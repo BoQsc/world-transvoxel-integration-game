@@ -7,13 +7,18 @@ const FLAT_PROFILE := &"flat_baseline"
 const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
+const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
+const FullMapVisual := preload("res://addons/world_transvoxel_terrain/visual/wt_terrain_full_map_visual.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 
+var playtest_profile_id: StringName = COMPACT_PROFILE
 var game_world: Node
 var player: CharacterBody3D
 var telemetry_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
+var material_applicator: Node
+var full_map_visual: MeshInstance3D
 var selected_profile: StringName = COMPACT_PROFILE
 var autonomous := false
 var expected_resources := 25
@@ -26,12 +31,14 @@ func _ready() -> void:
 	var args := Array(OS.get_cmdline_user_args())
 	autonomous = args.has("--p2-autonomous")
 	selected_profile = StringName(_arg_value(args, "--p2-profile", str(COMPACT_PROFILE)))
+	playtest_profile_id = selected_profile
 	_build_hud()
 	call_deferred("_start_profile")
 
 
 func _start_profile() -> void:
 	var settings := _profile_settings(selected_profile)
+	playtest_profile_id = selected_profile
 	expected_resources = int(settings["expected_resources"])
 	expected_max_resources = int(settings["expected_max_resources"])
 	expected_maximum_lod = int(settings["maximum_lod"])
@@ -57,6 +64,10 @@ func _start_profile() -> void:
 	if not await game_world.start_world():
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
+	_configure_presentation(settings)
+	await get_tree().process_frame
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
 	_update_telemetry()
 	if autonomous:
 		await _run_autonomous_proof()
@@ -95,7 +106,10 @@ func _run_autonomous_proof() -> void:
 	var summary: Dictionary = game_world.get_game_world_summary()
 	if not _verify_summary(summary):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d validation_internals=0" % [
+	var presentation: Dictionary = _presentation_summary()
+	if not _verify_presentation(presentation):
+		return
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -104,6 +118,11 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("render_resources", 0)),
 		int(summary.get("collision_resources", 0)),
 		int(summary.get("active_chunk_records", 0)),
+		int(presentation.get("materialized_instances", 0)),
+		1 if bool(presentation.get("production_texture_active", false)) else 0,
+		1 if bool(presentation.get("full_map_enabled", false)) else 0,
+		int(presentation.get("full_map_blocks_x", 0)),
+		int(presentation.get("full_map_blocks_z", 0)),
 	])
 	await get_tree().process_frame
 	get_tree().quit(0)
@@ -129,6 +148,30 @@ func _build_hud() -> void:
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
 	canvas.add_child(profile_selector)
+	if not autonomous:
+		telemetry_label.visible = false
+		profile_selector.visible = false
+
+
+func _configure_presentation(_settings: Dictionary) -> void:
+	material_applicator = MaterialApplicator.new()
+	material_applicator.name = "TerrainMaterialApplicator"
+	material_applicator.reference_scene_path = NodePath("../WtGameWorldTerrain")
+	game_world.add_child(material_applicator)
+	material_applicator.call("apply_materials_now")
+
+	full_map_visual = FullMapVisual.new()
+	full_map_visual.name = "FullMapTerrainVisual"
+	full_map_visual.enabled = selected_profile == COMPACT_PROFILE
+	full_map_visual.enabled_profile_id = COMPACT_PROFILE
+	full_map_visual.auto_detect_parent_profile = true
+	full_map_visual.chunk_count_x = 128
+	full_map_visual.chunk_count_z = 128
+	full_map_visual.chunk_size = 16.0
+	full_map_visual.grid_segments_x = 128
+	full_map_visual.grid_segments_z = 128
+	full_map_visual.seed = 19019
+	add_child(full_map_visual)
 
 
 func _create_player(start: Vector3) -> CharacterBody3D:
@@ -227,6 +270,51 @@ func _verify_summary(summary: Dictionary) -> bool:
 	for key in ["queued_render", "queued_collision", "pending_chunk_retirements", "render_fading_resources"]:
 		if int(summary.get(key, 0)) != 0:
 			_fail("terrain not cold idle: %s" % str(summary))
+			return false
+	return true
+
+
+func _presentation_summary() -> Dictionary:
+	var material_summary := {}
+	if material_applicator != null and material_applicator.has_method("get_material_quality_summary"):
+		material_summary = material_applicator.call("get_material_quality_summary")
+	var full_map_summary := {}
+	if full_map_visual != null and full_map_visual.has_method("get_full_terrain_visual_summary"):
+		full_map_summary = full_map_visual.call("get_full_terrain_visual_summary")
+	return {
+		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
+		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
+		"quality_implementation": str(material_summary.get("quality_implementation", "")),
+		"full_map_enabled": bool(full_map_summary.get("enabled", false)),
+		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
+		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
+		"full_map_layer": str(full_map_summary.get("visual_layer_kind", "")),
+	}
+
+
+func _verify_presentation(summary: Dictionary) -> bool:
+	if int(summary.get("materialized_instances", 0)) < expected_resources:
+		_fail("terrain materials not applied to active render meshes: %s" % str(summary))
+		return false
+	if not bool(summary.get("production_texture_active", false)):
+		_fail("production terrain texture pipeline inactive: %s" % str(summary))
+		return false
+	if str(summary.get("quality_implementation", "")) != "terrain_material_texture_pipeline_v1":
+		_fail("terrain material implementation mismatch: %s" % str(summary))
+		return false
+	if selected_profile == COMPACT_PROFILE:
+		if not bool(summary.get("full_map_enabled", false)):
+			_fail("compact 2K full-map visual is not active: %s" % str(summary))
+			return false
+		if int(summary.get("full_map_blocks_x", 0)) != 2048 or int(summary.get("full_map_blocks_z", 0)) != 2048:
+			_fail("compact 2K full-map visual coverage mismatch: %s" % str(summary))
+			return false
+		if str(summary.get("full_map_layer", "")) != "full_map_deterministic_procedural_lod":
+			_fail("compact 2K full-map visual layer mismatch: %s" % str(summary))
+			return false
+	else:
+		if bool(summary.get("full_map_enabled", false)):
+			_fail("flat baseline must not enable compact full-map visual: %s" % str(summary))
 			return false
 	return true
 
