@@ -8,6 +8,7 @@ const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
 const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
+const VISIBLE_SHADER_MODE := "addon_uv2_production_atlas"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 2
@@ -22,7 +23,7 @@ var _summary := {
 	"texture_format": CHECKER_TEXTURE_FORMAT,
 	"texture_bytes": 0,
 	"texture_checksum": 0,
-	"shader_mode": "addon_uv2_checker",
+	"shader_mode": VISIBLE_SHADER_MODE,
 	"profile_shader_mode": "",
 	"profile_id": "",
 	"material_ids": [],
@@ -72,6 +73,7 @@ func apply_materials_now() -> Dictionary:
 	var profile := _material_profile_summary()
 	var resolved_texture_resolution := _material_texture_resolution
 	var production_resolution := _production_texture_resolution(profile)
+	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	_summary = {
 		"applied": int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -80,7 +82,7 @@ func apply_materials_now() -> Dictionary:
 		"texture_format": CHECKER_TEXTURE_FORMAT,
 		"texture_bytes": _texture_bytes(resolved_texture_resolution),
 		"texture_checksum": _texture_checksum,
-		"shader_mode": "addon_uv2_checker",
+		"shader_mode": VISIBLE_SHADER_MODE,
 		"profile_shader_mode": str(profile.get("shader_mode", "")),
 		"profile_id": str(profile.get("profile_id", "unknown")),
 		"material_ids": Array(profile.get("material_ids", [])),
@@ -93,12 +95,16 @@ func apply_materials_now() -> Dictionary:
 		"quality_implementation": QUALITY_IMPLEMENTATION,
 		"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
 		"production_texture_pipeline": bool(profile.get("production_texture_pipeline", false)),
+		"production_texture_active": production_active,
 		"production_texture_slots": Array(profile.get("production_texture_slots", [])),
 		"production_texture_slot_count": int(profile.get("production_texture_slot_count", 0)),
 		"sample_material_names": Array(profile.get("sample_material_names", [])),
 		"sample_material_count": int(profile.get("sample_material_count", 0)),
 		"standard_texture_resolution": production_resolution,
+		"production_texture_resolution": production_resolution,
 		"production_texture_budget_bytes": int(profile.get("production_texture_budget_bytes", 0)),
+		"checker_fallback_enabled": true,
+		"visible_texture_target": "production_atlas_with_checker_fallback",
 		"mapping_policy": str(profile.get("mapping_policy", "")),
 		"blending_policy": str(profile.get("blending_policy", "")),
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
