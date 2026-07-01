@@ -1,0 +1,19 @@
+[gd_scene load_steps=3 format=3 uid="uid://cb4hi0mrsigel"]
+
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.gd" id="1_reference"]
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd" id="2_world"]
+
+[node name="WtTerrainReferenceScene" type="Node3D"]
+script = ExtResource("1_reference")
+
+[node name="TerrainWorld" type="Node3D" parent="."]
+script = ExtResource("2_world")
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="DebugOverlay"]
+offset_right = 480.0
+offset_bottom = 140.0
+
+[node name="StatusLabel" type="Label" parent="DebugOverlay/Panel"]
+text = "World Transvoxel Terrain Reference Scene"

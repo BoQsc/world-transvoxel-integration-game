@@ -1,0 +1,11 @@
+config_version=5
+
+[application]
+
+config/name="World Transvoxel Integration Game"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.6", "Forward Plus")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/world_transvoxel/plugin.cfg", "res://addons/world_transvoxel_terrain/plugin.cfg", "res://addons/world_transvoxel_game_world/plugin.cfg")

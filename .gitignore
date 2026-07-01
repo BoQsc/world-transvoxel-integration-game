@@ -1,0 +1,6 @@
+/.godot/
+/artifacts/
+/build/
+*.gd.uid
+__pycache__/
+*.pyc
