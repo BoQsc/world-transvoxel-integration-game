@@ -16,3 +16,44 @@ The automated proof command is run from the validation repository:
 ```console
 python tools/g57_separate_game_repository_integration_quality.py --skip-build
 ```
+
+## Installation
+
+Keep the three addons enabled in `project.godot`:
+
+- `res://addons/world_transvoxel/plugin.cfg`
+- `res://addons/world_transvoxel_terrain/plugin.cfg`
+- `res://addons/world_transvoxel_game_world/plugin.cfg`
+
+## Profile setup
+
+Create `WtTerrainGenerationProfile` and `WtTerrainStorageProfile` resources,
+then pass them into `WorldTransvoxelGameWorld.configure_game_world(...)`.
+This integration repo uses a deterministic compact 2K profile with a 128 by 128
+chunk map and one 25-resource active window.
+
+## Terrain editing
+
+Use the game-world addon boundary, not direct backend calls:
+
+```gdscript
+game_world.submit_sphere_edit(&"carve", Vector3(1032.0, 8.0, 1032.0), 1.8, -1, 1.0)
+```
+
+## Storage
+
+Generated runtime data goes under `res://build/g57-integration-game/...`.
+The local `build/` directory is ignored and must not be committed.
+
+## Telemetry
+
+Use `game_world.get_game_world_summary()` to inspect active records,
+render/collision resource counts, player viewer updates, and edit replacements.
+
+## Troubleshooting
+
+- If the GDExtension is missing, rebuild or recopy `world_transvoxel`.
+- If terrain is invisible, verify the generation and storage profiles.
+- If edits do not commit, check `game_world.get_last_edit_summary()`.
+- If cache files appear in status, keep `.godot/`, `build/`, and `*.gd.uid`
+  ignored.
