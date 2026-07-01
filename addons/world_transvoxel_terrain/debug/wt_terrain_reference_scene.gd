@@ -17,11 +17,13 @@ const OVERLAY_IMPLEMENTATION := "debug_overlay_category_rendering"
 @export var terrain_world_path: NodePath = ^"TerrainWorld"
 @export var status_label_path: NodePath = ^"DebugOverlay/Panel/StatusLabel"
 @export var refresh_on_ready: bool = true
+@export var debug_overlay_enabled: bool = true
 
 var _last_debug_snapshot: Dictionary = {}
 
 
 func _ready() -> void:
+	_sync_debug_overlay_visibility()
 	if refresh_on_ready:
 		refresh_debug_snapshot()
 
@@ -70,6 +72,7 @@ func get_reference_scene_summary(include_snapshot: bool = true) -> Dictionary:
 		"scene": "WtTerrainReferenceScene",
 		"has_terrain_world": get_terrain_world() != null,
 		"has_debug_overlay": get_node_or_null(status_label_path) != null,
+		"debug_overlay_enabled": debug_overlay_enabled,
 		"implementation": IMPLEMENTATION,
 	}
 	if include_snapshot:
@@ -158,7 +161,24 @@ func get_debug_overlay_categories() -> Array[String]:
 	return DebugOverlayFormatter.get_rendered_categories(_last_debug_snapshot)
 
 
+func set_debug_overlay_enabled(enabled: bool) -> void:
+	debug_overlay_enabled = enabled
+	_sync_debug_overlay_visibility()
+
+
+func _sync_debug_overlay_visibility() -> void:
+	var label := get_node_or_null(status_label_path)
+	if label != null:
+		var overlay := label.get_parent()
+		if overlay != null:
+			overlay = overlay.get_parent()
+		if overlay is CanvasLayer:
+			overlay.visible = debug_overlay_enabled
+
+
 func _update_status_label() -> void:
+	if not debug_overlay_enabled:
+		return
 	var label := get_node_or_null(status_label_path)
 	if label != null:
 		label.set("text", get_debug_status_text())
