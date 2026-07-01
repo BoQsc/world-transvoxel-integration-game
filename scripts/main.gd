@@ -32,6 +32,8 @@ func _ready() -> void:
 	autonomous = args.has("--p2-autonomous")
 	selected_profile = StringName(_arg_value(args, "--p2-profile", str(COMPACT_PROFILE)))
 	playtest_profile_id = selected_profile
+	if not autonomous:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_build_hud()
 	call_deferred("_start_profile")
 
@@ -80,6 +82,10 @@ func _run_autonomous_proof() -> void:
 	if terrain_world == null:
 		_fail("terrain world missing")
 		return
+	await get_tree().physics_frame
+	var spawn_summary := _playable_spawn_summary()
+	if not _verify_playable_spawn(spawn_summary):
+		return
 	if not bool(player.call("autonomous_translate", Vector3(16.0, 0.0, 0.0))):
 		_fail("player traversal method failed")
 		return
@@ -109,11 +115,13 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
 		int(summary.get("api_version", 0)),
+		1 if bool(spawn_summary.get("spawn_floor_hit", false)) else 0,
+		1 if float(spawn_summary.get("spawn_clearance", 0.0)) > 1.0 else 0,
 		int(summary.get("viewer_maximum_lod", 0)),
 		int(summary.get("render_resources", 0)),
 		int(summary.get("collision_resources", 0)),
@@ -123,6 +131,7 @@ func _run_autonomous_proof() -> void:
 		1 if bool(presentation.get("full_map_enabled", false)) else 0,
 		int(presentation.get("full_map_blocks_x", 0)),
 		int(presentation.get("full_map_blocks_z", 0)),
+		1 if bool(presentation.get("local_detail_exclusion", false)) else 0,
 	])
 	await get_tree().process_frame
 	get_tree().quit(0)
@@ -171,6 +180,13 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	full_map_visual.grid_segments_x = 128
 	full_map_visual.grid_segments_z = 128
 	full_map_visual.seed = 19019
+	var viewer_position: Vector3 = _settings["viewers"][0]
+	full_map_visual.local_detail_exclusion_enabled = selected_profile == COMPACT_PROFILE
+	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
+	full_map_visual.local_detail_exclusion_half_extent = Vector2(
+		float(_settings.get("detail_exclusion_half_extent", 96.0)),
+		float(_settings.get("detail_exclusion_half_extent", 96.0))
+	)
 	add_child(full_map_visual)
 
 
@@ -196,8 +212,8 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
-		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8)}
-	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 2, "maximum_lod": 1, "expected_resources": 25, "expected_max_resources": 81, "edit_point": Vector3(1032, 8, 1032)}
+		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8), "detail_exclusion_half_extent": 0.0}
+	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 2, "maximum_lod": 1, "expected_resources": 25, "expected_max_resources": 81, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 96.0}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -289,6 +305,8 @@ func _presentation_summary() -> Dictionary:
 		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
 		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
 		"full_map_layer": str(full_map_summary.get("visual_layer_kind", "")),
+		"local_detail_exclusion": bool(full_map_summary.get("local_detail_exclusion_enabled", false)),
+		"local_detail_exclusion_cells": int(full_map_summary.get("local_detail_exclusion_cells", 0)),
 	}
 
 
@@ -312,10 +330,50 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		if str(summary.get("full_map_layer", "")) != "full_map_deterministic_procedural_lod":
 			_fail("compact 2K full-map visual layer mismatch: %s" % str(summary))
 			return false
+		if not bool(summary.get("local_detail_exclusion", false)) or int(summary.get("local_detail_exclusion_cells", 0)) <= 0:
+			_fail("compact 2K full-map visual must exclude local playable detail window: %s" % str(summary))
+			return false
 	else:
 		if bool(summary.get("full_map_enabled", false)):
 			_fail("flat baseline must not enable compact full-map visual: %s" % str(summary))
 			return false
+	return true
+
+
+func _playable_spawn_summary() -> Dictionary:
+	var result := {
+		"spawn_floor_hit": false,
+		"spawn_clearance": 0.0,
+		"collision_floor_y": -99999.0,
+		"spawn_y": player.global_position.y if player != null else -99999.0,
+	}
+	if player == null:
+		return result
+	var query := PhysicsRayQueryParameters3D.create(
+		player.global_position + Vector3(0.0, 16.0, 0.0),
+		player.global_position + Vector3(0.0, -96.0, 0.0)
+	)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	if player is CollisionObject3D:
+		query.exclude = [(player as CollisionObject3D).get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		var hit_position: Vector3 = hit["position"]
+		result["spawn_floor_hit"] = true
+		result["collision_floor_y"] = hit_position.y
+		result["spawn_clearance"] = player.global_position.y - hit_position.y
+	return result
+
+
+func _verify_playable_spawn(summary: Dictionary) -> bool:
+	if not bool(summary.get("spawn_floor_hit", false)):
+		_fail("playable spawn has no collision floor below it: %s" % str(summary))
+		return false
+	var clearance := float(summary.get("spawn_clearance", 0.0))
+	if clearance <= 1.0 or clearance > 40.0:
+		_fail("playable spawn clearance is invalid: %s" % str(summary))
+		return false
 	return true
 
 

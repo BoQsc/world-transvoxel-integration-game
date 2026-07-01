@@ -12,6 +12,9 @@ class_name WtTerrainFullMapVisual
 @export_range(1, 512, 1) var grid_segments_x: int = 128
 @export_range(1, 512, 1) var grid_segments_z: int = 128
 @export var vertical_offset: float = -0.08
+@export var local_detail_exclusion_enabled: bool = false
+@export var local_detail_exclusion_center: Vector2 = Vector2(1024.0, 1024.0)
+@export var local_detail_exclusion_half_extent: Vector2 = Vector2(96.0, 96.0)
 
 var _built_profile_id: StringName = &""
 var _summary: Dictionary = {"enabled": false}
@@ -102,8 +105,14 @@ func _build_visual(profile_id: StringName) -> void:
 			vertices.append(Vector3(x, sample_surface_height(x, z) + vertical_offset, z))
 			normals.append(Vector3.UP)
 			colors.append(_material_color(sample_material_id(x, z)))
+	var excluded_cells := 0
 	for z_cell in range(grid_segments_z):
 		for x_cell in range(grid_segments_x):
+			var cell_center_x := width * (float(x_cell) + 0.5) / float(grid_segments_x)
+			var cell_center_z := depth * (float(z_cell) + 0.5) / float(grid_segments_z)
+			if _is_inside_local_detail_exclusion(cell_center_x, cell_center_z):
+				excluded_cells += 1
+				continue
 			var a := z_cell * (grid_segments_x + 1) + x_cell
 			var b := a + 1
 			var c := a + grid_segments_x + 1
@@ -135,6 +144,12 @@ func _build_visual(profile_id: StringName) -> void:
 		"visual_layer_kind": "full_map_deterministic_procedural_lod",
 		"native_detail_layer": "local_transvoxel_chunks",
 		"active_window_is_detail_layer_only": true,
+		"local_detail_exclusion_enabled": local_detail_exclusion_enabled,
+		"local_detail_exclusion_center_x": local_detail_exclusion_center.x,
+		"local_detail_exclusion_center_z": local_detail_exclusion_center.y,
+		"local_detail_exclusion_half_extent_x": local_detail_exclusion_half_extent.x,
+		"local_detail_exclusion_half_extent_z": local_detail_exclusion_half_extent.y,
+		"local_detail_exclusion_cells": excluded_cells,
 	}
 
 
@@ -160,6 +175,13 @@ func _material_color(material_id: int) -> Color:
 			return Color(0.45, 0.45, 0.42)
 		_:
 			return Color(0.5, 0.5, 0.5)
+
+
+func _is_inside_local_detail_exclusion(x: float, z: float) -> bool:
+	if not local_detail_exclusion_enabled:
+		return false
+	return abs(x - local_detail_exclusion_center.x) <= local_detail_exclusion_half_extent.x and \
+			abs(z - local_detail_exclusion_center.y) <= local_detail_exclusion_half_extent.y
 
 
 func _floor_div(value: int, divisor: int) -> int:
