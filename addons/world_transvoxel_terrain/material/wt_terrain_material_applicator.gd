@@ -7,6 +7,7 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 2
@@ -29,6 +30,7 @@ var _summary := {
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 	"quality_implementation": QUALITY_IMPLEMENTATION,
+	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
 	"implementation": "terrain_addon_material_applicator",
 }
 var _material: ShaderMaterial
@@ -69,6 +71,7 @@ func apply_materials_now() -> Dictionary:
 	var result := _apply_to_meshes(backend, material)
 	var profile := _material_profile_summary()
 	var resolved_texture_resolution := _material_texture_resolution
+	var production_resolution := _production_texture_resolution(profile)
 	_summary = {
 		"applied": int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -88,6 +91,17 @@ func apply_materials_now() -> Dictionary:
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 		"material_instance_id": material.get_instance_id(),
 		"quality_implementation": QUALITY_IMPLEMENTATION,
+		"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
+		"production_texture_pipeline": bool(profile.get("production_texture_pipeline", false)),
+		"production_texture_slots": Array(profile.get("production_texture_slots", [])),
+		"production_texture_slot_count": int(profile.get("production_texture_slot_count", 0)),
+		"sample_material_names": Array(profile.get("sample_material_names", [])),
+		"sample_material_count": int(profile.get("sample_material_count", 0)),
+		"standard_texture_resolution": production_resolution,
+		"production_texture_budget_bytes": int(profile.get("production_texture_budget_bytes", 0)),
+		"mapping_policy": str(profile.get("mapping_policy", "")),
+		"blending_policy": str(profile.get("blending_policy", "")),
+		"texture_import_policy": str(profile.get("texture_import_policy", "")),
 		"implementation": "terrain_addon_material_applicator",
 	}
 	return get_material_summary()
@@ -123,6 +137,10 @@ func _build_material(resolution: int) -> ShaderMaterial:
 	var shader_material := ShaderMaterial.new()
 	shader_material.shader = TERRAIN_SHADER
 	shader_material.set_shader_parameter("checker_texture", _checker_texture(resolution))
+	var production_resolution := _production_texture_resolution(_material_profile_summary())
+	shader_material.set_shader_parameter("terrain_albedo_atlas", _production_atlas(production_resolution, &"albedo"))
+	shader_material.set_shader_parameter("terrain_normal_atlas", _production_atlas(production_resolution, &"normal"))
+	shader_material.set_shader_parameter("terrain_roughness_atlas", _production_atlas(production_resolution, &"roughness_orm"))
 	return shader_material
 
 func _checker_texture(resolution: int) -> Texture2D:
@@ -207,6 +225,31 @@ func _resolved_texture_resolution() -> int:
 
 func _texture_bytes(resolution: int) -> int:
 	return resolution * resolution * CHECKER_TEXTURE_BYTES_PER_PIXEL
+
+func _production_texture_resolution(profile: Dictionary) -> int:
+	return int(clamp(int(profile.get("standard_texture_resolution", 64)), 16, 512))
+
+func _production_atlas(resolution: int, slot: StringName) -> Texture2D:
+	var image := Image.create(resolution * 4, resolution, false, Image.FORMAT_RGBA8)
+	var base := [
+		Color(0.40, 0.62, 0.22, 1.0),
+		Color(0.42, 0.43, 0.42, 1.0),
+		Color(0.63, 0.53, 0.36, 1.0),
+		Color(0.30, 0.30, 0.32, 1.0),
+	]
+	for y in range(resolution):
+		for x in range(resolution * 4):
+			var tile := int(x / resolution)
+			var c: Color = base[tile]
+			if slot == &"normal":
+				c = Color(0.5, 0.5, 1.0, 1.0)
+			elif slot == &"roughness_orm":
+				c = Color(0.0, 0.76 + float(tile) * 0.04, 1.0, 1.0)
+			else:
+				var grain := 0.90 + 0.10 * float(((x * 13 + y * 7 + tile * 19) % 11)) / 10.0
+				c = Color(c.r * grain, c.g * grain, c.b * grain, 1.0)
+			image.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(image)
 
 func _terrain_world() -> Node:
 	var reference := get_node_or_null(reference_scene_path)

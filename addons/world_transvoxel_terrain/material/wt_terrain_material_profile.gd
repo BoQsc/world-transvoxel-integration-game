@@ -6,6 +6,7 @@ const TEXTURE_FORMAT := "RGBA8"
 const TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const IMPLEMENTATION := "terrain_material_profile_contract_v1"
+const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
 
 @export var profile_id: StringName = &"debug_checker_palette"
 @export_range(2, 64, 1) var texture_resolution: int = 16
@@ -13,6 +14,12 @@ const IMPLEMENTATION := "terrain_material_profile_contract_v1"
 @export var material_ids: Array[int] = [1, 2, 3, 4, 7]
 @export var triplanar_projection: bool = true
 @export var debug_view_enabled: bool = true
+@export_range(16, 512, 1) var standard_texture_resolution: int = 64
+@export var production_texture_slots: Array[StringName] = [&"albedo", &"normal", &"roughness_orm"]
+@export var sample_material_names: Array[StringName] = [&"grass_ground", &"rock", &"sand_dirt", &"underground_stone"]
+@export var mapping_policy: StringName = &"world_space_triplanar_ready"
+@export var blending_policy: StringName = &"material_id_primary_slope_ready"
+@export var texture_import_policy: StringName = &"mipmapped_vram_compressed_normal_aware"
 
 
 func get_contract_summary() -> Dictionary:
@@ -30,6 +37,17 @@ func get_contract_summary() -> Dictionary:
 		"debug_view_enabled": debug_view_enabled,
 		"deterministic_palette": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
+		"production_texture_pipeline": true,
+		"production_implementation": PRODUCTION_IMPLEMENTATION,
+		"production_texture_slots": _string_names(production_texture_slots),
+		"production_texture_slot_count": production_texture_slots.size(),
+		"sample_material_names": _string_names(sample_material_names),
+		"sample_material_count": sample_material_names.size(),
+		"standard_texture_resolution": standard_texture_resolution,
+		"production_texture_budget_bytes": _production_texture_budget_bytes(),
+		"mapping_policy": str(mapping_policy),
+		"blending_policy": str(blending_policy),
+		"texture_import_policy": str(texture_import_policy),
 		"implementation": IMPLEMENTATION,
 	}
 
@@ -46,3 +64,15 @@ func _material_ids_csv(ids: Array[int]) -> String:
 	for id in ids:
 		strings.append(str(id))
 	return ",".join(strings)
+
+
+func _string_names(values: Array[StringName]) -> Array[String]:
+	var result: Array[String] = []
+	for value in values:
+		result.append(str(value))
+	return result
+
+
+func _production_texture_budget_bytes() -> int:
+	return standard_texture_resolution * standard_texture_resolution * TEXTURE_BYTES_PER_PIXEL * \
+			production_texture_slots.size() * sample_material_names.size()
