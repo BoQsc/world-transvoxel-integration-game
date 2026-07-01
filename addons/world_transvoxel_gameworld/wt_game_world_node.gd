@@ -15,6 +15,7 @@ var _generation_profile: Resource
 var _storage_profile: Resource
 var _viewer_positions: Array = []
 var _viewer_radius_chunks := 0
+var _viewer_maximum_lod := 0
 var _expected_resource_count := 0
 var _player_start_position := Vector3.ZERO
 var _reference_scene: Node
@@ -34,13 +35,15 @@ func configure_game_world(
 	viewer_positions: Array,
 	viewer_radius_chunks: int,
 	expected_resource_count: int,
-	player_start_position: Vector3
+	player_start_position: Vector3,
+	viewer_maximum_lod: int = 0
 ) -> void:
 	_profile_id = profile_id
 	_generation_profile = generation_profile
 	_storage_profile = storage_profile
 	_viewer_positions = viewer_positions
 	_viewer_radius_chunks = viewer_radius_chunks
+	_viewer_maximum_lod = viewer_maximum_lod
 	_expected_resource_count = expected_resource_count
 	_player_start_position = player_start_position
 
@@ -88,7 +91,7 @@ func update_player_viewer(force: bool = false) -> bool:
 		return false
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, 0
+		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("player viewer update failed")
 	_last_player_viewer_position = position
@@ -192,6 +195,7 @@ func get_game_world_summary() -> Dictionary:
 		"player_viewer_updates": _accepted_player_viewer_updates,
 		"viewer_positions": _viewer_positions.size(),
 		"viewer_radius_chunks": _viewer_radius_chunks,
+		"viewer_maximum_lod": _viewer_maximum_lod,
 		"expected_resource_count": _expected_resource_count,
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
@@ -216,7 +220,7 @@ func _apply_profiles() -> void:
 func _submit_initial_viewers() -> bool:
 	var viewer_id := 1
 	for position in _viewer_positions:
-		if not bool(_reference_scene.call("update_reference_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, 0)):
+		if not bool(_reference_scene.call("update_reference_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, _viewer_maximum_lod)):
 			return _fail("initial viewer update failed")
 		viewer_id += 1
 	return viewer_id > 1

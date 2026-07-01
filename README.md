@@ -19,7 +19,7 @@ internals. The game opens through `project.godot` and runs `res://scenes/main.ts
 - terrain edit input path;
 - telemetry overlay;
 - profile selector with `flat_baseline` and `g19_compact_2k_on_demand`;
-- compact 2K terrain through `WtGameWorld`.
+- compact 2K terrain through `WtGameWorld` with `viewer_maximum_lod=1`.
 
 ## Automated proof
 

@@ -17,6 +17,8 @@ var crosshair: Label
 var selected_profile: StringName = COMPACT_PROFILE
 var autonomous := false
 var expected_resources := 25
+var expected_max_resources := 81
+var expected_maximum_lod := 1
 var edit_point := Vector3.ZERO
 
 
@@ -31,6 +33,8 @@ func _ready() -> void:
 func _start_profile() -> void:
 	var settings := _profile_settings(selected_profile)
 	expected_resources = int(settings["expected_resources"])
+	expected_max_resources = int(settings["expected_max_resources"])
+	expected_maximum_lod = int(settings["maximum_lod"])
 	edit_point = settings["edit_point"]
 	game_world = GameWorldNode.new()
 	game_world.name = "WtGameWorld"
@@ -46,7 +50,8 @@ func _start_profile() -> void:
 		settings["viewers"],
 		int(settings["radius"]),
 		expected_resources,
-		settings["start"]
+		settings["start"],
+		expected_maximum_lod
 	)
 	game_world.attach_player(player, settings["start"])
 	if not await game_world.start_world():
@@ -90,11 +95,12 @@ func _run_autonomous_proof() -> void:
 	var summary: Dictionary = game_world.get_game_world_summary()
 	if not _verify_summary(summary):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 render_resources=%d collision_resources=%d active_records=%d validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
 		int(summary.get("api_version", 0)),
+		int(summary.get("viewer_maximum_lod", 0)),
 		int(summary.get("render_resources", 0)),
 		int(summary.get("collision_resources", 0)),
 		int(summary.get("active_chunk_records", 0)),
@@ -147,8 +153,8 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
-		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "expected_resources": 1, "edit_point": Vector3(8, 8, 8)}
-	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 2, "expected_resources": 25, "edit_point": Vector3(1032, 8, 1032)}
+		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8)}
+	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 2, "maximum_lod": 1, "expected_resources": 25, "expected_max_resources": 81, "edit_point": Vector3(1032, 8, 1032)}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -190,8 +196,9 @@ func _storage_root(profile_id: StringName) -> String:
 
 func _update_telemetry() -> void:
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
-	telemetry_label.text = "profile=%s active=%d render=%d collision=%d edits=%d" % [
+	telemetry_label.text = "profile=%s lod=%d active=%d render=%d collision=%d edits=%d" % [
 		str(selected_profile),
+		int(summary.get("viewer_maximum_lod", 0)),
 		int(summary.get("active_chunk_records", 0)),
 		int(summary.get("render_resources", 0)),
 		int(summary.get("collision_resources", 0)),
@@ -207,7 +214,14 @@ func _verify_summary(summary: Dictionary) -> bool:
 	if str(summary.get("addon_id", "")) != ADDON_ID or int(summary.get("api_version", 0)) != 1:
 		_fail("addon identity invalid: %s" % str(summary))
 		return false
-	if int(summary.get("render_resources", 0)) != expected_resources or int(summary.get("collision_resources", 0)) != expected_resources:
+	if int(summary.get("viewer_maximum_lod", -1)) != expected_maximum_lod:
+		_fail("maximum LOD mismatch: %s" % str(summary))
+		return false
+	for key in ["active_chunk_records", "render_resources", "collision_resources"]:
+		if int(summary.get(key, 0)) < expected_resources or int(summary.get(key, 0)) > expected_max_resources:
+			_fail("resource mismatch: %s" % str(summary))
+			return false
+	if selected_profile == FLAT_PROFILE and int(summary.get("active_chunk_records", 0)) != expected_resources:
 		_fail("resource mismatch: %s" % str(summary))
 		return false
 	for key in ["queued_render", "queued_collision", "pending_chunk_retirements", "render_fading_resources"]:
