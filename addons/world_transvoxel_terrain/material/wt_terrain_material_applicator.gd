@@ -45,13 +45,11 @@ func _ready() -> void:
 	set_process(auto_apply)
 
 func _process(_delta: float) -> void:
-	var parent := get_parent()
-	if parent != null and parent.has_method("get_validation_state") and \
-			parent.call("get_validation_state") == "ready":
-		if not _apply_if_signature_changed():
-			_repair_missing_materials_if_needed()
+	if _runtime_signature().is_empty():
+		_auto_apply_signature = ""
 		return
-	_auto_apply_signature = ""
+	if not _apply_if_signature_changed():
+		_repair_missing_materials_if_needed()
 
 func get_material_summary() -> Dictionary:
 	return _summary.duplicate()
