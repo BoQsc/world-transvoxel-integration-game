@@ -1,6 +1,8 @@
 /.godot/
 /artifacts/
 /build/
+/CURRENT_PLAYTEST_FRESHNESS.json
+/HUMAN_PLAYTEST.md
 *.uid
 *.gd.uid
 __pycache__/
