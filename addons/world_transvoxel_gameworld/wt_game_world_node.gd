@@ -1,6 +1,6 @@
 extends Node3D
 
-const ADDON_ID := "world_transvoxel_game_world"
+const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
 const ReferenceScene := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
@@ -262,5 +262,5 @@ func _operation_mode(mode_name: StringName) -> int:
 
 func _fail(message: String) -> bool:
 	_last_error = message
-	push_error("WT_GAME_WORLD_PROTOTYPE_FAIL: " + message)
+	push_error("WT_GAMEWORLD_FAIL: " + message)
 	return false
