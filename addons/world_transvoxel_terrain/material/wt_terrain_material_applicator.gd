@@ -11,9 +11,13 @@ const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_
 const VISIBLE_SHADER_MODE := "addon_uv2_production_atlas"
 
 @export var auto_apply: bool = true
-@export_range(1, 30, 1) var material_audit_interval_frames: int = 2
+@export_range(1, 30, 1) var material_audit_interval_frames: int = 1
 @export_range(2, 64, 1) var texture_resolution: int = 16
 @export var reference_scene_path: NodePath = ^"../WtTerrainReferenceScene"
+@export var visual_mode: StringName = &"production"
+@export var clean_albedo_color: Color = Color(0.72, 0.65, 0.50, 1.0)
+@export var clean_albedo_texture_path: String = ""
+@export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
 
 var _summary := {
 	"applied": false,
@@ -145,7 +149,23 @@ func _build_material(resolution: int) -> ShaderMaterial:
 	shader_material.set_shader_parameter("terrain_albedo_atlas", _production_atlas(production_resolution, &"albedo"))
 	shader_material.set_shader_parameter("terrain_normal_atlas", _production_atlas(production_resolution, &"normal"))
 	shader_material.set_shader_parameter("terrain_roughness_atlas", _production_atlas(production_resolution, &"roughness_orm"))
+	_apply_visual_mode(shader_material)
 	return shader_material
+
+func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
+	shader_material.set_shader_parameter("clean_visual_enabled", visual_mode == &"clean")
+	shader_material.set_shader_parameter("clean_albedo_color", clean_albedo_color)
+	shader_material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)
+	var texture := _load_clean_albedo_texture()
+	shader_material.set_shader_parameter("clean_texture_enabled", texture != null)
+	if texture != null:
+		shader_material.set_shader_parameter("clean_albedo_texture", texture)
+
+func _load_clean_albedo_texture() -> Texture2D:
+	if clean_albedo_texture_path.is_empty():
+		return null
+	var resource := ResourceLoader.load(clean_albedo_texture_path)
+	return resource as Texture2D
 
 func _checker_texture(resolution: int) -> Texture2D:
 	var image := Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
@@ -203,22 +223,21 @@ func _runtime_signature() -> String:
 	var active_records := int(metrics.get("active_chunk_records", 0))
 	var render_resources := int(metrics.get("render_resources", 0))
 	var collision_resources := int(metrics.get("collision_resources", 0))
-	if render_resources <= 0 or collision_resources <= 0 or \
-			int(metrics.get("queued_render", 0)) != 0 or \
-			int(metrics.get("queued_collision", 0)) != 0 or \
-			int(metrics.get("pending_chunk_retirements", 0)) != 0 or \
-			int(metrics.get("render_fading_resources", 0)) != 0 or \
-			int(metrics.get("fully_ready_chunk_records", -1)) != active_records:
+	if active_records <= 0 or render_resources <= 0 or collision_resources <= 0:
 		return ""
 	var revision := 0
 	if terrain_world.has_method("get_world_revision"):
 		revision = int(terrain_world.call("get_world_revision"))
-	return "%d:%d:%d:%d:%d:%d" % [
+	return "%d:%d:%d:%d:%d:%d:%d:%d:%d:%d" % [
 		active_records,
 		render_resources,
 		collision_resources,
 		int(metrics.get("viewer_updates", 0)),
 		int(metrics.get("edit_replacements", 0)),
+		int(metrics.get("queued_render", 0)),
+		int(metrics.get("queued_collision", 0)),
+		int(metrics.get("pending_chunk_retirements", 0)),
+		int(metrics.get("fully_ready_chunk_records", 0)),
 		revision,
 	]
 

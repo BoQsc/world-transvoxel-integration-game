@@ -10,6 +10,8 @@ const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/w
 const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
 const FullMapVisual := preload("res://addons/world_transvoxel_terrain/visual/wt_terrain_full_map_visual.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
+const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
+const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 
 var playtest_profile_id: StringName = COMPACT_PROFILE
 var game_world: Node
@@ -21,6 +23,9 @@ var material_applicator: Node
 var full_map_visual: MeshInstance3D
 var selected_profile: StringName = COMPACT_PROFILE
 var autonomous := false
+var human_visual_capture_path := ""
+var human_visual_capture_mode := "ground"
+var human_visual_capture_wait_frames := 90
 var expected_resources := 25
 var expected_max_resources := 81
 var expected_maximum_lod := 1
@@ -30,10 +35,16 @@ var edit_point := Vector3.ZERO
 func _ready() -> void:
 	var args := Array(OS.get_cmdline_user_args())
 	autonomous = args.has("--p2-autonomous")
+	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
+	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
+	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
 	selected_profile = StringName(_arg_value(args, "--p2-profile", str(COMPACT_PROFILE)))
 	playtest_profile_id = selected_profile
 	if not autonomous:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		if human_visual_capture_path.is_empty():
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		_clear_human_storage()
+	_configure_game_lighting()
 	_build_hud()
 	call_deferred("_start_profile")
 
@@ -47,7 +58,15 @@ func _start_profile() -> void:
 	edit_point = settings["edit_point"]
 	game_world = GameWorldNode.new()
 	game_world.name = "WtGameWorld"
-	game_world.human_input_enabled = not autonomous
+	game_world.human_input_enabled = false
+	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
+	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
+	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
+	game_world.runtime_active_chunk_capacity = int(settings.get("runtime_active_chunk_capacity", 0))
+	game_world.runtime_demand_capacity_per_viewer = int(settings.get("runtime_demand_capacity_per_viewer", 0))
+	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
+	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
+	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
 	add_child(game_world)
 	player = _create_player(settings["start"])
 	player.game_world = game_world
@@ -66,11 +85,19 @@ func _start_profile() -> void:
 	if not await game_world.start_world():
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
+	await get_tree().physics_frame
+	if not _stabilize_player_spawn():
+		return
 	_configure_presentation(settings)
 	await get_tree().process_frame
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
 	_update_telemetry()
+	if not autonomous:
+		game_world.human_input_enabled = true
+		player.call("set_human_input_enabled", true)
+		if not human_visual_capture_path.is_empty():
+			call_deferred("_capture_human_visual")
 	if autonomous:
 		await _run_autonomous_proof()
 
@@ -144,8 +171,16 @@ func _build_hud() -> void:
 	crosshair = Label.new()
 	crosshair.name = "Crosshair"
 	crosshair.text = "+"
-	crosshair.position = Vector2(636, 356)
+	crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	crosshair.offset_left = -4.0
+	crosshair.offset_top = -10.0
+	crosshair.offset_right = 4.0
+	crosshair.offset_bottom = 10.0
+	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	canvas.add_child(crosshair)
+	if not autonomous:
+		return
 	telemetry_label = Label.new()
 	telemetry_label.name = "TelemetryLabel"
 	telemetry_label.position = Vector2(12, 12)
@@ -157,21 +192,23 @@ func _build_hud() -> void:
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
 	canvas.add_child(profile_selector)
-	if not autonomous:
-		telemetry_label.visible = false
-		profile_selector.visible = false
 
 
 func _configure_presentation(_settings: Dictionary) -> void:
 	material_applicator = MaterialApplicator.new()
 	material_applicator.name = "TerrainMaterialApplicator"
 	material_applicator.reference_scene_path = NodePath("../WtGameWorldTerrain")
+	material_applicator.visual_mode = &"production" if autonomous else &"clean"
+	if not autonomous:
+		material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+		material_applicator.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
+		material_applicator.clean_texture_world_scale = 0.22
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
 	full_map_visual = FullMapVisual.new()
 	full_map_visual.name = "FullMapTerrainVisual"
-	full_map_visual.enabled = selected_profile == COMPACT_PROFILE
+	full_map_visual.enabled = false
 	full_map_visual.enabled_profile_id = COMPACT_PROFILE
 	full_map_visual.auto_detect_parent_profile = true
 	full_map_visual.chunk_count_x = 128
@@ -180,8 +217,14 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	full_map_visual.grid_segments_x = 128
 	full_map_visual.grid_segments_z = 128
 	full_map_visual.seed = 19019
+	full_map_visual.visual_mode = &"material_id" if autonomous else &"clean"
+	if not autonomous:
+		full_map_visual.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+		full_map_visual.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
+		full_map_visual.clean_texture_world_scale = 0.22
+		full_map_visual.vertical_offset = -0.75
 	var viewer_position: Vector3 = _settings["viewers"][0]
-	full_map_visual.local_detail_exclusion_enabled = selected_profile == COMPACT_PROFILE
+	full_map_visual.local_detail_exclusion_enabled = false
 	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
 	full_map_visual.local_detail_exclusion_half_extent = Vector2(
 		float(_settings.get("detail_exclusion_half_extent", 96.0)),
@@ -205,6 +248,7 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 	var camera := Camera3D.new()
 	camera.name = "FirstPersonCamera"
 	camera.current = true
+	camera.far = 5000.0
 	camera.position = Vector3(0.0, 1.6, 0.0)
 	p.add_child(camera)
 	return p
@@ -213,7 +257,7 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
 		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8), "detail_exclusion_half_extent": 0.0}
-	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 2, "maximum_lod": 1, "expected_resources": 25, "expected_max_resources": 81, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 96.0}
+	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 0.0}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -249,11 +293,17 @@ func _storage_profile(profile_id: StringName) -> Resource:
 
 func _storage_root(profile_id: StringName) -> String:
 	if profile_id == FLAT_PROFILE:
-		return "res://build/production-lifecycle-fixture"
+		if autonomous:
+			return "res://build/production-lifecycle-fixture"
+		return "res://build/human-playtest/%s" % str(profile_id)
+	if not autonomous:
+		return "res://build/human-playtest/%s" % str(profile_id)
 	return "res://build/p2-production-game/%s" % str(profile_id)
 
 
 func _update_telemetry() -> void:
+	if telemetry_label == null:
+		return
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	telemetry_label.text = "profile=%s lod=%d active=%d render=%d collision=%d edits=%d" % [
 		str(selected_profile),
@@ -267,6 +317,50 @@ func _update_telemetry() -> void:
 
 func _verify_scene_contract() -> bool:
 	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 2 and telemetry_label != null and 			player.has_method("submit_edit_input")
+
+
+func _configure_game_lighting() -> void:
+	var world_environment := WorldEnvironment.new()
+	world_environment.name = "HumanPlaytestWorldEnvironment"
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.56, 0.70, 0.92)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.86, 0.88, 0.82)
+	environment.ambient_light_energy = 0.75
+	world_environment.environment = environment
+	add_child(world_environment)
+
+	var sun := DirectionalLight3D.new()
+	sun.name = "HumanPlaytestSun"
+	sun.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
+	sun.light_energy = 1.35
+	sun.shadow_enabled = false
+	add_child(sun)
+
+
+func _clear_human_storage() -> void:
+	var root := ProjectSettings.globalize_path("res://build/human-playtest")
+	if DirAccess.dir_exists_absolute(root):
+		_remove_tree(root)
+
+
+func _remove_tree(path: String) -> void:
+	var directory := DirAccess.open(path)
+	if directory == null:
+		return
+	directory.list_dir_begin()
+	var entry := directory.get_next()
+	while not entry.is_empty():
+		if entry != "." and entry != "..":
+			var child := path.path_join(entry)
+			if directory.current_is_dir():
+				_remove_tree(child)
+			else:
+				DirAccess.remove_absolute(child)
+		entry = directory.get_next()
+	directory.list_dir_end()
+	DirAccess.remove_absolute(path)
 
 
 func _verify_summary(summary: Dictionary) -> bool:
@@ -320,23 +414,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if str(summary.get("quality_implementation", "")) != "terrain_material_texture_pipeline_v1":
 		_fail("terrain material implementation mismatch: %s" % str(summary))
 		return false
-	if selected_profile == COMPACT_PROFILE:
-		if not bool(summary.get("full_map_enabled", false)):
-			_fail("compact 2K full-map visual is not active: %s" % str(summary))
-			return false
-		if int(summary.get("full_map_blocks_x", 0)) != 2048 or int(summary.get("full_map_blocks_z", 0)) != 2048:
-			_fail("compact 2K full-map visual coverage mismatch: %s" % str(summary))
-			return false
-		if str(summary.get("full_map_layer", "")) != "full_map_deterministic_procedural_lod":
-			_fail("compact 2K full-map visual layer mismatch: %s" % str(summary))
-			return false
-		if not bool(summary.get("local_detail_exclusion", false)) or int(summary.get("local_detail_exclusion_cells", 0)) <= 0:
-			_fail("compact 2K full-map visual must exclude local playable detail window: %s" % str(summary))
-			return false
-	else:
-		if bool(summary.get("full_map_enabled", false)):
-			_fail("flat baseline must not enable compact full-map visual: %s" % str(summary))
-			return false
+	if bool(summary.get("full_map_enabled", false)):
+		_fail("playable terrain must not depend on compact full-map visual: %s" % str(summary))
+		return false
 	return true
 
 
@@ -366,6 +446,17 @@ func _playable_spawn_summary() -> Dictionary:
 	return result
 
 
+func _stabilize_player_spawn() -> bool:
+	var summary := _playable_spawn_summary()
+	if not bool(summary.get("spawn_floor_hit", false)):
+		_fail("playable spawn has no collision floor below it before human enable: %s" % str(summary))
+		return false
+	var floor_y := float(summary.get("collision_floor_y", player.global_position.y - 2.0))
+	player.global_position.y = floor_y + 2.0
+	player.velocity = Vector3.ZERO
+	return true
+
+
 func _verify_playable_spawn(summary: Dictionary) -> bool:
 	if not bool(summary.get("spawn_floor_hit", false)):
 		_fail("playable spawn has no collision floor below it: %s" % str(summary))
@@ -384,7 +475,82 @@ func _arg_value(args: Array, key: String, default_value: String) -> String:
 	return default_value
 
 
+func _capture_human_visual() -> void:
+	await _apply_capture_camera_mode()
+	for _frame in range(30):
+		await get_tree().process_frame
+	var image := get_viewport().get_texture().get_image()
+	image.save_png(human_visual_capture_path)
+	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var presentation: Dictionary = _presentation_summary()
+	print("WT_HUMAN_VISUAL_CAPTURE_SUMMARY ", JSON.stringify({
+		"mode": human_visual_capture_mode,
+		"profile": str(selected_profile),
+		"viewer_radius_chunks": int(summary.get("viewer_radius_chunks", 0)),
+		"viewer_maximum_lod": int(summary.get("viewer_maximum_lod", 0)),
+		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
+		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
+		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+		"render_resources": int(summary.get("render_resources", 0)),
+		"collision_resources": int(summary.get("collision_resources", 0)),
+		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
+		"materialized_instances": int(presentation.get("materialized_instances", 0)),
+		"capture_path": human_visual_capture_path,
+	}))
+	get_tree().quit(0)
+
+
+func _apply_capture_camera_mode() -> void:
+	if player == null:
+		return
+	if player.has_method("set_human_input_enabled"):
+		player.call("set_human_input_enabled", false)
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return
+	camera.far = 5000.0
+	var capture_position := player.global_position
+	var capture_target := Vector3(1032.0, 8.0, 1032.0)
+	match human_visual_capture_mode:
+		"topdown":
+			capture_position = Vector3(1032.0, 420.0, 1032.0)
+			capture_target = Vector3(1032.0, 8.0, 1032.1)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"aerial":
+			capture_position = Vector3(1032.0, 220.0, 920.0)
+			capture_target = Vector3(1032.0, 8.0, 1032.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"high_oblique":
+			capture_position = Vector3(1032.0, 140.0, 820.0)
+			capture_target = Vector3(1032.0, 8.0, 1032.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"local_overlap":
+			capture_position = Vector3(1032.0, 72.0, 972.0)
+			capture_target = Vector3(1032.0, 6.0, 1048.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		_:
+			return
+	camera.fov = 75.0
+	camera.far = 5000.0
+	var up_vector := Vector3.UP
+	if human_visual_capture_mode == "topdown":
+		up_vector = Vector3.FORWARD
+	camera.look_at_from_position(capture_position, capture_target, up_vector)
+	camera.current = true
+	camera.make_current()
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", true)
+	for _frame in range(maxi(human_visual_capture_wait_frames, 0)):
+		await get_tree().process_frame
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+
+
 func _fail(message: String) -> void:
 	push_error("WT_PRODUCTION_GAME_P2_FAIL: " + message)
-	if autonomous:
+	if autonomous or not human_visual_capture_path.is_empty():
 		get_tree().quit(1)

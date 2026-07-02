@@ -144,6 +144,7 @@ static func ensure_backend_terrain(world) -> bool:
 		return false
 	world._backend_terrain = terrain
 	world._backend_config = config
+	_apply_runtime_config_overrides(world, world._backend_config)
 	world._backend_terrain.name = BACKEND_TERRAIN_NODE_NAME
 	world._backend_terrain.set("configuration", world._backend_config)
 	world.add_child(world._backend_terrain)
@@ -180,6 +181,18 @@ static func _validate_storage_profile(world) -> bool:
 		world._last_error = "storage_profile must expose object_root_path"
 		return false
 	return true
+
+static func _apply_runtime_config_overrides(world, config: Resource) -> void:
+	for pair in [
+		["runtime_active_chunk_capacity", "active_chunk_capacity"],
+		["runtime_demand_capacity_per_viewer", "demand_capacity_per_viewer"],
+		["runtime_render_entry_capacity", "render_entry_capacity"],
+		["runtime_collision_entry_capacity", "collision_entry_capacity"],
+		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
+	]:
+		var value := int(world.get(pair[0]))
+		if value > 0:
+			config.set(pair[1], value)
 
 static func _finish_request(world, request_id: int) -> int:
 	if request_id <= 0:

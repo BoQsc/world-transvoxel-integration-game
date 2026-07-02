@@ -2,6 +2,8 @@
 extends MeshInstance3D
 class_name WtTerrainFullMapVisual
 
+const TerrainPaletteShader := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_palette.gdshader")
+
 @export var enabled: bool = true
 @export var auto_detect_parent_profile: bool = true
 @export var enabled_profile_id: StringName = &"g19_compact_2k_on_demand"
@@ -15,6 +17,10 @@ class_name WtTerrainFullMapVisual
 @export var local_detail_exclusion_enabled: bool = false
 @export var local_detail_exclusion_center: Vector2 = Vector2(1024.0, 1024.0)
 @export var local_detail_exclusion_half_extent: Vector2 = Vector2(96.0, 96.0)
+@export var visual_mode: StringName = &"material_id"
+@export var clean_albedo_color: Color = Color(0.72, 0.65, 0.50, 1.0)
+@export var clean_albedo_texture_path: String = ""
+@export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
 
 var _built_profile_id: StringName = &""
 var _summary: Dictionary = {"enabled": false}
@@ -97,6 +103,7 @@ func _build_visual(profile_id: StringName) -> void:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
 	for z_index in range(grid_segments_z + 1):
 		var z := depth * float(z_index) / float(grid_segments_z)
@@ -104,7 +111,8 @@ func _build_visual(profile_id: StringName) -> void:
 			var x := width * float(x_index) / float(grid_segments_x)
 			vertices.append(Vector3(x, sample_surface_height(x, z) + vertical_offset, z))
 			normals.append(Vector3.UP)
-			colors.append(_material_color(sample_material_id(x, z)))
+			colors.append(_visual_color(sample_material_id(x, z)))
+			uvs.append(Vector2(x * _clean_texture_uv_scale(), z * _clean_texture_uv_scale()))
 	var excluded_cells := 0
 	for z_cell in range(grid_segments_z):
 		for x_cell in range(grid_segments_x):
@@ -123,6 +131,7 @@ func _build_visual(profile_id: StringName) -> void:
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var array_mesh := ArrayMesh.new()
 	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -142,6 +151,7 @@ func _build_visual(profile_id: StringName) -> void:
 		"vertices": vertices.size(),
 		"triangles": int(indices.size() / 3),
 		"visual_layer_kind": "full_map_deterministic_procedural_lod",
+		"visual_mode": str(visual_mode),
 		"native_detail_layer": "local_transvoxel_chunks",
 		"active_window_is_detail_layer_only": true,
 		"local_detail_exclusion_enabled": local_detail_exclusion_enabled,
@@ -153,14 +163,54 @@ func _build_visual(profile_id: StringName) -> void:
 	}
 
 
-func _make_material() -> StandardMaterial3D:
+func _make_material() -> Material:
+	if visual_mode == &"clean":
+		return _make_clean_shader_material()
 	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
+	var clean_texture := _load_clean_albedo_texture()
+	material.vertex_color_use_as_albedo = clean_texture == null
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.roughness = 1.0
-	material.albedo_color = Color.WHITE
+	material.albedo_color = _clean_material_albedo_color() if visual_mode == &"clean" else Color.WHITE
+	if clean_texture != null:
+		material.albedo_texture = clean_texture
 	return material
+
+
+func _make_clean_shader_material() -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = TerrainPaletteShader
+	material.set_shader_parameter("clean_visual_enabled", true)
+	material.set_shader_parameter("clean_albedo_color", clean_albedo_color)
+	material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)
+	var clean_texture := _load_clean_albedo_texture()
+	material.set_shader_parameter("clean_texture_enabled", clean_texture != null)
+	if clean_texture != null:
+		material.set_shader_parameter("clean_albedo_texture", clean_texture)
+	return material
+
+
+func _load_clean_albedo_texture() -> Texture2D:
+	if visual_mode != &"clean" or clean_albedo_texture_path.is_empty():
+		return null
+	var resource := ResourceLoader.load(clean_albedo_texture_path)
+	return resource as Texture2D
+
+
+func _clean_texture_uv_scale() -> float:
+	if visual_mode == &"clean":
+		return clean_texture_world_scale
+	return 1.0 / 32.0
+
+
+func _clean_material_albedo_color() -> Color:
+	return Color(
+		minf(clean_albedo_color.r * 1.15, 1.0),
+		minf(clean_albedo_color.g * 1.15, 1.0),
+		minf(clean_albedo_color.b * 1.15, 1.0),
+		clean_albedo_color.a
+	)
 
 
 func _material_color(material_id: int) -> Color:
@@ -175,6 +225,12 @@ func _material_color(material_id: int) -> Color:
 			return Color(0.45, 0.45, 0.42)
 		_:
 			return Color(0.5, 0.5, 0.5)
+
+
+func _visual_color(material_id: int) -> Color:
+	if visual_mode == &"clean":
+		return clean_albedo_color
+	return _material_color(material_id)
 
 
 func _is_inside_local_detail_exclusion(x: float, z: float) -> bool:
