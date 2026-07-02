@@ -186,6 +186,28 @@ func wait_for_minimum_resources(render_count: int, collision_count: int) -> bool
 	return false
 
 
+func wait_for_streaming_settled(
+	render_count: int,
+	collision_count: int,
+	active_record_limit: int = 0
+) -> bool:
+	var terrain_world := get_terrain_world()
+	if terrain_world == null:
+		return false
+	for _frame in range(900):
+		var metrics: Dictionary = terrain_world.call("get_runtime_metrics")
+		var summary := _streaming_settled_summary(metrics)
+		_last_cold_idle_summary = summary
+		if _is_streaming_settled(summary, render_count, collision_count, active_record_limit):
+			await get_tree().process_frame
+			metrics = terrain_world.call("get_runtime_metrics")
+			summary = _streaming_settled_summary(metrics)
+			_last_cold_idle_summary = summary
+			return _is_streaming_settled(summary, render_count, collision_count, active_record_limit)
+		await get_tree().process_frame
+	return false
+
+
 func wait_for_world_revision(target_revision: int) -> bool:
 	var terrain_world := get_terrain_world()
 	if terrain_world == null:
@@ -216,6 +238,10 @@ func get_last_edit_summary() -> Dictionary:
 	return _last_edit_summary
 
 
+func get_last_settle_summary() -> Dictionary:
+	return _last_cold_idle_summary.duplicate(true)
+
+
 func get_game_world_summary() -> Dictionary:
 	var terrain_world := get_terrain_world()
 	var metrics: Dictionary = {}
@@ -244,9 +270,91 @@ func get_game_world_summary() -> Dictionary:
 		"queued_collision": int(metrics.get("queued_collision", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
+		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
+		"scheduler_meshing_records": int(metrics.get("scheduler_meshing_records", 0)),
+		"scheduler_ready_records": int(metrics.get("scheduler_ready_records", 0)),
+		"scheduler_failed_records": int(metrics.get("scheduler_failed_records", 0)),
+		"scheduler_queued_jobs": int(metrics.get("scheduler_queued_jobs", 0)),
+		"scheduler_queued_completions": int(metrics.get("scheduler_queued_completions", 0)),
+		"page_sample_failures": int(metrics.get("page_sample_failures", 0)),
+		"page_mesh_failures": int(metrics.get("page_mesh_failures", 0)),
+		"page_last_failure_key": Vector4i(
+			int(metrics.get("page_last_failure_key_x", 0)),
+			int(metrics.get("page_last_failure_key_y", 0)),
+			int(metrics.get("page_last_failure_key_z", 0)),
+			int(metrics.get("page_last_failure_key_lod", 0))
+		),
 		"edit_replacements": int(metrics.get("edit_replacements", 0)),
 		"last_error": _last_error,
 	}
+
+
+func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
+	var summary := {
+		"world_running": bool(metrics.get("world_running", false)),
+		"queued_render": int(metrics.get("queued_render", 0)),
+		"queued_collision": int(metrics.get("queued_collision", 0)),
+		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
+		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
+		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
+		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
+		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
+		"render_resources": int(metrics.get("render_resources", 0)),
+		"collision_resources": int(metrics.get("collision_resources", 0)),
+		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
+		"scheduler_meshing_records": int(metrics.get("scheduler_meshing_records", 0)),
+		"scheduler_ready_records": int(metrics.get("scheduler_ready_records", 0)),
+		"scheduler_failed_records": int(metrics.get("scheduler_failed_records", 0)),
+		"scheduler_queued_jobs": int(metrics.get("scheduler_queued_jobs", 0)),
+		"scheduler_queued_completions": int(metrics.get("scheduler_queued_completions", 0)),
+		"page_sample_failures": int(metrics.get("page_sample_failures", 0)),
+		"page_mesh_failures": int(metrics.get("page_mesh_failures", 0)),
+		"page_last_failure_key": Vector4i(
+			int(metrics.get("page_last_failure_key_x", 0)),
+			int(metrics.get("page_last_failure_key_y", 0)),
+			int(metrics.get("page_last_failure_key_z", 0)),
+			int(metrics.get("page_last_failure_key_lod", 0))
+		),
+		"implementation": "gameworld_streaming_settled_v1",
+	}
+	summary["streaming_settled"] = _is_streaming_settled(summary, 0, 0, 0)
+	return summary
+
+
+func _is_streaming_settled(
+	summary: Dictionary,
+	render_count: int,
+	collision_count: int,
+	active_record_limit: int
+) -> bool:
+	var active_records := int(summary.get("active_chunk_records", 0))
+	if not bool(summary.get("world_running", false)):
+		return false
+	if int(summary.get("queued_render", 0)) != 0:
+		return false
+	if int(summary.get("queued_collision", 0)) != 0:
+		return false
+	if int(summary.get("pending_chunk_retirements", 0)) != 0:
+		return false
+	if int(summary.get("render_fading_resources", 0)) != 0:
+		return false
+	if int(summary.get("render_resources", 0)) < render_count:
+		return false
+	if int(summary.get("collision_resources", 0)) < collision_count:
+		return false
+	if int(summary.get("visual_ready_chunk_records", 0)) < render_count:
+		return false
+	if int(summary.get("scheduler_failed_records", 0)) != 0:
+		return false
+	if int(summary.get("page_sample_failures", 0)) != 0:
+		return false
+	if int(summary.get("page_mesh_failures", 0)) != 0:
+		return false
+	if active_records <= 0:
+		return false
+	if active_record_limit > 0 and active_records > active_record_limit:
+		return false
+	return true
 
 
 func _apply_profiles() -> void:

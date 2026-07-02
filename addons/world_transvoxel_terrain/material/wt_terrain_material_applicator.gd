@@ -8,7 +8,7 @@ const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
 const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
-const VISIBLE_SHADER_MODE := "addon_uv2_production_atlas"
+const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -18,11 +18,14 @@ const VISIBLE_SHADER_MODE := "addon_uv2_production_atlas"
 @export var clean_albedo_color: Color = Color(0.72, 0.65, 0.50, 1.0)
 @export var clean_albedo_texture_path: String = ""
 @export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
+@export var clean_triplanar_enabled: bool = true
+@export_range(1.0, 16.0, 0.1) var clean_triplanar_blend_sharpness: float = 4.0
 
 var _summary := {
 	"applied": false,
 	"materialized_instances": 0,
 	"reapplied_instances": 0,
+	"native_render_material_override": false,
 	"texture_resolution": 0,
 	"texture_format": CHECKER_TEXTURE_FORMAT,
 	"texture_bytes": 0,
@@ -71,15 +74,17 @@ func apply_materials_now() -> Dictionary:
 		_summary["applied"] = false
 		return get_material_summary()
 	var material := _material_instance()
+	var native_override_set := _set_native_material_override(backend, material)
 	var result := _apply_to_meshes(backend, material)
 	var profile := _material_profile_summary()
 	var resolved_texture_resolution := _material_texture_resolution
 	var production_resolution := _production_texture_resolution(profile)
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	_summary = {
-		"applied": int(result.get("checked", 0)) > 0,
+		"applied": native_override_set or int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
 		"reapplied_instances": int(result.get("updated", 0)),
+		"native_render_material_override": native_override_set,
 		"texture_resolution": resolved_texture_resolution,
 		"texture_format": CHECKER_TEXTURE_FORMAT,
 		"texture_bytes": _texture_bytes(resolved_texture_resolution),
@@ -156,6 +161,8 @@ func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_visual_enabled", visual_mode == &"clean")
 	shader_material.set_shader_parameter("clean_albedo_color", clean_albedo_color)
 	shader_material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)
+	shader_material.set_shader_parameter("clean_triplanar_enabled", clean_triplanar_enabled)
+	shader_material.set_shader_parameter("clean_triplanar_blend_sharpness", clean_triplanar_blend_sharpness)
 	var texture := _load_clean_albedo_texture()
 	shader_material.set_shader_parameter("clean_texture_enabled", texture != null)
 	if texture != null:
@@ -184,6 +191,12 @@ func _apply_to_meshes(node: Node, material: Material) -> Dictionary:
 	var result := {"checked": 0, "updated": 0}
 	_apply_to_meshes_recursive(node, material, result)
 	return result
+
+func _set_native_material_override(node: Node, material: Material) -> bool:
+	if node == null or not node.has_method("set_render_material_override"):
+		return false
+	node.call("set_render_material_override", material)
+	return true
 
 func _apply_to_meshes_recursive(node: Node, material: Material, result: Dictionary) -> void:
 	if node is MeshInstance3D:

@@ -167,14 +167,10 @@ func _make_material() -> Material:
 	if visual_mode == &"clean":
 		return _make_clean_shader_material()
 	var material := StandardMaterial3D.new()
-	var clean_texture := _load_clean_albedo_texture()
-	material.vertex_color_use_as_albedo = clean_texture == null
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.vertex_color_use_as_albedo = true
+	material.cull_mode = BaseMaterial3D.CULL_BACK
 	material.roughness = 1.0
-	material.albedo_color = _clean_material_albedo_color() if visual_mode == &"clean" else Color.WHITE
-	if clean_texture != null:
-		material.albedo_texture = clean_texture
+	material.albedo_color = Color.WHITE
 	return material
 
 
@@ -184,6 +180,8 @@ func _make_clean_shader_material() -> ShaderMaterial:
 	material.set_shader_parameter("clean_visual_enabled", true)
 	material.set_shader_parameter("clean_albedo_color", clean_albedo_color)
 	material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)
+	material.set_shader_parameter("clean_triplanar_enabled", true)
+	material.set_shader_parameter("clean_triplanar_blend_sharpness", 4.0)
 	var clean_texture := _load_clean_albedo_texture()
 	material.set_shader_parameter("clean_texture_enabled", clean_texture != null)
 	if clean_texture != null:

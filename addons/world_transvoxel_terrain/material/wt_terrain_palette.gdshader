@@ -15,11 +15,15 @@ uniform bool clean_texture_enabled = false;
 uniform sampler2D clean_albedo_texture : source_color, repeat_enable;
 uniform vec4 clean_albedo_color : source_color = vec4(0.72, 0.65, 0.50, 1.0);
 uniform float clean_texture_world_scale = 0.125;
+uniform bool clean_triplanar_enabled = true;
+uniform float clean_triplanar_blend_sharpness = 4.0;
 
 varying vec3 world_position;
+varying vec3 world_normal;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
 float material_tile(float material_id) {
@@ -40,11 +44,27 @@ vec2 atlas_uv(float material_id, vec3 world_pos) {
 	return vec2((material_tile(material_id) + local_uv.x) * 0.25, local_uv.y);
 }
 
+vec3 triplanar_weights(vec3 normal, float sharpness) {
+	vec3 weights = pow(max(abs(normal), vec3(0.0001)), vec3(max(sharpness, 0.001)));
+	return weights / max(weights.x + weights.y + weights.z, 0.0001);
+}
+
+vec3 clean_texture_color(vec3 world_pos, vec3 normal) {
+	if (!clean_triplanar_enabled) {
+		return texture(clean_albedo_texture, world_pos.xz * clean_texture_world_scale).rgb;
+	}
+	vec3 weights = triplanar_weights(normal, clean_triplanar_blend_sharpness);
+	vec3 x_projection = texture(clean_albedo_texture, world_pos.zy * clean_texture_world_scale).rgb;
+	vec3 y_projection = texture(clean_albedo_texture, world_pos.xz * clean_texture_world_scale).rgb;
+	vec3 z_projection = texture(clean_albedo_texture, world_pos.xy * clean_texture_world_scale).rgb;
+	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
 void fragment() {
 	if (clean_visual_enabled) {
 		vec3 clean_color = clean_albedo_color.rgb;
 		if (clean_texture_enabled) {
-			clean_color = clamp(texture(clean_albedo_texture, world_position.xz * clean_texture_world_scale).rgb * clean_albedo_color.rgb * 1.15, vec3(0.0), vec3(1.0));
+			clean_color = clamp(clean_texture_color(world_position, normalize(world_normal)) * clean_albedo_color.rgb * 1.15, vec3(0.0), vec3(1.0));
 		}
 		ALBEDO = clean_color;
 		ROUGHNESS = 0.88;

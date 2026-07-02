@@ -40,7 +40,9 @@ func _ready() -> void:
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
 	selected_profile = StringName(_arg_value(args, "--p2-profile", str(COMPACT_PROFILE)))
 	playtest_profile_id = selected_profile
-	if not autonomous:
+	if autonomous:
+		_clear_autonomous_profile_outputs(selected_profile)
+	else:
 		if human_visual_capture_path.is_empty():
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		_clear_human_storage()
@@ -119,8 +121,7 @@ func _run_autonomous_proof() -> void:
 	if not bool(game_world.update_player_viewer(true)):
 		_fail("player viewer update failed")
 		return
-	if not await game_world.wait_for_cold_idle(expected_resources, expected_resources):
-		_fail("terrain did not settle after traversal")
+	if not await _wait_for_current_profile_settled("after traversal"):
 		return
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
 	if not bool(player.call("submit_edit_input", &"carve", edit_point)):
@@ -129,8 +130,7 @@ func _run_autonomous_proof() -> void:
 	if not await game_world.wait_for_world_revision(before_revision + 1):
 		_fail("terrain edit did not commit")
 		return
-	if not await game_world.wait_for_cold_idle(expected_resources, expected_resources):
-		_fail("terrain did not return to cold idle")
+	if not await _wait_for_current_profile_settled("after edit"):
 		return
 	if not FileAccess.file_exists(_storage_root(selected_profile) + "/world.wtedit"):
 		_fail("edit journal missing")
@@ -142,7 +142,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 cold_idle=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -155,6 +155,7 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("active_chunk_records", 0)),
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
+		1 if bool(presentation.get("native_render_material_override", false)) else 0,
 		1 if bool(presentation.get("full_map_enabled", false)) else 0,
 		int(presentation.get("full_map_blocks_x", 0)),
 		int(presentation.get("full_map_blocks_z", 0)),
@@ -162,6 +163,25 @@ func _run_autonomous_proof() -> void:
 	])
 	await get_tree().process_frame
 	get_tree().quit(0)
+
+
+func _wait_for_current_profile_settled(context: String) -> bool:
+	var settled := false
+	if selected_profile == FLAT_PROFILE:
+		settled = await game_world.wait_for_cold_idle(expected_resources, expected_resources)
+	else:
+		settled = await game_world.wait_for_streaming_settled(
+			expected_resources,
+			expected_resources,
+			expected_max_resources
+		)
+	if settled:
+		return true
+	var summary := {}
+	if game_world != null and game_world.has_method("get_last_settle_summary"):
+		summary = game_world.call("get_last_settle_summary")
+	_fail("terrain did not reach gameplay-settled state %s: %s" % [context, str(summary)])
+	return false
 
 
 func _build_hud() -> void:
@@ -345,6 +365,25 @@ func _clear_human_storage() -> void:
 		_remove_tree(root)
 
 
+func _clear_profile_storage(profile_id: StringName) -> void:
+	var root := ProjectSettings.globalize_path(_storage_root(profile_id))
+	if DirAccess.dir_exists_absolute(root):
+		_remove_tree(root)
+
+
+func _clear_autonomous_profile_outputs(profile_id: StringName) -> void:
+	if profile_id != FLAT_PROFILE:
+		_clear_profile_storage(profile_id)
+		return
+	var root := ProjectSettings.globalize_path(_storage_root(profile_id))
+	var edit_path := root.path_join("world.wtedit")
+	if FileAccess.file_exists(edit_path):
+		DirAccess.remove_absolute(edit_path)
+	var snapshots_path := root.path_join("snapshots")
+	if DirAccess.dir_exists_absolute(snapshots_path):
+		_remove_tree(snapshots_path)
+
+
 func _remove_tree(path: String) -> void:
 	var directory := DirAccess.open(path)
 	if directory == null:
@@ -394,6 +433,7 @@ func _presentation_summary() -> Dictionary:
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
+		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
 		"full_map_enabled": bool(full_map_summary.get("enabled", false)),
 		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
@@ -413,6 +453,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if str(summary.get("quality_implementation", "")) != "terrain_material_texture_pipeline_v1":
 		_fail("terrain material implementation mismatch: %s" % str(summary))
+		return false
+	if not bool(summary.get("native_render_material_override", false)):
+		_fail("terrain material is not installed through native render override: %s" % str(summary))
 		return false
 	if bool(summary.get("full_map_enabled", false)):
 		_fail("playable terrain must not depend on compact full-map visual: %s" % str(summary))
@@ -495,6 +538,7 @@ func _capture_human_visual() -> void:
 		"collision_resources": int(summary.get("collision_resources", 0)),
 		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
+		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"capture_path": human_visual_capture_path,
 	}))
 	get_tree().quit(0)

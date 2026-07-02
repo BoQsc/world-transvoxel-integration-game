@@ -38,7 +38,9 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage,
   capped radius-1 near-detail refinement, and no fake full-map visual in human
   play;
-- production terrain material texture pipeline on active render meshes;
+- production terrain material texture pipeline installed through the native
+  render material override, so newly streamed chunks do not flash with the
+  engine default material;
 - spawn floor raycast sanity before automated handoff.
 
 ## Profile setup
@@ -114,6 +116,7 @@ telemetry UI by default; autonomous proof keeps it available for validation.
 | Terrain invisible | Verify generation and storage profiles, then confirm `viewer_maximum_lod=3`, `radius_chunks=8`, and sufficient runtime capacities for compact 2K. |
 | Player falls or spawns badly | Run the autonomous proof and check `spawn_floor_hit=1` and `spawn_above_floor=1`. |
 | Edits do not commit | Inspect `game_world.get_last_edit_summary()` and the terrain edit journal under `res://build/<game>/<profile>/`. |
+| White/default chunks flash while moving | Confirm the material summary reports `native_render_material_override=true`; the old recursive-only material scan is not sufficient for human play. |
 | Debug UI visible during human play | Confirm you are running this integration game main scene, not an older validation playtest scene. |
 
 ## Automated proof
@@ -126,5 +129,6 @@ python tools/p2_production_integration_game_quality.py --skip-build
 
 The proof launches this project through `project.godot`, validates both standard
 profiles, submits terrain edits through player input methods, verifies storage
-journals, requires cold idle, proves the spawn floor, and proves the Terrain 1.0
-presentation marker fields.
+journals, requires gameplay-settled streaming for the compact LOD profile, keeps
+strict cold-idle for the flat baseline, proves the spawn floor, and proves the
+Terrain 1.0 presentation marker fields.
