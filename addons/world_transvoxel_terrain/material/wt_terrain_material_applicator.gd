@@ -20,6 +20,8 @@ const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas
 @export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
 @export var clean_triplanar_enabled: bool = true
 @export_range(1.0, 16.0, 0.1) var clean_triplanar_blend_sharpness: float = 4.0
+@export var clean_material_variation_enabled: bool = true
+@export_range(0.0, 1.0, 0.01) var clean_material_variation_strength: float = 0.08
 
 var _summary := {
 	"applied": false,
@@ -115,6 +117,8 @@ func apply_materials_now() -> Dictionary:
 		"mapping_policy": str(profile.get("mapping_policy", "")),
 		"blending_policy": str(profile.get("blending_policy", "")),
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
+		"clean_material_variation_enabled": clean_material_variation_enabled,
+		"clean_material_variation_strength": clean_material_variation_strength,
 		"implementation": "terrain_addon_material_applicator",
 	}
 	return get_material_summary()
@@ -163,6 +167,8 @@ func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)
 	shader_material.set_shader_parameter("clean_triplanar_enabled", clean_triplanar_enabled)
 	shader_material.set_shader_parameter("clean_triplanar_blend_sharpness", clean_triplanar_blend_sharpness)
+	shader_material.set_shader_parameter("clean_material_variation_enabled", clean_material_variation_enabled)
+	shader_material.set_shader_parameter("clean_material_variation_strength", clean_material_variation_strength)
 	var texture := _load_clean_albedo_texture()
 	shader_material.set_shader_parameter("clean_texture_enabled", texture != null)
 	if texture != null:

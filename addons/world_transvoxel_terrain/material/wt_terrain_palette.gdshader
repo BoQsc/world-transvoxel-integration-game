@@ -17,6 +17,8 @@ uniform vec4 clean_albedo_color : source_color = vec4(0.72, 0.65, 0.50, 1.0);
 uniform float clean_texture_world_scale = 0.125;
 uniform bool clean_triplanar_enabled = true;
 uniform float clean_triplanar_blend_sharpness = 4.0;
+uniform bool clean_material_variation_enabled = true;
+uniform float clean_material_variation_strength = 0.08;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -60,11 +62,28 @@ vec3 clean_texture_color(vec3 world_pos, vec3 normal) {
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
 }
 
+vec3 material_clean_tint(float material_id) {
+	if (material_id > 1.5 && material_id < 2.5) {
+		return vec3(0.62, 0.64, 0.48);
+	} else if (material_id > 2.5 && material_id < 3.5) {
+		return vec3(0.64, 0.57, 0.43);
+	} else if (material_id > 3.5 && material_id < 4.5) {
+		return vec3(0.76, 0.68, 0.50);
+	} else if (material_id > 6.5 && material_id < 7.5) {
+		return vec3(0.55, 0.53, 0.48);
+	}
+	return vec3(0.52, 0.48, 0.40);
+}
+
 void fragment() {
 	if (clean_visual_enabled) {
+		float material_id = UV2.x;
 		vec3 clean_color = clean_albedo_color.rgb;
 		if (clean_texture_enabled) {
 			clean_color = clamp(clean_texture_color(world_position, normalize(world_normal)) * clean_albedo_color.rgb * 1.15, vec3(0.0), vec3(1.0));
+		}
+		if (clean_material_variation_enabled) {
+			clean_color = mix(clean_color, material_clean_tint(material_id), clamp(clean_material_variation_strength, 0.0, 1.0));
 		}
 		ALBEDO = clean_color;
 		ROUGHNESS = 0.88;

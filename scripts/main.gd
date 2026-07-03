@@ -435,6 +435,8 @@ func _presentation_summary() -> Dictionary:
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
+		"clean_material_variation_enabled": bool(material_summary.get("clean_material_variation_enabled", false)),
+		"clean_material_variation_strength": float(material_summary.get("clean_material_variation_strength", 0.0)),
 		"full_map_enabled": bool(full_map_summary.get("enabled", false)),
 		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
 		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
@@ -539,6 +541,8 @@ func _capture_human_visual() -> void:
 		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
+		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
+		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
 		"capture_path": human_visual_capture_path,
 	}))
 	get_tree().quit(0)
