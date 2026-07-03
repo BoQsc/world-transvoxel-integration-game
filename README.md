@@ -33,8 +33,11 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 - crosshair UI only; telemetry and profile selector are hidden during normal
   human play;
 - mouse-look, WASD movement, jump, and terrain edit input path;
+- human lighting controls for daylight, low-angle, overcast, and local probe
+  lighting inspection;
 - telemetry overlay and profile selector for autonomous proof;
-- profile selector with `flat_baseline` and `g19_compact_2k_on_demand`;
+- default human profile is flat terrain; the mountainous 2K profile is explicit
+  inspection coverage;
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage,
   capped radius-1 near-detail refinement, and no fake full-map visual in human
   play;
@@ -51,11 +54,15 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 
 ## Profile setup
 
-The default human profile is `g19_compact_2k_on_demand`, a deterministic compact
-2K map with 128 by 128 chunks, 2048 by 2048 block coverage, and
-`viewer_maximum_lod=3`. The profile uses `radius_chunks=8` for full native
-coarse coverage across the 2K map and `runtime_lod_refinement_radius_chunks=1`
-so near detail does not force the entire visible world to refine.
+The default human profile is `flat_baseline`. It is intentionally the safe,
+flat terrain option for normal launch.
+
+The mountainous inspection profile is `g19_compact_2k_on_demand`, a
+deterministic compact 2K map with 128 by 128 chunks, 2048 by 2048 block
+coverage, and `viewer_maximum_lod=3`. The profile uses `radius_chunks=8` for
+full native coarse coverage across the 2K map and
+`runtime_lod_refinement_radius_chunks=1` so near detail does not force the
+entire visible world to refine.
 
 The flat baseline profile remains available for proof automation:
 
@@ -92,6 +99,8 @@ Controls:
 - Left mouse: carve terrain at the crosshair hit
 - Right mouse: place terrain at the crosshair hit
 - `~`, then `F`: toggle fly mode for human terrain inspection
+- `~`, then `L`: cycle global lighting preset
+- `~`, then `K`: toggle local terrain inspection lights near/above the player
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again

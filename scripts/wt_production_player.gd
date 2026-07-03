@@ -9,6 +9,7 @@ extends CharacterBody3D
 @export var fly_fast_multiplier: float = 4.0
 
 var game_world: Node
+var human_command_target: Node
 var edit_point := Vector3.ZERO
 var pitch := 0.0
 var human_command_armed := false
@@ -119,6 +120,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			human_command_armed = false
 			_set_fly_mode_enabled(not fly_mode_enabled)
 			return
+		if human_command_armed and (event.keycode == KEY_L or event.physical_keycode == KEY_L):
+			human_command_armed = false
+			_forward_human_command(&"cycle_lighting")
+			return
+		if human_command_armed and (event.keycode == KEY_K or event.physical_keycode == KEY_K):
+			human_command_armed = false
+			_forward_human_command(&"toggle_local_lights")
+			return
 		human_command_armed = false
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
@@ -170,6 +179,12 @@ func _set_fly_mode_enabled(enabled: bool) -> void:
 			collision_mask = _walk_collision_mask
 			_walk_collision_state_saved = false
 	print("human_fly_mode=%s" % ("on" if fly_mode_enabled else "off"))
+
+
+func _forward_human_command(command: StringName) -> bool:
+	if human_command_target == null or not human_command_target.has_method("handle_human_command"):
+		return false
+	return bool(human_command_target.call("handle_human_command", command))
 
 
 func _is_human_command_prefix(event: InputEventKey) -> bool:

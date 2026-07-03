@@ -4,6 +4,8 @@ const MARKER := "WT_PRODUCTION_GAME_P2_PASS"
 const ADDON_ID := "world_transvoxel_gameworld"
 const COMPACT_PROFILE := &"g19_compact_2k_on_demand"
 const FLAT_PROFILE := &"flat_baseline"
+const DEFAULT_HUMAN_PROFILE := FLAT_PROFILE
+const DEFAULT_AUTONOMOUS_PROFILE := COMPACT_PROFILE
 const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
@@ -13,7 +15,7 @@ const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 
-var playtest_profile_id: StringName = COMPACT_PROFILE
+var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
 var player: CharacterBody3D
 var telemetry_label: Label
@@ -21,7 +23,7 @@ var profile_selector: OptionButton
 var crosshair: Label
 var material_applicator: Node
 var full_map_visual: MeshInstance3D
-var selected_profile: StringName = COMPACT_PROFILE
+var selected_profile: StringName = DEFAULT_HUMAN_PROFILE
 var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
@@ -30,6 +32,14 @@ var expected_resources := 25
 var expected_max_resources := 81
 var expected_maximum_lod := 1
 var edit_point := Vector3.ZERO
+var world_environment: WorldEnvironment
+var environment_resource: Environment
+var sun_light: DirectionalLight3D
+var terrain_overhead_light: OmniLight3D
+var terrain_probe_light: SpotLight3D
+var lighting_preset_index := 0
+var initial_lighting_preset := 0
+var local_terrain_lights_enabled := false
 
 
 func _ready() -> void:
@@ -38,7 +48,9 @@ func _ready() -> void:
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
-	selected_profile = StringName(_arg_value(args, "--p2-profile", str(COMPACT_PROFILE)))
+	initial_lighting_preset = int(_arg_value(args, "--human-lighting-preset", "0"))
+	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
+	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
@@ -73,6 +85,7 @@ func _start_profile() -> void:
 	player = _create_player(settings["start"])
 	player.game_world = game_world
 	player.edit_point = edit_point
+	player.human_command_target = self
 	game_world.configure_game_world(
 		selected_profile,
 		_generation_profile(selected_profile),
@@ -102,6 +115,10 @@ func _start_profile() -> void:
 			call_deferred("_capture_human_visual")
 	if autonomous:
 		await _run_autonomous_proof()
+
+
+func _process(_delta: float) -> void:
+	_update_terrain_inspection_lights()
 
 
 func _run_autonomous_proof() -> void:
@@ -167,7 +184,7 @@ func _run_autonomous_proof() -> void:
 
 func _wait_for_current_profile_settled(context: String) -> bool:
 	var settled := false
-	if selected_profile == FLAT_PROFILE:
+	if expected_maximum_lod == 0:
 		settled = await game_world.wait_for_cold_idle(expected_resources, expected_resources)
 	else:
 		settled = await game_world.wait_for_streaming_settled(
@@ -276,8 +293,8 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
-		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8), "detail_exclusion_half_extent": 0.0}
-	return {"start": Vector3(1032, 52, 1032), "viewers": [Vector3(1032, 52, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 38, 1032), "detail_exclusion_half_extent": 0.0}
+		return {"start": Vector3(1032, 18, 1032), "viewers": [Vector3(1032, 18, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 0.0}
+	return {"start": Vector3(1032, 86, 1032), "viewers": [Vector3(1032, 86, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 60, 1032), "detail_exclusion_half_extent": 0.0}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -291,8 +308,8 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	if profile_id == FLAT_PROFILE:
 		generation.seed = 101
 		generation.source_revision = 101
-		generation.world_chunk_count_x = 8
-		generation.world_chunk_count_z = 8
+		generation.world_chunk_count_x = 128
+		generation.world_chunk_count_z = 128
 		generation.source_mode = GenerationProfile.SourceMode.FLAT
 	return generation
 
@@ -302,8 +319,6 @@ func _storage_profile(profile_id: StringName) -> Resource:
 	storage.profile_id = profile_id
 	var root_path := _storage_root(profile_id)
 	storage.world_manifest_path = "%s/procedural.wtseed" % root_path
-	if profile_id == FLAT_PROFILE:
-		storage.world_manifest_path = "%s/streaming.wtworld" % root_path
 	storage.object_root_path = root_path
 	storage.edit_journal_path = "%s/world.wtedit" % root_path
 	storage.snapshot_directory = "%s/snapshots" % root_path
@@ -314,7 +329,7 @@ func _storage_profile(profile_id: StringName) -> Resource:
 func _storage_root(profile_id: StringName) -> String:
 	if profile_id == FLAT_PROFILE:
 		if autonomous:
-			return "res://build/production-lifecycle-fixture"
+			return "res://build/p2-production-game/%s" % str(profile_id)
 		return "res://build/human-playtest/%s" % str(profile_id)
 	if not autonomous:
 		return "res://build/human-playtest/%s" % str(profile_id)
@@ -340,23 +355,114 @@ func _verify_scene_contract() -> bool:
 
 
 func _configure_game_lighting() -> void:
-	var world_environment := WorldEnvironment.new()
+	world_environment = WorldEnvironment.new()
 	world_environment.name = "HumanPlaytestWorldEnvironment"
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.56, 0.70, 0.92)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.86, 0.88, 0.82)
-	environment.ambient_light_energy = 0.75
-	world_environment.environment = environment
+	environment_resource = Environment.new()
+	environment_resource.background_mode = Environment.BG_COLOR
+	environment_resource.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	world_environment.environment = environment_resource
 	add_child(world_environment)
 
-	var sun := DirectionalLight3D.new()
-	sun.name = "HumanPlaytestSun"
-	sun.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
-	sun.light_energy = 1.35
-	sun.shadow_enabled = false
-	add_child(sun)
+	sun_light = DirectionalLight3D.new()
+	sun_light.name = "HumanPlaytestSun"
+	sun_light.shadow_enabled = false
+	add_child(sun_light)
+
+	terrain_overhead_light = OmniLight3D.new()
+	terrain_overhead_light.name = "TerrainInspectionOverheadLight"
+	terrain_overhead_light.omni_range = 28.0
+	terrain_overhead_light.light_energy = 2.2
+	terrain_overhead_light.visible = false
+	add_child(terrain_overhead_light)
+
+	terrain_probe_light = SpotLight3D.new()
+	terrain_probe_light.name = "TerrainInspectionProbeLight"
+	terrain_probe_light.spot_range = 42.0
+	terrain_probe_light.spot_angle = 46.0
+	terrain_probe_light.light_energy = 3.0
+	terrain_probe_light.visible = false
+	add_child(terrain_probe_light)
+
+	_apply_lighting_preset(initial_lighting_preset)
+	set_process(true)
+
+
+func handle_human_command(command: StringName) -> bool:
+	match command:
+		&"cycle_lighting":
+			_apply_lighting_preset((lighting_preset_index + 1) % 4)
+			return true
+		&"toggle_local_lights":
+			_set_local_terrain_lights_enabled(not local_terrain_lights_enabled)
+			return true
+	return false
+
+
+func _apply_lighting_preset(index: int) -> void:
+	lighting_preset_index = int(clamp(index, 0, 3))
+	if environment_resource == null or sun_light == null:
+		return
+	match lighting_preset_index:
+		0:
+			environment_resource.background_color = Color(0.56, 0.70, 0.92)
+			environment_resource.ambient_light_color = Color(0.86, 0.88, 0.82)
+			environment_resource.ambient_light_energy = 0.75
+			sun_light.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
+			sun_light.light_color = Color(1.0, 0.96, 0.88)
+			sun_light.light_energy = 1.35
+			_set_local_terrain_lights_enabled(false)
+		1:
+			environment_resource.background_color = Color(0.42, 0.50, 0.66)
+			environment_resource.ambient_light_color = Color(0.58, 0.62, 0.68)
+			environment_resource.ambient_light_energy = 0.42
+			sun_light.rotation_degrees = Vector3(-13.0, 62.0, 0.0)
+			sun_light.light_color = Color(1.0, 0.72, 0.46)
+			sun_light.light_energy = 1.55
+			_set_local_terrain_lights_enabled(false)
+		2:
+			environment_resource.background_color = Color(0.50, 0.55, 0.58)
+			environment_resource.ambient_light_color = Color(0.78, 0.80, 0.78)
+			environment_resource.ambient_light_energy = 0.95
+			sun_light.rotation_degrees = Vector3(-70.0, 20.0, 0.0)
+			sun_light.light_color = Color(0.84, 0.88, 0.92)
+			sun_light.light_energy = 0.28
+			_set_local_terrain_lights_enabled(false)
+		_:
+			environment_resource.background_color = Color(0.04, 0.05, 0.07)
+			environment_resource.ambient_light_color = Color(0.10, 0.12, 0.16)
+			environment_resource.ambient_light_energy = 0.18
+			sun_light.rotation_degrees = Vector3(-58.0, -25.0, 0.0)
+			sun_light.light_color = Color(0.50, 0.62, 1.0)
+			sun_light.light_energy = 0.18
+			_set_local_terrain_lights_enabled(true)
+	if not autonomous and human_visual_capture_path.is_empty():
+		print("human_lighting_preset=%d local_lights=%s" % [
+			lighting_preset_index,
+			"on" if local_terrain_lights_enabled else "off",
+		])
+
+
+func _set_local_terrain_lights_enabled(enabled: bool) -> void:
+	local_terrain_lights_enabled = enabled
+	if terrain_overhead_light != null:
+		terrain_overhead_light.visible = enabled
+	if terrain_probe_light != null:
+		terrain_probe_light.visible = enabled
+
+
+func _update_terrain_inspection_lights() -> void:
+	if player == null or not local_terrain_lights_enabled:
+		return
+	var base := player.global_position
+	var forward := -player.global_transform.basis.z
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera != null:
+		forward = -camera.global_transform.basis.z
+	if terrain_overhead_light != null:
+		terrain_overhead_light.global_position = base + Vector3(0.0, 7.5, 0.0)
+	if terrain_probe_light != null:
+		terrain_probe_light.global_position = base + Vector3(0.0, 4.5, 0.0) - forward * 5.0
+		terrain_probe_light.look_at(base + forward * 10.0, Vector3.UP)
 
 
 func _clear_human_storage() -> void:
@@ -372,16 +478,7 @@ func _clear_profile_storage(profile_id: StringName) -> void:
 
 
 func _clear_autonomous_profile_outputs(profile_id: StringName) -> void:
-	if profile_id != FLAT_PROFILE:
-		_clear_profile_storage(profile_id)
-		return
-	var root := ProjectSettings.globalize_path(_storage_root(profile_id))
-	var edit_path := root.path_join("world.wtedit")
-	if FileAccess.file_exists(edit_path):
-		DirAccess.remove_absolute(edit_path)
-	var snapshots_path := root.path_join("snapshots")
-	if DirAccess.dir_exists_absolute(snapshots_path):
-		_remove_tree(snapshots_path)
+	_clear_profile_storage(profile_id)
 
 
 func _remove_tree(path: String) -> void:
@@ -413,7 +510,7 @@ func _verify_summary(summary: Dictionary) -> bool:
 		if int(summary.get(key, 0)) < expected_resources or int(summary.get(key, 0)) > expected_max_resources:
 			_fail("resource mismatch: %s" % str(summary))
 			return false
-	if selected_profile == FLAT_PROFILE and int(summary.get("active_chunk_records", 0)) != expected_resources:
+	if expected_maximum_lod == 0 and int(summary.get("active_chunk_records", 0)) != expected_resources:
 		_fail("resource mismatch: %s" % str(summary))
 		return false
 	for key in ["queued_render", "queued_collision", "pending_chunk_retirements", "render_fading_resources"]:
@@ -543,6 +640,8 @@ func _capture_human_visual() -> void:
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
+		"lighting_preset": lighting_preset_index,
+		"local_terrain_lights_enabled": local_terrain_lights_enabled,
 		"capture_path": human_visual_capture_path,
 	}))
 	get_tree().quit(0)

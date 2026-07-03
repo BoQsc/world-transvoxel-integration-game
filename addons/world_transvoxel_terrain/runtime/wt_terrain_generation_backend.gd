@@ -8,7 +8,24 @@ static func start_backend_world(
 	manifest_path: String,
 	object_root: String
 ) -> Dictionary:
-	if _uses_procedural_generation(generation_profile):
+	var source_mode := _source_mode_name(generation_profile)
+	if source_mode == "FLAT":
+		if not backend_terrain.has_method("start_flat_world"):
+			return {
+				"started": false,
+				"error": "backend terrain cannot start flat worlds",
+			}
+		return {
+			"started": bool(backend_terrain.call(
+				"start_flat_world",
+				int(generation_profile.get("world_chunk_count_x")),
+				int(generation_profile.get("world_chunk_count_z")),
+				int(generation_profile.get("source_revision")),
+				object_root
+			)),
+			"error": "",
+		}
+	if source_mode == "DETERMINISTIC_REFERENCE":
 		if not backend_terrain.has_method("start_procedural_world"):
 			return {
 				"started": false,
@@ -31,15 +48,22 @@ static func start_backend_world(
 	}
 
 
-static func _uses_procedural_generation(generation_profile: Resource) -> bool:
+static func _source_mode_name(generation_profile: Resource) -> String:
 	if generation_profile == null:
-		return false
+		return ""
 	if not _resource_has_property(generation_profile, "source_mode"):
-		return false
+		return ""
 	if generation_profile.has_method("get_contract_summary"):
 		var summary := Dictionary(generation_profile.call("get_contract_summary"))
-		return str(summary.get("source_mode", "")) == "DETERMINISTIC_REFERENCE"
-	return int(generation_profile.get("source_mode")) == 1
+		return str(summary.get("source_mode", ""))
+	var source_mode := int(generation_profile.get("source_mode"))
+	if source_mode == 0:
+		return "FLAT"
+	if source_mode == 1:
+		return "DETERMINISTIC_REFERENCE"
+	if source_mode == 2:
+		return "BAKED_WORLD"
+	return ""
 
 
 static func _resource_has_property(resource: Resource, property_name: String) -> bool:
