@@ -285,6 +285,10 @@ func get_game_world_summary() -> Dictionary:
 			int(metrics.get("page_last_failure_key_lod", 0))
 		),
 		"edit_replacements": int(metrics.get("edit_replacements", 0)),
+		"edit_lod_retention_zones": int(metrics.get("edit_lod_retention_zones", 0)),
+		"edit_lod_retention_active_viewers": int(metrics.get("edit_lod_retention_active_viewers", 0)),
+		"edit_lod_retention_plans": int(metrics.get("edit_lod_retention_plans", 0)),
+		"edit_lod_retention_fallbacks": int(metrics.get("edit_lod_retention_fallbacks", 0)),
 		"last_error": _last_error,
 	}
 
@@ -315,6 +319,10 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 			int(metrics.get("page_last_failure_key_z", 0)),
 			int(metrics.get("page_last_failure_key_lod", 0))
 		),
+		"edit_lod_retention_zones": int(metrics.get("edit_lod_retention_zones", 0)),
+		"edit_lod_retention_active_viewers": int(metrics.get("edit_lod_retention_active_viewers", 0)),
+		"edit_lod_retention_plans": int(metrics.get("edit_lod_retention_plans", 0)),
+		"edit_lod_retention_fallbacks": int(metrics.get("edit_lod_retention_fallbacks", 0)),
 		"implementation": "gameworld_streaming_settled_v1",
 	}
 	summary["streaming_settled"] = _is_streaming_settled(summary, 0, 0, 0)

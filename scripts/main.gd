@@ -727,6 +727,10 @@ func _capture_human_visual() -> void:
 		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
 		"render_resources": int(summary.get("render_resources", 0)),
 		"collision_resources": int(summary.get("collision_resources", 0)),
+		"edit_lod_retention_zones": int(summary.get("edit_lod_retention_zones", 0)),
+		"edit_lod_retention_active_viewers": int(summary.get("edit_lod_retention_active_viewers", 0)),
+		"edit_lod_retention_plans": int(summary.get("edit_lod_retention_plans", 0)),
+		"edit_lod_retention_fallbacks": int(summary.get("edit_lod_retention_fallbacks", 0)),
 		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
@@ -743,6 +747,7 @@ func _capture_human_visual() -> void:
 
 func _capture_requires_interaction_inspection() -> bool:
 	return human_visual_capture_mode.begins_with("edit_") or \
+		human_visual_capture_mode.begins_with("small_edit_") or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -781,6 +786,13 @@ func _apply_interaction_inspection_edits() -> bool:
 
 func _interaction_inspection_operations() -> Array:
 	var operations: Array = []
+	if human_visual_capture_mode.begins_with("small_edit_"):
+		var center := edit_point
+		operations.append(_edit_operation(&"carve", center, 1.8, 1, 1.0))
+		operations.append(_edit_operation(&"carve", center + Vector3(2.4, 0.0, 0.0), 1.8, 1, 1.0))
+		operations.append(_edit_operation(&"carve", center + Vector3(0.0, 0.0, 2.4), 1.8, 1, 1.0))
+		operations.append(_edit_operation(&"carve", center + Vector3(2.4, 0.0, 2.4), 1.8, 1, 1.0))
+		return operations
 	if selected_profile == FLAT_PROFILE:
 		operations.append(_edit_operation(&"carve", Vector3(1010, 8, 1010), 18.0, 1, 1.0))
 		operations.append(_edit_operation(&"construct", Vector3(1058, 10, 1018), 14.0, 4, 1.0))
@@ -858,6 +870,21 @@ func _apply_capture_camera_mode() -> void:
 		"local_overlap":
 			capture_position = Vector3(1180.0, 150.0, 940.0)
 			capture_target = Vector3(1184.0, 118.0, 1008.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"small_edit_near":
+			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
+			capture_position = edit_point + Vector3(-8.0, 18.0, -46.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"small_edit_mid":
+			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
+			capture_position = edit_point + Vector3(-44.0, 72.0, -190.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"small_edit_far":
+			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
+			capture_position = edit_point + Vector3(-130.0, 145.0, -410.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"edit_near", "interaction_near":
