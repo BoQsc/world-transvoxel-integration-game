@@ -9,6 +9,10 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 This is the current `world-transvoxel-integration-game` scene using the addon
 stack directly. It is not the old validation playtest scene.
 
+Read `GODOT_SETUP.md` before changing textures, import settings, addons, scenes,
+or human visual tests. The Godot import cache is part of the runtime setup and
+must not be treated as optional.
+
 Expected baseline:
 
 - addon stack: `world_transvoxel` + `world_transvoxel_terrain` + `world_transvoxel_gameworld`

@@ -3,6 +3,11 @@
 This repository is the current human-playable production integration game for
 the World Transvoxel addon stack.
 
+Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
+addons, scenes, or human visual tests. Godot-specific generated import state is
+part of the runtime contract, and stale import cache can make visual testing
+misleading.
+
 It imports:
 
 - `world_transvoxel`
@@ -27,6 +32,8 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 ```
 
 ## Godot asset import gate
+
+Full Godot setup rules are in [GODOT_SETUP.md](GODOT_SETUP.md).
 
 Godot runtime assets are not fully defined by the tracked source texture alone.
 Texture import settings live in tracked `*.import` files, while Godot consumes
