@@ -132,3 +132,15 @@ profiles, submits terrain edits through player input methods, verifies storage
 journals, requires gameplay-settled streaming for the compact LOD profile, keeps
 strict cold-idle for the flat baseline, proves the spawn floor, and proves the
 Terrain 1.0 presentation marker fields.
+
+For terrain presentation smoke, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --visual-smoke
+```
+
+This also captures the real compact human-play profile from ground,
+high-oblique, and top-down views under `build/captures/terrain_1_0_visual_smoke/`
+and rejects regressions where the fake full-map visual is enabled, native
+material override is missing, or the visible native terrain coverage falls below
+the expected compact 2K profile thresholds.
