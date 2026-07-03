@@ -33,17 +33,18 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 - crosshair UI only; telemetry and profile selector are hidden during normal
   human play;
 - mouse-look, WASD movement, jump, and terrain edit input path;
-- human lighting controls for daylight, low-angle, overcast, and local probe
-  lighting inspection;
+- human lighting controls for daylight, low-angle, overcast, and a local
+  inspection-light field with multiple colored lights placed over terrain;
 - telemetry overlay and profile selector for autonomous proof;
 - default human profile is flat terrain; the mountainous 2K profile is explicit
   inspection coverage;
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage,
   capped radius-1 near-detail refinement, and no fake full-map visual in human
   play;
-- higher-relief deterministic terrain inside the current 64-cell vertical
-  budget, with the human spawn placed above terrain and snapped to collision
-  before input is enabled;
+- sharp deterministic mountain stress terrain inside the current procedural
+  vertical budget, with tall ridges, spire-like peaks, steep slopes, and the
+  human spawn placed above terrain and snapped to collision before input is
+  enabled;
 - production terrain material texture pipeline installed through the native
   render material override, so newly streamed chunks do not flash with the
   engine default material;
@@ -62,7 +63,9 @@ deterministic compact 2K map with 128 by 128 chunks, 2048 by 2048 block
 coverage, and `viewer_maximum_lod=3`. The profile uses `radius_chunks=8` for
 full native coarse coverage across the 2K map and
 `runtime_lod_refinement_radius_chunks=1` so near detail does not force the
-entire visible world to refine.
+entire visible world to refine. It is intentionally a stress profile: it is not
+the default terrain style, and it exists to inspect Transvoxel seams, lighting,
+materials, and edit replacement behavior on tall, sharper terrain.
 
 The flat baseline profile remains available for proof automation:
 
@@ -101,6 +104,7 @@ Controls:
 - `~`, then `F`: toggle fly mode for human terrain inspection
 - `~`, then `L`: cycle global lighting preset
 - `~`, then `K`: toggle local terrain inspection lights near/above the player
+  plus static colored terrain lights over the mountain/flat inspection area
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again
@@ -159,3 +163,14 @@ high-oblique, and top-down views under `build/captures/terrain_1_0_visual_smoke/
 and rejects regressions where the fake full-map visual is enabled, native
 material override is missing, or the visible native terrain coverage falls below
 the expected compact 2K profile thresholds.
+
+For explicit deformation inspection captures, run Godot directly with the
+mountain profile and an `edit_*` capture mode. These modes submit a real
+multi-operation terrain edit batch, wait for world revision and streaming
+settlement, then capture the result:
+
+```console
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_near.png --human-visual-capture-mode edit_near --human-visual-capture-wait-frames 180
+
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
+```

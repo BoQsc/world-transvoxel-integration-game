@@ -12,6 +12,8 @@ const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/w
 const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
 const FullMapVisual := preload("res://addons/world_transvoxel_terrain/visual/wt_terrain_full_map_visual.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
+const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
+const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 
@@ -37,9 +39,13 @@ var environment_resource: Environment
 var sun_light: DirectionalLight3D
 var terrain_overhead_light: OmniLight3D
 var terrain_probe_light: SpotLight3D
+var terrain_static_lights: Array = []
+var terrain_static_light_markers: Array = []
 var lighting_preset_index := 0
 var initial_lighting_preset := 0
 var local_terrain_lights_enabled := false
+var interaction_inspection_applied := false
+var interaction_inspection_operation_count := 0
 
 
 func _ready() -> void:
@@ -101,7 +107,7 @@ func _start_profile() -> void:
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
 	await get_tree().physics_frame
-	if not _stabilize_player_spawn():
+	if not await _stabilize_player_spawn():
 		return
 	_configure_presentation(settings)
 	await get_tree().process_frame
@@ -294,7 +300,7 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
 		return {"start": Vector3(1032, 18, 1032), "viewers": [Vector3(1032, 18, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 0.0}
-	return {"start": Vector3(1032, 86, 1032), "viewers": [Vector3(1032, 86, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 60, 1032), "detail_exclusion_half_extent": 0.0}
+	return {"start": Vector3(1184, 142, 1008), "viewers": [Vector3(1184, 142, 1008)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1184, 119, 1008), "detail_exclusion_half_extent": 0.0}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -383,6 +389,8 @@ func _configure_game_lighting() -> void:
 	terrain_probe_light.visible = false
 	add_child(terrain_probe_light)
 
+	_create_static_terrain_inspection_lights()
+
 	_apply_lighting_preset(initial_lighting_preset)
 	set_process(true)
 
@@ -448,6 +456,12 @@ func _set_local_terrain_lights_enabled(enabled: bool) -> void:
 		terrain_overhead_light.visible = enabled
 	if terrain_probe_light != null:
 		terrain_probe_light.visible = enabled
+	for light in terrain_static_lights:
+		if light is Light3D:
+			(light as Light3D).visible = enabled
+	for marker in terrain_static_light_markers:
+		if marker is Node3D:
+			(marker as Node3D).visible = enabled
 
 
 func _update_terrain_inspection_lights() -> void:
@@ -463,6 +477,74 @@ func _update_terrain_inspection_lights() -> void:
 	if terrain_probe_light != null:
 		terrain_probe_light.global_position = base + Vector3(0.0, 4.5, 0.0) - forward * 5.0
 		terrain_probe_light.look_at(base + forward * 10.0, Vector3.UP)
+
+
+func _create_static_terrain_inspection_lights() -> void:
+	terrain_static_lights.clear()
+	terrain_static_light_markers.clear()
+	var points := _terrain_inspection_light_points()
+	for index in range(points.size()):
+		var entry: Dictionary = points[index]
+		var position: Vector3 = entry["position"]
+		var color: Color = entry["color"]
+		var light := OmniLight3D.new()
+		light.name = "TerrainInspectionStaticLight%02d" % index
+		light.position = position
+		light.light_color = color
+		light.light_energy = float(entry.get("energy", 1.55))
+		light.omni_range = float(entry.get("range", 92.0))
+		light.shadow_enabled = false
+		light.visible = false
+		add_child(light)
+		terrain_static_lights.append(light)
+
+		var marker := MeshInstance3D.new()
+		marker.name = "TerrainInspectionLightMarker%02d" % index
+		var sphere := SphereMesh.new()
+		sphere.radius = 2.2
+		sphere.height = 4.4
+		marker.mesh = sphere
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = color
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 2.5
+		marker.material_override = material
+		marker.position = position
+		marker.visible = false
+		add_child(marker)
+		terrain_static_light_markers.append(marker)
+
+
+func _terrain_inspection_light_points() -> Array:
+	if selected_profile == FLAT_PROFILE:
+		return [
+			{"position": Vector3(960, 22, 960), "color": Color(1.0, 0.48, 0.30), "range": 75.0},
+			{"position": Vector3(1032, 22, 960), "color": Color(0.35, 0.72, 1.0), "range": 75.0},
+			{"position": Vector3(1104, 22, 960), "color": Color(0.45, 1.0, 0.55), "range": 75.0},
+			{"position": Vector3(960, 22, 1032), "color": Color(1.0, 0.86, 0.35), "range": 75.0},
+			{"position": Vector3(1104, 22, 1032), "color": Color(0.86, 0.48, 1.0), "range": 75.0},
+			{"position": Vector3(960, 22, 1104), "color": Color(0.35, 1.0, 0.92), "range": 75.0},
+			{"position": Vector3(1032, 22, 1104), "color": Color(1.0, 0.62, 0.40), "range": 75.0},
+			{"position": Vector3(1104, 22, 1104), "color": Color(0.58, 0.66, 1.0), "range": 75.0},
+		]
+	return [
+		{"position": Vector3(1184, 136, 1008), "color": Color(1.0, 0.45, 0.28), "range": 115.0, "energy": 1.9},
+		{"position": Vector3(1032, 81, 1032), "color": Color(0.35, 0.68, 1.0), "range": 105.0, "energy": 1.6},
+		{"position": Vector3(860, 88, 1220), "color": Color(0.55, 1.0, 0.48), "range": 100.0, "energy": 1.5},
+		{"position": Vector3(1400, 95, 700), "color": Color(1.0, 0.90, 0.36), "range": 105.0, "energy": 1.5},
+		{"position": Vector3(1250, 106, 950), "color": Color(0.92, 0.45, 1.0), "range": 100.0, "energy": 1.55},
+		{"position": Vector3(980, 66, 1160), "color": Color(0.38, 1.0, 0.95), "range": 95.0, "energy": 1.45},
+		{"position": Vector3(1110, 84, 880), "color": Color(1.0, 0.62, 0.32), "range": 95.0, "energy": 1.45},
+		{"position": Vector3(760, 48, 760), "color": Color(0.52, 0.62, 1.0), "range": 90.0, "energy": 1.35},
+		{"position": Vector3(1510, 57, 1120), "color": Color(1.0, 0.34, 0.40), "range": 95.0, "energy": 1.35},
+		{"position": Vector3(1320, 50, 1260), "color": Color(0.70, 1.0, 0.38), "range": 90.0, "energy": 1.35},
+		{"position": Vector3(920, 66, 900), "color": Color(0.38, 0.82, 1.0), "range": 90.0, "energy": 1.35},
+		{"position": Vector3(1200, 67, 1160), "color": Color(1.0, 0.78, 0.45), "range": 95.0, "energy": 1.4},
+		{"position": Vector3(1184, 108, 1060), "color": Color(0.78, 0.48, 1.0), "range": 95.0, "energy": 1.45},
+		{"position": Vector3(1080, 87, 980), "color": Color(0.48, 1.0, 0.70), "range": 90.0, "energy": 1.4},
+	]
 
 
 func _clear_human_storage() -> void:
@@ -572,8 +654,8 @@ func _playable_spawn_summary() -> Dictionary:
 	if player == null:
 		return result
 	var query := PhysicsRayQueryParameters3D.create(
-		player.global_position + Vector3(0.0, 16.0, 0.0),
-		player.global_position + Vector3(0.0, -96.0, 0.0)
+		player.global_position + Vector3(0.0, 96.0, 0.0),
+		player.global_position + Vector3(0.0, -180.0, 0.0)
 	)
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
@@ -589,7 +671,14 @@ func _playable_spawn_summary() -> Dictionary:
 
 
 func _stabilize_player_spawn() -> bool:
-	var summary := _playable_spawn_summary()
+	var summary := {}
+	for _frame in range(180):
+		summary = _playable_spawn_summary()
+		if bool(summary.get("spawn_floor_hit", false)):
+			break
+		if game_world != null and game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", true)
+		await get_tree().physics_frame
 	if not bool(summary.get("spawn_floor_hit", false)):
 		_fail("playable spawn has no collision floor below it before human enable: %s" % str(summary))
 		return false
@@ -618,6 +707,9 @@ func _arg_value(args: Array, key: String, default_value: String) -> String:
 
 
 func _capture_human_visual() -> void:
+	if _capture_requires_interaction_inspection():
+		if not await _apply_interaction_inspection_edits():
+			return
 	await _apply_capture_camera_mode()
 	for _frame in range(30):
 		await get_tree().process_frame
@@ -642,9 +734,98 @@ func _capture_human_visual() -> void:
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
 		"lighting_preset": lighting_preset_index,
 		"local_terrain_lights_enabled": local_terrain_lights_enabled,
+		"interaction_inspection_applied": interaction_inspection_applied,
+		"interaction_inspection_operation_count": interaction_inspection_operation_count,
 		"capture_path": human_visual_capture_path,
 	}))
 	get_tree().quit(0)
+
+
+func _capture_requires_interaction_inspection() -> bool:
+	return human_visual_capture_mode.begins_with("edit_") or \
+		human_visual_capture_mode == "interaction_near" or \
+		human_visual_capture_mode == "interaction_far" or \
+		human_visual_capture_mode == "interaction_aerial"
+
+
+func _apply_interaction_inspection_edits() -> bool:
+	if interaction_inspection_applied:
+		return true
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null:
+		_fail("terrain world unavailable for interaction inspection")
+		return false
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	var batch = EditBatch.new()
+	for operation in _interaction_inspection_operations():
+		if not batch.add_operation(operation):
+			_fail("failed to add interaction inspection operation")
+			return false
+	interaction_inspection_operation_count = batch.get_operation_count()
+	if interaction_inspection_operation_count <= 0:
+		_fail("interaction inspection produced no operations")
+		return false
+	if not bool(terrain_world.call("submit_edit_batch", batch, 7717)):
+		_fail("interaction inspection edit batch rejected: %s" % str(terrain_world.call("get_last_error")))
+		return false
+	if not await game_world.wait_for_world_revision(before_revision + 1):
+		_fail("interaction inspection edit did not commit")
+		return false
+	if not await _wait_for_current_profile_settled("after interaction inspection edits"):
+		return false
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _interaction_inspection_operations() -> Array:
+	var operations: Array = []
+	if selected_profile == FLAT_PROFILE:
+		operations.append(_edit_operation(&"carve", Vector3(1010, 8, 1010), 18.0, 1, 1.0))
+		operations.append(_edit_operation(&"construct", Vector3(1058, 10, 1018), 14.0, 4, 1.0))
+		operations.append(_edit_operation(&"carve", Vector3(1120, 8, 1100), 24.0, 1, 1.0))
+		operations.append(_edit_operation(&"paint", Vector3(980, 9, 1090), 20.0, 7, 1.0))
+		return operations
+	operations.append(_edit_operation(&"carve", Vector3(1184, 119, 1008), 26.0, 1, 1.0))
+	operations.append(_edit_operation(&"construct", Vector3(1230, 94, 982), 17.0, 4, 1.0))
+	operations.append(_edit_operation(&"paint", Vector3(1128, 84, 1048), 30.0, 7, 1.0))
+	operations.append(_edit_operation(&"carve", Vector3(860, 72, 1220), 24.0, 1, 1.0))
+	operations.append(_edit_operation(&"construct", Vector3(900, 72, 1182), 15.0, 3, 1.0))
+	operations.append(_edit_operation(&"carve", Vector3(1400, 64, 700), 28.0, 1, 1.0))
+	operations.append(_edit_operation(&"paint", Vector3(1320, 46, 1260), 26.0, 4, 1.0))
+	return operations
+
+
+func _edit_operation(
+	mode_name: StringName,
+	center: Vector3,
+	radius: float,
+	material_id: int,
+	density_value: float
+) -> Resource:
+	var operation = EditOperation.new()
+	operation.mode = _edit_mode(mode_name)
+	operation.brush_shape = EditOperation.BrushShape.SPHERE
+	operation.center = center
+	operation.radius = radius
+	operation.material_id = material_id
+	operation.density_value = density_value
+	return operation
+
+
+func _edit_mode(mode_name: StringName) -> int:
+	match mode_name:
+		&"construct", &"place":
+			return EditOperation.Mode.CONSTRUCT
+		&"fill":
+			return EditOperation.Mode.FILL
+		&"paint":
+			return EditOperation.Mode.PAINT
+		&"restore_to_base":
+			return EditOperation.Mode.RESTORE_TO_BASE
+		_:
+			return EditOperation.Mode.CARVE
 
 
 func _apply_capture_camera_mode() -> void:
@@ -661,22 +842,37 @@ func _apply_capture_camera_mode() -> void:
 	match human_visual_capture_mode:
 		"topdown":
 			capture_position = Vector3(1032.0, 420.0, 1032.0)
-			capture_target = Vector3(1032.0, 8.0, 1032.1)
+			capture_target = Vector3(1032.0, 40.0, 1032.1)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"aerial":
-			capture_position = Vector3(1032.0, 220.0, 920.0)
-			capture_target = Vector3(1032.0, 8.0, 1032.0)
+			capture_position = Vector3(1120.0, 250.0, 760.0)
+			capture_target = Vector3(1160.0, 78.0, 1020.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"high_oblique":
-			capture_position = Vector3(1032.0, 140.0, 820.0)
-			capture_target = Vector3(1032.0, 8.0, 1032.0)
+			capture_position = Vector3(1160.0, 190.0, 760.0)
+			capture_target = Vector3(1184.0, 116.0, 1008.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"local_overlap":
-			capture_position = Vector3(1032.0, 72.0, 972.0)
-			capture_target = Vector3(1032.0, 6.0, 1048.0)
+			capture_position = Vector3(1180.0, 150.0, 940.0)
+			capture_target = Vector3(1184.0, 118.0, 1008.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"edit_near", "interaction_near":
+			capture_position = Vector3(1176.0, 154.0, 922.0)
+			capture_target = Vector3(1188.0, 115.0, 1015.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"edit_far", "interaction_far":
+			capture_position = Vector3(1070.0, 210.0, 730.0)
+			capture_target = Vector3(860.0, 72.0, 1220.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"edit_aerial", "interaction_aerial":
+			capture_position = Vector3(1120.0, 330.0, 640.0)
+			capture_target = Vector3(1130.0, 72.0, 1035.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		_:
