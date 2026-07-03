@@ -26,6 +26,22 @@ Run the main scene from:
 C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game\project.godot
 ```
 
+## Godot asset import gate
+
+Godot runtime assets are not fully defined by the tracked source texture alone.
+Texture import settings live in tracked `*.import` files, while Godot consumes
+generated cache artifacts under `.godot/imported`. After changing or adding
+textures, refresh and verify that cache before trusting a game run or visual
+capture:
+
+```console
+python tools/godot_import_assets.py
+```
+
+The production integration quality gate runs this import step automatically
+before launching profiles or visual captures. This is required for settings such
+as mipmaps to actually reach the runtime `.ctex` texture.
+
 ## Runtime features
 
 - first-person player with `FirstPersonCamera`;
@@ -146,11 +162,12 @@ Run:
 python tools/p2_production_integration_game_quality.py --skip-build
 ```
 
-The proof launches this project through `project.godot`, validates both standard
-profiles, submits terrain edits through player input methods, verifies storage
-journals, requires gameplay-settled streaming for the compact LOD profile, keeps
-strict cold-idle for the flat baseline, proves the spawn floor, and proves the
-Terrain 1.0 presentation marker fields.
+The proof first refreshes/verifies the Godot import cache, then launches this
+project through `project.godot`, validates both standard profiles, submits
+terrain edits through player input methods, verifies storage journals, requires
+gameplay-settled streaming for the compact LOD profile, keeps strict cold-idle
+for the flat baseline, proves the spawn floor, and proves the Terrain 1.0
+presentation marker fields.
 
 For terrain presentation smoke, run:
 

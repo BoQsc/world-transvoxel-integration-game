@@ -15,6 +15,8 @@ import shutil
 import subprocess
 import sys
 
+import godot_import_assets
+
 
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
@@ -140,6 +142,8 @@ def validate_visual_summary(
         "full_map_enabled": False,
         "native_render_material_override": True,
         "clean_material_variation_enabled": False,
+        "clean_roughness": 1.0,
+        "clean_specular": 0.0,
     }
     for key, expected in checks.items():
         if summary.get(key) != expected:
@@ -207,6 +211,9 @@ def main(argv: list[str]) -> int:
 
     godot = find_godot(args.godot)
     project = pathlib.Path(args.project).resolve()
+    godot_import_assets.run_godot_import(godot, project)
+    godot_import_assets.verify_imports(project)
+    print("WT_GODOT_IMPORT_ASSETS_PASS required_imports=%d" % len(godot_import_assets.REQUIRED_TEXTURE_IMPORTS))
     profiles = tuple(args.profile) if args.profile else DEFAULT_PROFILES
     for profile in profiles:
         run_profile(godot, project, profile)

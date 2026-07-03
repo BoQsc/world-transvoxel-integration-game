@@ -46,6 +46,20 @@ Controls:
 
 Current source commits are recorded in `CURRENT_PLAYTEST_FRESHNESS.json`.
 
+Godot import cache rule:
+
+Tracked `*.import` files are the source of truth for texture import settings, but
+Godot uses generated files in `.godot/imported` at runtime. After changing or
+adding textures, refresh and verify the Godot import cache before trusting visual
+tests:
+
+```console
+python tools/godot_import_assets.py
+```
+
+The production integration quality gate runs this import step automatically
+before launching the game profiles or visual captures.
+
 Automated proof before asking for human review:
 
 ```console
