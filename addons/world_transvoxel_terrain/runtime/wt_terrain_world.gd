@@ -22,6 +22,8 @@ signal authoritative_sample_ready(request_id: int, sample: RefCounted)
 signal authoritative_sample_failed(request_id: int, error: String)
 signal authoritative_samples_ready(request_id: int, samples: Array)
 signal authoritative_samples_failed(request_id: int, error: String)
+signal edit_committed(world_revision: int)
+signal edit_failed(error: String)
 
 @export var terrain_profile: Resource
 @export var generation_profile: Resource
@@ -34,6 +36,10 @@ signal authoritative_samples_failed(request_id: int, error: String)
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
+@export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
+@export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
 var _backend_terrain: Node
 var _backend_config: Resource
@@ -166,6 +172,14 @@ func get_terrain_api_contract_summary() -> Dictionary:
 
 func get_contract_summary() -> Dictionary:
 	return Contracts.contract_summary(self)
+
+
+func _on_backend_edit_committed(world_revision: int) -> void:
+	edit_committed.emit(world_revision)
+
+
+func _on_backend_edit_failed(error: String) -> void:
+	edit_failed.emit(error)
 
 func get_a4_phase1_summary() -> Dictionary:
 	return Contracts.a4_phase1_summary(self)

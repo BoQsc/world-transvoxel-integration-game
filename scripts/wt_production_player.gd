@@ -17,6 +17,14 @@ var fly_mode_enabled := false
 var _walk_collision_layer := 0
 var _walk_collision_mask := 0
 var _walk_collision_state_saved := false
+var _interaction_attempt_count := 0
+var _last_interaction_summary := {
+	"attempt": 0,
+	"mode": "",
+	"ray_hit": false,
+	"accepted": false,
+	"reason": "not_attempted",
+}
 
 
 func set_human_input_enabled(enabled: bool) -> void:
@@ -40,11 +48,30 @@ func is_fly_mode_enabled() -> bool:
 	return fly_mode_enabled
 
 
-func submit_edit_input(mode_name: StringName, center: Vector3) -> bool:
+func get_last_interaction_summary() -> Dictionary:
+	return _last_interaction_summary.duplicate(true)
+
+
+func autonomous_look_at(target: Vector3) -> bool:
+	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return false
+	camera.look_at(target, Vector3.UP)
+	return true
+
+
+func autonomous_submit_interaction(mode_name: StringName) -> bool:
+	return _submit_interaction(mode_name)
+
+
+func submit_edit_input(mode_name: StringName, center: Vector3, ray_hit: bool = false) -> bool:
 	if game_world == null or not game_world.has_method("submit_sphere_edit"):
+		_record_interaction(mode_name, ray_hit, false, "game_world_unavailable", center)
 		return false
 	var material_id := -1 if mode_name == &"carve" else 4
-	return bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
+	var accepted := bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
+	_record_interaction(mode_name, ray_hit, accepted, "raycast_hit" if ray_hit and accepted else ("direct_center" if accepted else "edit_rejected"), center)
+	return accepted
 
 
 func _physics_process(delta: float) -> void:
@@ -141,15 +168,27 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			submit_edit_input(&"carve", _interaction_point())
+			_submit_interaction(&"carve")
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			submit_edit_input(&"construct", _interaction_point())
+			_submit_interaction(&"construct")
 
 
 func _interaction_point() -> Vector3:
+	var target := _interaction_target()
+	if bool(target.get("ray_hit", false)):
+		return target["position"]
+	return edit_point
+
+
+func _interaction_target() -> Dictionary:
 	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
-		return edit_point
+		return {
+			"ray_hit": false,
+			"reason": "camera_missing",
+			"position": edit_point,
+			"collider": "",
+		}
 	var origin := camera.global_position
 	var end := origin + (-camera.global_transform.basis.z * interaction_distance)
 	var query := PhysicsRayQueryParameters3D.create(origin, end)
@@ -158,8 +197,58 @@ func _interaction_point() -> Vector3:
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
-		return origin + (-camera.global_transform.basis.z * minf(interaction_distance, 8.0))
-	return hit["position"]
+		return {
+			"ray_hit": false,
+			"reason": "raycast_miss",
+			"position": end,
+			"collider": "",
+		}
+	var collider = hit.get("collider", null)
+	var collider_name := ""
+	if collider is Node:
+		collider_name = str((collider as Node).name)
+	return {
+		"ray_hit": true,
+		"reason": "raycast_hit",
+		"position": hit["position"],
+		"collider": collider_name,
+	}
+
+
+func _submit_interaction(mode_name: StringName) -> bool:
+	var target := _interaction_target()
+	if not bool(target.get("ray_hit", false)):
+		_record_interaction(
+			mode_name,
+			false,
+			false,
+			str(target.get("reason", "raycast_miss")),
+			target.get("position", edit_point)
+		)
+		return false
+	var position: Vector3 = target["position"]
+	var accepted := submit_edit_input(mode_name, position, true)
+	_last_interaction_summary["reason"] = "raycast_hit" if accepted else "edit_rejected_after_raycast"
+	_last_interaction_summary["collider"] = str(target.get("collider", ""))
+	return accepted
+
+
+func _record_interaction(
+	mode_name: StringName,
+	ray_hit: bool,
+	accepted: bool,
+	reason: String,
+	position: Vector3
+) -> void:
+	_interaction_attempt_count += 1
+	_last_interaction_summary = {
+		"attempt": _interaction_attempt_count,
+		"mode": str(mode_name),
+		"ray_hit": ray_hit,
+		"accepted": accepted,
+		"reason": reason,
+		"position": position,
+	}
 
 
 func _set_fly_mode_enabled(enabled: bool) -> void:

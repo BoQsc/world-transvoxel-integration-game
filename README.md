@@ -74,7 +74,10 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - normal human play uses the sand texture at
   `res://assets/terrain_textures/coast_sand_01_diff_1k.jpg` and keeps
   material-ID tinting off by default;
-- spawn floor raycast sanity before automated handoff.
+- spawn floor raycast sanity before automated handoff;
+- terrain interaction proof requires a real camera raycast hit against terrain
+  collision, accepted edit submission, backend `edit_committed`, and zero
+  `edit_failed` events.
 
 ## Profile setup
 
@@ -147,8 +150,10 @@ not be committed.
 ## Telemetry
 
 Use `game_world.get_game_world_summary()` for active records, render/collision
-resource counts, viewer updates, and edit replacements. Human play hides the
-telemetry UI by default; autonomous proof keeps it available for validation.
+resource counts, viewer updates, edit replacements, edit submission/accept/
+commit/failure counts, and the collision activation/deactivation settings.
+Human play hides the telemetry UI by default; autonomous proof keeps it
+available for validation.
 
 ## Troubleshooting
 
@@ -157,7 +162,8 @@ telemetry UI by default; autonomous proof keeps it available for validation.
 | GDExtension missing | Rebuild or recopy `world_transvoxel`; `world_transvoxel.gdextension` must point at real Windows debug/release libraries. |
 | Terrain invisible | Verify generation and storage profiles, then confirm `viewer_maximum_lod=3`, `radius_chunks=8`, and sufficient runtime capacities for compact 2K. |
 | Player falls or spawns badly | Run the autonomous proof and check `spawn_floor_hit=1` and `spawn_above_floor=1`. |
-| Edits do not commit | Inspect `game_world.get_last_edit_summary()` and the terrain edit journal under `res://build/<game>/<profile>/`. |
+| Edits do not commit | Inspect `game_world.get_last_edit_summary()`, `edit_commit_count`, `edit_failure_count`, and the terrain edit journal under `res://build/<game>/<profile>/`. |
+| Clicks appear to do nothing | Confirm the player interaction summary reports `ray_hit=true`; visible render chunks are not enough if collision coverage is stale or too narrow. |
 | White/default chunks flash while moving | Confirm the material summary reports `native_render_material_override=true`; the old recursive-only material scan is not sufficient for human play. |
 | Debug UI visible during human play | Confirm you are running this integration game main scene, not an older validation playtest scene. |
 
@@ -171,10 +177,11 @@ python tools/p2_production_integration_game_quality.py --skip-build
 
 The proof first refreshes/verifies the Godot import cache, then launches this
 project through `project.godot`, validates both standard profiles, submits
-terrain edits through player input methods, verifies storage journals, requires
-gameplay-settled streaming for the compact LOD profile, keeps strict cold-idle
-for the flat baseline, proves the spawn floor, and proves the Terrain 1.0
-presentation marker fields.
+terrain edits through player input methods, verifies repeated committed edits,
+proves a camera raycast interaction against terrain collision, verifies storage
+journals, requires gameplay-settled streaming for the compact LOD profile, keeps
+strict cold-idle for the flat baseline, proves the spawn floor, and proves the
+Terrain 1.0 presentation marker fields.
 
 For terrain presentation smoke, run:
 

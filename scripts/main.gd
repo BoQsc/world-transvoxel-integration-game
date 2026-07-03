@@ -87,6 +87,10 @@ func _start_profile() -> void:
 	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
 	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
 	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
+	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
+	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
+	game_world.runtime_collision_activation_distance = float(settings.get("runtime_collision_activation_distance", 0.0))
+	game_world.runtime_collision_deactivation_distance = float(settings.get("runtime_collision_deactivation_distance", 0.0))
 	add_child(game_world)
 	player = _create_player(settings["start"])
 	player.game_world = game_world
@@ -155,6 +159,10 @@ func _run_autonomous_proof() -> void:
 		return
 	if not await _wait_for_current_profile_settled("after edit"):
 		return
+	if not await _run_repeated_edit_health_proof(terrain_world):
+		return
+	if not await _run_interaction_raycast_proof(terrain_world):
+		return
 	if not FileAccess.file_exists(_storage_root(selected_profile) + "/world.wtedit"):
 		_fail("edit journal missing")
 		return
@@ -165,7 +173,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -176,6 +184,8 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("render_resources", 0)),
 		int(summary.get("collision_resources", 0)),
 		int(summary.get("active_chunk_records", 0)),
+		int(summary.get("edit_commit_count", 0)),
+		int(summary.get("edit_failure_count", 0)),
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
 		1 if bool(presentation.get("native_render_material_override", false)) else 0,
@@ -186,6 +196,102 @@ func _run_autonomous_proof() -> void:
 	])
 	await get_tree().process_frame
 	get_tree().quit(0)
+
+
+func _run_repeated_edit_health_proof(terrain_world: Node) -> bool:
+	var operations := [
+		{"mode": &"carve", "center": edit_point + Vector3(4.0, 0.0, 0.0)},
+		{"mode": &"construct", "center": edit_point + Vector3(-4.0, 0.0, 0.0)},
+		{"mode": &"carve", "center": edit_point + Vector3(0.0, 0.0, 4.0)},
+	]
+	for index in range(operations.size()):
+		var operation: Dictionary = operations[index]
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		if not bool(player.call("submit_edit_input", operation["mode"], operation["center"])):
+			_fail("repeated edit input path rejected operation %d" % index)
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("repeated edit operation %d did not commit" % index)
+			return false
+		if not await _wait_for_current_profile_settled("after repeated edit %d" % index):
+			return false
+		var summary: Dictionary = game_world.get_game_world_summary()
+		if int(summary.get("edit_failure_count", 0)) != 0:
+			_fail("backend rejected a repeated edit: %s" % str(summary))
+			return false
+	return true
+
+
+func _run_interaction_raycast_proof(terrain_world: Node) -> bool:
+	var approximate_target := edit_point + Vector3(18.0, 0.0, 18.0)
+	player.global_position = approximate_target + Vector3(-26.0, 18.0, -54.0)
+	player.velocity = Vector3.ZERO
+	if not bool(game_world.update_player_viewer(true)):
+		_fail("interaction proof viewer update failed")
+		return false
+	if not await _wait_for_current_profile_settled("before interaction raycast proof"):
+		return false
+	await get_tree().physics_frame
+	var target := _find_collision_surface_near([
+		approximate_target,
+		edit_point + Vector3(24.0, 0.0, 0.0),
+		edit_point + Vector3(0.0, 0.0, 24.0),
+		edit_point + Vector3(-24.0, 0.0, 0.0),
+	])
+	if is_inf(target.x):
+		var no_surface_summary: Dictionary = game_world.get_game_world_summary()
+		_fail("interaction proof could not find nearby terrain collision surface: %s" % str(no_surface_summary))
+		return false
+	player.global_position = target + Vector3(-26.0, 18.0, -54.0)
+	player.velocity = Vector3.ZERO
+	if not bool(game_world.update_player_viewer(true)):
+		_fail("interaction proof precise viewer update failed")
+		return false
+	if not await _wait_for_current_profile_settled("before precise interaction raycast proof"):
+		return false
+	if not bool(player.call("autonomous_look_at", target)):
+		_fail("interaction proof could not aim camera")
+		return false
+	await get_tree().physics_frame
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	if not bool(player.call("autonomous_submit_interaction", &"carve")):
+		var interaction_summary: Dictionary = player.call("get_last_interaction_summary")
+		_fail("interaction raycast path rejected carve: %s" % str(interaction_summary))
+		return false
+	var summary_after_submit: Dictionary = player.call("get_last_interaction_summary")
+	if not bool(summary_after_submit.get("ray_hit", false)):
+		_fail("interaction raycast did not hit terrain collision: %s" % str(summary_after_submit))
+		return false
+	if not bool(summary_after_submit.get("accepted", false)):
+		_fail("interaction raycast edit was not accepted: %s" % str(summary_after_submit))
+		return false
+	if not await game_world.wait_for_world_revision(before_revision + 1):
+		_fail("interaction raycast edit did not commit")
+		return false
+	if not await _wait_for_current_profile_settled("after interaction raycast edit"):
+		return false
+	var game_summary: Dictionary = game_world.get_game_world_summary()
+	if int(game_summary.get("edit_failure_count", 0)) != 0:
+		_fail("backend rejected interaction raycast edit: %s" % str(game_summary))
+		return false
+	return true
+
+
+func _find_collision_surface_near(points: Array) -> Vector3:
+	for point in points:
+		var probe: Vector3 = point
+		var query := PhysicsRayQueryParameters3D.create(
+			probe + Vector3(0.0, 180.0, 0.0),
+			probe + Vector3(0.0, -240.0, 0.0)
+		)
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		if player is CollisionObject3D:
+			query.exclude = [(player as CollisionObject3D).get_rid()]
+		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		if not hit.is_empty():
+			return hit["position"]
+	return Vector3(INF, INF, INF)
 
 
 func _wait_for_current_profile_settled(context: String) -> bool:
@@ -299,8 +405,50 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
-		return {"start": Vector3(1032, 18, 1032), "viewers": [Vector3(1032, 18, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 0.0}
-	return {"start": Vector3(1184, 142, 1008), "viewers": [Vector3(1184, 142, 1008)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1184, 119, 1008), "detail_exclusion_half_extent": 0.0}
+		return {
+			"start": Vector3(1032, 18, 1032),
+			"viewers": [Vector3(1032, 18, 1032)],
+			"radius": 8,
+			"maximum_lod": 3,
+			"expected_resources": 32,
+			"expected_max_resources": 1024,
+			"startup_requires_cold_idle": false,
+			"startup_minimum_render_resources": 32,
+			"startup_minimum_collision_resources": 32,
+			"runtime_active_chunk_capacity": 1024,
+			"runtime_demand_capacity_per_viewer": 8192,
+			"runtime_render_entry_capacity": 1024,
+			"runtime_collision_entry_capacity": 1024,
+			"runtime_lod_refinement_radius_chunks": 1,
+			"runtime_render_apply_budget": 8,
+			"runtime_collision_apply_budget": 8,
+			"runtime_collision_activation_distance": 192.0,
+			"runtime_collision_deactivation_distance": 256.0,
+			"edit_point": Vector3(1032, 8, 1032),
+			"detail_exclusion_half_extent": 0.0,
+		}
+	return {
+		"start": Vector3(1184, 142, 1008),
+		"viewers": [Vector3(1184, 142, 1008)],
+		"radius": 8,
+		"maximum_lod": 3,
+		"expected_resources": 32,
+		"expected_max_resources": 1024,
+		"startup_requires_cold_idle": false,
+		"startup_minimum_render_resources": 32,
+		"startup_minimum_collision_resources": 32,
+		"runtime_active_chunk_capacity": 1024,
+		"runtime_demand_capacity_per_viewer": 8192,
+		"runtime_render_entry_capacity": 1024,
+		"runtime_collision_entry_capacity": 1024,
+		"runtime_lod_refinement_radius_chunks": 1,
+		"runtime_render_apply_budget": 8,
+		"runtime_collision_apply_budget": 8,
+		"runtime_collision_activation_distance": 192.0,
+		"runtime_collision_deactivation_distance": 256.0,
+		"edit_point": Vector3(1184, 119, 1008),
+		"detail_exclusion_half_extent": 0.0,
+	}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -599,6 +747,9 @@ func _verify_summary(summary: Dictionary) -> bool:
 		if int(summary.get(key, 0)) != 0:
 			_fail("terrain not cold idle: %s" % str(summary))
 			return false
+	if int(summary.get("edit_failure_count", 0)) != 0:
+		_fail("terrain edit failure count is nonzero: %s" % str(summary))
+		return false
 	return true
 
 
@@ -726,9 +877,17 @@ func _capture_human_visual() -> void:
 		"viewer_maximum_lod": int(summary.get("viewer_maximum_lod", 0)),
 		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
+		"runtime_render_apply_budget": int(summary.get("runtime_render_apply_budget", 0)),
+		"runtime_collision_apply_budget": int(summary.get("runtime_collision_apply_budget", 0)),
+		"runtime_collision_activation_distance": float(summary.get("runtime_collision_activation_distance", 0.0)),
+		"runtime_collision_deactivation_distance": float(summary.get("runtime_collision_deactivation_distance", 0.0)),
 		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
 		"render_resources": int(summary.get("render_resources", 0)),
 		"collision_resources": int(summary.get("collision_resources", 0)),
+		"edit_submission_count": int(summary.get("edit_submission_count", 0)),
+		"edit_accept_count": int(summary.get("edit_accept_count", 0)),
+		"edit_commit_count": int(summary.get("edit_commit_count", 0)),
+		"edit_failure_count": int(summary.get("edit_failure_count", 0)),
 		"edit_lod_retention_zones": int(summary.get("edit_lod_retention_zones", 0)),
 		"edit_lod_retention_active_viewers": int(summary.get("edit_lod_retention_active_viewers", 0)),
 		"edit_lod_retention_plans": int(summary.get("edit_lod_retention_plans", 0)),

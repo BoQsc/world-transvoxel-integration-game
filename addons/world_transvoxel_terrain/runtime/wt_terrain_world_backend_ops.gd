@@ -161,6 +161,8 @@ static func connect_backend_runtime_signals(world) -> void:
 		["authoritative_sample_failed", "_on_backend_authoritative_sample_failed"],
 		["authoritative_samples_ready", "_on_backend_authoritative_samples_ready"],
 		["authoritative_samples_failed", "_on_backend_authoritative_samples_failed"],
+		["edit_committed", "_on_backend_edit_committed"],
+		["edit_failed", "_on_backend_edit_failed"],
 	]:
 		var callable := Callable(world, pair[1])
 		if world._backend_terrain.has_signal(pair[0]) and not world._backend_terrain.is_connected(pair[0], callable):
@@ -189,10 +191,18 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		["runtime_render_entry_capacity", "render_entry_capacity"],
 		["runtime_collision_entry_capacity", "collision_entry_capacity"],
 		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
+		["runtime_render_apply_budget", "render_apply_budget"],
+		["runtime_collision_apply_budget", "collision_apply_budget"],
 	]:
 		var value := int(world.get(pair[0]))
 		if value > 0:
 			config.set(pair[1], value)
+	var collision_activation_distance := float(world.get("runtime_collision_activation_distance"))
+	if collision_activation_distance > 0.0:
+		config.set("collision_activation_distance", collision_activation_distance)
+	var collision_deactivation_distance := float(world.get("runtime_collision_deactivation_distance"))
+	if collision_deactivation_distance > 0.0:
+		config.set("collision_deactivation_distance", collision_deactivation_distance)
 
 static func _finish_request(world, request_id: int) -> int:
 	if request_id <= 0:

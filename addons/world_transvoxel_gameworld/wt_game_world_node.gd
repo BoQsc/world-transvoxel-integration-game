@@ -18,6 +18,10 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
+@export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
+@export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
 var _profile_id: StringName = &""
 var _generation_profile: Resource
@@ -36,6 +40,12 @@ var _accepted_player_viewer_updates := 0
 var _last_error := ""
 var _last_edit_summary := {}
 var _last_cold_idle_summary: Dictionary = {}
+var _edit_submission_count := 0
+var _edit_accept_count := 0
+var _edit_commit_count := 0
+var _edit_failure_count := 0
+var _last_edit_committed_revision := 0
+var _last_edit_failure_error := "ok"
 
 
 func configure_game_world(
@@ -68,6 +78,7 @@ func setup_standard_world() -> Node:
 		_reference_scene.call("set_debug_overlay_enabled", debug_overlay_enabled)
 	_reference_scene.ensure_reference_defaults()
 	_apply_profiles()
+	_connect_terrain_world_signals()
 	return _reference_scene
 
 
@@ -128,6 +139,7 @@ func submit_sphere_edit(
 	var terrain_world := get_terrain_world()
 	if terrain_world == null:
 		return _fail("terrain world unavailable")
+	_edit_submission_count += 1
 	var operation = EditOperation.new()
 	operation.mode = _operation_mode(mode_name)
 	operation.brush_shape = EditOperation.BrushShape.SPHERE
@@ -136,14 +148,29 @@ func submit_sphere_edit(
 	operation.material_id = material_id
 	operation.density_value = density_value
 	var batch = EditBatch.new()
-	batch.add_operation(operation)
+	if not batch.add_operation(operation):
+		_last_edit_summary = {
+			"accepted": false,
+			"submission_index": _edit_submission_count,
+			"mode": str(mode_name),
+			"center": center,
+			"radius": radius,
+			"material_id": material_id,
+			"error": "failed to add edit operation",
+		}
+		return _fail("failed to add edit operation")
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
 	var accepted := bool(terrain_world.call("submit_edit_batch", batch, 56056))
+	if accepted:
+		_edit_accept_count += 1
 	_last_edit_summary = {
 		"accepted": accepted,
+		"submission_index": _edit_submission_count,
 		"mode": str(mode_name),
 		"center": center,
 		"radius": radius,
 		"material_id": material_id,
+		"before_world_revision": before_revision,
 		"terrain_summary": terrain_world.call("get_last_edit_submission_summary"),
 		"error": str(terrain_world.call("get_last_error")),
 	}
@@ -220,6 +247,17 @@ func wait_for_world_revision(target_revision: int) -> bool:
 	return false
 
 
+func wait_for_edit_commits(target_count: int) -> bool:
+	for _frame in range(900):
+		if _edit_commit_count >= target_count:
+			await get_tree().process_frame
+			return true
+		if _edit_failure_count > 0:
+			return false
+		await get_tree().process_frame
+	return false
+
+
 func get_reference_scene() -> Node:
 	return _reference_scene
 
@@ -262,6 +300,10 @@ func get_game_world_summary() -> Dictionary:
 		"viewer_maximum_lod": _viewer_maximum_lod,
 		"runtime_demand_capacity_per_viewer": runtime_demand_capacity_per_viewer,
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
+		"runtime_render_apply_budget": runtime_render_apply_budget,
+		"runtime_collision_apply_budget": runtime_collision_apply_budget,
+		"runtime_collision_activation_distance": runtime_collision_activation_distance,
+		"runtime_collision_deactivation_distance": runtime_collision_deactivation_distance,
 		"expected_resource_count": _expected_resource_count,
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
@@ -289,6 +331,12 @@ func get_game_world_summary() -> Dictionary:
 		"edit_lod_retention_active_viewers": int(metrics.get("edit_lod_retention_active_viewers", 0)),
 		"edit_lod_retention_plans": int(metrics.get("edit_lod_retention_plans", 0)),
 		"edit_lod_retention_fallbacks": int(metrics.get("edit_lod_retention_fallbacks", 0)),
+		"edit_submission_count": _edit_submission_count,
+		"edit_accept_count": _edit_accept_count,
+		"edit_commit_count": _edit_commit_count,
+		"edit_failure_count": _edit_failure_count,
+		"last_edit_committed_revision": _last_edit_committed_revision,
+		"last_edit_failure_error": _last_edit_failure_error,
 		"last_error": _last_error,
 	}
 
@@ -376,6 +424,34 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_render_entry_capacity = runtime_render_entry_capacity
 	terrain_world.runtime_collision_entry_capacity = runtime_collision_entry_capacity
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
+	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
+	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
+	terrain_world.runtime_collision_activation_distance = runtime_collision_activation_distance
+	terrain_world.runtime_collision_deactivation_distance = runtime_collision_deactivation_distance
+
+
+func _connect_terrain_world_signals() -> void:
+	var terrain_world := get_terrain_world()
+	if terrain_world == null:
+		return
+	var committed := Callable(self, "_on_terrain_edit_committed")
+	if terrain_world.has_signal("edit_committed") and not terrain_world.is_connected("edit_committed", committed):
+		terrain_world.connect("edit_committed", committed)
+	var failed := Callable(self, "_on_terrain_edit_failed")
+	if terrain_world.has_signal("edit_failed") and not terrain_world.is_connected("edit_failed", failed):
+		terrain_world.connect("edit_failed", failed)
+
+
+func _on_terrain_edit_committed(world_revision: int) -> void:
+	_edit_commit_count += 1
+	_last_edit_committed_revision = world_revision
+	_last_edit_failure_error = "ok"
+
+
+func _on_terrain_edit_failed(error: String) -> void:
+	_edit_failure_count += 1
+	_last_edit_failure_error = error
+	_last_error = error
 
 
 func _submit_initial_viewers() -> bool:
