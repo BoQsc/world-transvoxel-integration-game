@@ -21,3 +21,7 @@ categories into explicit overlay sections for the reference scene label.
 `WtTerrainMeshStats` owns debug mesh counting for validation and integration
 smoke tests. Game repositories should not carry their own backend mesh traversal
 helper just to prove terrain has drawable mesh instances.
+
+`WtTerrainWatertightnessProbe` owns rendered mesh edge/winding audits for
+integration smoke tests. Game repositories may choose probe centers and edit
+patterns, but the backend mesh traversal and edge counting should stay here.

@@ -20,7 +20,15 @@ import godot_import_assets
 
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
-DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown")
+DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown", "watertight_boundary_near")
+VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
+    "small_edit_near",
+    "small_edit_mid",
+    "small_edit_far",
+    "edit_near",
+    "edit_far",
+    "edit_aerial",
+)
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
@@ -169,6 +177,18 @@ def validate_visual_summary(
                 f"visual capture field {key} expected >= {minimum}, "
                 f"got {value}: {summary!r}"
             )
+    watertightness = summary.get("watertightness")
+    if not isinstance(watertightness, dict):
+        raise RuntimeError(f"visual capture missing watertightness summary: {summary!r}")
+    if watertightness.get("enabled"):
+        if watertightness.get("ok") is not True:
+            raise RuntimeError(f"watertightness probe failed: {watertightness!r}")
+        if int(watertightness.get("boundary_edges", -1)) != 0:
+            raise RuntimeError(f"watertightness probe found open rendered edges: {watertightness!r}")
+        if watertightness.get("winding_mixed") is True:
+            raise RuntimeError(f"watertightness probe found mixed winding: {watertightness!r}")
+        if int(watertightness.get("triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
 
 
 def main(argv: list[str]) -> int:
@@ -198,7 +218,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--visual-mode",
         action="append",
-        choices=DEFAULT_VISUAL_MODES,
+        choices=VISUAL_MODE_CHOICES,
         help="Visual capture mode to run. May be passed more than once.",
     )
     parser.add_argument(

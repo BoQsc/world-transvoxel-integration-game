@@ -14,6 +14,7 @@ const FullMapVisual := preload("res://addons/world_transvoxel_terrain/visual/wt_
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
+const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_watertightness_probe.gd")
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 
@@ -46,6 +47,7 @@ var initial_lighting_preset := 0
 var local_terrain_lights_enabled := false
 var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
+var last_watertightness_summary := {}
 
 
 func _ready() -> void:
@@ -866,6 +868,7 @@ func _capture_human_visual() -> void:
 	await _apply_capture_camera_mode()
 	for _frame in range(30):
 		await get_tree().process_frame
+	last_watertightness_summary = _collect_watertightness_summary()
 	var image := get_viewport().get_texture().get_image()
 	image.save_png(human_visual_capture_path)
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
@@ -903,17 +906,27 @@ func _capture_human_visual() -> void:
 		"local_terrain_lights_enabled": local_terrain_lights_enabled,
 		"interaction_inspection_applied": interaction_inspection_applied,
 		"interaction_inspection_operation_count": interaction_inspection_operation_count,
+		"watertightness": last_watertightness_summary,
 		"capture_path": human_visual_capture_path,
 	}))
+	if _capture_requires_watertightness_probe() and not bool(last_watertightness_summary.get("ok", false)):
+		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
+		get_tree().quit(1)
+		return
 	get_tree().quit(0)
 
 
 func _capture_requires_interaction_inspection() -> bool:
 	return human_visual_capture_mode.begins_with("edit_") or \
 		human_visual_capture_mode.begins_with("small_edit_") or \
+		human_visual_capture_mode.begins_with("watertight_") or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
+
+
+func _capture_requires_watertightness_probe() -> bool:
+	return human_visual_capture_mode.begins_with("watertight_")
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -949,6 +962,14 @@ func _apply_interaction_inspection_edits() -> bool:
 
 func _interaction_inspection_operations() -> Array:
 	var operations: Array = []
+	if human_visual_capture_mode.begins_with("watertight_"):
+		var center := _watertightness_edit_center()
+		operations.append(_edit_operation(&"carve", center, 7.5, 1, 1.0))
+		operations.append(_edit_operation(&"carve", center + Vector3(5.25, 0.0, 0.0), 5.5, 1, 1.0))
+		operations.append(_edit_operation(&"carve", center + Vector3(0.0, -4.5, 5.25), 5.0, 1, 1.0))
+		operations.append(_edit_operation(&"construct", center + Vector3(-4.5, 1.5, 4.5), 4.25, 4, 1.0))
+		operations.append(_edit_operation(&"paint", center + Vector3(2.0, -1.5, -4.0), 6.0, 7, 1.0))
+		return operations
 	if human_visual_capture_mode.begins_with("small_edit_"):
 		var center := edit_point
 		operations.append(_edit_operation(&"carve", center, 1.8, 1, 1.0))
@@ -1003,6 +1024,58 @@ func _edit_mode(mode_name: StringName) -> int:
 			return EditOperation.Mode.CARVE
 
 
+func _watertightness_edit_center() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 8.0, 1040.0)
+	return Vector3(1184.0, 119.0, 1008.0)
+
+
+func _watertightness_probe_center() -> Vector3:
+	if human_visual_capture_mode.begins_with("watertight_"):
+		return _watertightness_edit_center()
+	if human_visual_capture_mode.begins_with("small_edit_"):
+		return edit_point + Vector3(1.2, 0.0, 1.2)
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 8.0, 1040.0)
+	return Vector3(1184.0, 119.0, 1008.0)
+
+
+func _watertightness_probe_radius() -> float:
+	if human_visual_capture_mode.begins_with("small_edit_"):
+		return 18.0
+	if human_visual_capture_mode.begins_with("watertight_"):
+		return 36.0
+	return 56.0
+
+
+func _collect_watertightness_summary() -> Dictionary:
+	if not _capture_requires_interaction_inspection():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null or not terrain_world.has_method("get_backend_terrain"):
+		return {
+			"enabled": true,
+			"ok": false,
+			"error": "terrain_world_unavailable",
+		}
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		return {
+			"enabled": true,
+			"ok": false,
+			"error": "backend_unavailable",
+		}
+	return WatertightnessProbe.collect(
+		backend,
+		human_visual_capture_mode,
+		_watertightness_probe_center(),
+		_watertightness_probe_radius()
+	)
+
+
 func _apply_capture_camera_mode() -> void:
 	if player == null:
 		return
@@ -1033,6 +1106,11 @@ func _apply_capture_camera_mode() -> void:
 		"local_overlap":
 			capture_position = Vector3(1180.0, 150.0, 940.0)
 			capture_target = Vector3(1184.0, 118.0, 1008.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"watertight_boundary_near":
+			capture_target = _watertightness_edit_center()
+			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"small_edit_near":

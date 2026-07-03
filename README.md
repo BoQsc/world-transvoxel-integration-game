@@ -77,7 +77,10 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - spawn floor raycast sanity before automated handoff;
 - terrain interaction proof requires a real camera raycast hit against terrain
   collision, accepted edit submission, backend `edit_committed`, and zero
-  `edit_failed` events.
+  `edit_failed` events;
+- visual smoke includes an edited-boundary watertightness probe that audits the
+  rendered mesh for open edges and mixed triangle winding after a multi-operation
+  deformation batch.
 
 ## Profile setup
 
@@ -190,10 +193,11 @@ python tools/p2_production_integration_game_quality.py --skip-build --visual-smo
 ```
 
 This also captures the real compact human-play profile from ground,
-high-oblique, and top-down views under `build/captures/terrain_1_0_visual_smoke/`
-and rejects regressions where the fake full-map visual is enabled, native
-material override is missing, or the visible native terrain coverage falls below
-the expected compact 2K profile thresholds.
+high-oblique, top-down, and edited-boundary watertightness views under
+`build/captures/terrain_1_0_visual_smoke/` and rejects regressions where the fake
+full-map visual is enabled, native material override is missing, visible native
+terrain coverage falls below the expected compact 2K profile thresholds, or the
+edited rendered mesh reports open edges / mixed triangle winding.
 
 For explicit deformation inspection captures, run Godot directly with the
 mountain profile and an `edit_*` capture mode. These modes submit a real

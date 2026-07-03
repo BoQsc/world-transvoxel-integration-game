@@ -83,7 +83,10 @@ python tools/p2_production_integration_game_quality.py --skip-build --visual-smo
 ```
 
 This quality gate first refreshes/verifies the Godot import cache, then launches
-the actual integration game profiles and visual captures.
+the actual integration game profiles and visual captures. The default visual
+captures include an edited-boundary watertightness probe; it fails if the
+rendered terrain mesh reports open edges or mixed triangle winding after the edit
+batch.
 
 ## Current human terrain texture contract
 
