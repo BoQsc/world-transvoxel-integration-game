@@ -22,6 +22,8 @@ const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas
 @export_range(1.0, 16.0, 0.1) var clean_triplanar_blend_sharpness: float = 4.0
 @export var clean_material_variation_enabled: bool = false
 @export_range(0.0, 1.0, 0.01) var clean_material_variation_strength: float = 0.08
+@export_range(0.0, 1.0, 0.01) var clean_roughness: float = 1.0
+@export_range(0.0, 1.0, 0.01) var clean_specular: float = 0.0
 
 var _summary := {
 	"applied": false,
@@ -119,6 +121,8 @@ func apply_materials_now() -> Dictionary:
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
 		"clean_material_variation_enabled": clean_material_variation_enabled,
 		"clean_material_variation_strength": clean_material_variation_strength,
+		"clean_roughness": clean_roughness,
+		"clean_specular": clean_specular,
 		"implementation": "terrain_addon_material_applicator",
 	}
 	return get_material_summary()
@@ -169,6 +173,8 @@ func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_triplanar_blend_sharpness", clean_triplanar_blend_sharpness)
 	shader_material.set_shader_parameter("clean_material_variation_enabled", clean_material_variation_enabled)
 	shader_material.set_shader_parameter("clean_material_variation_strength", clean_material_variation_strength)
+	shader_material.set_shader_parameter("clean_roughness", clean_roughness)
+	shader_material.set_shader_parameter("clean_specular", clean_specular)
 	var texture := _load_clean_albedo_texture()
 	shader_material.set_shader_parameter("clean_texture_enabled", texture != null)
 	if texture != null:

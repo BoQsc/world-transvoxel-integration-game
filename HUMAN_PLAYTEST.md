@@ -23,7 +23,9 @@ Expected baseline:
 - fullscreen by default
 - crosshair only by default; no debug telemetry UI unless running autonomous proof
 - sand-textured clean terrain presentation using `assets/terrain_textures/coast_sand_01_diff_1k.jpg`
+- the sand texture import is mipmapped for distance viewing, and the clean human material is intentionally rough/non-specular so terrain does not produce shiny lighting streaks
 - clean human view keeps material IDs internal; material-ID tinting is off by default
+- terrain is viewer-streamed: chunks are generated/loaded/meshed around the active player/camera and unloaded outside the active coverage. This is expected for the large-world runtime; edits persist through the journal/storage path instead of requiring the entire 2048×2048 map to stay rendered at once.
 - player starts above the current higher-relief terrain and is snapped to the collision floor before input is enabled
 - mouse-look, WASD movement, jump, fly inspection, terrain edit input, and lighting controls are present
 

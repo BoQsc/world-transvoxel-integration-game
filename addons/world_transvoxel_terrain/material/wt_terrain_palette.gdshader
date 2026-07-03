@@ -19,6 +19,8 @@ uniform bool clean_triplanar_enabled = true;
 uniform float clean_triplanar_blend_sharpness = 4.0;
 uniform bool clean_material_variation_enabled = false;
 uniform float clean_material_variation_strength = 0.08;
+uniform float clean_roughness = 1.0;
+uniform float clean_specular = 0.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -87,7 +89,9 @@ void fragment() {
 			clean_color = mix(clean_color, material_clean_tint(material_id), clamp(clean_material_variation_strength, 0.0, 1.0));
 		}
 		ALBEDO = clean_color;
-		ROUGHNESS = 0.88;
+		METALLIC = 0.0;
+		SPECULAR = clamp(clean_specular, 0.0, 1.0);
+		ROUGHNESS = clamp(clean_roughness, 0.0, 1.0);
 	} else {
 		float material_id = UV2.x;
 		vec4 base = material_1_color;
