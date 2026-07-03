@@ -38,9 +38,15 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage,
   capped radius-1 near-detail refinement, and no fake full-map visual in human
   play;
+- higher-relief deterministic terrain inside the current 64-cell vertical
+  budget, with the human spawn placed above terrain and snapped to collision
+  before input is enabled;
 - production terrain material texture pipeline installed through the native
   render material override, so newly streamed chunks do not flash with the
   engine default material;
+- normal human play uses the sand texture at
+  `res://assets/terrain_textures/coast_sand_01_diff_1k.jpg` and keeps
+  material-ID tinting off by default;
 - spawn floor raycast sanity before automated handoff.
 
 ## Profile setup
@@ -58,10 +64,10 @@ game_world.configure_game_world(
 	&"g19_compact_2k_on_demand",
 	generation_profile,
 	storage_profile,
-	[Vector3(1032.0, 8.0, 1032.0)],
+	[Vector3(1032.0, 52.0, 1032.0)],
 	8,
 	32,
-	Vector3(1032.0, 24.0, 1032.0),
+	Vector3(1032.0, 52.0, 1032.0),
 	3
 )
 ```

@@ -139,7 +139,7 @@ def validate_visual_summary(
         "runtime_lod_refinement_radius_chunks": 1,
         "full_map_enabled": False,
         "native_render_material_override": True,
-        "clean_material_variation_enabled": True,
+        "clean_material_variation_enabled": False,
     }
     for key, expected in checks.items():
         if summary.get(key) != expected:
@@ -160,12 +160,6 @@ def validate_visual_summary(
                 f"visual capture field {key} expected >= {minimum}, "
                 f"got {value}: {summary!r}"
             )
-    variation_strength = float(summary.get("clean_material_variation_strength", 0.0))
-    if variation_strength < 0.05:
-        raise RuntimeError(
-            "visual capture clean material variation is too weak: "
-            f"{summary!r}"
-        )
 
 
 def main(argv: list[str]) -> int:

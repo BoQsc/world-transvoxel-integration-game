@@ -277,7 +277,7 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
 		return {"start": Vector3(8, 12, 8), "viewers": [Vector3(8, 8, 8)], "radius": 0, "maximum_lod": 0, "expected_resources": 1, "expected_max_resources": 1, "edit_point": Vector3(8, 8, 8), "detail_exclusion_half_extent": 0.0}
-	return {"start": Vector3(1032, 24, 1032), "viewers": [Vector3(1032, 8, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 8, 1032), "detail_exclusion_half_extent": 0.0}
+	return {"start": Vector3(1032, 52, 1032), "viewers": [Vector3(1032, 52, 1032)], "radius": 8, "maximum_lod": 3, "expected_resources": 32, "expected_max_resources": 1024, "startup_requires_cold_idle": false, "startup_minimum_render_resources": 32, "startup_minimum_collision_resources": 32, "runtime_active_chunk_capacity": 1024, "runtime_demand_capacity_per_viewer": 8192, "runtime_render_entry_capacity": 1024, "runtime_collision_entry_capacity": 1024, "runtime_lod_refinement_radius_chunks": 1, "edit_point": Vector3(1032, 38, 1032), "detail_exclusion_half_extent": 0.0}
 
 
 func _generation_profile(profile_id: StringName) -> Resource:

@@ -20,7 +20,7 @@ const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas
 @export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
 @export var clean_triplanar_enabled: bool = true
 @export_range(1.0, 16.0, 0.1) var clean_triplanar_blend_sharpness: float = 4.0
-@export var clean_material_variation_enabled: bool = true
+@export var clean_material_variation_enabled: bool = false
 @export_range(0.0, 1.0, 0.01) var clean_material_variation_strength: float = 0.08
 
 var _summary := {

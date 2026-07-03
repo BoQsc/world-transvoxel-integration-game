@@ -17,7 +17,7 @@ uniform vec4 clean_albedo_color : source_color = vec4(0.72, 0.65, 0.50, 1.0);
 uniform float clean_texture_world_scale = 0.125;
 uniform bool clean_triplanar_enabled = true;
 uniform float clean_triplanar_blend_sharpness = 4.0;
-uniform bool clean_material_variation_enabled = true;
+uniform bool clean_material_variation_enabled = false;
 uniform float clean_material_variation_strength = 0.08;
 
 varying vec3 world_position;
@@ -76,6 +76,7 @@ vec3 material_clean_tint(float material_id) {
 }
 
 void fragment() {
+	NORMAL = normalize(NORMAL);
 	if (clean_visual_enabled) {
 		float material_id = UV2.x;
 		vec3 clean_color = clean_albedo_color.rgb;
