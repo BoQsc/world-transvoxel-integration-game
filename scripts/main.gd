@@ -48,6 +48,9 @@ var local_terrain_lights_enabled := false
 var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
+var last_edit_persistence_summary := {}
+var authoritative_sample_batches := {}
+var authoritative_sample_failures := {}
 
 
 func _ready() -> void:
@@ -907,6 +910,7 @@ func _capture_human_visual() -> void:
 		"interaction_inspection_applied": interaction_inspection_applied,
 		"interaction_inspection_operation_count": interaction_inspection_operation_count,
 		"watertightness": last_watertightness_summary,
+		"edit_persistence": _edit_persistence_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	if _capture_requires_watertightness_probe() and not bool(last_watertightness_summary.get("ok", false)):
@@ -920,13 +924,15 @@ func _capture_requires_interaction_inspection() -> bool:
 	return human_visual_capture_mode.begins_with("edit_") or \
 		human_visual_capture_mode.begins_with("small_edit_") or \
 		human_visual_capture_mode.begins_with("watertight_") or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
 
 
 func _capture_requires_watertightness_probe() -> bool:
-	return human_visual_capture_mode.begins_with("watertight_")
+	return human_visual_capture_mode.begins_with("watertight_") or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -965,7 +971,8 @@ func _apply_interaction_inspection_edits() -> bool:
 func _capture_requires_sequential_interaction_edits() -> bool:
 	return human_visual_capture_mode == "watertight_many_small_near" or \
 		human_visual_capture_mode == "watertight_rapid_small_near" or \
-		human_visual_capture_mode == "watertight_rapid_small_reload_near"
+		human_visual_capture_mode == "watertight_rapid_small_reload_near" or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle"
 
 
 func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool:
@@ -998,13 +1005,34 @@ func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool
 				await get_tree().process_frame
 	if not await _wait_for_current_profile_settled("after sequential interaction inspection edits"):
 		return false
-	if human_visual_capture_mode == "watertight_rapid_small_reload_near":
+	var before_reload_snapshot := {}
+	if _capture_requires_edit_persistence_oracle():
+		before_reload_snapshot = await _collect_edit_persistence_snapshot(terrain_world, "before reload")
+		if not bool(before_reload_snapshot.get("ok", false)):
+			return false
+	if _capture_exercises_edit_reload_path():
 		if not await _exercise_edit_reload_path():
+			return false
+	if _capture_requires_edit_persistence_oracle():
+		var after_reload_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "after reload")
+		if not bool(after_reload_snapshot.get("ok", false)):
+			return false
+		if not _compare_edit_persistence_snapshots(before_reload_snapshot, after_reload_snapshot):
 			return false
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
 	interaction_inspection_applied = true
 	return true
+
+
+func _capture_exercises_edit_reload_path() -> bool:
+	return human_visual_capture_mode == "watertight_rapid_small_reload_near" or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle"
+
+
+func _capture_requires_edit_persistence_oracle() -> bool:
+	return human_visual_capture_mode == "watertight_rapid_small_reload_near" or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle"
 
 
 func _sequential_interaction_inspection_operations() -> Array:
@@ -1030,6 +1058,185 @@ func _sequential_interaction_inspection_operations() -> Array:
 			1.0
 		))
 	return operations
+
+
+func _edit_persistence_points() -> Array:
+	var points: Array = []
+	var seen := {}
+	for operation in _sequential_interaction_inspection_operations():
+		var center: Vector3 = operation.get("center")
+		var radius := float(operation.get("radius"))
+		var offsets := [
+			Vector3.ZERO,
+			Vector3(radius * 0.50, 0.0, 0.0),
+			Vector3(-radius * 0.50, 0.0, 0.0),
+			Vector3(0.0, radius * 0.50, 0.0),
+			Vector3(0.0, -radius * 0.50, 0.0),
+			Vector3(0.0, 0.0, radius * 0.50),
+			Vector3(0.0, 0.0, -radius * 0.50),
+		]
+		for offset_index in range(offsets.size()):
+			var offset: Vector3 = offsets[offset_index]
+			var position: Vector3 = center + offset
+			var point := Vector3i(
+				int(round(position.x)),
+				int(round(position.y)),
+				int(round(position.z))
+			)
+			var key := _grid_point_key(point)
+			if not seen.has(key):
+				seen[key] = true
+				points.append(point)
+	return points
+
+
+func _collect_edit_persistence_snapshot(terrain_world: Node, context: String) -> Dictionary:
+	var points := _edit_persistence_points()
+	if points.is_empty():
+		_fail("edit persistence oracle has no sample points")
+		return {"ok": false, "error": "no_sample_points"}
+	_ensure_authoritative_sample_connections(terrain_world)
+	var request_id := int(terrain_world.call("request_authoritative_samples", points, 0))
+	if request_id <= 0:
+		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "unknown"
+		_fail("edit persistence oracle query rejected %s: %s" % [context, error])
+		return {"ok": false, "error": "query_rejected", "context": context}
+	for _frame in range(600):
+		if authoritative_sample_failures.has(request_id):
+			var failure_error := str(authoritative_sample_failures[request_id])
+			authoritative_sample_failures.erase(request_id)
+			_fail("edit persistence oracle query failed %s: %s" % [context, failure_error])
+			return {"ok": false, "error": failure_error, "context": context}
+		if authoritative_sample_batches.has(request_id):
+			var samples: Array = authoritative_sample_batches[request_id]
+			authoritative_sample_batches.erase(request_id)
+			return _samples_to_persistence_snapshot(samples, context)
+		await get_tree().process_frame
+	_fail("edit persistence oracle query timed out %s request=%d" % [context, request_id])
+	return {"ok": false, "error": "query_timeout", "context": context}
+
+
+func _samples_to_persistence_snapshot(samples: Array, context: String) -> Dictionary:
+	var sample_map := {}
+	var air_sample_count := 0
+	var material_histogram := {}
+	var world_revision_min := 9223372036854775807
+	var world_revision_max := -1
+	for sample in samples:
+		if sample == null:
+			continue
+		var point: Vector3i = sample.call("get_grid_point")
+		var material := int(sample.call("get_material"))
+		var density := float(sample.call("get_density"))
+		var world_revision := int(sample.call("get_world_revision"))
+		if density > 0.0:
+			air_sample_count += 1
+		material_histogram[material] = int(material_histogram.get(material, 0)) + 1
+		world_revision_min = mini(world_revision_min, world_revision)
+		world_revision_max = maxi(world_revision_max, world_revision)
+		sample_map[_grid_point_key(point)] = {
+			"point": point,
+			"density": density,
+			"material": material,
+			"world_revision": world_revision,
+		}
+	return {
+		"ok": true,
+		"context": context,
+		"sample_count": sample_map.size(),
+		"air_sample_count": air_sample_count,
+		"material_histogram": material_histogram,
+		"world_revision_min": world_revision_min,
+		"world_revision_max": world_revision_max,
+		"samples": sample_map,
+	}
+
+
+func _compare_edit_persistence_snapshots(before: Dictionary, after: Dictionary) -> bool:
+	var before_samples: Dictionary = before.get("samples", {})
+	var after_samples: Dictionary = after.get("samples", {})
+	var density_mismatches := 0
+	var material_mismatches := 0
+	var missing_after := 0
+	var max_abs_density_delta := 0.0
+	var examples := []
+	for key in before_samples.keys():
+		if not after_samples.has(key):
+			missing_after += 1
+			if examples.size() < 8:
+				examples.append("%s missing_after" % str(key))
+			continue
+		var before_sample: Dictionary = before_samples[key]
+		var after_sample: Dictionary = after_samples[key]
+		var density_delta := absf(float(before_sample["density"]) - float(after_sample["density"]))
+		max_abs_density_delta = maxf(max_abs_density_delta, density_delta)
+		var material_changed := int(before_sample["material"]) != int(after_sample["material"])
+		var density_changed := density_delta > 0.000001
+		if density_changed:
+			density_mismatches += 1
+		if material_changed:
+			material_mismatches += 1
+		if (density_changed or material_changed) and examples.size() < 8:
+			examples.append("%s density_before=%.9f density_after=%.9f material_before=%d material_after=%d" % [
+				str(key),
+				float(before_sample["density"]),
+				float(after_sample["density"]),
+				int(before_sample["material"]),
+				int(after_sample["material"]),
+			])
+	last_edit_persistence_summary = {
+		"enabled": true,
+		"ok": density_mismatches == 0 and material_mismatches == 0 and missing_after == 0,
+		"sample_count": before_samples.size(),
+		"before_air_sample_count": int(before.get("air_sample_count", 0)),
+		"after_air_sample_count": int(after.get("air_sample_count", 0)),
+		"before_world_revision_min": int(before.get("world_revision_min", -1)),
+		"before_world_revision_max": int(before.get("world_revision_max", -1)),
+		"after_world_revision_min": int(after.get("world_revision_min", -1)),
+		"after_world_revision_max": int(after.get("world_revision_max", -1)),
+		"density_mismatches": density_mismatches,
+		"material_mismatches": material_mismatches,
+		"missing_after": missing_after,
+		"max_abs_density_delta": max_abs_density_delta,
+		"examples": examples,
+	}
+	if not bool(last_edit_persistence_summary["ok"]):
+		_fail("edit persistence oracle mismatch: %s" % JSON.stringify(last_edit_persistence_summary))
+		return false
+	if int(last_edit_persistence_summary["before_air_sample_count"]) <= 0:
+		_fail("edit persistence oracle did not sample carved air: %s" % JSON.stringify(last_edit_persistence_summary))
+		return false
+	return true
+
+
+func _edit_persistence_summary() -> Dictionary:
+	if last_edit_persistence_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_edit_persistence_summary
+
+
+func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
+	var ready_callable := Callable(self, "_on_authoritative_samples_ready")
+	if not terrain_world.is_connected("authoritative_samples_ready", ready_callable):
+		terrain_world.connect("authoritative_samples_ready", ready_callable)
+	var failed_callable := Callable(self, "_on_authoritative_samples_failed")
+	if not terrain_world.is_connected("authoritative_samples_failed", failed_callable):
+		terrain_world.connect("authoritative_samples_failed", failed_callable)
+
+
+func _on_authoritative_samples_ready(request_id: int, samples: Array) -> void:
+	authoritative_sample_batches[request_id] = samples
+
+
+func _on_authoritative_samples_failed(request_id: int, error: String) -> void:
+	authoritative_sample_failures[request_id] = error
+
+
+func _grid_point_key(point: Vector3i) -> String:
+	return "%d,%d,%d" % [point.x, point.y, point.z]
 
 
 func _exercise_edit_reload_path() -> bool:
@@ -1155,7 +1362,8 @@ func _watertightness_probe_radius() -> float:
 		return 18.0
 	if human_visual_capture_mode == "watertight_many_small_near" or \
 		human_visual_capture_mode == "watertight_rapid_small_near" or \
-		human_visual_capture_mode == "watertight_rapid_small_reload_near":
+		human_visual_capture_mode == "watertight_rapid_small_reload_near" or \
+		human_visual_capture_mode == "edit_persistence_reload_oracle":
 		return 48.0
 	if human_visual_capture_mode.begins_with("watertight_"):
 		return 36.0
@@ -1227,7 +1435,7 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near":
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle":
 			capture_target = _watertightness_edit_center() + Vector3(0.0, -4.0, 0.0)
 			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position
