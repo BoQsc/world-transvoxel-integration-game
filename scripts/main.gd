@@ -50,6 +50,7 @@ var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
 var last_edit_persistence_summary := {}
 var last_edit_stability_summary := {}
+var last_lod_movement_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -914,6 +915,7 @@ func _capture_human_visual() -> void:
 		"watertightness": last_watertightness_summary,
 		"edit_persistence": _edit_persistence_summary(),
 		"edit_stability": _edit_stability_summary(),
+		"lod_movement": _lod_movement_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	if _capture_requires_watertightness_probe() and not bool(last_watertightness_summary.get("ok", false)):
@@ -929,6 +931,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode.begins_with("watertight_") or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
+		human_visual_capture_mode == "edit_lod_movement_gate" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -937,7 +940,8 @@ func _capture_requires_interaction_inspection() -> bool:
 func _capture_requires_watertightness_probe() -> bool:
 	return human_visual_capture_mode.begins_with("watertight_") or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
-		human_visual_capture_mode == "edit_stability_gate"
+		human_visual_capture_mode == "edit_stability_gate" or \
+		human_visual_capture_mode == "edit_lod_movement_gate"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -947,6 +951,8 @@ func _apply_interaction_inspection_edits() -> bool:
 	if terrain_world == null:
 		_fail("terrain world unavailable for interaction inspection")
 		return false
+	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return await _run_edit_lod_movement_gate(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
@@ -1196,6 +1202,491 @@ func _edit_stability_snapshot_has_material_diversity(snapshot: Dictionary) -> bo
 	return true
 
 
+func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
+	var operations := _edit_lod_movement_gate_operations()
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	last_lod_movement_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+		"direct_operation_count": operations.size(),
+	}
+	if operations.is_empty():
+		_fail("LOD movement gate produced no operations")
+		return false
+	var mode_counts := {}
+	for index in range(operations.size()):
+		var operation: Resource = operations[index]
+		var mode_name := str(operation.call("get_mode_name"))
+		mode_counts[mode_name] = int(mode_counts.get(mode_name, 0)) + 1
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		if not batch.add_operation(operation):
+			_fail("failed to add LOD movement operation %d" % index)
+			return false
+		if not bool(terrain_world.call("submit_edit_batch", batch, 8843)):
+			_fail("LOD movement operation %d rejected: %s" % [
+				index,
+				str(terrain_world.call("get_last_error")),
+			])
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("LOD movement operation %d did not commit" % index)
+			return false
+		if index % 16 == 15:
+			if not await _wait_for_current_profile_settled("after LOD movement edit %d" % index):
+				return false
+		else:
+			for _frame in range(2):
+				await get_tree().process_frame
+	if not await _wait_for_current_profile_settled("after LOD movement direct edits"):
+		return false
+	var interaction_result: Dictionary = await _run_lod_movement_player_interactions(terrain_world)
+	if not bool(interaction_result.get("ok", false)):
+		last_lod_movement_summary = {
+			"enabled": true,
+			"ok": false,
+			"error": "interaction_path_failed",
+			"interaction_result": interaction_result,
+		}
+		_fail("LOD movement gate interaction path failed: %s" % JSON.stringify(interaction_result))
+		return false
+	var interaction_operations: Array = interaction_result.get("operations", [])
+	for operation in interaction_operations:
+		edit_persistence_operations.append(operation)
+	interaction_inspection_operation_count = edit_persistence_operations.size()
+	var baseline_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "LOD movement baseline")
+	if not bool(baseline_snapshot.get("ok", false)):
+		return false
+	if not _edit_stability_snapshot_has_material_diversity(baseline_snapshot):
+		return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("LOD movement gate backend unavailable")
+		return false
+	var transition_summaries := []
+	var persistence_summaries := []
+	for step in _edit_lod_movement_path():
+		var transition: Dictionary = await _exercise_lod_movement_step(backend, step)
+		transition_summaries.append(transition)
+		if not bool(transition.get("ok", false)):
+			last_lod_movement_summary = {
+				"enabled": true,
+				"ok": false,
+				"error": "movement_step_failed",
+				"failed_step": transition,
+				"transition_summaries": transition_summaries,
+			}
+			_fail("LOD movement gate step failed: %s" % JSON.stringify(transition))
+			return false
+		var after_snapshot := await _collect_edit_persistence_snapshot(
+			terrain_world,
+			"LOD movement after %s" % str(step.get("label", "step"))
+		)
+		if not bool(after_snapshot.get("ok", false)):
+			return false
+		if not _compare_edit_persistence_snapshots(baseline_snapshot, after_snapshot):
+			last_lod_movement_summary = {
+				"enabled": true,
+				"ok": false,
+				"error": "persistence_changed_after_lod_movement",
+				"failed_step": str(step.get("label", "step")),
+				"persistence": last_edit_persistence_summary,
+				"transition_summaries": transition_summaries,
+			}
+			return false
+		persistence_summaries.append({
+			"label": str(step.get("label", "step")),
+			"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+			"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+			"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+			"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		})
+	if not await _save_lod_movement_gate_captures():
+		return false
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	last_lod_movement_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"direct_operation_count": operations.size(),
+		"interaction_operation_count": interaction_operations.size(),
+		"total_operation_count": edit_persistence_operations.size(),
+		"mode_counts": mode_counts,
+		"interaction_strict_settle_notes": interaction_result.get("strict_settle_notes", []),
+		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"transition_summaries": transition_summaries,
+		"persistence_summaries": persistence_summaries,
+		"render_resources": int(runtime_summary.get("render_resources", 0)),
+		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
+		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
+	}
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _edit_lod_movement_gate_operations() -> Array:
+	var operations: Array = []
+	var seeds := [615197, 382091, 928371, 470039]
+	var center := _edit_lod_movement_gate_center()
+	var horizontal_radius_limit := 30.0
+	var vertical_offset_min := -14.0
+	var vertical_offset_max := -2.0
+	if selected_profile == FLAT_PROFILE:
+		horizontal_radius_limit = 8.5
+		vertical_offset_min = -2.2
+		vertical_offset_max = 2.8
+	for seed_index in range(seeds.size()):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(seeds[seed_index])
+		for index in range(32):
+			var angle := rng.randf_range(0.0, TAU)
+			var horizontal_radius := rng.randf_range(0.0, horizontal_radius_limit)
+			var offset := Vector3(
+				cos(angle) * horizontal_radius,
+				rng.randf_range(vertical_offset_min, vertical_offset_max),
+				sin(angle) * horizontal_radius
+			)
+			var pattern := index % 12
+			var mode := &"carve"
+			var material_id := 1
+			var radius := rng.randf_range(1.4, 3.6)
+			if selected_profile == FLAT_PROFILE:
+				radius = rng.randf_range(1.3, 2.2)
+			if pattern == 8:
+				mode = &"construct"
+				material_id = 3 + seed_index
+				radius = rng.randf_range(2.0, 4.2)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.5, 2.5)
+			elif pattern == 9:
+				mode = &"fill"
+				material_id = 4 + seed_index
+				radius = rng.randf_range(1.8, 3.8)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.5, 2.4)
+			elif pattern == 10:
+				mode = &"paint"
+				material_id = 7 + seed_index
+				radius = rng.randf_range(2.0, 4.5)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.8, 2.8)
+			operations.append(_edit_operation(
+				mode,
+				center + offset,
+				radius,
+				material_id,
+				1.0
+			))
+	return operations
+
+
+func _run_lod_movement_player_interactions(terrain_world: Node) -> Dictionary:
+	if player == null or game_world == null:
+		return {"ok": false, "error": "player_or_game_world_unavailable"}
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		return {"ok": false, "error": "backend_unavailable"}
+	var center := _edit_lod_movement_gate_center()
+	var approximates := [
+		center + Vector3(-18.0, 0.0, -18.0),
+		center + Vector3(18.0, 0.0, -12.0),
+		center + Vector3(-8.0, 0.0, 22.0),
+		center + Vector3(24.0, 0.0, 18.0),
+	]
+	var target := _find_collision_surface_near(approximates)
+	if is_inf(target.x):
+		return {"ok": false, "error": "no_collision_surface_for_interaction"}
+	var interaction_operations := []
+	var interaction_summaries := []
+	var strict_settle_notes := []
+	for index in range(4):
+		var offset := Vector3(
+			float((index % 3) - 1) * 7.5,
+			0.0,
+			float((index / 2) - 0.5) * 8.0
+		)
+		var aim_target := target + offset
+		var camera_position := aim_target + Vector3(-14.0, 13.0, -32.0)
+		player.global_position = camera_position
+		player.velocity = Vector3.ZERO
+		if not bool(game_world.update_player_viewer(true)):
+			return {"ok": false, "error": "viewer_update_failed_before_interaction", "index": index}
+		if not await _wait_for_lod_movement_visual_ready(
+			backend,
+			"before LOD movement player interaction %d" % index,
+			strict_settle_notes
+		):
+			return {"ok": false, "error": "not_visual_ready_before_interaction", "index": index}
+		if not bool(player.call("autonomous_look_at", aim_target)):
+			return {"ok": false, "error": "look_at_failed", "index": index}
+		await get_tree().physics_frame
+		var mode := &"carve" if index % 3 != 2 else &"construct"
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		if not bool(player.call("autonomous_submit_interaction", mode)):
+			var rejected_summary: Dictionary = player.call("get_last_interaction_summary")
+			return {
+				"ok": false,
+				"error": "interaction_rejected",
+				"index": index,
+				"summary": rejected_summary,
+			}
+		var interaction_summary: Dictionary = player.call("get_last_interaction_summary")
+		if not bool(interaction_summary.get("ray_hit", false)) or not bool(interaction_summary.get("accepted", false)):
+			return {
+				"ok": false,
+				"error": "interaction_not_accepted",
+				"index": index,
+				"summary": interaction_summary,
+			}
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			return {"ok": false, "error": "interaction_revision_not_committed", "index": index}
+		if not await _wait_for_lod_movement_visual_ready(
+			backend,
+			"after LOD movement player interaction %d" % index,
+			strict_settle_notes
+		):
+			return {"ok": false, "error": "not_visual_ready_after_interaction", "index": index}
+		var edit_position: Vector3 = interaction_summary.get("position", aim_target)
+		var material_id := 1 if mode == &"carve" else 4
+		interaction_operations.append(_edit_operation(
+			mode,
+			edit_position,
+			float(player.get("edit_radius")),
+			material_id,
+			1.0
+		))
+		interaction_summaries.append(interaction_summary)
+	return {
+		"ok": true,
+		"operation_count": interaction_operations.size(),
+		"operations": interaction_operations,
+		"summaries": interaction_summaries,
+		"strict_settle_notes": strict_settle_notes,
+	}
+
+
+func _edit_lod_movement_path() -> Array:
+	var center := _edit_lod_movement_gate_center()
+	var target := center + Vector3(0.0, -4.0, 0.0)
+	return [
+		{"label": "close", "position": center + Vector3(-12.0, 18.0, -36.0), "target": target},
+		{"label": "mid", "position": center + Vector3(-68.0, 54.0, -146.0), "target": target},
+		{"label": "far", "position": center + Vector3(-132.0, 86.0, -286.0), "target": target},
+		{"label": "return_close", "position": center + Vector3(16.0, 20.0, -40.0), "target": target},
+	]
+
+
+func _wait_for_lod_movement_visual_ready(
+	backend: Node,
+	context: String,
+	strict_settle_notes: Array
+) -> bool:
+	var last_summary := {}
+	var last_probe := {}
+	for frame in range(120):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_lod_movement_visual_ready_summary(summary):
+			if frame % 15 != 0 and frame != 119:
+				await get_tree().process_frame
+				continue
+			var probe := WatertightnessProbe.collect(
+				backend,
+				"edit_lod_movement_gate_visual_ready",
+				_edit_lod_movement_gate_center(),
+				_edit_lod_movement_probe_radius()
+			)
+			last_probe = {
+				"ok": bool(probe.get("ok", false)),
+				"boundary_edges": int(probe.get("boundary_edges", -1)),
+				"nonmanifold_edges": int(probe.get("nonmanifold_edges", -1)),
+				"triangles_in_region": int(probe.get("triangles_in_region", -1)),
+				"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
+				"boundary_examples": probe.get("boundary_examples", []),
+				"nonmanifold_examples": probe.get("nonmanifold_examples", []),
+			}
+			if bool(probe.get("ok", false)):
+				if int(summary.get("pending_chunk_retirements", 0)) != 0 or \
+						int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
+					strict_settle_notes.append({
+						"context": context,
+						"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+						"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+						"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
+						"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+						"render_resources": int(summary.get("render_resources", 0)),
+						"collision_resources": int(summary.get("collision_resources", 0)),
+					})
+				return true
+		await get_tree().process_frame
+	_fail("LOD movement visual-ready wait failed %s: summary=%s probe=%s" % [context, str(last_summary), str(last_probe)])
+	return false
+
+
+func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
+	if not bool(summary.get("backend_running", summary.get("world_running", true))):
+		return false
+	if int(summary.get("queued_render", 0)) != 0:
+		return false
+	if int(summary.get("queued_collision", 0)) != 0:
+		return false
+	if int(summary.get("scheduler_queued_jobs", 0)) != 0:
+		return false
+	if int(summary.get("scheduler_queued_completions", 0)) != 0:
+		return false
+	if int(summary.get("scheduler_failed_records", 0)) != 0:
+		return false
+	if int(summary.get("page_sample_failures", 0)) != 0:
+		return false
+	if int(summary.get("page_mesh_failures", 0)) != 0:
+		return false
+	if int(summary.get("render_resources", 0)) <= 0:
+		return false
+	if int(summary.get("collision_resources", 0)) <= 0:
+		return false
+	return true
+
+
+func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
+	if player == null or game_world == null:
+		return {"ok": false, "error": "player_or_game_world_unavailable"}
+	var label := str(step.get("label", "step"))
+	var position: Vector3 = step.get("position", player.global_position)
+	var target: Vector3 = step.get("target", _edit_lod_movement_gate_center())
+	player.global_position = position
+	player.velocity = Vector3.ZERO
+	if not bool(player.call("autonomous_look_at", target)):
+		return {"ok": false, "label": label, "error": "look_at_failed"}
+	if not bool(game_world.update_player_viewer(true)):
+		return {"ok": false, "label": label, "error": "viewer_update_failed"}
+	var transient_probe_failures := []
+	var transient_frames := [1, 12]
+	var max_queued_render := 0
+	var max_queued_collision := 0
+	var max_pending_retirements := 0
+	var max_render_fading := 0
+	var min_render_resources := 9223372036854775807
+	var min_collision_resources := 9223372036854775807
+	var max_scheduler_jobs := 0
+	for frame in range(30):
+		await get_tree().process_frame
+		var summary: Dictionary = game_world.get_game_world_summary()
+		max_queued_render = maxi(max_queued_render, int(summary.get("queued_render", 0)))
+		max_queued_collision = maxi(max_queued_collision, int(summary.get("queued_collision", 0)))
+		max_pending_retirements = maxi(max_pending_retirements, int(summary.get("pending_chunk_retirements", 0)))
+		max_render_fading = maxi(max_render_fading, int(summary.get("render_fading_resources", 0)))
+		min_render_resources = mini(min_render_resources, int(summary.get("render_resources", 0)))
+		min_collision_resources = mini(min_collision_resources, int(summary.get("collision_resources", 0)))
+		max_scheduler_jobs = maxi(max_scheduler_jobs, int(summary.get("scheduler_queued_jobs", 0)))
+		if transient_frames.has(frame):
+			var transient_probe := WatertightnessProbe.collect(
+				backend,
+				"edit_lod_movement_gate_%s_frame_%d" % [label, frame],
+				_edit_lod_movement_gate_center(),
+				_edit_lod_movement_probe_radius()
+			)
+			if not bool(transient_probe.get("ok", false)):
+				transient_probe_failures.append({
+					"frame": frame,
+					"boundary_edges": int(transient_probe.get("boundary_edges", -1)),
+					"triangles_in_region": int(transient_probe.get("triangles_in_region", -1)),
+					"examples": transient_probe.get("boundary_examples", []),
+				})
+	var strict_settle_notes := []
+	if not await _wait_for_lod_movement_visual_ready(
+		backend,
+		"after LOD movement step %s" % label,
+		strict_settle_notes
+	):
+		var timeout_summary: Dictionary = game_world.get_game_world_summary()
+		return {
+			"ok": false,
+			"label": label,
+			"error": "visual_streaming_not_ready",
+			"summary": timeout_summary,
+		}
+	var settled_probe := WatertightnessProbe.collect(
+		backend,
+		"edit_lod_movement_gate_%s_settled" % label,
+		_edit_lod_movement_gate_center(),
+		_edit_lod_movement_probe_radius()
+	)
+	if not bool(settled_probe.get("ok", false)):
+		return {
+			"ok": false,
+			"label": label,
+			"error": "settled_watertightness_failure",
+			"settled_probe": settled_probe,
+		}
+	return {
+		"ok": true,
+		"label": label,
+		"max_queued_render": max_queued_render,
+		"max_queued_collision": max_queued_collision,
+		"max_pending_retirements": max_pending_retirements,
+		"max_render_fading_resources": max_render_fading,
+		"min_render_resources": min_render_resources,
+		"min_collision_resources": min_collision_resources,
+		"max_scheduler_queued_jobs": max_scheduler_jobs,
+		"transient_probe_failures": transient_probe_failures,
+		"transient_probe_failure_count": transient_probe_failures.size(),
+		"strict_settle_notes": strict_settle_notes,
+		"settled_boundary_edges": int(settled_probe.get("boundary_edges", -1)),
+		"settled_triangles_in_region": int(settled_probe.get("triangles_in_region", -1)),
+	}
+
+
+func _save_lod_movement_gate_captures() -> bool:
+	if human_visual_capture_path.is_empty():
+		return true
+	var steps := _edit_lod_movement_path()
+	for step in steps:
+		var label := str(step.get("label", "step"))
+		if label != "close" and label != "mid" and label != "far":
+			continue
+		var output_path := _capture_variant_path(label)
+		await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _edit_lod_movement_gate_center()))
+		var image := get_viewport().get_texture().get_image()
+		var error := image.save_png(output_path)
+		if error != OK:
+			_fail("failed to save LOD movement %s capture to %s" % [label, output_path])
+			return false
+	return true
+
+
+func _capture_variant_path(label: String) -> String:
+	var dot_index := human_visual_capture_path.rfind(".")
+	if dot_index > 0:
+		return human_visual_capture_path.substr(0, dot_index) + "_" + label + ".png"
+	return human_visual_capture_path + "_" + label + ".png"
+
+
+func _set_capture_camera_pose(position: Vector3, target: Vector3) -> void:
+	if player == null:
+		return
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return
+	player.global_position = position
+	player.velocity = Vector3.ZERO
+	camera.far = 5000.0
+	camera.fov = 75.0
+	camera.look_at_from_position(position, target, Vector3.UP)
+	camera.current = true
+	camera.make_current()
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", true)
+	for _frame in range(12):
+		await get_tree().process_frame
+
+
 func _sequential_interaction_inspection_operations() -> Array:
 	var operations: Array = []
 	var rng := RandomNumberGenerator.new()
@@ -1391,6 +1882,15 @@ func _edit_stability_summary() -> Dictionary:
 	return last_edit_stability_summary
 
 
+func _lod_movement_summary() -> Dictionary:
+	if last_lod_movement_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_lod_movement_summary
+
+
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
 	var ready_callable := Callable(self, "_on_authoritative_samples_ready")
 	if not terrain_world.is_connected("authoritative_samples_ready", ready_callable):
@@ -1526,13 +2026,27 @@ func _edit_stability_gate_center() -> Vector3:
 	return _watertightness_edit_center()
 
 
+func _edit_lod_movement_gate_center() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 12.0, 1040.0)
+	return _watertightness_edit_center()
+
+
+func _edit_lod_movement_probe_radius() -> float:
+	return 14.0 if selected_profile == FLAT_PROFILE else 56.0
+
+
 func _edit_reload_test_center() -> Vector3:
+	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return _edit_lod_movement_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	return _watertightness_edit_center()
 
 
 func _watertightness_probe_center() -> Vector3:
+	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return _edit_lod_movement_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	if human_visual_capture_mode.begins_with("watertight_"):
@@ -1547,6 +2061,8 @@ func _watertightness_probe_center() -> Vector3:
 func _watertightness_probe_radius() -> float:
 	if human_visual_capture_mode.begins_with("small_edit_"):
 		return 18.0
+	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return _edit_lod_movement_probe_radius()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
 	if human_visual_capture_mode == "watertight_many_small_near" or \
@@ -1624,8 +2140,12 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate":
-			var target_center := _edit_stability_gate_center() if human_visual_capture_mode == "edit_stability_gate" else _watertightness_edit_center()
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate":
+			var target_center := _watertightness_edit_center()
+			if human_visual_capture_mode == "edit_stability_gate":
+				target_center = _edit_stability_gate_center()
+			elif human_visual_capture_mode == "edit_lod_movement_gate":
+				target_center = _edit_lod_movement_gate_center()
 			capture_target = target_center + Vector3(0.0, -4.0, 0.0)
 			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position

@@ -20,6 +20,7 @@ import godot_import_assets
 
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
+LOD_MOVEMENT_GATE_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown", "watertight_boundary_near")
 VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "small_edit_near",
@@ -28,6 +29,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_near",
     "edit_far",
     "edit_aerial",
+    "edit_lod_movement_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -86,22 +88,26 @@ def run_profile(godot: pathlib.Path, project: pathlib.Path, profile: str) -> Non
         raise subprocess.CalledProcessError(completed.returncode, cmd)
 
 
-def run_visual_capture(
+def run_visual_capture_summary(
     godot: pathlib.Path,
     project: pathlib.Path,
     mode: str,
     output_dir: pathlib.Path,
     wait_frames: int,
-) -> pathlib.Path:
+    profile: str = VISUAL_CAPTURE_PROFILE,
+    capture_stem: str | None = None,
+) -> tuple[pathlib.Path, dict[str, object]]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    capture_path = output_dir / f"terrain_1_0_{mode}.png"
+    if capture_stem is None:
+        capture_stem = f"terrain_1_0_{mode}"
+    capture_path = output_dir / f"{capture_stem}.png"
     cmd = [
         str(godot),
         "--path",
         str(project),
         "--",
         "--p2-profile",
-        VISUAL_CAPTURE_PROFILE,
+        profile,
         "--human-visual-capture",
         str(capture_path),
         "--human-visual-capture-mode",
@@ -119,7 +125,28 @@ def run_visual_capture(
         raise subprocess.CalledProcessError(completed.returncode, cmd)
 
     summary = parse_visual_summary(completed.stdout, mode)
-    validate_visual_summary(summary, capture_path)
+    validate_visual_summary(summary, capture_path, profile)
+    return capture_path, summary
+
+
+def run_visual_capture(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    mode: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+    profile: str = VISUAL_CAPTURE_PROFILE,
+    capture_stem: str | None = None,
+) -> pathlib.Path:
+    capture_path, _summary = run_visual_capture_summary(
+        godot,
+        project,
+        mode,
+        output_dir,
+        wait_frames,
+        profile,
+        capture_stem,
+    )
     return capture_path
 
 
@@ -139,11 +166,12 @@ def parse_visual_summary(stdout: str, mode: str) -> dict[str, object]:
 def validate_visual_summary(
     summary: dict[str, object],
     capture_path: pathlib.Path,
+    expected_profile: str = VISUAL_CAPTURE_PROFILE,
 ) -> None:
     if not capture_path.is_file() or capture_path.stat().st_size < 10_000:
         raise RuntimeError(f"visual capture was not written: {capture_path}")
     checks = {
-        "profile": VISUAL_CAPTURE_PROFILE,
+        "profile": expected_profile,
         "viewer_radius_chunks": 8,
         "viewer_maximum_lod": 3,
         "runtime_lod_refinement_radius_chunks": 1,
@@ -191,6 +219,98 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
 
 
+def run_lod_movement_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_lod_movement_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=f"terrain_1_0_{profile}_edit_lod_movement_gate",
+    )
+    validate_lod_movement_summary(summary, profile)
+    return capture
+
+
+def validate_lod_movement_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"LOD movement profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_lod_movement_gate":
+        raise RuntimeError(f"LOD movement mode mismatch: {summary!r}")
+    lod_movement = summary.get("lod_movement")
+    if not isinstance(lod_movement, dict):
+        raise RuntimeError(f"LOD movement summary missing: {summary!r}")
+    if lod_movement.get("enabled") is not True or lod_movement.get("ok") is not True:
+        raise RuntimeError(f"LOD movement gate failed: {lod_movement!r}")
+    if int(lod_movement.get("direct_operation_count", 0)) < 128:
+        raise RuntimeError(f"LOD movement direct edits were not exercised: {lod_movement!r}")
+    if int(lod_movement.get("interaction_operation_count", 0)) < 4:
+        raise RuntimeError(f"LOD movement player interactions were not exercised: {lod_movement!r}")
+    if int(lod_movement.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"LOD movement changed authoritative densities: {lod_movement!r}")
+    if int(lod_movement.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"LOD movement changed authoritative materials: {lod_movement!r}")
+    if float(lod_movement.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"LOD movement density delta was nonzero: {lod_movement!r}")
+    expected_labels = {"close", "mid", "far", "return_close"}
+    persistence_labels: set[str] = set()
+    for persistence in lod_movement.get("persistence_summaries", []):
+        if not isinstance(persistence, dict):
+            raise RuntimeError(f"LOD movement persistence summary malformed: {lod_movement!r}")
+        label = str(persistence.get("label", ""))
+        persistence_labels.add(label)
+        if int(persistence.get("density_mismatches", -1)) != 0:
+            raise RuntimeError(f"LOD movement persistence density mismatch: {persistence!r}")
+        if int(persistence.get("material_mismatches", -1)) != 0:
+            raise RuntimeError(f"LOD movement persistence material mismatch: {persistence!r}")
+        if float(persistence.get("max_abs_density_delta", -1.0)) != 0.0:
+            raise RuntimeError(f"LOD movement persistence density delta: {persistence!r}")
+        if int(persistence.get("sample_count", 0)) <= 0:
+            raise RuntimeError(f"LOD movement persistence sampled no points: {persistence!r}")
+    if persistence_labels != expected_labels:
+        raise RuntimeError(
+            f"LOD movement persistence labels expected {sorted(expected_labels)}, "
+            f"got {sorted(persistence_labels)}: {lod_movement!r}"
+        )
+    transition_labels: set[str] = set()
+    transient_failures = 0
+    for transition in lod_movement.get("transition_summaries", []):
+        if not isinstance(transition, dict):
+            raise RuntimeError(f"LOD movement transition summary malformed: {lod_movement!r}")
+        label = str(transition.get("label", ""))
+        transition_labels.add(label)
+        if transition.get("ok") is not True:
+            raise RuntimeError(f"LOD movement transition failed: {transition!r}")
+        if int(transition.get("settled_boundary_edges", -1)) != 0:
+            raise RuntimeError(f"LOD movement settled crack detected: {transition!r}")
+        if int(transition.get("settled_triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"LOD movement transition sampled no triangles: {transition!r}")
+        transient_failures += int(transition.get("transient_probe_failure_count", 0))
+    if transition_labels != expected_labels:
+        raise RuntimeError(
+            f"LOD movement transition labels expected {sorted(expected_labels)}, "
+            f"got {sorted(transition_labels)}: {lod_movement!r}"
+        )
+    print(
+        "WT_LOD_MOVEMENT_GATE_PROFILE_PASS profile=%s operations=%d transient_probe_failures=%d"
+        % (
+            profile,
+            int(lod_movement.get("total_operation_count", 0)),
+            transient_failures,
+        )
+    )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--godot", help="Path to a Godot 4 executable.")
@@ -232,6 +352,28 @@ def main(argv: list[str]) -> int:
         default=180,
         help="Frames to wait after moving the capture camera.",
     )
+    parser.add_argument(
+        "--lod-movement-gate",
+        action="store_true",
+        help=(
+            "Exercise edits, real interaction input, and close/mid/far movement "
+            "to catch permanent edit loss or settled LOD cracks."
+        ),
+    )
+    parser.add_argument(
+        "--lod-movement-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --lod-movement-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--lod-movement-output-dir",
+        default=None,
+        help="Directory for LOD movement gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -260,6 +402,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.lod_movement_gate:
+        lod_profiles = (
+            tuple(args.lod_movement_profile)
+            if args.lod_movement_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.lod_movement_output_dir).resolve()
+            if args.lod_movement_output_dir
+            else project / "build" / "captures" / "terrain_1_0_lod_movement_gate"
+        )
+        captures = [
+            run_lod_movement_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in lod_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_LOD_MOVEMENT_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0

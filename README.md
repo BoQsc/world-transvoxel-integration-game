@@ -199,6 +199,18 @@ full-map visual is enabled, native material override is missing, visible native
 terrain coverage falls below the expected compact 2K profile thresholds, or the
 edited rendered mesh reports open edges / mixed triangle winding.
 
+For the movement/edit LOD gate, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --lod-movement-gate
+```
+
+This exercises deterministic edit batches, real player interaction edits, and
+close/mid/far viewer movement on the compact and flat profiles. It fails on
+permanent authoritative edit loss or settled open rendered edges, and reports
+transient LOD probe failures separately so streaming artifacts are not confused
+with stored terrain data loss.
+
 For explicit deformation inspection captures, run Godot directly with the
 mountain profile and an `edit_*` capture mode. These modes submit a real
 multi-operation terrain edit batch, wait for world revision and streaming
