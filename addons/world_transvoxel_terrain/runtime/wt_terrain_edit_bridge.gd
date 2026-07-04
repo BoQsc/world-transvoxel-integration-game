@@ -3,6 +3,8 @@ extends RefCounted
 class_name WtTerrainEditBridge
 
 const BACKEND_EDIT_METHODS := [
+	"carve_sdf_sphere",
+	"construct_sdf_sphere",
 	"set_density_sphere",
 	"set_density_box",
 	"paint_material_sphere",
@@ -60,6 +62,8 @@ func apply_batch_to_transaction(transaction: Object, batch: Resource) -> bool:
 	if transaction == null:
 		_last_error = "backend edit transaction is required"
 		return false
+	if not _validate_transaction(transaction):
+		return false
 	if not _validate_batch(batch):
 		return false
 	var backend_command_count := 0
@@ -87,11 +91,27 @@ func _apply_operation(transaction: Object, operation: Resource) -> int:
 		return 0
 	match mode:
 		&"carve":
+			if shape == &"sphere":
+				return _apply_sdf_sphere(
+					transaction,
+					operation,
+					"carve_sdf_sphere",
+					_positive_density(operation)
+				)
 			return _apply_density(transaction, shape, operation, "set", _positive_density(operation))
 		&"construct", &"fill":
-			var density_count := _apply_density(
-				transaction, shape, operation, "set", -_positive_density(operation)
-			)
+			var density_count := 0
+			if shape == &"sphere":
+				density_count = _apply_sdf_sphere(
+					transaction,
+					operation,
+					"construct_sdf_sphere",
+					_positive_density(operation)
+				)
+			else:
+				density_count = _apply_density(
+					transaction, shape, operation, "set", -_positive_density(operation)
+				)
 			if density_count <= 0:
 				return 0
 			var paint_count := _apply_paint(transaction, shape, operation)
@@ -142,6 +162,24 @@ func _apply_density(
 	return 1
 
 
+func _apply_sdf_sphere(
+	transaction: Object,
+	operation: Resource,
+	method_name: String,
+	strength: float
+) -> int:
+	var ok := bool(transaction.call(
+		method_name,
+		operation.get("center"),
+		float(operation.get("radius")),
+		strength
+	))
+	if not ok:
+		_last_error = _transaction_error(transaction)
+		return 0
+	return 1
+
+
 func _apply_paint(transaction: Object, shape: StringName, operation: Resource) -> int:
 	var material_id := int(operation.get("material_id"))
 	var ok := false
@@ -178,6 +216,14 @@ func _validate_backend_terrain(backend_terrain: Object) -> bool:
 	for method_name in ["begin_edit_transaction", "commit_edit_transaction", "get_world_error"]:
 		if not backend_terrain.has_method(method_name):
 			_last_error = "backend terrain missing method: %s" % method_name
+			return false
+	return true
+
+
+func _validate_transaction(transaction: Object) -> bool:
+	for method_name in BACKEND_EDIT_METHODS:
+		if not transaction.has_method(method_name):
+			_last_error = "backend edit transaction missing method: %s" % method_name
 			return false
 	return true
 

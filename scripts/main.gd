@@ -936,6 +936,8 @@ func _apply_interaction_inspection_edits() -> bool:
 	if terrain_world == null:
 		_fail("terrain world unavailable for interaction inspection")
 		return false
+	if _capture_requires_sequential_interaction_edits():
+		return await _apply_sequential_interaction_inspection_edits(terrain_world)
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
 	var batch = EditBatch.new()
 	for operation in _interaction_inspection_operations():
@@ -958,6 +960,114 @@ func _apply_interaction_inspection_edits() -> bool:
 		material_applicator.call("apply_materials_now")
 	interaction_inspection_applied = true
 	return true
+
+
+func _capture_requires_sequential_interaction_edits() -> bool:
+	return human_visual_capture_mode == "watertight_many_small_near" or \
+		human_visual_capture_mode == "watertight_rapid_small_near" or \
+		human_visual_capture_mode == "watertight_rapid_small_reload_near"
+
+
+func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool:
+	var operations := _sequential_interaction_inspection_operations()
+	interaction_inspection_operation_count = operations.size()
+	if interaction_inspection_operation_count <= 0:
+		_fail("sequential interaction inspection produced no operations")
+		return false
+	for index in range(operations.size()):
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		if not batch.add_operation(operations[index]):
+			_fail("failed to add sequential interaction inspection operation %d" % index)
+			return false
+		if not bool(terrain_world.call("submit_edit_batch", batch, 7717)):
+			_fail("sequential interaction inspection edit %d rejected: %s" % [
+				index,
+				str(terrain_world.call("get_last_error")),
+			])
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("sequential interaction inspection edit %d did not commit" % index)
+			return false
+		if human_visual_capture_mode == "watertight_many_small_near":
+			if index % 8 == 7:
+				if not await _wait_for_current_profile_settled("after sequential interaction edit %d" % index):
+					return false
+		else:
+			for _frame in range(2):
+				await get_tree().process_frame
+	if not await _wait_for_current_profile_settled("after sequential interaction inspection edits"):
+		return false
+	if human_visual_capture_mode == "watertight_rapid_small_reload_near":
+		if not await _exercise_edit_reload_path():
+			return false
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _sequential_interaction_inspection_operations() -> Array:
+	var operations: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 615197
+	var center := _watertightness_edit_center()
+	for index in range(96):
+		var angle := rng.randf_range(0.0, TAU)
+		var horizontal_radius := rng.randf_range(0.0, 16.0)
+		var offset := Vector3(
+			cos(angle) * horizontal_radius,
+			rng.randf_range(-8.0, 3.0),
+			sin(angle) * horizontal_radius
+		)
+		if index % 5 == 0:
+			offset += Vector3(0.0, rng.randf_range(-2.0, 2.0), rng.randf_range(-5.0, 5.0))
+		operations.append(_edit_operation(
+			&"carve",
+			center + offset,
+			rng.randf_range(1.4, 2.4),
+			1,
+			1.0
+		))
+	return operations
+
+
+func _exercise_edit_reload_path() -> bool:
+	if player == null or game_world == null:
+		_fail("cannot exercise edit reload path without player and game world")
+		return false
+	var center := _watertightness_edit_center()
+	var far_position := center + Vector3(480.0, 20.0, 480.0)
+	var near_position := center + Vector3(-10.0, 14.0, -34.0)
+	player.global_position = far_position
+	player.velocity = Vector3.ZERO
+	if not bool(game_world.update_player_viewer(true)):
+		_fail("edit reload path far viewer update failed")
+		return false
+	if not await _wait_for_reload_visual_ready("after moving away from edited area"):
+		return false
+	player.global_position = near_position
+	player.velocity = Vector3.ZERO
+	if not bool(game_world.update_player_viewer(true)):
+		_fail("edit reload path return viewer update failed")
+		return false
+	if not await _wait_for_reload_visual_ready("after returning to edited area"):
+		return false
+	return true
+
+
+func _wait_for_reload_visual_ready(context: String) -> bool:
+	for _frame in range(360):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		if int(summary.get("render_resources", 0)) >= expected_resources and \
+				int(summary.get("queued_render", 0)) == 0:
+			for _settle_frame in range(30):
+				await get_tree().process_frame
+			return true
+		await get_tree().process_frame
+	var timeout_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	_fail("terrain did not reach visual-ready reload state %s: %s" % [context, str(timeout_summary)])
+	return false
 
 
 func _interaction_inspection_operations() -> Array:
@@ -1043,6 +1153,10 @@ func _watertightness_probe_center() -> Vector3:
 func _watertightness_probe_radius() -> float:
 	if human_visual_capture_mode.begins_with("small_edit_"):
 		return 18.0
+	if human_visual_capture_mode == "watertight_many_small_near" or \
+		human_visual_capture_mode == "watertight_rapid_small_near" or \
+		human_visual_capture_mode == "watertight_rapid_small_reload_near":
+		return 48.0
 	if human_visual_capture_mode.begins_with("watertight_"):
 		return 36.0
 	return 56.0
@@ -1111,6 +1225,11 @@ func _apply_capture_camera_mode() -> void:
 		"watertight_boundary_near":
 			capture_target = _watertightness_edit_center()
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near":
+			capture_target = _watertightness_edit_center() + Vector3(0.0, -4.0, 0.0)
+			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"small_edit_near":
