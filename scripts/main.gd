@@ -49,6 +49,8 @@ var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
 var last_edit_persistence_summary := {}
+var last_edit_stability_summary := {}
+var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
 
@@ -911,6 +913,7 @@ func _capture_human_visual() -> void:
 		"interaction_inspection_operation_count": interaction_inspection_operation_count,
 		"watertightness": last_watertightness_summary,
 		"edit_persistence": _edit_persistence_summary(),
+		"edit_stability": _edit_stability_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	if _capture_requires_watertightness_probe() and not bool(last_watertightness_summary.get("ok", false)):
@@ -925,6 +928,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode.begins_with("small_edit_") or \
 		human_visual_capture_mode.begins_with("watertight_") or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
+		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -932,7 +936,8 @@ func _capture_requires_interaction_inspection() -> bool:
 
 func _capture_requires_watertightness_probe() -> bool:
 	return human_visual_capture_mode.begins_with("watertight_") or \
-		human_visual_capture_mode == "edit_persistence_reload_oracle"
+		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
+		human_visual_capture_mode == "edit_stability_gate"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -942,6 +947,8 @@ func _apply_interaction_inspection_edits() -> bool:
 	if terrain_world == null:
 		_fail("terrain world unavailable for interaction inspection")
 		return false
+	if human_visual_capture_mode == "edit_stability_gate":
+		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
 		return await _apply_sequential_interaction_inspection_edits(terrain_world)
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
@@ -977,6 +984,7 @@ func _capture_requires_sequential_interaction_edits() -> bool:
 
 func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool:
 	var operations := _sequential_interaction_inspection_operations()
+	edit_persistence_operations = operations.duplicate()
 	interaction_inspection_operation_count = operations.size()
 	if interaction_inspection_operation_count <= 0:
 		_fail("sequential interaction inspection produced no operations")
@@ -1035,6 +1043,159 @@ func _capture_requires_edit_persistence_oracle() -> bool:
 		human_visual_capture_mode == "edit_persistence_reload_oracle"
 
 
+func _run_edit_stability_gate(terrain_world: Node) -> bool:
+	var operations := _edit_stability_gate_operations()
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	last_edit_stability_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+		"seed_count": _edit_stability_gate_seeds().size(),
+		"operation_count": operations.size(),
+	}
+	if operations.is_empty():
+		_fail("edit stability gate produced no operations")
+		return false
+	var mode_counts := {}
+	for index in range(operations.size()):
+		var operation: Resource = operations[index]
+		var mode_name := str(operation.call("get_mode_name"))
+		mode_counts[mode_name] = int(mode_counts.get(mode_name, 0)) + 1
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		if not batch.add_operation(operation):
+			_fail("failed to add edit stability operation %d" % index)
+			return false
+		if not bool(terrain_world.call("submit_edit_batch", batch, 8841)):
+			_fail("edit stability operation %d rejected: %s" % [
+				index,
+				str(terrain_world.call("get_last_error")),
+			])
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("edit stability operation %d did not commit" % index)
+			return false
+		if index % 12 == 11:
+			if not await _wait_for_current_profile_settled("after edit stability operation %d" % index):
+				return false
+		else:
+			for _frame in range(2):
+				await get_tree().process_frame
+	if not await _wait_for_current_profile_settled("after edit stability operations"):
+		return false
+	var before_reload_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "edit stability before reload")
+	if not bool(before_reload_snapshot.get("ok", false)):
+		return false
+	if not _edit_stability_snapshot_has_material_diversity(before_reload_snapshot):
+		return false
+	if not await _exercise_edit_reload_path():
+		return false
+	var after_reload_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "edit stability after reload")
+	if not bool(after_reload_snapshot.get("ok", false)):
+		return false
+	if not _compare_edit_persistence_snapshots(before_reload_snapshot, after_reload_snapshot):
+		return false
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	if int(runtime_summary.get("collision_resources", 0)) <= 0:
+		_fail("edit stability gate has no collision resources after reload: %s" % str(runtime_summary))
+		return false
+	last_edit_stability_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"seed_count": _edit_stability_gate_seeds().size(),
+		"operation_count": operations.size(),
+		"mode_counts": mode_counts,
+		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+		"air_sample_count": int(last_edit_persistence_summary.get("before_air_sample_count", 0)),
+		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"render_resources": int(runtime_summary.get("render_resources", 0)),
+		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
+		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
+	}
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _edit_stability_gate_seeds() -> Array:
+	return [615197, 382091, 928371]
+
+
+func _edit_stability_gate_operations() -> Array:
+	var operations: Array = []
+	var seeds := _edit_stability_gate_seeds()
+	var center := _edit_stability_gate_center()
+	var horizontal_radius_limit := 18.0
+	var vertical_offset_min := -8.0
+	var vertical_offset_max := 4.0
+	if selected_profile == FLAT_PROFILE:
+		horizontal_radius_limit = 7.5
+		vertical_offset_min = -2.0
+		vertical_offset_max = 2.5
+	for seed_index in range(seeds.size()):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(seeds[seed_index])
+		for index in range(32):
+			var angle := rng.randf_range(0.0, TAU)
+			var horizontal_radius := rng.randf_range(0.0, horizontal_radius_limit)
+			var offset := Vector3(
+				cos(angle) * horizontal_radius,
+				rng.randf_range(vertical_offset_min, vertical_offset_max),
+				sin(angle) * horizontal_radius
+			)
+			var pattern := index % 8
+			var mode := &"carve"
+			var material_id := 1
+			var radius := rng.randf_range(1.6, 2.8)
+			if selected_profile == FLAT_PROFILE:
+				radius = rng.randf_range(1.4, 2.2)
+			if pattern == 5:
+				mode = &"construct"
+				material_id = 3 + seed_index
+				radius = rng.randf_range(1.8, 3.2)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.5, 2.4)
+			elif pattern == 6:
+				mode = &"paint"
+				material_id = 7 + seed_index
+				radius = rng.randf_range(2.0, 3.5)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.8, 2.6)
+			elif pattern == 7:
+				mode = &"fill"
+				material_id = 4 + seed_index
+				radius = rng.randf_range(1.8, 3.0)
+				if selected_profile == FLAT_PROFILE:
+					radius = rng.randf_range(1.5, 2.4)
+			operations.append(_edit_operation(
+				mode,
+				center + offset,
+				radius,
+				material_id,
+				1.0
+			))
+	return operations
+
+
+func _edit_stability_snapshot_has_material_diversity(snapshot: Dictionary) -> bool:
+	var histogram: Dictionary = snapshot.get("material_histogram", {})
+	if histogram.keys().size() < 2:
+		last_edit_stability_summary = {
+			"enabled": true,
+			"ok": false,
+			"error": "material_diversity_missing",
+			"material_histogram": histogram,
+		}
+		_fail("edit stability gate did not observe mixed material edits: %s" % JSON.stringify(last_edit_stability_summary))
+		return false
+	return true
+
+
 func _sequential_interaction_inspection_operations() -> Array:
 	var operations: Array = []
 	var rng := RandomNumberGenerator.new()
@@ -1063,7 +1224,10 @@ func _sequential_interaction_inspection_operations() -> Array:
 func _edit_persistence_points() -> Array:
 	var points: Array = []
 	var seen := {}
-	for operation in _sequential_interaction_inspection_operations():
+	var operations: Array = edit_persistence_operations
+	if operations.is_empty():
+		operations = _sequential_interaction_inspection_operations()
+	for operation in operations:
 		var center: Vector3 = operation.get("center")
 		var radius := float(operation.get("radius"))
 		var offsets := [
@@ -1218,6 +1382,15 @@ func _edit_persistence_summary() -> Dictionary:
 	return last_edit_persistence_summary
 
 
+func _edit_stability_summary() -> Dictionary:
+	if last_edit_stability_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_edit_stability_summary
+
+
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
 	var ready_callable := Callable(self, "_on_authoritative_samples_ready")
 	if not terrain_world.is_connected("authoritative_samples_ready", ready_callable):
@@ -1243,7 +1416,7 @@ func _exercise_edit_reload_path() -> bool:
 	if player == null or game_world == null:
 		_fail("cannot exercise edit reload path without player and game world")
 		return false
-	var center := _watertightness_edit_center()
+	var center := _edit_reload_test_center()
 	var far_position := center + Vector3(480.0, 20.0, 480.0)
 	var near_position := center + Vector3(-10.0, 14.0, -34.0)
 	player.global_position = far_position
@@ -1347,7 +1520,21 @@ func _watertightness_edit_center() -> Vector3:
 	return Vector3(1184.0, 119.0, 1008.0)
 
 
+func _edit_stability_gate_center() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 12.0, 1040.0)
+	return _watertightness_edit_center()
+
+
+func _edit_reload_test_center() -> Vector3:
+	if human_visual_capture_mode == "edit_stability_gate":
+		return _edit_stability_gate_center()
+	return _watertightness_edit_center()
+
+
 func _watertightness_probe_center() -> Vector3:
+	if human_visual_capture_mode == "edit_stability_gate":
+		return _edit_stability_gate_center()
 	if human_visual_capture_mode.begins_with("watertight_"):
 		return _watertightness_edit_center()
 	if human_visual_capture_mode.begins_with("small_edit_"):
@@ -1360,6 +1547,8 @@ func _watertightness_probe_center() -> Vector3:
 func _watertightness_probe_radius() -> float:
 	if human_visual_capture_mode.begins_with("small_edit_"):
 		return 18.0
+	if human_visual_capture_mode == "edit_stability_gate":
+		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
 	if human_visual_capture_mode == "watertight_many_small_near" or \
 		human_visual_capture_mode == "watertight_rapid_small_near" or \
 		human_visual_capture_mode == "watertight_rapid_small_reload_near" or \
@@ -1435,8 +1624,9 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle":
-			capture_target = _watertightness_edit_center() + Vector3(0.0, -4.0, 0.0)
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate":
+			var target_center := _edit_stability_gate_center() if human_visual_capture_mode == "edit_stability_gate" else _watertightness_edit_center()
+			capture_target = target_center + Vector3(0.0, -4.0, 0.0)
 			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
