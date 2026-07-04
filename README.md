@@ -207,9 +207,11 @@ python tools/p2_production_integration_game_quality.py --skip-build --lod-moveme
 
 This exercises deterministic edit batches, real player interaction edits, and
 close/mid/far viewer movement on the compact and flat profiles. It fails on
-permanent authoritative edit loss or settled open rendered edges, and reports
-transient LOD probe failures separately so streaming artifacts are not confused
-with stored terrain data loss.
+permanent authoritative edit loss, settled open rendered edges, or transient
+movement-triggered LOD crack probes. The gameworld keeps a low steady render /
+collision apply budget of 8 and uses a short viewer-movement burst budget of 128
+for 30 frames to avoid exposing partial LOD replacement sets while the player is
+moving.
 
 For explicit deformation inspection captures, run Godot directly with the
 mountain profile and an `edit_*` capture mode. These modes submit a real

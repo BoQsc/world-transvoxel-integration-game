@@ -31,6 +31,8 @@ var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
+var runtime_render_apply_budget_override := -1
+var runtime_collision_apply_budget_override := -1
 var expected_resources := 25
 var expected_max_resources := 81
 var expected_maximum_lod := 1
@@ -62,6 +64,8 @@ func _ready() -> void:
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
+	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
+	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	initial_lighting_preset = int(_arg_value(args, "--human-lighting-preset", "0"))
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
@@ -79,6 +83,10 @@ func _ready() -> void:
 
 func _start_profile() -> void:
 	var settings := _profile_settings(selected_profile)
+	if runtime_render_apply_budget_override >= 0:
+		settings["runtime_render_apply_budget"] = runtime_render_apply_budget_override
+	if runtime_collision_apply_budget_override >= 0:
+		settings["runtime_collision_apply_budget"] = runtime_collision_apply_budget_override
 	playtest_profile_id = selected_profile
 	expected_resources = int(settings["expected_resources"])
 	expected_max_resources = int(settings["expected_max_resources"])
@@ -97,6 +105,9 @@ func _start_profile() -> void:
 	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
 	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
+	game_world.runtime_streaming_burst_render_apply_budget = int(settings.get("runtime_streaming_burst_render_apply_budget", 0))
+	game_world.runtime_streaming_burst_collision_apply_budget = int(settings.get("runtime_streaming_burst_collision_apply_budget", 0))
+	game_world.runtime_streaming_burst_frames = int(settings.get("runtime_streaming_burst_frames", 0))
 	game_world.runtime_collision_activation_distance = float(settings.get("runtime_collision_activation_distance", 0.0))
 	game_world.runtime_collision_deactivation_distance = float(settings.get("runtime_collision_deactivation_distance", 0.0))
 	add_child(game_world)
@@ -430,6 +441,9 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
 			"runtime_collision_apply_budget": 8,
+			"runtime_streaming_burst_render_apply_budget": 128,
+			"runtime_streaming_burst_collision_apply_budget": 128,
+			"runtime_streaming_burst_frames": 30,
 			"runtime_collision_activation_distance": 192.0,
 			"runtime_collision_deactivation_distance": 256.0,
 			"edit_point": Vector3(1032, 8, 1032),
@@ -452,6 +466,9 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": 1,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
+		"runtime_streaming_burst_render_apply_budget": 128,
+		"runtime_streaming_burst_collision_apply_budget": 128,
+		"runtime_streaming_burst_frames": 30,
 		"runtime_collision_activation_distance": 192.0,
 		"runtime_collision_deactivation_distance": 256.0,
 		"edit_point": Vector3(1184, 119, 1008),
@@ -888,6 +905,10 @@ func _capture_human_visual() -> void:
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
 		"runtime_render_apply_budget": int(summary.get("runtime_render_apply_budget", 0)),
 		"runtime_collision_apply_budget": int(summary.get("runtime_collision_apply_budget", 0)),
+		"runtime_streaming_burst_render_apply_budget": int(summary.get("runtime_streaming_burst_render_apply_budget", 0)),
+		"runtime_streaming_burst_collision_apply_budget": int(summary.get("runtime_streaming_burst_collision_apply_budget", 0)),
+		"runtime_streaming_burst_frames": int(summary.get("runtime_streaming_burst_frames", 0)),
+		"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
 		"runtime_collision_activation_distance": float(summary.get("runtime_collision_activation_distance", 0.0)),
 		"runtime_collision_deactivation_distance": float(summary.get("runtime_collision_deactivation_distance", 0.0)),
 		"active_chunk_records": int(summary.get("active_chunk_records", 0)),

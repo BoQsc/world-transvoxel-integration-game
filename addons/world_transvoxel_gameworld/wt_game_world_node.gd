@@ -20,6 +20,9 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_streaming_burst_render_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_streaming_burst_collision_apply_budget: int = 0
+@export_range(0, 600, 1) var runtime_streaming_burst_frames: int = 0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
@@ -46,6 +49,7 @@ var _edit_commit_count := 0
 var _edit_failure_count := 0
 var _last_edit_committed_revision := 0
 var _last_edit_failure_error := "ok"
+var _streaming_burst_frames_remaining := 0
 
 
 func configure_game_world(
@@ -80,6 +84,14 @@ func setup_standard_world() -> Node:
 	_apply_profiles()
 	_connect_terrain_world_signals()
 	return _reference_scene
+
+
+func _process(_delta: float) -> void:
+	if _streaming_burst_frames_remaining <= 0:
+		return
+	_streaming_burst_frames_remaining -= 1
+	if _streaming_burst_frames_remaining == 0:
+		_apply_live_apply_budgets(runtime_render_apply_budget, runtime_collision_apply_budget)
 
 
 func attach_player(player: Node, start_position: Vector3) -> void:
@@ -126,6 +138,7 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed")
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
+	_begin_streaming_burst()
 	return true
 
 
@@ -302,6 +315,10 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
+		"runtime_streaming_burst_render_apply_budget": runtime_streaming_burst_render_apply_budget,
+		"runtime_streaming_burst_collision_apply_budget": runtime_streaming_burst_collision_apply_budget,
+		"runtime_streaming_burst_frames": runtime_streaming_burst_frames,
+		"streaming_burst_frames_remaining": _streaming_burst_frames_remaining,
 		"runtime_collision_activation_distance": runtime_collision_activation_distance,
 		"runtime_collision_deactivation_distance": runtime_collision_deactivation_distance,
 		"expected_resource_count": _expected_resource_count,
@@ -428,6 +445,39 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
 	terrain_world.runtime_collision_activation_distance = runtime_collision_activation_distance
 	terrain_world.runtime_collision_deactivation_distance = runtime_collision_deactivation_distance
+
+
+func _begin_streaming_burst() -> void:
+	if runtime_streaming_burst_frames <= 0:
+		return
+	var render_budget := runtime_streaming_burst_render_apply_budget
+	var collision_budget := runtime_streaming_burst_collision_apply_budget
+	if render_budget <= runtime_render_apply_budget and collision_budget <= runtime_collision_apply_budget:
+		return
+	if not _apply_live_apply_budgets(
+		maxi(runtime_render_apply_budget, render_budget),
+		maxi(runtime_collision_apply_budget, collision_budget)
+	):
+		return
+	_streaming_burst_frames_remaining = runtime_streaming_burst_frames
+
+
+func _apply_live_apply_budgets(render_budget: int, collision_budget: int) -> bool:
+	var backend := _get_backend_terrain()
+	if backend == null:
+		return false
+	if backend.has_method("set_render_apply_budget"):
+		backend.call("set_render_apply_budget", render_budget)
+	if backend.has_method("set_collision_apply_budget"):
+		backend.call("set_collision_apply_budget", collision_budget)
+	return true
+
+
+func _get_backend_terrain() -> Node:
+	var terrain_world := get_terrain_world()
+	if terrain_world == null or not terrain_world.has_method("get_backend_terrain"):
+		return null
+	return terrain_world.call("get_backend_terrain")
 
 
 func _connect_terrain_world_signals() -> void:

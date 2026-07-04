@@ -177,6 +177,9 @@ def validate_visual_summary(
         "runtime_lod_refinement_radius_chunks": 1,
         "runtime_render_apply_budget": 8,
         "runtime_collision_apply_budget": 8,
+        "runtime_streaming_burst_render_apply_budget": 128,
+        "runtime_streaming_burst_collision_apply_budget": 128,
+        "runtime_streaming_burst_frames": 30,
         "runtime_collision_activation_distance": 192.0,
         "runtime_collision_deactivation_distance": 256.0,
         "edit_failure_count": 0,
@@ -300,6 +303,11 @@ def validate_lod_movement_summary(
         raise RuntimeError(
             f"LOD movement transition labels expected {sorted(expected_labels)}, "
             f"got {sorted(transition_labels)}: {lod_movement!r}"
+        )
+    if transient_failures != 0:
+        raise RuntimeError(
+            f"LOD movement transient crack probes must stay clean, "
+            f"got {transient_failures}: {lod_movement!r}"
         )
     print(
         "WT_LOD_MOVEMENT_GATE_PROFILE_PASS profile=%s operations=%d transient_probe_failures=%d"
