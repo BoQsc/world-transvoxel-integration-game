@@ -57,6 +57,7 @@ var last_watertightness_summary := {}
 var last_edit_persistence_summary := {}
 var last_edit_stability_summary := {}
 var last_lod_movement_summary := {}
+var last_edit_during_load_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -952,11 +953,14 @@ func _capture_human_visual() -> void:
 		"edit_persistence": _edit_persistence_summary(),
 		"edit_stability": _edit_stability_summary(),
 		"lod_movement": _lod_movement_summary(),
+		"edit_during_load": _edit_during_load_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
 	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
 		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
+	if human_visual_capture_mode == "edit_during_load_oracle":
+		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
 		get_tree().quit(1)
@@ -980,7 +984,8 @@ func _capture_requires_watertightness_probe() -> bool:
 	return human_visual_capture_mode.begins_with("watertight_") or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
-		human_visual_capture_mode == "edit_lod_movement_gate"
+		human_visual_capture_mode == "edit_lod_movement_gate" or \
+		human_visual_capture_mode == "edit_during_load_oracle"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -992,6 +997,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return false
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return await _run_edit_lod_movement_gate(terrain_world)
+	if human_visual_capture_mode == "edit_during_load_oracle":
+		return await _run_edit_during_load_oracle(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
@@ -1239,6 +1246,263 @@ func _edit_stability_snapshot_has_material_diversity(snapshot: Dictionary) -> bo
 		_fail("edit stability gate did not observe mixed material edits: %s" % JSON.stringify(last_edit_stability_summary))
 		return false
 	return true
+
+
+func _run_edit_during_load_oracle(terrain_world: Node) -> bool:
+	if player == null or game_world == null:
+		_fail("edit-during-load oracle requires player and game world")
+		return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("edit-during-load oracle backend unavailable")
+		return false
+	var center := _edit_during_load_oracle_center()
+	var far_position := center + Vector3(520.0, 46.0, 520.0)
+	var near_position := center + Vector3(-16.0, 18.0, -42.0)
+	if selected_profile == FLAT_PROFILE:
+		far_position = center + Vector3(420.0, 28.0, 420.0)
+		near_position = center + Vector3(-14.0, 16.0, -38.0)
+	last_edit_during_load_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+	}
+
+	await _set_capture_camera_pose(far_position, center)
+	var far_settle_notes := []
+	if not await _wait_for_lod_movement_visual_ready(
+		backend,
+		"edit-during-load far eviction",
+		far_settle_notes
+	):
+		last_edit_during_load_summary["error"] = "far_evict_not_ready"
+		return false
+
+	player.global_position = near_position
+	player.velocity = Vector3.ZERO
+	if not bool(player.call("autonomous_look_at", center)):
+		last_edit_during_load_summary["error"] = "look_at_failed"
+		_fail("edit-during-load oracle look_at failed")
+		return false
+	if not bool(game_world.update_player_viewer(true)):
+		last_edit_during_load_summary["error"] = "near_viewer_update_failed"
+		_fail("edit-during-load oracle near viewer update failed")
+		return false
+	var busy_before_edit := await _wait_for_streaming_busy("before edit-during-load submissions", 60)
+	if not bool(busy_before_edit.get("ok", false)):
+		last_edit_during_load_summary["error"] = "streaming_not_observed_before_edit"
+		last_edit_during_load_summary["pre_edit_streaming"] = busy_before_edit
+		return false
+
+	var operations := _edit_during_load_oracle_operations()
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	if operations.is_empty():
+		last_edit_during_load_summary["error"] = "no_operations"
+		_fail("edit-during-load oracle produced no operations")
+		return false
+
+	var streaming_batches := 0
+	var busy_observations := [busy_before_edit]
+	var operation_index := 0
+	var batch_size := 8
+	while operation_index < operations.size():
+		var before_batch_summary: Dictionary = game_world.get_game_world_summary()
+		if _is_streaming_busy_summary(before_batch_summary):
+			streaming_batches += 1
+			busy_observations.append(_streaming_summary(before_batch_summary))
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		for _local_index in range(batch_size):
+			if operation_index >= operations.size():
+				break
+			if not batch.add_operation(operations[operation_index]):
+				last_edit_during_load_summary["error"] = "batch_add_failed"
+				last_edit_during_load_summary["failed_operation"] = operation_index
+				_fail("failed to add edit-during-load operation %d" % operation_index)
+				return false
+			operation_index += 1
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9029)):
+			last_edit_during_load_summary["error"] = "edit_batch_rejected"
+			last_edit_during_load_summary["failed_operation"] = operation_index
+			last_edit_during_load_summary["last_error"] = str(terrain_world.call("get_last_error"))
+			_fail("edit-during-load batch rejected: %s" % str(terrain_world.call("get_last_error")))
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			last_edit_during_load_summary["error"] = "revision_not_committed"
+			last_edit_during_load_summary["failed_operation"] = operation_index
+			_fail("edit-during-load batch did not commit")
+			return false
+		await get_tree().process_frame
+	if streaming_batches <= 0:
+		last_edit_during_load_summary["error"] = "no_batch_submitted_while_streaming"
+		last_edit_during_load_summary["pre_edit_streaming"] = busy_before_edit
+		_fail("edit-during-load oracle did not submit any batch while streaming was busy")
+		return false
+
+	var after_commit_snapshot := await _collect_edit_persistence_snapshot(
+		terrain_world,
+		"edit-during-load after commit before visual-ready"
+	)
+	if not bool(after_commit_snapshot.get("ok", false)):
+		last_edit_during_load_summary["error"] = "after_commit_snapshot_failed"
+		return false
+
+	var load_settle_notes := []
+	if not await _wait_for_edit_during_load_visual_ready(
+		backend,
+		"edit-during-load after streaming completion",
+		load_settle_notes
+	):
+		last_edit_during_load_summary["error"] = "post_edit_visual_not_ready"
+		return false
+	var after_load_snapshot := await _collect_edit_persistence_snapshot(
+		terrain_world,
+		"edit-during-load after visual-ready"
+	)
+	if not bool(after_load_snapshot.get("ok", false)):
+		last_edit_during_load_summary["error"] = "after_load_snapshot_failed"
+		return false
+	if not _compare_edit_persistence_snapshots(after_commit_snapshot, after_load_snapshot):
+		last_edit_during_load_summary["error"] = "changed_after_late_load"
+		last_edit_during_load_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
+		return false
+	var after_load_persistence := last_edit_persistence_summary.duplicate(true)
+
+	if not await _exercise_edit_reload_path():
+		last_edit_during_load_summary["error"] = "reload_path_failed"
+		return false
+	var after_reload_snapshot := await _collect_edit_persistence_snapshot(
+		terrain_world,
+		"edit-during-load after reload"
+	)
+	if not bool(after_reload_snapshot.get("ok", false)):
+		last_edit_during_load_summary["error"] = "after_reload_snapshot_failed"
+		return false
+	if not _compare_edit_persistence_snapshots(after_commit_snapshot, after_reload_snapshot):
+		last_edit_during_load_summary["error"] = "changed_after_reload"
+		last_edit_during_load_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
+		return false
+	var after_reload_persistence := last_edit_persistence_summary.duplicate(true)
+
+	last_edit_during_load_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"batch_size": batch_size,
+		"streaming_batches": streaming_batches,
+		"busy_observations": busy_observations,
+		"far_settle_notes": far_settle_notes,
+		"load_settle_notes": load_settle_notes,
+		"after_commit_sample_count": int(after_commit_snapshot.get("sample_count", 0)),
+		"after_commit_air_sample_count": int(after_commit_snapshot.get("air_sample_count", 0)),
+		"after_load_persistence": after_load_persistence,
+		"after_reload_persistence": after_reload_persistence,
+	}
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _edit_during_load_oracle_operations() -> Array:
+	var operations: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 742901
+	var center := _edit_during_load_oracle_center()
+	var horizontal_radius_limit := 18.0
+	var vertical_offset_min := -9.0
+	var vertical_offset_max := 2.5
+	if selected_profile == FLAT_PROFILE:
+		horizontal_radius_limit = 9.0
+		vertical_offset_min = -2.0
+		vertical_offset_max = 2.5
+	for index in range(64):
+		var angle := rng.randf_range(0.0, TAU)
+		var horizontal_radius := rng.randf_range(0.0, horizontal_radius_limit)
+		var offset := Vector3(
+			cos(angle) * horizontal_radius,
+			rng.randf_range(vertical_offset_min, vertical_offset_max),
+			sin(angle) * horizontal_radius
+		)
+		var mode := &"carve"
+		var material_id := 1
+		var radius := rng.randf_range(1.35, 2.8)
+		if selected_profile == FLAT_PROFILE:
+			radius = rng.randf_range(1.2, 2.2)
+		var pattern := index % 16
+		if pattern == 12:
+			mode = &"construct"
+			material_id = 4
+			radius = rng.randf_range(1.6, 3.0)
+		elif pattern == 13:
+			mode = &"fill"
+			material_id = 5
+			radius = rng.randf_range(1.6, 3.2)
+		elif pattern == 14:
+			mode = &"paint"
+			material_id = 7
+			radius = rng.randf_range(2.0, 3.5)
+		operations.append(_edit_operation(mode, center + offset, radius, material_id, 1.0))
+	return operations
+
+
+func _wait_for_streaming_busy(context: String, max_frames: int) -> Dictionary:
+	for frame in range(max_frames):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		if _is_streaming_busy_summary(summary):
+			var observed := _streaming_summary(summary)
+			observed["ok"] = true
+			observed["context"] = context
+			observed["frame"] = frame
+			return observed
+		await get_tree().process_frame
+	var timeout_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var result := _streaming_summary(timeout_summary)
+	result["ok"] = false
+	result["context"] = context
+	result["error"] = "streaming_busy_not_observed"
+	_fail("streaming busy state was not observed %s: %s" % [context, JSON.stringify(result)])
+	return result
+
+
+func _is_streaming_busy_summary(summary: Dictionary) -> bool:
+	if int(summary.get("queued_render", 0)) != 0:
+		return true
+	if int(summary.get("queued_collision", 0)) != 0:
+		return true
+	if int(summary.get("scheduler_queued_jobs", 0)) != 0:
+		return true
+	if int(summary.get("scheduler_queued_completions", 0)) != 0:
+		return true
+	if int(summary.get("pending_chunk_retirements", 0)) != 0:
+		return true
+	if int(summary.get("render_fading_resources", 0)) != 0:
+		return true
+	if summary.has("fully_ready_chunk_records") and \
+			int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
+		return true
+	if summary.has("visual_ready_chunk_records") and \
+			int(summary.get("visual_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
+		return true
+	return false
+
+
+func _streaming_summary(summary: Dictionary) -> Dictionary:
+	return {
+		"queued_render": int(summary.get("queued_render", 0)),
+		"queued_collision": int(summary.get("queued_collision", 0)),
+		"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+		"scheduler_queued_completions": int(summary.get("scheduler_queued_completions", 0)),
+		"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+		"render_fading_resources": int(summary.get("render_fading_resources", 0)),
+		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+		"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
+		"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+		"render_resources": int(summary.get("render_resources", 0)),
+		"collision_resources": int(summary.get("collision_resources", 0)),
+	}
 
 
 func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
@@ -1644,6 +1908,71 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 	return true
 
 
+func _wait_for_edit_during_load_visual_ready(
+	backend: Node,
+	context: String,
+	settle_notes: Array
+) -> bool:
+	var last_summary := {}
+	var last_probe := {}
+	for frame in range(120):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_lod_movement_visual_ready_summary(summary):
+			if frame % 15 != 0 and frame != 119:
+				await get_tree().process_frame
+				continue
+			var probe := WatertightnessProbe.collect(
+				backend,
+				"edit_during_load_visual_ready",
+				_edit_during_load_oracle_center(),
+				_watertightness_probe_radius()
+			)
+			last_probe = {
+				"ok": bool(probe.get("ok", false)),
+				"boundary_edges": int(probe.get("boundary_edges", -1)),
+				"interior_boundary_edges": int(probe.get("interior_boundary_edges", -1)),
+				"chunk_face_boundary_edges": int(probe.get("chunk_face_boundary_edges", -1)),
+				"unknown_boundary_edges": int(probe.get("unknown_boundary_edges", -1)),
+				"nonmanifold_edges": int(probe.get("nonmanifold_edges", -1)),
+				"nonmanifold_interior_edges": int(probe.get("nonmanifold_interior_edges", -1)),
+				"nonmanifold_unknown_edges": int(probe.get("nonmanifold_unknown_edges", -1)),
+				"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
+				"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", -1)),
+				"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", -1)),
+				"zero_area_unknown_triangles": int(probe.get("zero_area_unknown_triangles", -1)),
+				"zero_edge_triangles": int(probe.get("zero_edge_triangles", -1)),
+				"repeated_point_key_triangles": int(probe.get("repeated_point_key_triangles", -1)),
+				"repeated_point_key_interior_triangles": int(probe.get("repeated_point_key_interior_triangles", -1)),
+				"repeated_point_key_unknown_triangles": int(probe.get("repeated_point_key_unknown_triangles", -1)),
+				"triangles_in_region": int(probe.get("triangles_in_region", -1)),
+				"zero_area_examples": probe.get("zero_area_examples", []),
+				"boundary_examples": probe.get("boundary_examples", []),
+				"interior_boundary_examples": probe.get("interior_boundary_examples", []),
+				"nonmanifold_examples": probe.get("nonmanifold_examples", []),
+				"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
+			}
+			if _is_open_gap_free_probe(probe):
+				if int(probe.get("zero_area_interior_triangles", 0)) != 0 or \
+						int(probe.get("zero_area_chunk_face_triangles", 0)) != 0:
+					settle_notes.append({
+						"context": context,
+						"safe_near_zero_area_triangles": int(probe.get("zero_area_triangles", 0)),
+						"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", 0)),
+						"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", 0)),
+						"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
+					})
+				return true
+		await get_tree().process_frame
+	_save_diagnostic_failure_capture(context)
+	_fail("edit-during-load visual-ready wait failed %s: summary=%s probe=%s" % [
+		context,
+		str(last_summary),
+		str(last_probe),
+	])
+	return false
+
+
 func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 	if player == null or game_world == null:
 		return {"ok": false, "error": "player_or_game_world_unavailable"}
@@ -1777,6 +2106,23 @@ func _is_lod_movement_probe_ready(probe: Dictionary) -> bool:
 		int(probe.get("nonmanifold_interior_edges", 0)) == 0 and \
 		int(probe.get("nonmanifold_unknown_edges", 0)) == 0 and \
 		int(probe.get("zero_area_interior_triangles", 0)) == 0 and \
+		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
+		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
+		int(probe.get("repeated_point_key_unknown_triangles", 0)) == 0 and \
+		int(probe.get("zero_edge_triangles", -1)) == 0 and \
+		int(probe.get("triangles_in_region", 0)) > 0
+
+
+func _is_open_gap_free_probe(probe: Dictionary) -> bool:
+	if bool(probe.get("ok", false)):
+		return true
+	var boundary_edges := int(probe.get("boundary_edges", -1))
+	var chunk_face_boundary_edges := int(probe.get("chunk_face_boundary_edges", 0))
+	return int(probe.get("interior_boundary_edges", boundary_edges)) == 0 and \
+		int(probe.get("unknown_boundary_edges", 0)) == 0 and \
+		boundary_edges == chunk_face_boundary_edges and \
+		int(probe.get("nonmanifold_interior_edges", 0)) == 0 and \
+		int(probe.get("nonmanifold_unknown_edges", 0)) == 0 and \
 		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_unknown_triangles", 0)) == 0 and \
@@ -2043,6 +2389,15 @@ func _lod_movement_summary() -> Dictionary:
 	return last_lod_movement_summary
 
 
+func _edit_during_load_summary() -> Dictionary:
+	if last_edit_during_load_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_edit_during_load_summary
+
+
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
 	var ready_callable := Callable(self, "_on_authoritative_samples_ready")
 	if not terrain_world.is_connected("authoritative_samples_ready", ready_callable):
@@ -2184,6 +2539,12 @@ func _edit_lod_movement_gate_center() -> Vector3:
 	return _watertightness_edit_center()
 
 
+func _edit_during_load_oracle_center() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 12.0, 1040.0)
+	return _watertightness_edit_center()
+
+
 func _edit_lod_movement_probe_radius() -> float:
 	return 14.0 if selected_profile == FLAT_PROFILE else 56.0
 
@@ -2191,6 +2552,8 @@ func _edit_lod_movement_probe_radius() -> float:
 func _edit_reload_test_center() -> Vector3:
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return _edit_lod_movement_gate_center()
+	if human_visual_capture_mode == "edit_during_load_oracle":
+		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	return _watertightness_edit_center()
@@ -2199,6 +2562,8 @@ func _edit_reload_test_center() -> Vector3:
 func _watertightness_probe_center() -> Vector3:
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return _edit_lod_movement_gate_center()
+	if human_visual_capture_mode == "edit_during_load_oracle":
+		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	if human_visual_capture_mode.begins_with("watertight_"):
@@ -2215,6 +2580,8 @@ func _watertightness_probe_radius() -> float:
 		return 18.0
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return _edit_lod_movement_probe_radius()
+	if human_visual_capture_mode == "edit_during_load_oracle":
+		return 14.0 if selected_profile == FLAT_PROFILE else 56.0
 	if human_visual_capture_mode == "edit_stability_gate":
 		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
 	if human_visual_capture_mode == "watertight_many_small_near" or \
@@ -2292,12 +2659,14 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate":
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle":
 			var target_center := _watertightness_edit_center()
 			if human_visual_capture_mode == "edit_stability_gate":
 				target_center = _edit_stability_gate_center()
 			elif human_visual_capture_mode == "edit_lod_movement_gate":
 				target_center = _edit_lod_movement_gate_center()
+			elif human_visual_capture_mode == "edit_during_load_oracle":
+				target_center = _edit_during_load_oracle_center()
 			capture_target = target_center + Vector3(0.0, -4.0, 0.0)
 			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position

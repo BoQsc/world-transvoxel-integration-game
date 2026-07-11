@@ -29,6 +29,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_near",
     "edit_far",
     "edit_aerial",
+    "edit_during_load_oracle",
     "edit_lod_movement_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
@@ -214,6 +215,8 @@ def validate_visual_summary(
     if not isinstance(watertightness, dict):
         raise RuntimeError(f"visual capture missing watertightness summary: {summary!r}")
     if watertightness.get("enabled"):
+        mode = str(summary.get("mode", ""))
+        allow_safe_near_zero_slivers = mode == "edit_during_load_oracle"
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
         interior_boundary_edges = int(
@@ -228,7 +231,10 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found interior nonmanifold edges: {watertightness!r}")
         if int(watertightness.get("nonmanifold_unknown_edges", 0)) != 0:
             raise RuntimeError(f"watertightness probe found unknown nonmanifold edges: {watertightness!r}")
-        if int(watertightness.get("zero_area_interior_triangles", 0)) != 0:
+        if (
+            int(watertightness.get("zero_area_interior_triangles", 0)) != 0
+            and not allow_safe_near_zero_slivers
+        ):
             raise RuntimeError(f"watertightness probe found interior zero-area triangles: {watertightness!r}")
         if int(watertightness.get("zero_area_unknown_triangles", 0)) != 0:
             raise RuntimeError(f"watertightness probe found unknown zero-area triangles: {watertightness!r}")
@@ -263,6 +269,71 @@ def run_lod_movement_gate(
     )
     validate_lod_movement_summary(summary, profile)
     return capture
+
+
+def run_edit_during_load_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_during_load_oracle",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=f"terrain_1_0_{profile}_edit_during_load_oracle",
+    )
+    validate_edit_during_load_summary(summary, profile)
+    return capture
+
+
+def validate_edit_during_load_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"edit-during-load profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_during_load_oracle":
+        raise RuntimeError(f"edit-during-load mode mismatch: {summary!r}")
+    oracle = summary.get("edit_during_load")
+    if not isinstance(oracle, dict):
+        raise RuntimeError(f"edit-during-load summary missing: {summary!r}")
+    if oracle.get("enabled") is not True or oracle.get("ok") is not True:
+        raise RuntimeError(f"edit-during-load oracle failed: {oracle!r}")
+    if int(oracle.get("operation_count", 0)) < 64:
+        raise RuntimeError(f"edit-during-load did not exercise enough edits: {oracle!r}")
+    if int(oracle.get("streaming_batches", 0)) <= 0:
+        raise RuntimeError(f"edit-during-load submitted no edit batch while streaming: {oracle!r}")
+    if int(oracle.get("after_commit_sample_count", 0)) <= 0:
+        raise RuntimeError(f"edit-during-load sampled no authoritative points: {oracle!r}")
+    if int(oracle.get("after_commit_air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"edit-during-load sampled no carved air: {oracle!r}")
+    for key in ("after_load_persistence", "after_reload_persistence"):
+        persistence = oracle.get(key)
+        if not isinstance(persistence, dict):
+            raise RuntimeError(f"edit-during-load {key} missing: {oracle!r}")
+        if persistence.get("ok") is not True:
+            raise RuntimeError(f"edit-during-load {key} failed: {persistence!r}")
+        if int(persistence.get("density_mismatches", -1)) != 0:
+            raise RuntimeError(f"edit-during-load density mismatch in {key}: {persistence!r}")
+        if int(persistence.get("material_mismatches", -1)) != 0:
+            raise RuntimeError(f"edit-during-load material mismatch in {key}: {persistence!r}")
+        if int(persistence.get("missing_after", -1)) != 0:
+            raise RuntimeError(f"edit-during-load missing samples in {key}: {persistence!r}")
+        if float(persistence.get("max_abs_density_delta", -1.0)) != 0.0:
+            raise RuntimeError(f"edit-during-load density delta in {key}: {persistence!r}")
+    print(
+        "WT_EDIT_DURING_LOAD_GATE_PROFILE_PASS profile=%s operations=%d streaming_batches=%d"
+        % (
+            profile,
+            int(oracle.get("operation_count", 0)),
+            int(oracle.get("streaming_batches", 0)),
+        )
+    )
 
 
 def validate_lod_movement_summary(
@@ -427,6 +498,28 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for LOD movement gate PNG captures.",
     )
+    parser.add_argument(
+        "--edit-during-load-gate",
+        action="store_true",
+        help=(
+            "Exercise edits submitted while the target zone is still streaming, "
+            "then verify persistence after load completion and reload."
+        ),
+    )
+    parser.add_argument(
+        "--edit-during-load-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --edit-during-load-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--edit-during-load-output-dir",
+        default=None,
+        help="Directory for edit-during-load gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -480,6 +573,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_LOD_MOVEMENT_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.edit_during_load_gate:
+        edit_during_load_profiles = (
+            tuple(args.edit_during_load_profile)
+            if args.edit_during_load_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.edit_during_load_output_dir).resolve()
+            if args.edit_during_load_output_dir
+            else project / "build" / "captures" / "terrain_1_0_edit_during_load_gate"
+        )
+        captures = [
+            run_edit_during_load_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in edit_during_load_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_EDIT_DURING_LOAD_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0

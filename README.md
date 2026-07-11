@@ -213,6 +213,18 @@ collision apply budget of 8 and uses a short viewer-movement burst budget of 128
 for 30 frames to avoid exposing partial LOD replacement sets while the player is
 moving.
 
+For the edit-during-load persistence gate, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --edit-during-load-gate
+```
+
+This moves away from the edit target, returns while the target zone is still
+streaming, submits deterministic edit batches before visual readiness, then
+checks authoritative samples after late load completion and after reload. It
+fails on restored/lost edits, missing authoritative samples, open rendered gaps,
+or nonmanifold rendered edges.
+
 For explicit deformation inspection captures, run Godot directly with the
 mountain profile and an `edit_*` capture mode. These modes submit a real
 multi-operation terrain edit batch, wait for world revision and streaming
