@@ -420,7 +420,7 @@ def validate_tunnel_summary(
         raise RuntimeError(f"tunnel gate summary missing: {summary!r}")
     if tunnel.get("enabled") is not True or tunnel.get("ok") is not True:
         raise RuntimeError(f"tunnel gate failed: {tunnel!r}")
-    if int(tunnel.get("operation_count", 0)) < 32:
+    if int(tunnel.get("operation_count", 0)) < 96:
         raise RuntimeError(f"tunnel gate did not exercise enough edits: {tunnel!r}")
     if int(tunnel.get("sample_count", 0)) <= 0:
         raise RuntimeError(f"tunnel gate sampled no authoritative points: {tunnel!r}")
@@ -433,9 +433,16 @@ def validate_tunnel_summary(
     if float(tunnel.get("max_abs_density_delta", -1.0)) != 0.0:
         raise RuntimeError(f"tunnel gate density delta: {tunnel!r}")
     probe_summaries = tunnel.get("probe_summaries")
-    if not isinstance(probe_summaries, list) or len(probe_summaries) < 3:
+    if not isinstance(probe_summaries, list) or len(probe_summaries) < 6:
         raise RuntimeError(f"tunnel gate probe summaries missing: {tunnel!r}")
-    expected_labels = {"entry", "middle", "exit"}
+    expected_labels = {
+        "entry",
+        "middle",
+        "exit",
+        "descending_entry",
+        "descending_middle",
+        "descending_deep",
+    }
     labels: set[str] = set()
     for probe in probe_summaries:
         if not isinstance(probe, dict):

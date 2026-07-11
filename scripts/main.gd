@@ -1784,6 +1784,28 @@ func _run_tunnel_gate(terrain_world: Node) -> bool:
 		for _frame in range(2):
 			await get_tree().process_frame
 
+	var preload_summaries := []
+	for step in _tunnel_gate_path():
+		var preload_label := str(step.get("label", "step"))
+		await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _tunnel_gate_center()))
+		var preload_notes := []
+		var preload_center: Vector3 = step.get("probe_center", _tunnel_gate_center())
+		var preload_radius := float(step.get("probe_radius", _tunnel_probe_radius()))
+		if not await _wait_for_tunnel_visual_ready(
+			backend,
+			"tunnel preload %s" % preload_label,
+			preload_notes,
+			preload_center,
+			preload_radius
+		):
+			last_tunnel_summary["error"] = "preload_visual_not_ready"
+			last_tunnel_summary["failed_preload"] = preload_label
+			return false
+		preload_summaries.append({
+			"label": preload_label,
+			"settle_notes": preload_notes,
+		})
+
 	var baseline_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "tunnel baseline")
 	if not bool(baseline_snapshot.get("ok", false)):
 		last_tunnel_summary["error"] = "baseline_snapshot_failed"
@@ -1821,6 +1843,7 @@ func _run_tunnel_gate(terrain_world: Node) -> bool:
 		"profile": str(selected_profile),
 		"operation_count": operations.size(),
 		"batch_size": batch_size,
+		"preload_summaries": preload_summaries,
 		"probe_summaries": probe_summaries,
 		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
 		"air_sample_count": int(baseline_snapshot.get("air_sample_count", 0)),
@@ -1839,36 +1862,107 @@ func _run_tunnel_gate(terrain_world: Node) -> bool:
 
 func _tunnel_gate_operations() -> Array:
 	var operations: Array = []
-	var center := _tunnel_gate_center()
-	var direction := _tunnel_gate_direction()
-	var radius := 4.2
-	var step_count := 42
-	var spacing := 1.45
-	var start := -float(step_count - 1) * spacing * 0.5
+	_append_tunnel_carve_chain(
+		operations,
+		_tunnel_gate_center(),
+		_tunnel_gate_direction(),
+		4.2,
+		42,
+		1.45,
+		0.35,
+		true
+	)
 	if selected_profile == FLAT_PROFILE:
-		radius = 3.4
-		spacing = 1.25
-		start = -float(step_count - 1) * spacing * 0.5
+		operations.clear()
+		_append_tunnel_carve_chain(
+			operations,
+			_tunnel_gate_center(),
+			_tunnel_gate_direction(),
+			3.4,
+			42,
+			1.25,
+			0.35,
+			true
+		)
+	_append_tunnel_carve_chain(
+		operations,
+		_tunnel_descending_start(),
+		_tunnel_descending_direction(),
+		_tunnel_descending_radius(),
+		_tunnel_descending_step_count(),
+		_tunnel_descending_spacing(),
+		0.22,
+		false
+	)
+	return operations
+
+
+func _append_tunnel_carve_chain(
+	operations: Array,
+	center_or_start: Vector3,
+	direction: Vector3,
+	radius: float,
+	step_count: int,
+	spacing: float,
+	wobble_scale: float,
+	centered: bool
+) -> void:
+	var start_distance := -float(step_count - 1) * spacing * 0.5 if centered else 0.0
 	for index in range(step_count):
-		var distance := start + float(index) * spacing
-		var wobble := Vector3(0.0, sin(float(index) * 0.47) * 0.35, 0.0)
+		var distance := start_distance + float(index) * spacing
+		var side_wobble := Vector3(
+			0.0,
+			sin(float(index) * 0.47) * wobble_scale,
+			cos(float(index) * 0.31) * wobble_scale
+		)
+		if not centered:
+			side_wobble = Vector3(
+				sin(float(index) * 0.37) * wobble_scale,
+				cos(float(index) * 0.53) * wobble_scale * 0.35,
+				cos(float(index) * 0.29) * wobble_scale
+			)
 		operations.append(_edit_operation(
 			&"carve",
-			center + direction * distance + wobble,
+			center_or_start + direction * distance + side_wobble,
 			radius,
 			1,
 			1.0
 		))
-	return operations
 
 
 func _tunnel_gate_path() -> Array:
 	var center := _tunnel_gate_center()
 	var direction := _tunnel_gate_direction()
+	var descending_start := _tunnel_descending_start()
+	var descending_direction := _tunnel_descending_direction()
+	var descending_length := float(_tunnel_descending_step_count() - 1) * _tunnel_descending_spacing()
+	var descending_mid := descending_start + descending_direction * descending_length * 0.50
+	var descending_deep := descending_start + descending_direction * descending_length
 	return [
-		{"label": "entry", "position": center - direction * 18.0, "target": center - direction * 8.0},
-		{"label": "middle", "position": center - direction * 2.0, "target": center + direction * 8.0},
-		{"label": "exit", "position": center + direction * 18.0, "target": center + direction * 28.0},
+		{"label": "entry", "position": center - direction * 18.0, "target": center - direction * 8.0, "probe_center": center, "probe_radius": _tunnel_probe_radius()},
+		{"label": "middle", "position": center - direction * 2.0, "target": center + direction * 8.0, "probe_center": center, "probe_radius": _tunnel_probe_radius()},
+		{"label": "exit", "position": center + direction * 18.0, "target": center + direction * 28.0, "probe_center": center, "probe_radius": _tunnel_probe_radius()},
+		{
+			"label": "descending_entry",
+			"position": descending_start - descending_direction * 7.0 + Vector3(0.0, 1.5, 0.0),
+			"target": descending_start + descending_direction * 6.0,
+			"probe_center": descending_start + descending_direction * 8.0,
+			"probe_radius": _tunnel_descending_probe_radius(),
+		},
+		{
+			"label": "descending_middle",
+			"position": descending_mid - descending_direction * 3.0 + Vector3(0.0, 1.0, 0.0),
+			"target": descending_mid + descending_direction * 8.0,
+			"probe_center": descending_mid,
+			"probe_radius": _tunnel_descending_probe_radius(),
+		},
+		{
+			"label": "descending_deep",
+			"position": descending_deep - descending_direction * 8.0 + Vector3(0.0, 1.0, 0.0),
+			"target": descending_deep,
+			"probe_center": descending_deep - descending_direction * 4.0,
+			"probe_radius": _tunnel_descending_probe_radius(),
+		},
 	]
 
 
@@ -1884,7 +1978,15 @@ func _exercise_tunnel_step(backend: Node, step: Dictionary) -> Dictionary:
 	var label := str(step.get("label", "step"))
 	await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _tunnel_gate_center()))
 	var notes := []
-	if not await _wait_for_tunnel_visual_ready(backend, "tunnel %s" % label, notes):
+	var probe_center: Vector3 = step.get("probe_center", _tunnel_gate_center())
+	var probe_radius := float(step.get("probe_radius", _tunnel_probe_radius()))
+	if not await _wait_for_tunnel_visual_ready(
+		backend,
+		"tunnel %s" % label,
+		notes,
+		probe_center,
+		probe_radius
+	):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		return {
 			"ok": false,
@@ -1896,8 +1998,8 @@ func _exercise_tunnel_step(backend: Node, step: Dictionary) -> Dictionary:
 	var probe := WatertightnessProbe.collect(
 		backend,
 		"edit_tunnel_gate_%s" % label,
-		_tunnel_gate_center(),
-		_tunnel_probe_radius()
+		probe_center,
+		probe_radius
 	)
 	var digest := _open_gap_probe_digest(probe)
 	digest["ok"] = _is_open_gap_free_probe(probe)
@@ -1911,10 +2013,16 @@ func _exercise_tunnel_step(backend: Node, step: Dictionary) -> Dictionary:
 func _wait_for_tunnel_visual_ready(
 	backend: Node,
 	context: String,
-	settle_notes: Array
+	settle_notes: Array,
+	probe_center: Vector3 = Vector3.INF,
+	probe_radius: float = -1.0
 ) -> bool:
 	var last_summary := {}
 	var last_probe := {}
+	if probe_center == Vector3.INF:
+		probe_center = _tunnel_gate_center()
+	if probe_radius <= 0.0:
+		probe_radius = _tunnel_probe_radius()
 	var frame_limit := maxi(180, human_visual_capture_wait_frames)
 	for frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
@@ -1926,8 +2034,8 @@ func _wait_for_tunnel_visual_ready(
 			var probe := WatertightnessProbe.collect(
 				backend,
 				"edit_tunnel_gate_visual_ready",
-				_tunnel_gate_center(),
-				_tunnel_probe_radius()
+				probe_center,
+				probe_radius
 			)
 			last_probe = _open_gap_probe_digest(probe)
 			if _is_open_gap_free_probe(probe):
@@ -2977,8 +3085,18 @@ func _collect_edit_persistence_snapshot(terrain_world: Node, context: String) ->
 		if authoritative_sample_failures.has(request_id):
 			var failure_error := str(authoritative_sample_failures[request_id])
 			authoritative_sample_failures.erase(request_id)
-			_fail("edit persistence oracle query failed %s: %s" % [context, failure_error])
-			return {"ok": false, "error": failure_error, "context": context}
+			var diagnostics := await _diagnose_authoritative_sample_points(terrain_world, points, 8)
+			_fail("edit persistence oracle query failed %s: %s diagnostics=%s" % [
+				context,
+				failure_error,
+				JSON.stringify(diagnostics),
+			])
+			return {
+				"ok": false,
+				"error": failure_error,
+				"context": context,
+				"diagnostics": diagnostics,
+			}
 		if authoritative_sample_batches.has(request_id):
 			var samples: Array = authoritative_sample_batches[request_id]
 			authoritative_sample_batches.erase(request_id)
@@ -2986,6 +3104,85 @@ func _collect_edit_persistence_snapshot(terrain_world: Node, context: String) ->
 		await get_tree().process_frame
 	_fail("edit persistence oracle query timed out %s request=%d" % [context, request_id])
 	return {"ok": false, "error": "query_timeout", "context": context}
+
+
+func _diagnose_authoritative_sample_points(
+	terrain_world: Node,
+	points: Array,
+	failure_limit: int
+) -> Dictionary:
+	var failures := []
+	var checked_count := 0
+	var ok_count := 0
+	for point in points:
+		var request_point: Vector3i = point
+		var request_id := int(terrain_world.call("request_authoritative_samples", [request_point], 0))
+		checked_count += 1
+		if request_id <= 0:
+			var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "request_rejected"
+			failures.append(_authoritative_sample_point_failure(request_point, error))
+		else:
+			var resolved := false
+			for _frame in range(120):
+				if authoritative_sample_failures.has(request_id):
+					var failure_error := str(authoritative_sample_failures[request_id])
+					authoritative_sample_failures.erase(request_id)
+					failures.append(_authoritative_sample_point_failure(request_point, failure_error))
+					resolved = true
+					break
+				if authoritative_sample_batches.has(request_id):
+					authoritative_sample_batches.erase(request_id)
+					ok_count += 1
+					resolved = true
+					break
+				await get_tree().process_frame
+			if not resolved:
+				failures.append(_authoritative_sample_point_failure(request_point, "diagnostic_timeout"))
+		if failures.size() >= failure_limit:
+			break
+	return {
+		"point_count": points.size(),
+		"checked_count": checked_count,
+		"ok_checked_count": ok_count,
+		"bounds": _authoritative_sample_point_bounds(points),
+		"failures": failures,
+	}
+
+
+func _authoritative_sample_point_failure(point: Vector3i, error: String) -> Dictionary:
+	return {
+		"point": _grid_point_key(point),
+		"chunk_guess_lod0": "%d,%d,%d" % [
+			floori(float(point.x) / 16.0),
+			floori(float(point.y) / 16.0),
+			floori(float(point.z) / 16.0),
+		],
+		"error": error,
+	}
+
+
+func _authoritative_sample_point_bounds(points: Array) -> Dictionary:
+	if points.is_empty():
+		return {}
+	var first: Vector3i = points[0]
+	var min_point := first
+	var max_point := first
+	for point in points:
+		var typed_point: Vector3i = point
+		min_point = Vector3i(
+			mini(min_point.x, typed_point.x),
+			mini(min_point.y, typed_point.y),
+			mini(min_point.z, typed_point.z)
+		)
+		max_point = Vector3i(
+			maxi(max_point.x, typed_point.x),
+			maxi(max_point.y, typed_point.y),
+			maxi(max_point.z, typed_point.z)
+		)
+	return {
+		"min": _grid_point_key(min_point),
+		"max": _grid_point_key(max_point),
+	}
 
 
 func _samples_to_persistence_snapshot(samples: Array, context: String) -> Dictionary:
@@ -3299,6 +3496,35 @@ func _tunnel_gate_direction() -> Vector3:
 	if selected_profile == FLAT_PROFILE:
 		direction = Vector3(1.0, 0.0, 0.28)
 	return direction.normalized()
+
+
+func _tunnel_descending_start() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return _tunnel_gate_center() + Vector3(-18.0, 4.0, -14.0)
+	return _tunnel_gate_center() + Vector3(-28.0, 4.0, -18.0)
+
+
+func _tunnel_descending_direction() -> Vector3:
+	var direction := Vector3(0.72, -0.42, 0.38)
+	if selected_profile == FLAT_PROFILE:
+		direction = Vector3(0.78, -0.24, 0.36)
+	return direction.normalized()
+
+
+func _tunnel_descending_radius() -> float:
+	return 1.85 if selected_profile == FLAT_PROFILE else 2.15
+
+
+func _tunnel_descending_step_count() -> int:
+	return 56 if selected_profile == FLAT_PROFILE else 68
+
+
+func _tunnel_descending_spacing() -> float:
+	return 0.95 if selected_profile == FLAT_PROFILE else 1.05
+
+
+func _tunnel_descending_probe_radius() -> float:
+	return 16.0 if selected_profile == FLAT_PROFILE else 26.0
 
 
 func _edit_lod_movement_probe_radius() -> float:
