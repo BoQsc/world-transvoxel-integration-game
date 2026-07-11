@@ -1573,16 +1573,26 @@ func _wait_for_lod_movement_visual_ready(
 				"chunk_face_boundary_edges": int(probe.get("chunk_face_boundary_edges", -1)),
 				"unknown_boundary_edges": int(probe.get("unknown_boundary_edges", -1)),
 				"nonmanifold_edges": int(probe.get("nonmanifold_edges", -1)),
+				"nonmanifold_chunk_face_edges": int(probe.get("nonmanifold_chunk_face_edges", -1)),
+				"nonmanifold_interior_edges": int(probe.get("nonmanifold_interior_edges", -1)),
+				"nonmanifold_unknown_edges": int(probe.get("nonmanifold_unknown_edges", -1)),
 				"triangles_in_region": int(probe.get("triangles_in_region", -1)),
 				"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
+				"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", -1)),
+				"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", -1)),
+				"zero_area_unknown_triangles": int(probe.get("zero_area_unknown_triangles", -1)),
 				"zero_edge_triangles": int(probe.get("zero_edge_triangles", -1)),
 				"repeated_point_key_triangles": int(probe.get("repeated_point_key_triangles", -1)),
+				"repeated_point_key_chunk_face_triangles": int(probe.get("repeated_point_key_chunk_face_triangles", -1)),
+				"repeated_point_key_interior_triangles": int(probe.get("repeated_point_key_interior_triangles", -1)),
+				"repeated_point_key_unknown_triangles": int(probe.get("repeated_point_key_unknown_triangles", -1)),
 				"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
 				"minimum_edge_length_squared": float(probe.get("minimum_edge_length_squared", -1.0)),
 				"boundary_examples": probe.get("boundary_examples", []),
 				"interior_boundary_examples": probe.get("interior_boundary_examples", []),
 				"nonmanifold_examples": probe.get("nonmanifold_examples", []),
 				"zero_area_examples": probe.get("zero_area_examples", []),
+				"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
 			}
 			if _is_lod_movement_probe_ready(probe):
 				if int(summary.get("pending_chunk_retirements", 0)) != 0 or \
@@ -1680,11 +1690,22 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 					"chunk_face_boundary_edges": int(transient_probe.get("chunk_face_boundary_edges", -1)),
 					"unknown_boundary_edges": int(transient_probe.get("unknown_boundary_edges", -1)),
 					"nonmanifold_edges": int(transient_probe.get("nonmanifold_edges", -1)),
+					"nonmanifold_chunk_face_edges": int(transient_probe.get("nonmanifold_chunk_face_edges", -1)),
+					"nonmanifold_interior_edges": int(transient_probe.get("nonmanifold_interior_edges", -1)),
+					"nonmanifold_unknown_edges": int(transient_probe.get("nonmanifold_unknown_edges", -1)),
 					"zero_area_triangles": int(transient_probe.get("zero_area_triangles", -1)),
+					"zero_area_chunk_face_triangles": int(transient_probe.get("zero_area_chunk_face_triangles", -1)),
+					"zero_area_interior_triangles": int(transient_probe.get("zero_area_interior_triangles", -1)),
+					"zero_area_unknown_triangles": int(transient_probe.get("zero_area_unknown_triangles", -1)),
+					"repeated_point_key_triangles": int(transient_probe.get("repeated_point_key_triangles", -1)),
+					"repeated_point_key_chunk_face_triangles": int(transient_probe.get("repeated_point_key_chunk_face_triangles", -1)),
+					"repeated_point_key_interior_triangles": int(transient_probe.get("repeated_point_key_interior_triangles", -1)),
+					"repeated_point_key_unknown_triangles": int(transient_probe.get("repeated_point_key_unknown_triangles", -1)),
 					"triangles_in_region": int(transient_probe.get("triangles_in_region", -1)),
 					"examples": transient_probe.get("boundary_examples", []),
 					"interior_boundary_examples": transient_probe.get("interior_boundary_examples", []),
 					"nonmanifold_examples": transient_probe.get("nonmanifold_examples", []),
+					"repeated_point_key_examples": transient_probe.get("repeated_point_key_examples", []),
 				})
 	var strict_settle_notes := []
 	if not await _wait_for_lod_movement_visual_ready(
@@ -1730,8 +1751,18 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 		"settled_chunk_face_boundary_edges": int(settled_probe.get("chunk_face_boundary_edges", -1)),
 		"settled_unknown_boundary_edges": int(settled_probe.get("unknown_boundary_edges", -1)),
 		"settled_nonmanifold_edges": int(settled_probe.get("nonmanifold_edges", -1)),
+		"settled_nonmanifold_chunk_face_edges": int(settled_probe.get("nonmanifold_chunk_face_edges", -1)),
+		"settled_nonmanifold_interior_edges": int(settled_probe.get("nonmanifold_interior_edges", -1)),
+		"settled_nonmanifold_unknown_edges": int(settled_probe.get("nonmanifold_unknown_edges", -1)),
 		"settled_zero_area_triangles": int(settled_probe.get("zero_area_triangles", -1)),
+		"settled_zero_area_chunk_face_triangles": int(settled_probe.get("zero_area_chunk_face_triangles", -1)),
+		"settled_zero_area_interior_triangles": int(settled_probe.get("zero_area_interior_triangles", -1)),
+		"settled_zero_area_unknown_triangles": int(settled_probe.get("zero_area_unknown_triangles", -1)),
 		"settled_zero_edge_triangles": int(settled_probe.get("zero_edge_triangles", -1)),
+		"settled_repeated_point_key_triangles": int(settled_probe.get("repeated_point_key_triangles", -1)),
+		"settled_repeated_point_key_chunk_face_triangles": int(settled_probe.get("repeated_point_key_chunk_face_triangles", -1)),
+		"settled_repeated_point_key_interior_triangles": int(settled_probe.get("repeated_point_key_interior_triangles", -1)),
+		"settled_repeated_point_key_unknown_triangles": int(settled_probe.get("repeated_point_key_unknown_triangles", -1)),
 		"settled_triangles_in_region": int(settled_probe.get("triangles_in_region", -1)),
 	}
 
@@ -1743,6 +1774,12 @@ func _is_lod_movement_probe_ready(probe: Dictionary) -> bool:
 		return false
 	return int(probe.get("interior_boundary_edges", -1)) == 0 and \
 		int(probe.get("unknown_boundary_edges", -1)) == 0 and \
+		int(probe.get("nonmanifold_interior_edges", 0)) == 0 and \
+		int(probe.get("nonmanifold_unknown_edges", 0)) == 0 and \
+		int(probe.get("zero_area_interior_triangles", 0)) == 0 and \
+		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
+		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
+		int(probe.get("repeated_point_key_unknown_triangles", 0)) == 0 and \
 		int(probe.get("zero_edge_triangles", -1)) == 0 and \
 		int(probe.get("triangles_in_region", 0)) > 0
 

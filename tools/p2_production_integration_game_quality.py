@@ -224,6 +224,18 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found open rendered edges: {watertightness!r}")
         if boundary_edges != chunk_face_boundary_edges:
             raise RuntimeError(f"watertightness probe found unexpected boundary edges: {watertightness!r}")
+        if int(watertightness.get("nonmanifold_interior_edges", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found interior nonmanifold edges: {watertightness!r}")
+        if int(watertightness.get("nonmanifold_unknown_edges", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found unknown nonmanifold edges: {watertightness!r}")
+        if int(watertightness.get("zero_area_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found interior zero-area triangles: {watertightness!r}")
+        if int(watertightness.get("zero_area_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found unknown zero-area triangles: {watertightness!r}")
+        if int(watertightness.get("repeated_point_key_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found interior repeated-point triangles: {watertightness!r}")
+        if int(watertightness.get("repeated_point_key_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found unknown repeated-point triangles: {watertightness!r}")
         if int(watertightness.get("zero_edge_triangles", 0)) != 0:
             raise RuntimeError(f"watertightness probe found zero-edge triangles: {watertightness!r}")
         if watertightness.get("winding_mixed") is True:
@@ -315,6 +327,18 @@ def validate_lod_movement_summary(
             raise RuntimeError(f"LOD movement settled unknown boundary detected: {transition!r}")
         if settled_boundary_edges != settled_chunk_face_boundary_edges:
             raise RuntimeError(f"LOD movement settled unexpected boundary detected: {transition!r}")
+        if int(transition.get("settled_nonmanifold_interior_edges", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled interior nonmanifold edges detected: {transition!r}")
+        if int(transition.get("settled_nonmanifold_unknown_edges", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled unknown nonmanifold edges detected: {transition!r}")
+        if int(transition.get("settled_zero_area_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled interior zero-area triangles detected: {transition!r}")
+        if int(transition.get("settled_zero_area_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled unknown zero-area triangles detected: {transition!r}")
+        if int(transition.get("settled_repeated_point_key_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled interior repeated-point triangles detected: {transition!r}")
+        if int(transition.get("settled_repeated_point_key_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled unknown repeated-point triangles detected: {transition!r}")
         if int(transition.get("settled_zero_edge_triangles", 0)) != 0:
             raise RuntimeError(f"LOD movement settled zero-edge triangles detected: {transition!r}")
         if int(transition.get("settled_triangles_in_region", 0)) <= 0:

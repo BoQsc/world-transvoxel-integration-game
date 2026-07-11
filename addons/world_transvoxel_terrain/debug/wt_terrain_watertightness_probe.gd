@@ -31,11 +31,18 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"triangles_in_region": 0,
 		"lod0_triangles_in_region": 0,
 		"zero_area_triangles": 0,
+		"zero_area_chunk_face_triangles": 0,
+		"zero_area_interior_triangles": 0,
+		"zero_area_unknown_triangles": 0,
 		"zero_edge_triangles": 0,
 		"repeated_point_key_triangles": 0,
+		"repeated_point_key_chunk_face_triangles": 0,
+		"repeated_point_key_interior_triangles": 0,
+		"repeated_point_key_unknown_triangles": 0,
 		"minimum_area_squared": INF,
 		"minimum_edge_length_squared": INF,
 		"zero_area_examples": [],
+		"repeated_point_key_examples": [],
 		"normal_agreement_positive": 0,
 		"normal_agreement_negative": 0,
 		"normal_agreement_near_zero": 0,
@@ -194,15 +201,56 @@ static func _accumulate_triangle(
 	var repeated_key := _point_key(a) == _point_key(b) or _point_key(b) == _point_key(c) or _point_key(c) == _point_key(a)
 	if repeated_key:
 		stats["repeated_point_key_triangles"] = int(stats.get("repeated_point_key_triangles", 0)) + 1
+		var repeated_kind := _triangle_kind(
+			_point_key(a),
+			_point_key(b),
+			_point_key(c),
+			owner
+		)
+		if repeated_kind == "chunk_face":
+			stats["repeated_point_key_chunk_face_triangles"] = int(stats.get("repeated_point_key_chunk_face_triangles", 0)) + 1
+		elif repeated_kind == "interior":
+			stats["repeated_point_key_interior_triangles"] = int(stats.get("repeated_point_key_interior_triangles", 0)) + 1
+		else:
+			stats["repeated_point_key_unknown_triangles"] = int(stats.get("repeated_point_key_unknown_triangles", 0)) + 1
+		var repeated_examples: Array = stats.get("repeated_point_key_examples", [])
+		if repeated_examples.size() < 8:
+			repeated_examples.append({
+				"owner": owner,
+				"lod": lod,
+				"kind": repeated_kind,
+				"area_squared": area_squared,
+				"minimum_edge_length_squared": min_edge_squared,
+				"a": _vector_summary(a),
+				"b": _vector_summary(b),
+				"c": _vector_summary(c),
+				"a_key": _point_key(a),
+				"b_key": _point_key(b),
+				"c_key": _point_key(c),
+			})
+			stats["repeated_point_key_examples"] = repeated_examples
 	if min_edge_squared <= 0.000000000001:
 		stats["zero_edge_triangles"] = int(stats.get("zero_edge_triangles", 0)) + 1
 	if area_squared <= 0.00000001:
 		stats["zero_area_triangles"] = int(stats.get("zero_area_triangles", 0)) + 1
+		var zero_area_kind := _triangle_kind(
+			_point_key(a),
+			_point_key(b),
+			_point_key(c),
+			owner
+		)
+		if zero_area_kind == "chunk_face":
+			stats["zero_area_chunk_face_triangles"] = int(stats.get("zero_area_chunk_face_triangles", 0)) + 1
+		elif zero_area_kind == "interior":
+			stats["zero_area_interior_triangles"] = int(stats.get("zero_area_interior_triangles", 0)) + 1
+		else:
+			stats["zero_area_unknown_triangles"] = int(stats.get("zero_area_unknown_triangles", 0)) + 1
 		var examples: Array = stats.get("zero_area_examples", [])
 		if examples.size() < 8:
 			examples.append({
 				"owner": owner,
 				"lod": lod,
+				"kind": zero_area_kind,
 				"area_squared": area_squared,
 				"minimum_edge_length_squared": min_edge_squared,
 				"a": _vector_summary(a),
@@ -273,6 +321,9 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 	var chunk_face_boundary_edges := 0
 	var unknown_boundary_edges := 0
 	var nonmanifold_edges := 0
+	var nonmanifold_chunk_face_edges := 0
+	var nonmanifold_interior_edges := 0
+	var nonmanifold_unknown_edges := 0
 	var matched_edges := 0
 	var maximum_edge_use := 0
 	var boundary_examples := []
@@ -299,9 +350,17 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 			matched_edges += 1
 		else:
 			nonmanifold_edges += 1
+			var nonmanifold_kind := _nonmanifold_edge_kind(str(key), edge_owners.get(key, {}))
+			if nonmanifold_kind == "chunk_face":
+				nonmanifold_chunk_face_edges += 1
+			elif nonmanifold_kind == "interior":
+				nonmanifold_interior_edges += 1
+			else:
+				nonmanifold_unknown_edges += 1
 			if nonmanifold_examples.size() < 8:
-				nonmanifold_examples.append("%s count=%d owners=%s" % [
+				nonmanifold_examples.append("%s kind=%s count=%d owners=%s" % [
 					str(key),
+					nonmanifold_kind,
 					count,
 					_owners_summary(edge_owners.get(key, {})),
 				])
@@ -313,6 +372,9 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 		"chunk_face_boundary_edges": chunk_face_boundary_edges,
 		"unknown_boundary_edges": unknown_boundary_edges,
 		"nonmanifold_edges": nonmanifold_edges,
+		"nonmanifold_chunk_face_edges": nonmanifold_chunk_face_edges,
+		"nonmanifold_interior_edges": nonmanifold_interior_edges,
+		"nonmanifold_unknown_edges": nonmanifold_unknown_edges,
 		"maximum_edge_use": maximum_edge_use,
 		"boundary_examples": boundary_examples,
 		"interior_boundary_examples": interior_boundary_examples,
@@ -365,6 +427,23 @@ static func _boundary_edge_kind(edge_key: String, owners: Dictionary) -> String:
 	return "interior"
 
 
+static func _nonmanifold_edge_kind(edge_key: String, owners: Dictionary) -> String:
+	var points := _parse_edge_points(edge_key)
+	if points.size() != 2:
+		return "unknown"
+	var parsed_owner_count := 0
+	for owner_key in owners.keys():
+		var chunk := _parse_owner_chunk_key(str(owner_key))
+		if chunk.is_empty():
+			continue
+		parsed_owner_count += 1
+		if _edge_on_chunk_face(points[0], points[1], chunk):
+			return "chunk_face"
+	if parsed_owner_count == 0:
+		return "unknown"
+	return "interior"
+
+
 static func _parse_edge_points(edge_key: String) -> Array:
 	var parts := edge_key.split("|", false)
 	if parts.size() != 2:
@@ -374,6 +453,25 @@ static func _parse_edge_points(edge_key: String) -> Array:
 	if first.size() != 3 or second.size() != 3:
 		return []
 	return [first, second]
+
+
+static func _triangle_kind(
+	a_key: String,
+	b_key: String,
+	c_key: String,
+	owner: String
+) -> String:
+	var chunk := _parse_owner_chunk_key(owner)
+	if chunk.is_empty():
+		return "unknown"
+	var first := _parse_point_key(a_key)
+	var second := _parse_point_key(b_key)
+	var third := _parse_point_key(c_key)
+	if first.size() != 3 or second.size() != 3 or third.size() != 3:
+		return "unknown"
+	if _triangle_on_chunk_face(first, second, third, chunk):
+		return "chunk_face"
+	return "interior"
 
 
 static func _parse_point_key(point_key: String) -> Array:
@@ -429,6 +527,33 @@ static func _edge_on_chunk_face(first: Array, second: Array, chunk: Dictionary) 
 			return true
 		if abs(int(first[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
 				abs(int(second[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+			return true
+	return false
+
+
+static func _triangle_on_chunk_face(first: Array, second: Array, third: Array, chunk: Dictionary) -> bool:
+	var lod := int(chunk.get("lod", -1))
+	if lod < 0:
+		return false
+	var extent := CHUNK_CELLS_PER_AXIS * int(1 << lod)
+	var minimum := [
+		int(chunk.get("x", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("y", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("z", 0)) * extent * POINT_KEY_SCALE,
+	]
+	var maximum := [
+		(int(chunk.get("x", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("y", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("z", 0)) * extent + extent) * POINT_KEY_SCALE,
+	]
+	for axis in range(3):
+		if abs(int(first[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(second[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(third[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+			return true
+		if abs(int(first[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(second[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(third[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
 			return true
 	return false
 
