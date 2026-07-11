@@ -57,11 +57,20 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 	var positive := int(stats.get("normal_agreement_positive", 0))
 	var negative := int(stats.get("normal_agreement_negative", 0))
 	var winding_minority := mini(positive, negative)
+	var unsafe_zero_area_triangles := int(stats.get("zero_area_interior_triangles", 0)) + \
+		int(stats.get("zero_area_unknown_triangles", 0))
+	var unsafe_repeated_point_key_triangles := int(stats.get("repeated_point_key_interior_triangles", 0)) + \
+		int(stats.get("repeated_point_key_unknown_triangles", 0))
+	stats["allowed_zero_area_chunk_face_triangles"] = int(stats.get("zero_area_chunk_face_triangles", 0))
+	stats["unsafe_zero_area_triangles"] = unsafe_zero_area_triangles
+	stats["unsafe_repeated_point_key_triangles"] = unsafe_repeated_point_key_triangles
 	stats["winding_mixed"] = positive > 0 and negative > 0
 	stats["winding_minority"] = winding_minority
 	stats["ok"] = int(stats.get("boundary_edges", 0)) == 0 and \
 		int(stats.get("nonmanifold_edges", 0)) == 0 and \
-		int(stats.get("zero_area_triangles", 0)) == 0 and \
+		unsafe_zero_area_triangles == 0 and \
+		unsafe_repeated_point_key_triangles == 0 and \
+		int(stats.get("zero_edge_triangles", 0)) == 0 and \
 		winding_minority == 0 and \
 		int(stats.get("triangles_in_region", 0)) > 0
 	return stats
