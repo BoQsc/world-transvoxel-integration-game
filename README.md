@@ -225,6 +225,19 @@ checks authoritative samples after late load completion and after reload. It
 fails on restored/lost edits, missing authoritative samples, open rendered gaps,
 or nonmanifold rendered edges.
 
+For the broader manifold stress gate, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --manifold-stress-gate
+```
+
+This submits 128 deterministic mixed edit operations, checks interim movement
+while edits are still accumulating, then verifies close/mid/far/return movement
+and reload persistence on the compact and flat profiles. It fails on changed
+authoritative samples, missing carved-air samples, transient or settled open
+rendered gaps, nonmanifold rendered edges, zero-edge triangles, or unknown
+degenerate geometry.
+
 For explicit deformation inspection captures, run Godot directly with the
 mountain profile and an `edit_*` capture mode. These modes submit a real
 multi-operation terrain edit batch, wait for world revision and streaming

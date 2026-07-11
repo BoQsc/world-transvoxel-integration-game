@@ -104,6 +104,8 @@ static func _accumulate_mesh(
 	stats: Dictionary
 ) -> void:
 	stats["mesh_instances"] = int(stats.get("mesh_instances", 0)) + 1
+	if not instance.is_visible_in_tree():
+		return
 	var mesh := instance.mesh
 	if mesh == null or not (mesh is ArrayMesh):
 		return

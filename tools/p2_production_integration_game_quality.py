@@ -30,6 +30,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_far",
     "edit_aerial",
     "edit_during_load_oracle",
+    "edit_manifold_stress_gate",
     "edit_lod_movement_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
@@ -216,7 +217,10 @@ def validate_visual_summary(
         raise RuntimeError(f"visual capture missing watertightness summary: {summary!r}")
     if watertightness.get("enabled"):
         mode = str(summary.get("mode", ""))
-        allow_safe_near_zero_slivers = mode == "edit_during_load_oracle"
+        allow_safe_near_zero_slivers = mode in {
+            "edit_during_load_oracle",
+            "edit_manifold_stress_gate",
+        }
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
         interior_boundary_edges = int(
@@ -332,6 +336,124 @@ def validate_edit_during_load_summary(
             profile,
             int(oracle.get("operation_count", 0)),
             int(oracle.get("streaming_batches", 0)),
+        )
+    )
+
+
+def run_manifold_stress_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_manifold_stress_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=f"terrain_1_0_{profile}_edit_manifold_stress_gate",
+    )
+    validate_manifold_stress_summary(summary, profile)
+    return capture
+
+
+def validate_manifold_stress_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"manifold stress profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_manifold_stress_gate":
+        raise RuntimeError(f"manifold stress mode mismatch: {summary!r}")
+    stress = summary.get("manifold_stress")
+    if not isinstance(stress, dict):
+        raise RuntimeError(f"manifold stress summary missing: {summary!r}")
+    if stress.get("enabled") is not True or stress.get("ok") is not True:
+        raise RuntimeError(f"manifold stress gate failed: {stress!r}")
+    if int(stress.get("operation_count", 0)) < 128:
+        raise RuntimeError(f"manifold stress did not exercise enough edits: {stress!r}")
+    if int(stress.get("baseline_sample_count", 0)) <= 0:
+        raise RuntimeError(f"manifold stress sampled no authoritative points: {stress!r}")
+    if int(stress.get("baseline_air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"manifold stress sampled no carved air: {stress!r}")
+    required_modes = {"carve", "construct", "fill", "paint"}
+    mode_counts = stress.get("mode_counts")
+    if not isinstance(mode_counts, dict) or not required_modes.issubset(set(mode_counts)):
+        raise RuntimeError(f"manifold stress did not exercise all edit modes: {stress!r}")
+    for mode in required_modes:
+        if int(mode_counts.get(mode, 0)) <= 0:
+            raise RuntimeError(f"manifold stress edit mode {mode} missing: {stress!r}")
+    interim_summaries = stress.get("interim_summaries")
+    if not isinstance(interim_summaries, list) or len(interim_summaries) < 4:
+        raise RuntimeError(f"manifold stress interim checks missing: {stress!r}")
+    persistence_summaries = stress.get("persistence_summaries")
+    if not isinstance(persistence_summaries, list) or len(persistence_summaries) < 5:
+        raise RuntimeError(f"manifold stress movement persistence missing: {stress!r}")
+    for collection_name in ("interim_summaries", "persistence_summaries"):
+        collection = stress.get(collection_name)
+        if not isinstance(collection, list):
+            raise RuntimeError(f"manifold stress {collection_name} malformed: {stress!r}")
+        for entry in collection:
+            if not isinstance(entry, dict):
+                raise RuntimeError(f"manifold stress persistence entry malformed: {entry!r}")
+            if int(entry.get("sample_count", 0)) <= 0:
+                raise RuntimeError(f"manifold stress sampled no points: {entry!r}")
+            if int(entry.get("density_mismatches", -1)) != 0:
+                raise RuntimeError(f"manifold stress density mismatch: {entry!r}")
+            if int(entry.get("material_mismatches", -1)) != 0:
+                raise RuntimeError(f"manifold stress material mismatch: {entry!r}")
+            if float(entry.get("max_abs_density_delta", -1.0)) != 0.0:
+                raise RuntimeError(f"manifold stress density delta: {entry!r}")
+    transitions = stress.get("transition_summaries")
+    if not isinstance(transitions, list) or len(transitions) < 9:
+        raise RuntimeError(f"manifold stress transition checks missing: {stress!r}")
+    for transition in transitions:
+        if not isinstance(transition, dict):
+            raise RuntimeError(f"manifold stress transition malformed: {transition!r}")
+        if transition.get("ok") is not True:
+            raise RuntimeError(f"manifold stress transition failed: {transition!r}")
+        boundary_edges = int(transition.get("boundary_edges", -1))
+        chunk_face_boundary_edges = int(transition.get("chunk_face_boundary_edges", 0))
+        if int(transition.get("interior_boundary_edges", boundary_edges)) != 0:
+            raise RuntimeError(f"manifold stress interior open edge: {transition!r}")
+        if int(transition.get("unknown_boundary_edges", 0)) != 0:
+            raise RuntimeError(f"manifold stress unknown open edge: {transition!r}")
+        if boundary_edges != chunk_face_boundary_edges:
+            raise RuntimeError(f"manifold stress unexpected boundary edge: {transition!r}")
+        if int(transition.get("nonmanifold_interior_edges", 0)) != 0:
+            raise RuntimeError(f"manifold stress interior nonmanifold edge: {transition!r}")
+        if int(transition.get("nonmanifold_unknown_edges", 0)) != 0:
+            raise RuntimeError(f"manifold stress unknown nonmanifold edge: {transition!r}")
+        if int(transition.get("zero_area_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"manifold stress unknown zero-area triangles: {transition!r}")
+        if int(transition.get("zero_edge_triangles", 0)) != 0:
+            raise RuntimeError(f"manifold stress zero-edge triangles: {transition!r}")
+        if int(transition.get("repeated_point_key_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"manifold stress repeated-point interior triangles: {transition!r}")
+        if int(transition.get("repeated_point_key_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"manifold stress repeated-point unknown triangles: {transition!r}")
+        if int(transition.get("transient_probe_failure_count", -1)) != 0:
+            raise RuntimeError(f"manifold stress transient probe failure: {transition!r}")
+        if int(transition.get("triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"manifold stress sampled no triangles: {transition!r}")
+    reload_persistence = stress.get("reload_persistence")
+    if not isinstance(reload_persistence, dict) or reload_persistence.get("ok") is not True:
+        raise RuntimeError(f"manifold stress reload persistence failed: {stress!r}")
+    if int(reload_persistence.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"manifold stress reload density mismatch: {reload_persistence!r}")
+    if int(reload_persistence.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"manifold stress reload material mismatch: {reload_persistence!r}")
+    if int(reload_persistence.get("missing_after", -1)) != 0:
+        raise RuntimeError(f"manifold stress reload missing samples: {reload_persistence!r}")
+    print(
+        "WT_MANIFOLD_STRESS_GATE_PROFILE_PASS profile=%s operations=%d transitions=%d"
+        % (
+            profile,
+            int(stress.get("operation_count", 0)),
+            len(transitions),
         )
     )
 
@@ -520,6 +642,28 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for edit-during-load gate PNG captures.",
     )
+    parser.add_argument(
+        "--manifold-stress-gate",
+        action="store_true",
+        help=(
+            "Exercise many mixed edits, movement, transient probes, settled probes, "
+            "and reload persistence to catch open/nonmanifold terrain regressions."
+        ),
+    )
+    parser.add_argument(
+        "--manifold-stress-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --manifold-stress-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--manifold-stress-output-dir",
+        default=None,
+        help="Directory for manifold stress gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -598,6 +742,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_EDIT_DURING_LOAD_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.manifold_stress_gate:
+        manifold_stress_profiles = (
+            tuple(args.manifold_stress_profile)
+            if args.manifold_stress_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.manifold_stress_output_dir).resolve()
+            if args.manifold_stress_output_dir
+            else project / "build" / "captures" / "terrain_1_0_manifold_stress_gate"
+        )
+        captures = [
+            run_manifold_stress_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in manifold_stress_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_MANIFOLD_STRESS_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0

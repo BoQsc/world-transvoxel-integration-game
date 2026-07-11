@@ -323,12 +323,15 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_collision_deactivation_distance": runtime_collision_deactivation_distance,
 		"expected_resource_count": _expected_resource_count,
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
+		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
+		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
 		"collision_resources": int(metrics.get("collision_resources", 0)),
 		"queued_render": int(metrics.get("queued_render", 0)),
 		"queued_collision": int(metrics.get("queued_collision", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
+		"staged_render_resources": int(metrics.get("staged_render_resources", 0)),
 		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
 		"scheduler_meshing_records": int(metrics.get("scheduler_meshing_records", 0)),
 		"scheduler_ready_records": int(metrics.get("scheduler_ready_records", 0)),
@@ -365,6 +368,7 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"queued_collision": int(metrics.get("queued_collision", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
+		"staged_render_resources": int(metrics.get("staged_render_resources", 0)),
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
 		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
@@ -410,6 +414,8 @@ func _is_streaming_settled(
 	if int(summary.get("pending_chunk_retirements", 0)) != 0:
 		return false
 	if int(summary.get("render_fading_resources", 0)) != 0:
+		return false
+	if int(summary.get("staged_render_resources", 0)) != 0:
 		return false
 	if int(summary.get("render_resources", 0)) < render_count:
 		return false
