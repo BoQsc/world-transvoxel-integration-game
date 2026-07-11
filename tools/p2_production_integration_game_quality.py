@@ -33,6 +33,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_manifold_stress_gate",
     "edit_lod_movement_gate",
     "edit_tunnel_gate",
+    "edit_tunnel_crawl_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -222,6 +223,7 @@ def validate_visual_summary(
             "edit_during_load_oracle",
             "edit_manifold_stress_gate",
             "edit_tunnel_gate",
+            "edit_tunnel_crawl_gate",
         }
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
@@ -380,6 +382,36 @@ def run_tunnel_gate(
     return capture
 
 
+def run_tunnel_crawl_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture_stem = f"terrain_1_0_{profile}_edit_tunnel_crawl_gate"
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_tunnel_crawl_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=capture_stem,
+    )
+    validate_tunnel_crawl_summary(summary, profile)
+    step_captures = sorted(output_dir.glob(f"{capture_stem}_step_*.png"))
+    if len(step_captures) < 16:
+        raise RuntimeError(
+            f"tunnel crawl expected at least 16 step captures, got "
+            f"{len(step_captures)} in {output_dir}"
+        )
+    for step_capture in step_captures:
+        if step_capture.stat().st_size < 10_000:
+            raise RuntimeError(f"tunnel crawl step capture too small: {step_capture}")
+    return capture
+
+
 def validate_open_gap_digest(digest: dict[str, object], context: str) -> None:
     if digest.get("ok") is not True:
         raise RuntimeError(f"{context} probe failed: {digest!r}")
@@ -457,6 +489,62 @@ def validate_tunnel_summary(
         )
     print(
         "WT_TUNNEL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
+        % (
+            profile,
+            int(tunnel.get("operation_count", 0)),
+            len(probe_summaries),
+        )
+    )
+
+
+def validate_tunnel_crawl_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"tunnel crawl gate profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_tunnel_crawl_gate":
+        raise RuntimeError(f"tunnel crawl gate mode mismatch: {summary!r}")
+    tunnel = summary.get("tunnel")
+    if not isinstance(tunnel, dict):
+        raise RuntimeError(f"tunnel crawl gate summary missing: {summary!r}")
+    if tunnel.get("enabled") is not True or tunnel.get("ok") is not True:
+        raise RuntimeError(f"tunnel crawl gate failed: {tunnel!r}")
+    if tunnel.get("gate_mode") != "edit_tunnel_crawl_gate":
+        raise RuntimeError(f"tunnel crawl gate mode missing from tunnel summary: {tunnel!r}")
+    if int(tunnel.get("operation_count", 0)) < 96:
+        raise RuntimeError(f"tunnel crawl did not exercise enough edits: {tunnel!r}")
+    if int(tunnel.get("sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel crawl sampled no authoritative points: {tunnel!r}")
+    if int(tunnel.get("air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel crawl sampled no carved air: {tunnel!r}")
+    if int(tunnel.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel crawl density mismatch: {tunnel!r}")
+    if int(tunnel.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel crawl material mismatch: {tunnel!r}")
+    if float(tunnel.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"tunnel crawl density delta: {tunnel!r}")
+    probe_summaries = tunnel.get("probe_summaries")
+    if not isinstance(probe_summaries, list) or len(probe_summaries) < 16:
+        raise RuntimeError(f"tunnel crawl probe summaries missing: {tunnel!r}")
+    expected_labels = {
+        *(f"main_crawl_{index:02d}" for index in range(9)),
+        *(f"descending_crawl_{index:02d}" for index in range(7)),
+    }
+    labels: set[str] = set()
+    for probe in probe_summaries:
+        if not isinstance(probe, dict):
+            raise RuntimeError(f"tunnel crawl probe malformed: {probe!r}")
+        label = str(probe.get("label", ""))
+        labels.add(label)
+        validate_open_gap_digest(probe, f"tunnel crawl {label}")
+    if labels != expected_labels:
+        raise RuntimeError(
+            f"tunnel crawl labels expected {sorted(expected_labels)}, "
+            f"got {sorted(labels)}: {tunnel!r}"
+        )
+    print(
+        "WT_TUNNEL_CRAWL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
         % (
             profile,
             int(tunnel.get("operation_count", 0)),
@@ -791,6 +879,29 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for tunnel gate PNG captures.",
     )
+    parser.add_argument(
+        "--tunnel-crawl-gate",
+        action="store_true",
+        help=(
+            "Carve the tunnel/cavity, move the actual viewer through close centerline "
+            "crawl positions, save per-step screenshots, and verify each position has "
+            "no open, nonmanifold, or orientation-conflicted gaps."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-crawl-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --tunnel-crawl-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-crawl-output-dir",
+        default=None,
+        help="Directory for tunnel crawl gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -919,6 +1030,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.tunnel_crawl_gate:
+        tunnel_crawl_profiles = (
+            tuple(args.tunnel_crawl_profile)
+            if args.tunnel_crawl_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.tunnel_crawl_output_dir).resolve()
+            if args.tunnel_crawl_output_dir
+            else project / "build" / "captures" / "terrain_1_0_tunnel_crawl_gate"
+        )
+        captures = [
+            run_tunnel_crawl_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in tunnel_crawl_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_CRAWL_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0
