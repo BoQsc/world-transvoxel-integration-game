@@ -32,6 +32,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_during_load_oracle",
     "edit_manifold_stress_gate",
     "edit_lod_movement_gate",
+    "edit_tunnel_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -220,6 +221,7 @@ def validate_visual_summary(
         allow_safe_near_zero_slivers = mode in {
             "edit_during_load_oracle",
             "edit_manifold_stress_gate",
+            "edit_tunnel_gate",
         }
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
@@ -231,10 +233,10 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found open rendered edges: {watertightness!r}")
         if boundary_edges != chunk_face_boundary_edges:
             raise RuntimeError(f"watertightness probe found unexpected boundary edges: {watertightness!r}")
-        if int(watertightness.get("nonmanifold_interior_edges", 0)) != 0:
-            raise RuntimeError(f"watertightness probe found interior nonmanifold edges: {watertightness!r}")
-        if int(watertightness.get("nonmanifold_unknown_edges", 0)) != 0:
-            raise RuntimeError(f"watertightness probe found unknown nonmanifold edges: {watertightness!r}")
+        if int(watertightness.get("nonmanifold_edges", -1)) != 0:
+            raise RuntimeError(f"watertightness probe found nonmanifold edges: {watertightness!r}")
+        if int(watertightness.get("orientation_conflict_edges", -1)) != 0:
+            raise RuntimeError(f"watertightness probe found orientation conflicts: {watertightness!r}")
         if (
             int(watertightness.get("zero_area_interior_triangles", 0)) != 0
             and not allow_safe_near_zero_slivers
@@ -248,8 +250,6 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found unknown repeated-point triangles: {watertightness!r}")
         if int(watertightness.get("zero_edge_triangles", 0)) != 0:
             raise RuntimeError(f"watertightness probe found zero-edge triangles: {watertightness!r}")
-        if watertightness.get("winding_mixed") is True:
-            raise RuntimeError(f"watertightness probe found mixed winding: {watertightness!r}")
         if int(watertightness.get("triangles_in_region", 0)) <= 0:
             raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
 
@@ -360,6 +360,104 @@ def run_manifold_stress_gate(
     return capture
 
 
+def run_tunnel_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_tunnel_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=f"terrain_1_0_{profile}_edit_tunnel_gate",
+    )
+    validate_tunnel_summary(summary, profile)
+    return capture
+
+
+def validate_open_gap_digest(digest: dict[str, object], context: str) -> None:
+    if digest.get("ok") is not True:
+        raise RuntimeError(f"{context} probe failed: {digest!r}")
+    boundary_edges = int(digest.get("boundary_edges", -1))
+    chunk_face_boundary_edges = int(digest.get("chunk_face_boundary_edges", 0))
+    if int(digest.get("interior_boundary_edges", boundary_edges)) != 0:
+        raise RuntimeError(f"{context} interior open edge: {digest!r}")
+    if int(digest.get("unknown_boundary_edges", 0)) != 0:
+        raise RuntimeError(f"{context} unknown open edge: {digest!r}")
+    if boundary_edges != chunk_face_boundary_edges:
+        raise RuntimeError(f"{context} unexpected boundary edge: {digest!r}")
+    if int(digest.get("nonmanifold_edges", -1)) != 0:
+        raise RuntimeError(f"{context} nonmanifold edge: {digest!r}")
+    if int(digest.get("orientation_conflict_edges", -1)) != 0:
+        raise RuntimeError(f"{context} orientation conflict: {digest!r}")
+    if int(digest.get("zero_area_unknown_triangles", 0)) != 0:
+        raise RuntimeError(f"{context} unknown zero-area triangle: {digest!r}")
+    if int(digest.get("zero_edge_triangles", 0)) != 0:
+        raise RuntimeError(f"{context} zero-edge triangle: {digest!r}")
+    if int(digest.get("repeated_point_key_interior_triangles", 0)) != 0:
+        raise RuntimeError(f"{context} interior repeated-point triangle: {digest!r}")
+    if int(digest.get("repeated_point_key_unknown_triangles", 0)) != 0:
+        raise RuntimeError(f"{context} unknown repeated-point triangle: {digest!r}")
+    if int(digest.get("triangles_in_region", 0)) <= 0:
+        raise RuntimeError(f"{context} sampled no triangles: {digest!r}")
+
+
+def validate_tunnel_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"tunnel gate profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_tunnel_gate":
+        raise RuntimeError(f"tunnel gate mode mismatch: {summary!r}")
+    tunnel = summary.get("tunnel")
+    if not isinstance(tunnel, dict):
+        raise RuntimeError(f"tunnel gate summary missing: {summary!r}")
+    if tunnel.get("enabled") is not True or tunnel.get("ok") is not True:
+        raise RuntimeError(f"tunnel gate failed: {tunnel!r}")
+    if int(tunnel.get("operation_count", 0)) < 32:
+        raise RuntimeError(f"tunnel gate did not exercise enough edits: {tunnel!r}")
+    if int(tunnel.get("sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel gate sampled no authoritative points: {tunnel!r}")
+    if int(tunnel.get("air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel gate sampled no carved air: {tunnel!r}")
+    if int(tunnel.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel gate density mismatch: {tunnel!r}")
+    if int(tunnel.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel gate material mismatch: {tunnel!r}")
+    if float(tunnel.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"tunnel gate density delta: {tunnel!r}")
+    probe_summaries = tunnel.get("probe_summaries")
+    if not isinstance(probe_summaries, list) or len(probe_summaries) < 3:
+        raise RuntimeError(f"tunnel gate probe summaries missing: {tunnel!r}")
+    expected_labels = {"entry", "middle", "exit"}
+    labels: set[str] = set()
+    for probe in probe_summaries:
+        if not isinstance(probe, dict):
+            raise RuntimeError(f"tunnel gate probe malformed: {probe!r}")
+        label = str(probe.get("label", ""))
+        labels.add(label)
+        validate_open_gap_digest(probe, f"tunnel gate {label}")
+    if labels != expected_labels:
+        raise RuntimeError(
+            f"tunnel gate labels expected {sorted(expected_labels)}, "
+            f"got {sorted(labels)}: {tunnel!r}"
+        )
+    print(
+        "WT_TUNNEL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
+        % (
+            profile,
+            int(tunnel.get("operation_count", 0)),
+            len(probe_summaries),
+        )
+    )
+
+
 def validate_manifold_stress_summary(
     summary: dict[str, object],
     profile: str,
@@ -423,10 +521,10 @@ def validate_manifold_stress_summary(
             raise RuntimeError(f"manifold stress unknown open edge: {transition!r}")
         if boundary_edges != chunk_face_boundary_edges:
             raise RuntimeError(f"manifold stress unexpected boundary edge: {transition!r}")
-        if int(transition.get("nonmanifold_interior_edges", 0)) != 0:
-            raise RuntimeError(f"manifold stress interior nonmanifold edge: {transition!r}")
-        if int(transition.get("nonmanifold_unknown_edges", 0)) != 0:
-            raise RuntimeError(f"manifold stress unknown nonmanifold edge: {transition!r}")
+        if int(transition.get("nonmanifold_edges", -1)) != 0:
+            raise RuntimeError(f"manifold stress nonmanifold edge: {transition!r}")
+        if int(transition.get("orientation_conflict_edges", -1)) != 0:
+            raise RuntimeError(f"manifold stress orientation conflict: {transition!r}")
         if int(transition.get("zero_area_unknown_triangles", 0)) != 0:
             raise RuntimeError(f"manifold stress unknown zero-area triangles: {transition!r}")
         if int(transition.get("zero_edge_triangles", 0)) != 0:
@@ -520,10 +618,10 @@ def validate_lod_movement_summary(
             raise RuntimeError(f"LOD movement settled unknown boundary detected: {transition!r}")
         if settled_boundary_edges != settled_chunk_face_boundary_edges:
             raise RuntimeError(f"LOD movement settled unexpected boundary detected: {transition!r}")
-        if int(transition.get("settled_nonmanifold_interior_edges", 0)) != 0:
-            raise RuntimeError(f"LOD movement settled interior nonmanifold edges detected: {transition!r}")
-        if int(transition.get("settled_nonmanifold_unknown_edges", 0)) != 0:
-            raise RuntimeError(f"LOD movement settled unknown nonmanifold edges detected: {transition!r}")
+        if int(transition.get("settled_nonmanifold_edges", -1)) != 0:
+            raise RuntimeError(f"LOD movement settled nonmanifold edges detected: {transition!r}")
+        if int(transition.get("settled_orientation_conflict_edges", -1)) != 0:
+            raise RuntimeError(f"LOD movement settled orientation conflicts detected: {transition!r}")
         if int(transition.get("settled_zero_area_interior_triangles", 0)) != 0:
             raise RuntimeError(f"LOD movement settled interior zero-area triangles detected: {transition!r}")
         if int(transition.get("settled_zero_area_unknown_triangles", 0)) != 0:
@@ -664,6 +762,28 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for manifold stress gate PNG captures.",
     )
+    parser.add_argument(
+        "--tunnel-gate",
+        action="store_true",
+        help=(
+            "Carve a tunnel/cavity, inspect it from entry/middle/exit, and verify "
+            "that edited terrain has no open, nonmanifold, or orientation-conflicted gaps."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --tunnel-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-output-dir",
+        default=None,
+        help="Directory for tunnel gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -767,6 +887,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_MANIFOLD_STRESS_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.tunnel_gate:
+        tunnel_profiles = (
+            tuple(args.tunnel_profile)
+            if args.tunnel_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.tunnel_output_dir).resolve()
+            if args.tunnel_output_dir
+            else project / "build" / "captures" / "terrain_1_0_tunnel_gate"
+        )
+        captures = [
+            run_tunnel_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in tunnel_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0

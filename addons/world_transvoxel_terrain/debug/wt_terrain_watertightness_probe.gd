@@ -19,6 +19,8 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 	var lod0_edge_counts := {}
 	var edge_owners := {}
 	var lod0_edge_owners := {}
+	var edge_directions := {}
+	var lod0_edge_directions := {}
 	var stats := {
 		"enabled": true,
 		"mode": mode,
@@ -47,9 +49,20 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"normal_agreement_negative": 0,
 		"normal_agreement_near_zero": 0,
 	}
-	_collect_edges(backend, center, radius, edge_counts, lod0_edge_counts, edge_owners, lod0_edge_owners, stats)
-	var edge_summary := _summarize_edge_counts(edge_counts, edge_owners)
-	var lod0_edge_summary := _summarize_edge_counts(lod0_edge_counts, lod0_edge_owners)
+	_collect_edges(
+		backend,
+		center,
+		radius,
+		edge_counts,
+		lod0_edge_counts,
+		edge_owners,
+		lod0_edge_owners,
+		edge_directions,
+		lod0_edge_directions,
+		stats
+	)
+	var edge_summary := _summarize_edge_counts(edge_counts, edge_owners, edge_directions)
+	var lod0_edge_summary := _summarize_edge_counts(lod0_edge_counts, lod0_edge_owners, lod0_edge_directions)
 	for key in edge_summary.keys():
 		stats[key] = edge_summary[key]
 	for key in lod0_edge_summary.keys():
@@ -68,10 +81,10 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 	stats["winding_minority"] = winding_minority
 	stats["ok"] = int(stats.get("boundary_edges", 0)) == 0 and \
 		int(stats.get("nonmanifold_edges", 0)) == 0 and \
+		int(stats.get("orientation_conflict_edges", 0)) == 0 and \
 		unsafe_zero_area_triangles == 0 and \
 		unsafe_repeated_point_key_triangles == 0 and \
 		int(stats.get("zero_edge_triangles", 0)) == 0 and \
-		winding_minority == 0 and \
 		int(stats.get("triangles_in_region", 0)) > 0
 	return stats
 
@@ -84,13 +97,37 @@ static func _collect_edges(
 	lod0_edge_counts: Dictionary,
 	edge_owners: Dictionary,
 	lod0_edge_owners: Dictionary,
+	edge_directions: Dictionary,
+	lod0_edge_directions: Dictionary,
 	stats: Dictionary
 ) -> void:
 	if node is MeshInstance3D:
-		_accumulate_mesh(node as MeshInstance3D, center, radius, edge_counts, lod0_edge_counts, edge_owners, lod0_edge_owners, stats)
+		_accumulate_mesh(
+			node as MeshInstance3D,
+			center,
+			radius,
+			edge_counts,
+			lod0_edge_counts,
+			edge_owners,
+			lod0_edge_owners,
+			edge_directions,
+			lod0_edge_directions,
+			stats
+		)
 	for child in node.get_children():
 		if child is Node:
-			_collect_edges(child, center, radius, edge_counts, lod0_edge_counts, edge_owners, lod0_edge_owners, stats)
+			_collect_edges(
+				child,
+				center,
+				radius,
+				edge_counts,
+				lod0_edge_counts,
+				edge_owners,
+				lod0_edge_owners,
+				edge_directions,
+				lod0_edge_directions,
+				stats
+			)
 
 
 static func _accumulate_mesh(
@@ -101,6 +138,8 @@ static func _accumulate_mesh(
 	lod0_edge_counts: Dictionary,
 	edge_owners: Dictionary,
 	lod0_edge_owners: Dictionary,
+	edge_directions: Dictionary,
+	lod0_edge_directions: Dictionary,
 	stats: Dictionary
 ) -> void:
 	stats["mesh_instances"] = int(stats.get("mesh_instances", 0)) + 1
@@ -144,6 +183,8 @@ static func _accumulate_mesh(
 					lod0_edge_counts,
 					edge_owners,
 					lod0_edge_owners,
+					edge_directions,
+					lod0_edge_directions,
 					stats
 				)
 		else:
@@ -163,6 +204,8 @@ static func _accumulate_mesh(
 					lod0_edge_counts,
 					edge_owners,
 					lod0_edge_owners,
+					edge_directions,
+					lod0_edge_directions,
 					stats
 				)
 
@@ -182,6 +225,8 @@ static func _accumulate_triangle(
 	lod0_edge_counts: Dictionary,
 	edge_owners: Dictionary,
 	lod0_edge_owners: Dictionary,
+	edge_directions: Dictionary,
+	lod0_edge_directions: Dictionary,
 	stats: Dictionary
 ) -> void:
 	stats["triangles_examined"] = int(stats.get("triangles_examined", 0)) + 1
@@ -274,13 +319,13 @@ static func _accumulate_triangle(
 			stats["zero_area_examples"] = examples
 	else:
 		_accumulate_normal_agreement(transform, normals, index_a, index_b, index_c, cross, stats)
-	_accumulate_edge_if_inner(a, b, center, radius, edge_counts, edge_owners, owner)
-	_accumulate_edge_if_inner(b, c, center, radius, edge_counts, edge_owners, owner)
-	_accumulate_edge_if_inner(c, a, center, radius, edge_counts, edge_owners, owner)
+	_accumulate_edge_if_inner(a, b, center, radius, edge_counts, edge_owners, edge_directions, owner)
+	_accumulate_edge_if_inner(b, c, center, radius, edge_counts, edge_owners, edge_directions, owner)
+	_accumulate_edge_if_inner(c, a, center, radius, edge_counts, edge_owners, edge_directions, owner)
 	if lod == 0:
-		_accumulate_edge_if_inner(a, b, center, radius, lod0_edge_counts, lod0_edge_owners, owner)
-		_accumulate_edge_if_inner(b, c, center, radius, lod0_edge_counts, lod0_edge_owners, owner)
-		_accumulate_edge_if_inner(c, a, center, radius, lod0_edge_counts, lod0_edge_owners, owner)
+		_accumulate_edge_if_inner(a, b, center, radius, lod0_edge_counts, lod0_edge_owners, lod0_edge_directions, owner)
+		_accumulate_edge_if_inner(b, c, center, radius, lod0_edge_counts, lod0_edge_owners, lod0_edge_directions, owner)
+		_accumulate_edge_if_inner(c, a, center, radius, lod0_edge_counts, lod0_edge_owners, lod0_edge_directions, owner)
 
 
 static func _accumulate_normal_agreement(
@@ -313,20 +358,30 @@ static func _accumulate_edge_if_inner(
 	radius: float,
 	edge_counts: Dictionary,
 	edge_owners: Dictionary,
+	edge_directions: Dictionary,
 	owner: String
 ) -> void:
 	var midpoint := (a + b) * 0.5
 	if midpoint.distance_to(center) > radius:
 		return
 	var key := _edge_key(a, b)
+	var direction_key := _directed_edge_key(a, b)
 	edge_counts[key] = int(edge_counts.get(key, 0)) + 1
 	if not edge_owners.has(key):
 		edge_owners[key] = {}
 	var owners: Dictionary = edge_owners[key]
 	owners[owner] = int(owners.get(owner, 0)) + 1
+	if not edge_directions.has(key):
+		edge_directions[key] = {}
+	var directions: Dictionary = edge_directions[key]
+	directions[direction_key] = int(directions.get(direction_key, 0)) + 1
 
 
-static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Dictionary) -> Dictionary:
+static func _summarize_edge_counts(
+	edge_counts: Dictionary,
+	edge_owners: Dictionary,
+	edge_directions: Dictionary
+) -> Dictionary:
 	var boundary_edges := 0
 	var interior_boundary_edges := 0
 	var chunk_face_boundary_edges := 0
@@ -335,11 +390,16 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 	var nonmanifold_chunk_face_edges := 0
 	var nonmanifold_interior_edges := 0
 	var nonmanifold_unknown_edges := 0
+	var orientation_conflict_edges := 0
+	var orientation_conflict_chunk_face_edges := 0
+	var orientation_conflict_interior_edges := 0
+	var orientation_conflict_unknown_edges := 0
 	var matched_edges := 0
 	var maximum_edge_use := 0
 	var boundary_examples := []
 	var interior_boundary_examples := []
 	var nonmanifold_examples := []
+	var orientation_conflict_examples := []
 	for key in edge_counts.keys():
 		var count := int(edge_counts[key])
 		maximum_edge_use = maxi(maximum_edge_use, count)
@@ -359,6 +419,23 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 				boundary_examples.append("%s kind=%s owners=%s" % [str(key), boundary_kind, _owners_summary(owners)])
 		elif count == 2:
 			matched_edges += 1
+			var directions: Dictionary = edge_directions.get(key, {})
+			if directions.keys().size() != 2:
+				orientation_conflict_edges += 1
+				var orientation_kind := _nonmanifold_edge_kind(str(key), edge_owners.get(key, {}))
+				if orientation_kind == "chunk_face":
+					orientation_conflict_chunk_face_edges += 1
+				elif orientation_kind == "interior":
+					orientation_conflict_interior_edges += 1
+				else:
+					orientation_conflict_unknown_edges += 1
+				if orientation_conflict_examples.size() < 8:
+					orientation_conflict_examples.append("%s kind=%s directions=%s owners=%s" % [
+						str(key),
+						orientation_kind,
+						_owners_summary(directions),
+						_owners_summary(edge_owners.get(key, {})),
+					])
 		else:
 			nonmanifold_edges += 1
 			var nonmanifold_kind := _nonmanifold_edge_kind(str(key), edge_owners.get(key, {}))
@@ -386,10 +463,15 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 		"nonmanifold_chunk_face_edges": nonmanifold_chunk_face_edges,
 		"nonmanifold_interior_edges": nonmanifold_interior_edges,
 		"nonmanifold_unknown_edges": nonmanifold_unknown_edges,
+		"orientation_conflict_edges": orientation_conflict_edges,
+		"orientation_conflict_chunk_face_edges": orientation_conflict_chunk_face_edges,
+		"orientation_conflict_interior_edges": orientation_conflict_interior_edges,
+		"orientation_conflict_unknown_edges": orientation_conflict_unknown_edges,
 		"maximum_edge_use": maximum_edge_use,
 		"boundary_examples": boundary_examples,
 		"interior_boundary_examples": interior_boundary_examples,
 		"nonmanifold_examples": nonmanifold_examples,
+		"orientation_conflict_examples": orientation_conflict_examples,
 	}
 
 
@@ -399,6 +481,10 @@ static func _edge_key(a: Vector3, b: Vector3) -> String:
 	if key_a < key_b:
 		return key_a + "|" + key_b
 	return key_b + "|" + key_a
+
+
+static func _directed_edge_key(a: Vector3, b: Vector3) -> String:
+	return _point_key(a) + ">" + _point_key(b)
 
 
 static func _point_key(point: Vector3) -> String:

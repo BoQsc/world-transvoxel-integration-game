@@ -59,6 +59,7 @@ var last_edit_stability_summary := {}
 var last_lod_movement_summary := {}
 var last_edit_during_load_summary := {}
 var last_manifold_stress_summary := {}
+var last_tunnel_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -956,6 +957,7 @@ func _capture_human_visual() -> void:
 		"lod_movement": _lod_movement_summary(),
 		"edit_during_load": _edit_during_load_summary(),
 		"manifold_stress": _manifold_stress_summary(),
+		"tunnel": _tunnel_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
@@ -964,6 +966,8 @@ func _capture_human_visual() -> void:
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
+		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
+	if human_visual_capture_mode == "edit_tunnel_gate":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
@@ -979,6 +983,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
+		human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -990,7 +995,8 @@ func _capture_requires_watertightness_probe() -> bool:
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
 		human_visual_capture_mode == "edit_during_load_oracle" or \
-		human_visual_capture_mode == "edit_manifold_stress_gate"
+		human_visual_capture_mode == "edit_manifold_stress_gate" or \
+		human_visual_capture_mode == "edit_tunnel_gate"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -1006,6 +1012,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return await _run_edit_during_load_oracle(terrain_world)
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return await _run_manifold_stress_gate(terrain_world)
+	if human_visual_capture_mode == "edit_tunnel_gate":
+		return await _run_tunnel_gate(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
@@ -1585,6 +1593,15 @@ func _run_manifold_stress_gate(terrain_world: Node) -> bool:
 			return false
 		await get_tree().process_frame
 		if operation_index % 32 == 0 or operation_index >= operations.size():
+			var checkpoint_settle_notes := []
+			if not await _wait_for_manifold_stress_visual_ready(
+				backend,
+				"manifold stress after operation %d before movement" % operation_index,
+				checkpoint_settle_notes
+			):
+				last_manifold_stress_summary["error"] = "interim_pre_move_not_ready"
+				last_manifold_stress_summary["failed_operation"] = operation_index
+				return false
 			var before_move_snapshot := await _collect_edit_persistence_snapshot(
 				terrain_world,
 				"manifold stress after operation %d" % operation_index
@@ -1619,6 +1636,7 @@ func _run_manifold_stress_gate(terrain_world: Node) -> bool:
 			interim_summaries.append({
 				"operation_index": operation_index,
 				"path_label": str(step.get("label", "step")),
+				"pre_move_settle_notes": checkpoint_settle_notes,
 				"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
 				"air_sample_count": int(after_move_snapshot.get("air_sample_count", 0)),
 				"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
@@ -1707,6 +1725,229 @@ func _run_manifold_stress_gate(terrain_world: Node) -> bool:
 		material_applicator.call("apply_materials_now")
 	interaction_inspection_applied = true
 	return true
+
+
+func _run_tunnel_gate(terrain_world: Node) -> bool:
+	if player == null or game_world == null:
+		_fail("tunnel gate requires player and game world")
+		return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("tunnel gate backend unavailable")
+		return false
+	var operations := _tunnel_gate_operations()
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+	}
+	if operations.is_empty():
+		last_tunnel_summary["error"] = "no_operations"
+		_fail("tunnel gate produced no operations")
+		return false
+	if not await _set_tunnel_camera("entry"):
+		last_tunnel_summary["error"] = "initial_camera_failed"
+		return false
+	var initial_notes := []
+	if not await _wait_for_tunnel_visual_ready(backend, "before tunnel edits", initial_notes):
+		last_tunnel_summary["error"] = "initial_visual_not_ready"
+		return false
+
+	var operation_index := 0
+	var batch_size := 4
+	while operation_index < operations.size():
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		for _local_index in range(batch_size):
+			if operation_index >= operations.size():
+				break
+			if not batch.add_operation(operations[operation_index]):
+				last_tunnel_summary["error"] = "batch_add_failed"
+				last_tunnel_summary["failed_operation"] = operation_index
+				_fail("failed to add tunnel operation %d" % operation_index)
+				return false
+			operation_index += 1
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9619)):
+			last_tunnel_summary["error"] = "edit_batch_rejected"
+			last_tunnel_summary["failed_operation"] = operation_index
+			last_tunnel_summary["last_error"] = str(terrain_world.call("get_last_error"))
+			_fail("tunnel edit batch rejected: %s" % str(terrain_world.call("get_last_error")))
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			last_tunnel_summary["error"] = "revision_not_committed"
+			last_tunnel_summary["failed_operation"] = operation_index
+			_fail("tunnel edit batch did not commit")
+			return false
+		for _frame in range(2):
+			await get_tree().process_frame
+
+	var baseline_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "tunnel baseline")
+	if not bool(baseline_snapshot.get("ok", false)):
+		last_tunnel_summary["error"] = "baseline_snapshot_failed"
+		return false
+	if int(baseline_snapshot.get("air_sample_count", 0)) <= 0:
+		last_tunnel_summary["error"] = "no_carved_air_samples"
+		_fail("tunnel gate did not sample carved air")
+		return false
+
+	var probe_summaries := []
+	for step in _tunnel_gate_path():
+		var step_summary := await _exercise_tunnel_step(backend, step)
+		probe_summaries.append(step_summary)
+		if not bool(step_summary.get("ok", false)):
+			last_tunnel_summary["error"] = "tunnel_probe_failed"
+			last_tunnel_summary["failed_step"] = step_summary
+			_fail("tunnel gate probe failed: %s" % JSON.stringify(step_summary))
+			return false
+		var after_step_snapshot := await _collect_edit_persistence_snapshot(
+			terrain_world,
+			"tunnel after %s" % str(step.get("label", "step"))
+		)
+		if not bool(after_step_snapshot.get("ok", false)):
+			last_tunnel_summary["error"] = "after_step_snapshot_failed"
+			return false
+		if not _compare_edit_persistence_snapshots(baseline_snapshot, after_step_snapshot):
+			last_tunnel_summary["error"] = "persistence_changed"
+			last_tunnel_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
+			return false
+
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"batch_size": batch_size,
+		"probe_summaries": probe_summaries,
+		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+		"air_sample_count": int(baseline_snapshot.get("air_sample_count", 0)),
+		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"render_resources": int(runtime_summary.get("render_resources", 0)),
+		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
+		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
+	}
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _tunnel_gate_operations() -> Array:
+	var operations: Array = []
+	var center := _tunnel_gate_center()
+	var direction := _tunnel_gate_direction()
+	var radius := 4.2
+	var step_count := 42
+	var spacing := 1.45
+	var start := -float(step_count - 1) * spacing * 0.5
+	if selected_profile == FLAT_PROFILE:
+		radius = 3.4
+		spacing = 1.25
+		start = -float(step_count - 1) * spacing * 0.5
+	for index in range(step_count):
+		var distance := start + float(index) * spacing
+		var wobble := Vector3(0.0, sin(float(index) * 0.47) * 0.35, 0.0)
+		operations.append(_edit_operation(
+			&"carve",
+			center + direction * distance + wobble,
+			radius,
+			1,
+			1.0
+		))
+	return operations
+
+
+func _tunnel_gate_path() -> Array:
+	var center := _tunnel_gate_center()
+	var direction := _tunnel_gate_direction()
+	return [
+		{"label": "entry", "position": center - direction * 18.0, "target": center - direction * 8.0},
+		{"label": "middle", "position": center - direction * 2.0, "target": center + direction * 8.0},
+		{"label": "exit", "position": center + direction * 18.0, "target": center + direction * 28.0},
+	]
+
+
+func _set_tunnel_camera(label: String) -> bool:
+	for step in _tunnel_gate_path():
+		if str(step.get("label", "")) == label:
+			await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _tunnel_gate_center()))
+			return true
+	return false
+
+
+func _exercise_tunnel_step(backend: Node, step: Dictionary) -> Dictionary:
+	var label := str(step.get("label", "step"))
+	await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _tunnel_gate_center()))
+	var notes := []
+	if not await _wait_for_tunnel_visual_ready(backend, "tunnel %s" % label, notes):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		return {
+			"ok": false,
+			"label": label,
+			"error": "visual_not_ready",
+			"summary": summary,
+			"settle_notes": notes,
+		}
+	var probe := WatertightnessProbe.collect(
+		backend,
+		"edit_tunnel_gate_%s" % label,
+		_tunnel_gate_center(),
+		_tunnel_probe_radius()
+	)
+	var digest := _open_gap_probe_digest(probe)
+	digest["ok"] = _is_open_gap_free_probe(probe)
+	digest["label"] = label
+	digest["settle_notes"] = notes
+	if not bool(digest.get("ok", false)):
+		digest["error"] = "open_gap_or_orientation_conflict"
+	return digest
+
+
+func _wait_for_tunnel_visual_ready(
+	backend: Node,
+	context: String,
+	settle_notes: Array
+) -> bool:
+	var last_summary := {}
+	var last_probe := {}
+	var frame_limit := maxi(180, human_visual_capture_wait_frames)
+	for frame in range(frame_limit):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_lod_movement_visual_ready_summary(summary):
+			if frame % 15 != 0 and frame != frame_limit - 1:
+				await get_tree().process_frame
+				continue
+			var probe := WatertightnessProbe.collect(
+				backend,
+				"edit_tunnel_gate_visual_ready",
+				_tunnel_gate_center(),
+				_tunnel_probe_radius()
+			)
+			last_probe = _open_gap_probe_digest(probe)
+			if _is_open_gap_free_probe(probe):
+				if int(probe.get("zero_area_triangles", 0)) != 0:
+					settle_notes.append({
+						"context": context,
+						"safe_near_zero_area_triangles": int(probe.get("zero_area_triangles", 0)),
+						"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", 0)),
+						"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", 0)),
+						"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
+					})
+				return true
+		await get_tree().process_frame
+	_save_diagnostic_failure_capture(context)
+	_fail("tunnel visual-ready wait failed %s: summary=%s probe=%s" % [
+		context,
+		str(last_summary),
+		str(last_probe),
+	])
+	return false
 
 
 func _manifold_stress_operations() -> Array:
@@ -1923,6 +2164,10 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"nonmanifold_chunk_face_edges": int(probe.get("nonmanifold_chunk_face_edges", -1)),
 		"nonmanifold_interior_edges": int(probe.get("nonmanifold_interior_edges", -1)),
 		"nonmanifold_unknown_edges": int(probe.get("nonmanifold_unknown_edges", -1)),
+		"orientation_conflict_edges": int(probe.get("orientation_conflict_edges", -1)),
+		"orientation_conflict_chunk_face_edges": int(probe.get("orientation_conflict_chunk_face_edges", -1)),
+		"orientation_conflict_interior_edges": int(probe.get("orientation_conflict_interior_edges", -1)),
+		"orientation_conflict_unknown_edges": int(probe.get("orientation_conflict_unknown_edges", -1)),
 		"triangles_in_region": int(probe.get("triangles_in_region", -1)),
 		"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
 		"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", -1)),
@@ -1937,6 +2182,7 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"boundary_examples": probe.get("boundary_examples", []),
 		"interior_boundary_examples": probe.get("interior_boundary_examples", []),
 		"nonmanifold_examples": probe.get("nonmanifold_examples", []),
+		"orientation_conflict_examples": probe.get("orientation_conflict_examples", []),
 		"zero_area_examples": probe.get("zero_area_examples", []),
 		"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
 	}
@@ -2301,6 +2547,10 @@ func _wait_for_lod_movement_visual_ready(
 				"nonmanifold_chunk_face_edges": int(probe.get("nonmanifold_chunk_face_edges", -1)),
 				"nonmanifold_interior_edges": int(probe.get("nonmanifold_interior_edges", -1)),
 				"nonmanifold_unknown_edges": int(probe.get("nonmanifold_unknown_edges", -1)),
+				"orientation_conflict_edges": int(probe.get("orientation_conflict_edges", -1)),
+				"orientation_conflict_chunk_face_edges": int(probe.get("orientation_conflict_chunk_face_edges", -1)),
+				"orientation_conflict_interior_edges": int(probe.get("orientation_conflict_interior_edges", -1)),
+				"orientation_conflict_unknown_edges": int(probe.get("orientation_conflict_unknown_edges", -1)),
 				"triangles_in_region": int(probe.get("triangles_in_region", -1)),
 				"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
 				"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", -1)),
@@ -2316,6 +2566,7 @@ func _wait_for_lod_movement_visual_ready(
 				"boundary_examples": probe.get("boundary_examples", []),
 				"interior_boundary_examples": probe.get("interior_boundary_examples", []),
 				"nonmanifold_examples": probe.get("nonmanifold_examples", []),
+				"orientation_conflict_examples": probe.get("orientation_conflict_examples", []),
 				"zero_area_examples": probe.get("zero_area_examples", []),
 				"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
 			}
@@ -2547,6 +2798,10 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 		"settled_nonmanifold_chunk_face_edges": int(settled_probe.get("nonmanifold_chunk_face_edges", -1)),
 		"settled_nonmanifold_interior_edges": int(settled_probe.get("nonmanifold_interior_edges", -1)),
 		"settled_nonmanifold_unknown_edges": int(settled_probe.get("nonmanifold_unknown_edges", -1)),
+		"settled_orientation_conflict_edges": int(settled_probe.get("orientation_conflict_edges", -1)),
+		"settled_orientation_conflict_chunk_face_edges": int(settled_probe.get("orientation_conflict_chunk_face_edges", -1)),
+		"settled_orientation_conflict_interior_edges": int(settled_probe.get("orientation_conflict_interior_edges", -1)),
+		"settled_orientation_conflict_unknown_edges": int(settled_probe.get("orientation_conflict_unknown_edges", -1)),
 		"settled_zero_area_triangles": int(settled_probe.get("zero_area_triangles", -1)),
 		"settled_zero_area_chunk_face_triangles": int(settled_probe.get("zero_area_chunk_face_triangles", -1)),
 		"settled_zero_area_interior_triangles": int(settled_probe.get("zero_area_interior_triangles", -1)),
@@ -2567,8 +2822,8 @@ func _is_lod_movement_probe_ready(probe: Dictionary) -> bool:
 		return false
 	return int(probe.get("interior_boundary_edges", -1)) == 0 and \
 		int(probe.get("unknown_boundary_edges", -1)) == 0 and \
-		int(probe.get("nonmanifold_interior_edges", 0)) == 0 and \
-		int(probe.get("nonmanifold_unknown_edges", 0)) == 0 and \
+		int(probe.get("nonmanifold_edges", -1)) == 0 and \
+		int(probe.get("orientation_conflict_edges", -1)) == 0 and \
 		int(probe.get("zero_area_interior_triangles", 0)) == 0 and \
 		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
@@ -2585,8 +2840,8 @@ func _is_open_gap_free_probe(probe: Dictionary) -> bool:
 	return int(probe.get("interior_boundary_edges", boundary_edges)) == 0 and \
 		int(probe.get("unknown_boundary_edges", 0)) == 0 and \
 		boundary_edges == chunk_face_boundary_edges and \
-		int(probe.get("nonmanifold_interior_edges", 0)) == 0 and \
-		int(probe.get("nonmanifold_unknown_edges", 0)) == 0 and \
+		int(probe.get("nonmanifold_edges", -1)) == 0 and \
+		int(probe.get("orientation_conflict_edges", -1)) == 0 and \
 		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_unknown_triangles", 0)) == 0 and \
@@ -2871,6 +3126,15 @@ func _manifold_stress_summary() -> Dictionary:
 	return last_manifold_stress_summary
 
 
+func _tunnel_summary() -> Dictionary:
+	if last_tunnel_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_tunnel_summary
+
+
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
 	var ready_callable := Callable(self, "_on_authoritative_samples_ready")
 	if not terrain_world.is_connected("authoritative_samples_ready", ready_callable):
@@ -3024,12 +3288,29 @@ func _manifold_stress_center() -> Vector3:
 	return _watertightness_edit_center()
 
 
+func _tunnel_gate_center() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1040.0, 12.0, 1040.0)
+	return _watertightness_edit_center()
+
+
+func _tunnel_gate_direction() -> Vector3:
+	var direction := Vector3(1.0, -0.08, 0.35)
+	if selected_profile == FLAT_PROFILE:
+		direction = Vector3(1.0, 0.0, 0.28)
+	return direction.normalized()
+
+
 func _edit_lod_movement_probe_radius() -> float:
 	return 14.0 if selected_profile == FLAT_PROFILE else 56.0
 
 
 func _manifold_stress_probe_radius() -> float:
 	return 18.0 if selected_profile == FLAT_PROFILE else 68.0
+
+
+func _tunnel_probe_radius() -> float:
+	return 24.0 if selected_profile == FLAT_PROFILE else 72.0
 
 
 func _edit_reload_test_center() -> Vector3:
@@ -3039,6 +3320,8 @@ func _edit_reload_test_center() -> Vector3:
 		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_center()
+	if human_visual_capture_mode == "edit_tunnel_gate":
+		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	return _watertightness_edit_center()
@@ -3051,6 +3334,8 @@ func _watertightness_probe_center() -> Vector3:
 		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_center()
+	if human_visual_capture_mode == "edit_tunnel_gate":
+		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
 	if human_visual_capture_mode.begins_with("watertight_"):
@@ -3071,6 +3356,8 @@ func _watertightness_probe_radius() -> float:
 		return 14.0 if selected_profile == FLAT_PROFILE else 56.0
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_probe_radius()
+	if human_visual_capture_mode == "edit_tunnel_gate":
+		return _tunnel_probe_radius()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
 	if human_visual_capture_mode == "watertight_many_small_near" or \
@@ -3148,7 +3435,7 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle", "edit_manifold_stress_gate":
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle", "edit_manifold_stress_gate", "edit_tunnel_gate":
 			var target_center := _watertightness_edit_center()
 			if human_visual_capture_mode == "edit_stability_gate":
 				target_center = _edit_stability_gate_center()
@@ -3158,8 +3445,16 @@ func _apply_capture_camera_mode() -> void:
 				target_center = _edit_during_load_oracle_center()
 			elif human_visual_capture_mode == "edit_manifold_stress_gate":
 				target_center = _manifold_stress_center()
-			capture_target = target_center + Vector3(0.0, -4.0, 0.0)
-			capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
+			elif human_visual_capture_mode == "edit_tunnel_gate":
+				target_center = _tunnel_gate_center()
+			if human_visual_capture_mode == "edit_tunnel_gate":
+				var tunnel_path := _tunnel_gate_path()
+				var tunnel_step: Dictionary = tunnel_path[1] if tunnel_path.size() > 1 else {}
+				capture_position = tunnel_step.get("position", target_center + Vector3(-10.0, 14.0, -34.0))
+				capture_target = tunnel_step.get("target", target_center)
+			else:
+				capture_target = target_center + Vector3(0.0, -4.0, 0.0)
+				capture_position = capture_target + Vector3(-10.0, 14.0, -34.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"small_edit_near":
