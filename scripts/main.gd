@@ -31,6 +31,7 @@ var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
+var human_playtest_preset := ""
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -71,6 +72,7 @@ func _ready() -> void:
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
+	human_playtest_preset = _arg_value(args, "--human-playtest-preset", "")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -156,6 +158,9 @@ func _start_profile() -> void:
 		material_applicator.call("apply_materials_now")
 	_update_telemetry()
 	if not autonomous:
+		if not human_playtest_preset.is_empty():
+			if not await _apply_human_playtest_preset():
+				return
 		game_world.human_input_enabled = true
 		player.call("set_human_input_enabled", true)
 		if not human_visual_capture_path.is_empty():
@@ -900,6 +905,133 @@ func _arg_value(args: Array, key: String, default_value: String) -> String:
 	if index >= 0 and index + 1 < args.size():
 		return str(args[index + 1])
 	return default_value
+
+
+func _apply_human_playtest_preset() -> bool:
+	match human_playtest_preset:
+		"edit_tunnel_gate", "tunnel_gate", "descending_tunnel":
+			return await _apply_human_tunnel_playtest()
+		_:
+			_fail("unknown human playtest preset: %s" % human_playtest_preset)
+			return false
+
+
+func _apply_human_tunnel_playtest() -> bool:
+	if player == null or game_world == null:
+		_fail("human tunnel playtest requires player and game world")
+		return false
+	var terrain_world: Node = game_world.get_terrain_world()
+	if terrain_world == null:
+		_fail("human tunnel playtest terrain world unavailable")
+		return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("human tunnel playtest backend unavailable")
+		return false
+	var operations := _tunnel_gate_operations()
+	if operations.is_empty():
+		_fail("human tunnel playtest produced no operations")
+		return false
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"human_playtest_preset": true,
+	}
+	if not await _submit_tunnel_operations_for_playtest(terrain_world, operations):
+		return false
+	var preload_summaries := []
+	for step in _tunnel_gate_path():
+		var preload_label := str(step.get("label", "step"))
+		await _set_capture_camera_pose(step.get("position", player.global_position), step.get("target", _tunnel_gate_center()))
+		var preload_notes := []
+		var preload_center: Vector3 = step.get("probe_center", _tunnel_gate_center())
+		var preload_radius := float(step.get("probe_radius", _tunnel_probe_radius()))
+		if not await _wait_for_tunnel_visual_ready(
+			backend,
+			"human tunnel preload %s" % preload_label,
+			preload_notes,
+			preload_center,
+			preload_radius
+		):
+			last_tunnel_summary["error"] = "preload_visual_not_ready"
+			last_tunnel_summary["failed_preload"] = preload_label
+			return false
+		preload_summaries.append({
+			"label": preload_label,
+			"settle_notes": preload_notes,
+		})
+	if not await _place_player_at_tunnel_playtest_start():
+		last_tunnel_summary["error"] = "player_start_failed"
+		return false
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"human_playtest_preset": true,
+		"preload_summaries": preload_summaries,
+	}
+	interaction_inspection_applied = true
+	return true
+
+
+func _submit_tunnel_operations_for_playtest(terrain_world: Node, operations: Array) -> bool:
+	var operation_index := 0
+	var batch_size := 4
+	while operation_index < operations.size():
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		for _local_index in range(batch_size):
+			if operation_index >= operations.size():
+				break
+			if not batch.add_operation(operations[operation_index]):
+				_fail("failed to add human tunnel operation %d" % operation_index)
+				last_tunnel_summary["error"] = "batch_add_failed"
+				last_tunnel_summary["failed_operation"] = operation_index
+				return false
+			operation_index += 1
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9721)):
+			last_tunnel_summary["error"] = "edit_batch_rejected"
+			last_tunnel_summary["failed_operation"] = operation_index
+			last_tunnel_summary["last_error"] = str(terrain_world.call("get_last_error"))
+			_fail("human tunnel edit batch rejected: %s" % str(terrain_world.call("get_last_error")))
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			last_tunnel_summary["error"] = "revision_not_committed"
+			last_tunnel_summary["failed_operation"] = operation_index
+			_fail("human tunnel edit batch did not commit")
+			return false
+		for _frame in range(2):
+			await get_tree().process_frame
+	return true
+
+
+func _place_player_at_tunnel_playtest_start() -> bool:
+	var path := _tunnel_gate_path()
+	if path.is_empty():
+		return false
+	var step: Dictionary = path[3] if path.size() > 3 else path[0]
+	var position: Vector3 = step.get("position", _tunnel_gate_center() + Vector3(-8.0, 5.0, -8.0))
+	var target: Vector3 = step.get("target", _tunnel_gate_center())
+	player.global_position = position
+	player.velocity = Vector3.ZERO
+	if player.has_method("set_fly_mode_enabled"):
+		player.call("set_fly_mode_enabled", false)
+	if player.has_method("set_view_target"):
+		player.call("set_view_target", target)
+	elif player.has_method("autonomous_look_at"):
+		player.call("autonomous_look_at", target)
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", true)
+	for _frame in range(30):
+		await get_tree().process_frame
+	return true
 
 
 func _capture_human_visual() -> void:

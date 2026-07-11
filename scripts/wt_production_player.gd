@@ -60,6 +60,20 @@ func autonomous_look_at(target: Vector3) -> bool:
 	return true
 
 
+func set_view_target(target: Vector3) -> bool:
+	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return false
+	var direction := target - camera.global_position
+	if direction.length_squared() <= 0.000001:
+		return false
+	direction = direction.normalized()
+	rotation.y = atan2(-direction.x, -direction.z)
+	pitch = clamp(asin(direction.y), -1.45, 1.45)
+	camera.rotation = Vector3(pitch, 0.0, 0.0)
+	return true
+
+
 func autonomous_submit_interaction(mode_name: StringName) -> bool:
 	return _submit_interaction(mode_name)
 
