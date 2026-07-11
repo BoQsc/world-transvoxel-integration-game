@@ -3,6 +3,11 @@ extends RefCounted
 class_name WtTerrainWatertightnessProbe
 
 
+const CHUNK_CELLS_PER_AXIS := 16
+const POINT_KEY_SCALE := 1024
+const CHUNK_FACE_TOLERANCE_KEYS := 2
+
+
 static func collect(backend: Node, mode: String, center: Vector3, radius: float) -> Dictionary:
 	if backend == null:
 		return {
@@ -26,6 +31,11 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"triangles_in_region": 0,
 		"lod0_triangles_in_region": 0,
 		"zero_area_triangles": 0,
+		"zero_edge_triangles": 0,
+		"repeated_point_key_triangles": 0,
+		"minimum_area_squared": INF,
+		"minimum_edge_length_squared": INF,
+		"zero_area_examples": [],
 		"normal_agreement_positive": 0,
 		"normal_agreement_negative": 0,
 		"normal_agreement_near_zero": 0,
@@ -43,6 +53,8 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 	stats["winding_mixed"] = positive > 0 and negative > 0
 	stats["winding_minority"] = winding_minority
 	stats["ok"] = int(stats.get("boundary_edges", 0)) == 0 and \
+		int(stats.get("nonmanifold_edges", 0)) == 0 and \
+		int(stats.get("zero_area_triangles", 0)) == 0 and \
 		winding_minority == 0 and \
 		int(stats.get("triangles_in_region", 0)) > 0
 	return stats
@@ -169,8 +181,38 @@ static func _accumulate_triangle(
 	if lod == 0:
 		stats["lod0_triangles_in_region"] = int(stats.get("lod0_triangles_in_region", 0)) + 1
 	var cross := (b - a).cross(c - a)
-	if cross.length_squared() <= 0.00000001:
+	var area_squared := cross.length_squared()
+	var ab_squared := a.distance_squared_to(b)
+	var bc_squared := b.distance_squared_to(c)
+	var ca_squared := c.distance_squared_to(a)
+	var min_edge_squared := minf(ab_squared, minf(bc_squared, ca_squared))
+	stats["minimum_area_squared"] = minf(float(stats.get("minimum_area_squared", INF)), area_squared)
+	stats["minimum_edge_length_squared"] = minf(
+		float(stats.get("minimum_edge_length_squared", INF)),
+		min_edge_squared
+	)
+	var repeated_key := _point_key(a) == _point_key(b) or _point_key(b) == _point_key(c) or _point_key(c) == _point_key(a)
+	if repeated_key:
+		stats["repeated_point_key_triangles"] = int(stats.get("repeated_point_key_triangles", 0)) + 1
+	if min_edge_squared <= 0.000000000001:
+		stats["zero_edge_triangles"] = int(stats.get("zero_edge_triangles", 0)) + 1
+	if area_squared <= 0.00000001:
 		stats["zero_area_triangles"] = int(stats.get("zero_area_triangles", 0)) + 1
+		var examples: Array = stats.get("zero_area_examples", [])
+		if examples.size() < 8:
+			examples.append({
+				"owner": owner,
+				"lod": lod,
+				"area_squared": area_squared,
+				"minimum_edge_length_squared": min_edge_squared,
+				"a": _vector_summary(a),
+				"b": _vector_summary(b),
+				"c": _vector_summary(c),
+				"a_key": _point_key(a),
+				"b_key": _point_key(b),
+				"c_key": _point_key(c),
+			})
+			stats["zero_area_examples"] = examples
 	else:
 		_accumulate_normal_agreement(transform, normals, index_a, index_b, index_c, cross, stats)
 	_accumulate_edge_if_inner(a, b, center, radius, edge_counts, edge_owners, owner)
@@ -227,18 +269,32 @@ static func _accumulate_edge_if_inner(
 
 static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Dictionary) -> Dictionary:
 	var boundary_edges := 0
+	var interior_boundary_edges := 0
+	var chunk_face_boundary_edges := 0
+	var unknown_boundary_edges := 0
 	var nonmanifold_edges := 0
 	var matched_edges := 0
 	var maximum_edge_use := 0
 	var boundary_examples := []
+	var interior_boundary_examples := []
 	var nonmanifold_examples := []
 	for key in edge_counts.keys():
 		var count := int(edge_counts[key])
 		maximum_edge_use = maxi(maximum_edge_use, count)
 		if count == 1:
 			boundary_edges += 1
+			var owners: Dictionary = edge_owners.get(key, {})
+			var boundary_kind := _boundary_edge_kind(str(key), owners)
+			if boundary_kind == "interior":
+				interior_boundary_edges += 1
+				if interior_boundary_examples.size() < 8:
+					interior_boundary_examples.append("%s owners=%s" % [str(key), _owners_summary(owners)])
+			elif boundary_kind == "chunk_face":
+				chunk_face_boundary_edges += 1
+			else:
+				unknown_boundary_edges += 1
 			if boundary_examples.size() < 8:
-				boundary_examples.append("%s owners=%s" % [str(key), _owners_summary(edge_owners.get(key, {}))])
+				boundary_examples.append("%s kind=%s owners=%s" % [str(key), boundary_kind, _owners_summary(owners)])
 		elif count == 2:
 			matched_edges += 1
 		else:
@@ -253,9 +309,13 @@ static func _summarize_edge_counts(edge_counts: Dictionary, edge_owners: Diction
 		"edges": edge_counts.size(),
 		"matched_edges": matched_edges,
 		"boundary_edges": boundary_edges,
+		"interior_boundary_edges": interior_boundary_edges,
+		"chunk_face_boundary_edges": chunk_face_boundary_edges,
+		"unknown_boundary_edges": unknown_boundary_edges,
 		"nonmanifold_edges": nonmanifold_edges,
 		"maximum_edge_use": maximum_edge_use,
 		"boundary_examples": boundary_examples,
+		"interior_boundary_examples": interior_boundary_examples,
 		"nonmanifold_examples": nonmanifold_examples,
 	}
 
@@ -269,7 +329,7 @@ static func _edge_key(a: Vector3, b: Vector3) -> String:
 
 
 static func _point_key(point: Vector3) -> String:
-	var scale := 1024.0
+	var scale := float(POINT_KEY_SCALE)
 	return "%d,%d,%d" % [
 		roundi(point.x * scale),
 		roundi(point.y * scale),
@@ -287,6 +347,90 @@ static func _owners_summary(owners: Dictionary) -> String:
 	if keys.size() > parts.size():
 		parts.append("+%d more" % (keys.size() - parts.size()))
 	return "[" + ", ".join(parts) + "]"
+
+
+static func _boundary_edge_kind(edge_key: String, owners: Dictionary) -> String:
+	if owners.size() != 1:
+		return "unknown"
+	var owner_keys := owners.keys()
+	var owner := str(owner_keys[0])
+	var chunk := _parse_owner_chunk_key(owner)
+	if chunk.is_empty():
+		return "unknown"
+	var points := _parse_edge_points(edge_key)
+	if points.size() != 2:
+		return "unknown"
+	if _edge_on_chunk_face(points[0], points[1], chunk):
+		return "chunk_face"
+	return "interior"
+
+
+static func _parse_edge_points(edge_key: String) -> Array:
+	var parts := edge_key.split("|", false)
+	if parts.size() != 2:
+		return []
+	var first := _parse_point_key(str(parts[0]))
+	var second := _parse_point_key(str(parts[1]))
+	if first.size() != 3 or second.size() != 3:
+		return []
+	return [first, second]
+
+
+static func _parse_point_key(point_key: String) -> Array:
+	var parts := point_key.split(",", false)
+	if parts.size() != 3:
+		return []
+	return [int(parts[0]), int(parts[1]), int(parts[2])]
+
+
+static func _parse_owner_chunk_key(owner: String) -> Dictionary:
+	var name_text := owner
+	var space := name_text.find(" ")
+	if space >= 0:
+		name_text = name_text.substr(0, space)
+	var retiring := name_text.find("_retiring_")
+	if retiring >= 0:
+		name_text = name_text.substr(0, retiring)
+	var prefix := "WT_Render_"
+	if not name_text.begins_with(prefix):
+		return {}
+	var parts := name_text.substr(prefix.length()).split("_", false)
+	if parts.size() != 4:
+		return {}
+	var lod_text := str(parts[3])
+	if not lod_text.begins_with("L"):
+		return {}
+	return {
+		"x": int(parts[0]),
+		"y": int(parts[1]),
+		"z": int(parts[2]),
+		"lod": int(lod_text.substr(1)),
+	}
+
+
+static func _edge_on_chunk_face(first: Array, second: Array, chunk: Dictionary) -> bool:
+	var lod := int(chunk.get("lod", -1))
+	if lod < 0:
+		return false
+	var extent := CHUNK_CELLS_PER_AXIS * int(1 << lod)
+	var minimum := [
+		int(chunk.get("x", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("y", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("z", 0)) * extent * POINT_KEY_SCALE,
+	]
+	var maximum := [
+		(int(chunk.get("x", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("y", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("z", 0)) * extent + extent) * POINT_KEY_SCALE,
+	]
+	for axis in range(3):
+		if abs(int(first[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(second[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+			return true
+		if abs(int(first[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
+				abs(int(second[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+			return true
+	return false
 
 
 static func _mesh_owner(instance: MeshInstance3D, lod: int) -> String:

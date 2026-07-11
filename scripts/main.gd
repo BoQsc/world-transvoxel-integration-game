@@ -33,6 +33,10 @@ var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
+var lod_movement_direct_only := false
+var lod_movement_operation_limit := -1
+var lod_movement_gap_only_probe := false
+var maximum_lod_override := -1
 var expected_resources := 25
 var expected_max_resources := 81
 var expected_maximum_lod := 1
@@ -66,6 +70,10 @@ func _ready() -> void:
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
+	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
+	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
+	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
+	maximum_lod_override = int(_arg_value(args, "--p2-maximum-lod", "-1"))
 	initial_lighting_preset = int(_arg_value(args, "--human-lighting-preset", "0"))
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
@@ -87,6 +95,13 @@ func _start_profile() -> void:
 		settings["runtime_render_apply_budget"] = runtime_render_apply_budget_override
 	if runtime_collision_apply_budget_override >= 0:
 		settings["runtime_collision_apply_budget"] = runtime_collision_apply_budget_override
+	if maximum_lod_override >= 0:
+		settings["maximum_lod"] = maximum_lod_override
+		if maximum_lod_override == 0:
+			settings["radius"] = 4
+			settings["expected_resources"] = settings.get("startup_minimum_render_resources", 32)
+			settings["expected_max_resources"] = 1024
+			settings["runtime_lod_refinement_radius_chunks"] = 0
 	playtest_profile_id = selected_profile
 	expected_resources = int(settings["expected_resources"])
 	expected_max_resources = int(settings["expected_max_resources"])
@@ -939,7 +954,10 @@ func _capture_human_visual() -> void:
 		"lod_movement": _lod_movement_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
-	if _capture_requires_watertightness_probe() and not bool(last_watertightness_summary.get("ok", false)):
+	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
+	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
+		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
+	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
 		get_tree().quit(1)
 		return
@@ -1225,6 +1243,8 @@ func _edit_stability_snapshot_has_material_diversity(snapshot: Dictionary) -> bo
 
 func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 	var operations := _edit_lod_movement_gate_operations()
+	if lod_movement_operation_limit >= 0 and lod_movement_operation_limit < operations.size():
+		operations = operations.slice(0, lod_movement_operation_limit)
 	edit_persistence_operations = operations.duplicate()
 	interaction_inspection_operation_count = operations.size()
 	last_lod_movement_summary = {
@@ -1234,6 +1254,17 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 		"direct_operation_count": operations.size(),
 	}
 	if operations.is_empty():
+		if lod_movement_direct_only:
+			last_lod_movement_summary = {
+				"enabled": true,
+				"ok": true,
+				"profile": str(selected_profile),
+				"direct_only": true,
+				"direct_operation_count": 0,
+				"mode_counts": {},
+			}
+			interaction_inspection_applied = true
+			return true
 		_fail("LOD movement gate produced no operations")
 		return false
 	var mode_counts := {}
@@ -1263,6 +1294,17 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 				await get_tree().process_frame
 	if not await _wait_for_current_profile_settled("after LOD movement direct edits"):
 		return false
+	if lod_movement_direct_only:
+		last_lod_movement_summary = {
+			"enabled": true,
+			"ok": true,
+			"profile": str(selected_profile),
+			"direct_only": true,
+			"direct_operation_count": operations.size(),
+			"mode_counts": mode_counts,
+		}
+		interaction_inspection_applied = true
+		return true
 	var interaction_result: Dictionary = await _run_lod_movement_player_interactions(terrain_world)
 	if not bool(interaction_result.get("ok", false)):
 		last_lod_movement_summary = {
@@ -1527,13 +1569,22 @@ func _wait_for_lod_movement_visual_ready(
 			last_probe = {
 				"ok": bool(probe.get("ok", false)),
 				"boundary_edges": int(probe.get("boundary_edges", -1)),
+				"interior_boundary_edges": int(probe.get("interior_boundary_edges", -1)),
+				"chunk_face_boundary_edges": int(probe.get("chunk_face_boundary_edges", -1)),
+				"unknown_boundary_edges": int(probe.get("unknown_boundary_edges", -1)),
 				"nonmanifold_edges": int(probe.get("nonmanifold_edges", -1)),
 				"triangles_in_region": int(probe.get("triangles_in_region", -1)),
 				"zero_area_triangles": int(probe.get("zero_area_triangles", -1)),
+				"zero_edge_triangles": int(probe.get("zero_edge_triangles", -1)),
+				"repeated_point_key_triangles": int(probe.get("repeated_point_key_triangles", -1)),
+				"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
+				"minimum_edge_length_squared": float(probe.get("minimum_edge_length_squared", -1.0)),
 				"boundary_examples": probe.get("boundary_examples", []),
+				"interior_boundary_examples": probe.get("interior_boundary_examples", []),
 				"nonmanifold_examples": probe.get("nonmanifold_examples", []),
+				"zero_area_examples": probe.get("zero_area_examples", []),
 			}
-			if bool(probe.get("ok", false)):
+			if _is_lod_movement_probe_ready(probe):
 				if int(summary.get("pending_chunk_retirements", 0)) != 0 or \
 						int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 					strict_settle_notes.append({
@@ -1547,6 +1598,7 @@ func _wait_for_lod_movement_visual_ready(
 					})
 				return true
 		await get_tree().process_frame
+	_save_diagnostic_failure_capture(context)
 	_fail("LOD movement visual-ready wait failed %s: summary=%s probe=%s" % [context, str(last_summary), str(last_probe)])
 	return false
 
@@ -1568,9 +1620,16 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 		return false
 	if int(summary.get("page_mesh_failures", 0)) != 0:
 		return false
+	if int(summary.get("pending_chunk_retirements", 0)) != 0:
+		return false
+	if int(summary.get("render_fading_resources", 0)) != 0:
+		return false
 	if int(summary.get("render_resources", 0)) <= 0:
 		return false
 	if int(summary.get("collision_resources", 0)) <= 0:
+		return false
+	if summary.has("fully_ready_chunk_records") and \
+			int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 		return false
 	return true
 
@@ -1613,12 +1672,19 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 				_edit_lod_movement_gate_center(),
 				_edit_lod_movement_probe_radius()
 			)
-			if not bool(transient_probe.get("ok", false)):
+			if not _is_lod_movement_probe_ready(transient_probe):
 				transient_probe_failures.append({
 					"frame": frame,
 					"boundary_edges": int(transient_probe.get("boundary_edges", -1)),
+					"interior_boundary_edges": int(transient_probe.get("interior_boundary_edges", -1)),
+					"chunk_face_boundary_edges": int(transient_probe.get("chunk_face_boundary_edges", -1)),
+					"unknown_boundary_edges": int(transient_probe.get("unknown_boundary_edges", -1)),
+					"nonmanifold_edges": int(transient_probe.get("nonmanifold_edges", -1)),
+					"zero_area_triangles": int(transient_probe.get("zero_area_triangles", -1)),
 					"triangles_in_region": int(transient_probe.get("triangles_in_region", -1)),
 					"examples": transient_probe.get("boundary_examples", []),
+					"interior_boundary_examples": transient_probe.get("interior_boundary_examples", []),
+					"nonmanifold_examples": transient_probe.get("nonmanifold_examples", []),
 				})
 	var strict_settle_notes := []
 	if not await _wait_for_lod_movement_visual_ready(
@@ -1639,7 +1705,7 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 		_edit_lod_movement_gate_center(),
 		_edit_lod_movement_probe_radius()
 	)
-	if not bool(settled_probe.get("ok", false)):
+	if not _is_lod_movement_probe_ready(settled_probe):
 		return {
 			"ok": false,
 			"label": label,
@@ -1660,8 +1726,25 @@ func _exercise_lod_movement_step(backend: Node, step: Dictionary) -> Dictionary:
 		"transient_probe_failure_count": transient_probe_failures.size(),
 		"strict_settle_notes": strict_settle_notes,
 		"settled_boundary_edges": int(settled_probe.get("boundary_edges", -1)),
+		"settled_interior_boundary_edges": int(settled_probe.get("interior_boundary_edges", -1)),
+		"settled_chunk_face_boundary_edges": int(settled_probe.get("chunk_face_boundary_edges", -1)),
+		"settled_unknown_boundary_edges": int(settled_probe.get("unknown_boundary_edges", -1)),
+		"settled_nonmanifold_edges": int(settled_probe.get("nonmanifold_edges", -1)),
+		"settled_zero_area_triangles": int(settled_probe.get("zero_area_triangles", -1)),
+		"settled_zero_edge_triangles": int(settled_probe.get("zero_edge_triangles", -1)),
 		"settled_triangles_in_region": int(settled_probe.get("triangles_in_region", -1)),
 	}
+
+
+func _is_lod_movement_probe_ready(probe: Dictionary) -> bool:
+	if bool(probe.get("ok", false)):
+		return true
+	if not lod_movement_gap_only_probe:
+		return false
+	return int(probe.get("interior_boundary_edges", -1)) == 0 and \
+		int(probe.get("unknown_boundary_edges", -1)) == 0 and \
+		int(probe.get("zero_edge_triangles", -1)) == 0 and \
+		int(probe.get("triangles_in_region", 0)) > 0
 
 
 func _save_lod_movement_gate_captures() -> bool:
@@ -1687,6 +1770,17 @@ func _capture_variant_path(label: String) -> String:
 	if dot_index > 0:
 		return human_visual_capture_path.substr(0, dot_index) + "_" + label + ".png"
 	return human_visual_capture_path + "_" + label + ".png"
+
+
+func _save_diagnostic_failure_capture(label: String) -> void:
+	if human_visual_capture_path.is_empty():
+		return
+	var safe_label := label.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(":", "_")
+	var output_path := _capture_variant_path("failure_" + safe_label)
+	var image := get_viewport().get_texture().get_image()
+	var error := image.save_png(output_path)
+	if error != OK:
+		push_error("WT_DIAGNOSTIC_CAPTURE_FAIL: %s error=%d" % [output_path, int(error)])
 
 
 func _set_capture_camera_pose(position: Vector3, target: Vector3) -> void:

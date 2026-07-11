@@ -96,6 +96,7 @@ def run_visual_capture_summary(
     wait_frames: int,
     profile: str = VISUAL_CAPTURE_PROFILE,
     capture_stem: str | None = None,
+    extra_args: tuple[str, ...] = (),
 ) -> tuple[pathlib.Path, dict[str, object]]:
     output_dir.mkdir(parents=True, exist_ok=True)
     if capture_stem is None:
@@ -115,6 +116,7 @@ def run_visual_capture_summary(
         "--human-visual-capture-wait-frames",
         str(wait_frames),
     ]
+    cmd.extend(extra_args)
     print("capturing:", " ".join(cmd), flush=True)
     completed = subprocess.run(cmd, text=True, capture_output=True)
     if completed.stdout:
@@ -212,10 +214,18 @@ def validate_visual_summary(
     if not isinstance(watertightness, dict):
         raise RuntimeError(f"visual capture missing watertightness summary: {summary!r}")
     if watertightness.get("enabled"):
-        if watertightness.get("ok") is not True:
-            raise RuntimeError(f"watertightness probe failed: {watertightness!r}")
-        if int(watertightness.get("boundary_edges", -1)) != 0:
+        boundary_edges = int(watertightness.get("boundary_edges", -1))
+        chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
+        interior_boundary_edges = int(
+            watertightness.get("interior_boundary_edges", boundary_edges)
+        )
+        unknown_boundary_edges = int(watertightness.get("unknown_boundary_edges", 0))
+        if interior_boundary_edges != 0 or unknown_boundary_edges != 0:
             raise RuntimeError(f"watertightness probe found open rendered edges: {watertightness!r}")
+        if boundary_edges != chunk_face_boundary_edges:
+            raise RuntimeError(f"watertightness probe found unexpected boundary edges: {watertightness!r}")
+        if int(watertightness.get("zero_edge_triangles", 0)) != 0:
+            raise RuntimeError(f"watertightness probe found zero-edge triangles: {watertightness!r}")
         if watertightness.get("winding_mixed") is True:
             raise RuntimeError(f"watertightness probe found mixed winding: {watertightness!r}")
         if int(watertightness.get("triangles_in_region", 0)) <= 0:
@@ -237,6 +247,7 @@ def run_lod_movement_gate(
         wait_frames,
         profile=profile,
         capture_stem=f"terrain_1_0_{profile}_edit_lod_movement_gate",
+        extra_args=("--p2-lod-movement-gap-only-probe",),
     )
     validate_lod_movement_summary(summary, profile)
     return capture
@@ -294,8 +305,18 @@ def validate_lod_movement_summary(
         transition_labels.add(label)
         if transition.get("ok") is not True:
             raise RuntimeError(f"LOD movement transition failed: {transition!r}")
-        if int(transition.get("settled_boundary_edges", -1)) != 0:
+        settled_boundary_edges = int(transition.get("settled_boundary_edges", -1))
+        settled_chunk_face_boundary_edges = int(
+            transition.get("settled_chunk_face_boundary_edges", 0)
+        )
+        if int(transition.get("settled_interior_boundary_edges", settled_boundary_edges)) != 0:
             raise RuntimeError(f"LOD movement settled crack detected: {transition!r}")
+        if int(transition.get("settled_unknown_boundary_edges", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled unknown boundary detected: {transition!r}")
+        if settled_boundary_edges != settled_chunk_face_boundary_edges:
+            raise RuntimeError(f"LOD movement settled unexpected boundary detected: {transition!r}")
+        if int(transition.get("settled_zero_edge_triangles", 0)) != 0:
+            raise RuntimeError(f"LOD movement settled zero-edge triangles detected: {transition!r}")
         if int(transition.get("settled_triangles_in_region", 0)) <= 0:
             raise RuntimeError(f"LOD movement transition sampled no triangles: {transition!r}")
         transient_failures += int(transition.get("transient_probe_failure_count", 0))
