@@ -9,6 +9,7 @@ const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
 const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas"
+const TERRAIN_CULL_MODE := "disabled"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -43,6 +44,7 @@ var _summary := {
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 	"quality_implementation": QUALITY_IMPLEMENTATION,
 	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
+	"terrain_cull_mode": TERRAIN_CULL_MODE,
 	"implementation": "terrain_addon_material_applicator",
 }
 var _material: ShaderMaterial
@@ -105,6 +107,7 @@ func apply_materials_now() -> Dictionary:
 		"material_instance_id": material.get_instance_id(),
 		"quality_implementation": QUALITY_IMPLEMENTATION,
 		"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
+		"terrain_cull_mode": TERRAIN_CULL_MODE,
 		"production_texture_pipeline": bool(profile.get("production_texture_pipeline", false)),
 		"production_texture_active": production_active,
 		"production_texture_slots": Array(profile.get("production_texture_slots", [])),

@@ -193,6 +193,7 @@ def validate_visual_summary(
         "clean_material_variation_enabled": False,
         "clean_roughness": 1.0,
         "clean_specular": 0.0,
+        "terrain_cull_mode": "disabled",
     }
     for key, expected in checks.items():
         if summary.get(key) != expected:

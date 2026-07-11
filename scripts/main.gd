@@ -817,6 +817,7 @@ func _presentation_summary() -> Dictionary:
 		"clean_material_variation_strength": float(material_summary.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(material_summary.get("clean_roughness", 0.0)),
 		"clean_specular": float(material_summary.get("clean_specular", 1.0)),
+		"terrain_cull_mode": str(material_summary.get("terrain_cull_mode", "")),
 		"full_map_enabled": bool(full_map_summary.get("enabled", false)),
 		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
 		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
@@ -838,6 +839,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
+		return false
+	if str(summary.get("terrain_cull_mode", "")) != "disabled":
+		_fail("terrain material must use cull_disabled for transition seam sliver stability: %s" % str(summary))
 		return false
 	if bool(summary.get("full_map_enabled", false)):
 		_fail("playable terrain must not depend on compact full-map visual: %s" % str(summary))
@@ -1079,6 +1083,7 @@ func _capture_human_visual() -> void:
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(presentation.get("clean_roughness", 0.0)),
 		"clean_specular": float(presentation.get("clean_specular", 1.0)),
+		"terrain_cull_mode": str(presentation.get("terrain_cull_mode", "")),
 		"lighting_preset": lighting_preset_index,
 		"local_terrain_lights_enabled": local_terrain_lights_enabled,
 		"interaction_inspection_applied": interaction_inspection_applied,
