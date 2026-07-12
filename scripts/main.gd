@@ -34,6 +34,8 @@ var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
 var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
+var human_preserve_storage := false
+var human_artifact_replay_marker_path := ""
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -78,6 +80,8 @@ func _ready() -> void:
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
 	human_playtest_preset = _arg_value(args, "--human-playtest-preset", "")
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
+	human_preserve_storage = args.has("--human-preserve-storage")
+	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -93,7 +97,8 @@ func _ready() -> void:
 	else:
 		if human_visual_capture_path.is_empty():
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		_clear_human_storage()
+		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty():
+			_clear_human_storage()
 	_configure_game_lighting()
 	_build_hud()
 	call_deferred("_start_profile")
@@ -162,6 +167,9 @@ func _start_profile() -> void:
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
 	_update_telemetry()
+	if not human_artifact_replay_marker_path.is_empty():
+		call_deferred("_run_human_artifact_replay_marker")
+		return
 	if human_artifact_marker_smoke:
 		call_deferred("_run_human_artifact_marker_smoke")
 		return
@@ -627,6 +635,61 @@ func _run_human_artifact_marker_smoke() -> void:
 		get_tree().quit(1)
 
 
+func _run_human_artifact_replay_marker() -> void:
+	var marker := _load_human_artifact_marker_json(human_artifact_replay_marker_path)
+	if marker.is_empty():
+		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_LOAD_FAIL path=%s" % human_artifact_replay_marker_path)
+		get_tree().quit(1)
+		return
+	await _apply_human_artifact_marker_pose(marker)
+	for _index in range(180):
+		await get_tree().physics_frame
+	_update_telemetry()
+	var ok := await _capture_human_artifact_mark("replay")
+	if ok:
+		print("WT_HUMAN_ARTIFACT_REPLAY_MARKER_PASS")
+		get_tree().quit(0)
+	else:
+		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_FAIL")
+		get_tree().quit(1)
+
+
+func _load_human_artifact_marker_json(path: String) -> Dictionary:
+	var absolute_path := path
+	if not absolute_path.is_absolute_path():
+		absolute_path = ProjectSettings.globalize_path(path)
+	var file := FileAccess.open(absolute_path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	file.close()
+	return parsed if parsed is Dictionary else {}
+
+
+func _apply_human_artifact_marker_pose(marker: Dictionary) -> void:
+	if player == null:
+		return
+	var player_summary: Dictionary = marker.get("player", {})
+	var camera_summary: Dictionary = marker.get("camera", {})
+	if player_summary.has("position"):
+		player.global_position = _vector3_from_summary(player_summary["position"])
+	elif camera_summary.has("position"):
+		player.global_position = _vector3_from_summary(camera_summary["position"]) - Vector3(0.0, 1.6, 0.0)
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera != null and camera_summary.has("rotation"):
+		var camera_rotation := _vector3_from_summary(camera_summary["rotation"])
+		player.global_rotation = Vector3(0.0, camera_rotation.y, 0.0)
+		if player.has_method("set_fly_mode_enabled"):
+			player.call("set_fly_mode_enabled", true)
+		player.set("pitch", camera_rotation.x)
+		camera.rotation = Vector3(camera_rotation.x, 0.0, 0.0)
+		camera.current = true
+		camera.make_current()
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", false)
+	await get_tree().process_frame
+
+
 func _capture_human_artifact_mark(source: String) -> bool:
 	if human_artifact_marker_busy:
 		print("WT_HUMAN_ARTIFACT_MARK_BUSY")
@@ -655,6 +718,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 	var render_ray_hits := _human_artifact_render_ray_hits(backend, sky_pixel_rays)
 	var probe_specs := _human_artifact_probe_specs(target_summary)
 	probe_specs.append_array(_human_artifact_sky_pixel_probe_specs(sky_pixel_rays))
+	probe_specs.append_array(_human_artifact_render_hit_probe_specs(render_ray_hits))
 	var probes := _collect_human_artifact_probes(backend, probe_specs)
 	var precise_probes := _collect_human_artifact_precise_probes(backend, probe_specs)
 	var problematic_probes := []
@@ -682,6 +746,8 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"screen_sky_pixels": sky_summary,
 		"sky_pixel_rays": sky_pixel_rays,
 		"render_ray_hits": render_ray_hits,
+		"chunk_neighborhood": _human_artifact_chunk_neighborhood(terrain_world, render_ray_hits),
+		"render_seam_diagnostics": _human_artifact_render_seam_diagnostics(backend, render_ray_hits),
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
 		"problematic_probes": problematic_probes,
@@ -897,6 +963,29 @@ func _human_artifact_sky_pixel_probe_specs(sky_pixel_rays: Array) -> Array:
 	return specs
 
 
+func _human_artifact_render_hit_probe_specs(render_ray_hits: Array) -> Array:
+	var specs := []
+	var ray_limit := mini(12, render_ray_hits.size())
+	var seen := {}
+	for index in range(ray_limit):
+		var hit: Dictionary = render_ray_hits[index]
+		for kind in ["any", "front_like", "back_like"]:
+			var hit_key := "render_%s_hit" % kind
+			var position_key := "render_%s_position" % kind
+			if not bool(hit.get(hit_key, false)) or not hit.has(position_key):
+				continue
+			var center := _vector3_from_summary(hit[position_key])
+			var dedupe := "%s:%0.5f,%0.5f,%0.5f" % [kind, center.x, center.y, center.z]
+			if seen.has(dedupe):
+				continue
+			seen[dedupe] = true
+			specs.append({
+				"label": "render_hit_%02d_%s" % [index, kind],
+				"center": center,
+			})
+	return specs
+
+
 func _human_artifact_render_ray_hits(backend: Node, sky_pixel_rays: Array) -> Array:
 	if backend == null:
 		return []
@@ -1030,6 +1119,12 @@ func _accumulate_render_ray_triangle(
 	if hit.is_empty():
 		return
 	hit["owner"] = owner
+	hit["triangle_indices"] = [index_a, index_b, index_c]
+	hit["triangle_vertices"] = [
+		_vector3_summary(a),
+		_vector3_summary(b),
+		_vector3_summary(c),
+	]
 	_update_render_ray_hit(report, "any", hit)
 	var normal := _vector3_from_summary(hit.get("normal", {}))
 	var facing_dot := normal.dot(direction)
@@ -1051,6 +1146,443 @@ func _update_render_ray_hit(report: Dictionary, kind: String, hit: Dictionary) -
 	report["%s_position" % key] = hit.get("position", {})
 	report["%s_normal" % key] = hit.get("normal", {})
 	report["%s_normal_dot_ray" % key] = float(hit.get("normal_dot_ray", 0.0))
+	report["%s_triangle_indices" % key] = hit.get("triangle_indices", [])
+	report["%s_triangle_vertices" % key] = hit.get("triangle_vertices", [])
+
+
+func _human_artifact_chunk_neighborhood(terrain_world: Node, render_ray_hits: Array) -> Array:
+	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
+		return []
+	var seen := {}
+	var output := []
+	for hit in render_ray_hits:
+		if not hit is Dictionary:
+			continue
+		var positions := []
+		for kind in ["render_any", "render_front_like", "render_back_like"]:
+			var hit_key := "%s_hit" % kind
+			var position_key := "%s_position" % kind
+			if bool(hit.get(hit_key, false)) and hit.has(position_key):
+				positions.append(_vector3_from_summary(hit[position_key]))
+		for position in positions:
+			for lod in range(0, 4):
+				var extent := float(16 * int(1 << lod))
+				var center := Vector3i(
+					floori(position.x / extent),
+					floori(position.y / extent),
+					floori(position.z / extent)
+				)
+				for dz in range(-1, 2):
+					for dy in range(-1, 2):
+						for dx in range(-1, 2):
+							var key := Vector3i(center.x + dx, center.y + dy, center.z + dz)
+							var dedupe := "%d:%d,%d,%d" % [lod, key.x, key.y, key.z]
+							if seen.has(dedupe):
+								continue
+							seen[dedupe] = true
+							var state: RefCounted = terrain_world.call("query_chunk_state", key, lod)
+							var summary := {
+								"coordinate": {"x": key.x, "y": key.y, "z": key.z},
+								"lod": lod,
+								"present": false,
+								"visual_ready": false,
+								"collision_required": false,
+								"collision_ready": false,
+								"fully_ready": false,
+								"generation": 0,
+							}
+							if state != null:
+								summary["present"] = bool(state.call("is_present")) if state.has_method("is_present") else false
+								summary["visual_ready"] = bool(state.call("is_visual_ready")) if state.has_method("is_visual_ready") else false
+								summary["collision_required"] = bool(state.call("is_collision_required")) if state.has_method("is_collision_required") else false
+								summary["collision_ready"] = bool(state.call("is_collision_ready")) if state.has_method("is_collision_ready") else false
+								summary["fully_ready"] = bool(state.call("is_fully_ready")) if state.has_method("is_fully_ready") else false
+								summary["generation"] = int(state.call("get_generation")) if state.has_method("get_generation") else 0
+							output.append(summary)
+	return output
+
+
+func _human_artifact_render_seam_diagnostics(backend: Node, render_ray_hits: Array) -> Array:
+	if backend == null:
+		return []
+	var output := []
+	var seen := {}
+	for hit in render_ray_hits:
+		if not hit is Dictionary:
+			continue
+		if not bool(hit.get("render_any_hit", false)):
+			continue
+		var owner_name := str(hit.get("render_any_owner", ""))
+		var owner_info := _parse_human_artifact_render_chunk_name(owner_name)
+		if owner_info.is_empty():
+			continue
+		var hit_position := _vector3_from_summary(hit.get("render_any_position", {}))
+		var face := _human_artifact_nearest_chunk_face(owner_info, hit_position)
+		if face.is_empty():
+			continue
+		var diagnostic_key := "%s:%d:%s" % [
+			owner_name,
+			int(face.get("axis", -1)),
+			str(face.get("side", ""))
+		]
+		if seen.has(diagnostic_key):
+			continue
+		seen[diagnostic_key] = true
+		var coordinate: Vector3i = owner_info.get("coordinate", Vector3i.ZERO)
+		var lod := int(owner_info.get("lod", 0))
+		var axis := int(face.get("axis", 0))
+		var side := int(face.get("side", 0))
+		var neighbor_coordinate := coordinate
+		neighbor_coordinate[axis] += side
+		var neighbor_name := _human_artifact_render_chunk_name(neighbor_coordinate, lod)
+		var owner_summary := _human_artifact_mesh_seam_summary(
+			backend,
+			owner_name,
+			face,
+			hit_position,
+			4.0
+		)
+		var neighbor_summary := _human_artifact_mesh_seam_summary(
+			backend,
+			neighbor_name,
+			face,
+			hit_position,
+			4.0
+		)
+		output.append({
+			"hit_index": int(hit.get("index", -1)),
+			"owner": owner_name,
+			"neighbor": neighbor_name,
+			"lod": lod,
+			"coordinate": {"x": coordinate.x, "y": coordinate.y, "z": coordinate.z},
+			"neighbor_coordinate": {
+				"x": neighbor_coordinate.x,
+				"y": neighbor_coordinate.y,
+				"z": neighbor_coordinate.z
+			},
+			"face": {
+				"axis": axis,
+				"axis_name": _human_artifact_axis_name(axis),
+				"side": side,
+				"plane": float(face.get("plane", 0.0)),
+			},
+			"hit_position": _vector3_summary(hit_position),
+			"owner_seam": owner_summary,
+			"neighbor_seam": neighbor_summary,
+			"edge_comparison": _human_artifact_compare_seam_edges(owner_summary, neighbor_summary),
+		})
+		if output.size() >= 8:
+			break
+	return output
+
+
+func _parse_human_artifact_render_chunk_name(owner_name: String) -> Dictionary:
+	const PREFIX := "WT_Render_"
+	if not owner_name.begins_with(PREFIX):
+		return {}
+	var rest := owner_name.substr(PREFIX.length())
+	var parts := rest.split("_")
+	if parts.size() != 4:
+		return {}
+	var lod_part := str(parts[3])
+	if not lod_part.begins_with("L"):
+		return {}
+	return {
+		"coordinate": Vector3i(int(parts[0]), int(parts[1]), int(parts[2])),
+		"lod": int(lod_part.substr(1)),
+	}
+
+
+func _human_artifact_render_chunk_name(coordinate: Vector3i, lod: int) -> String:
+	return "WT_Render_%d_%d_%d_L%d" % [coordinate.x, coordinate.y, coordinate.z, lod]
+
+
+func _human_artifact_nearest_chunk_face(chunk_info: Dictionary, position: Vector3) -> Dictionary:
+	var coordinate: Vector3i = chunk_info.get("coordinate", Vector3i.ZERO)
+	var lod := int(chunk_info.get("lod", 0))
+	var extent := float(16 * int(1 << lod))
+	var minimum := Vector3(coordinate.x * extent, coordinate.y * extent, coordinate.z * extent)
+	var maximum := minimum + Vector3(extent, extent, extent)
+	var best_axis := -1
+	var best_side := 0
+	var best_plane := 0.0
+	var best_distance := INF
+	for axis in range(3):
+		var min_distance := absf(position[axis] - minimum[axis])
+		if min_distance < best_distance:
+			best_axis = axis
+			best_side = -1
+			best_plane = minimum[axis]
+			best_distance = min_distance
+		var max_distance := absf(position[axis] - maximum[axis])
+		if max_distance < best_distance:
+			best_axis = axis
+			best_side = 1
+			best_plane = maximum[axis]
+			best_distance = max_distance
+	if best_axis < 0 or best_distance > 0.35:
+		return {}
+	return {
+		"axis": best_axis,
+		"axis_name": _human_artifact_axis_name(best_axis),
+		"side": best_side,
+		"plane": best_plane,
+		"distance": best_distance,
+	}
+
+
+func _human_artifact_mesh_seam_summary(
+	backend: Node,
+	owner_name: String,
+	face: Dictionary,
+	focus: Vector3,
+	window_radius: float
+) -> Dictionary:
+	var result := {
+		"owner": owner_name,
+		"found": false,
+		"error": "",
+		"surface_count": 0,
+		"vertex_count": 0,
+		"index_count": 0,
+		"near_triangles_count": 0,
+		"seam_edge_count": 0,
+		"unique_seam_edge_count": 0,
+		"near_triangles": [],
+		"seam_edges": [],
+	}
+	var instance := _human_artifact_find_mesh_instance_by_name(backend, owner_name)
+	if instance == null:
+		result["error"] = "mesh_instance_not_found"
+		return result
+	var mesh := instance.mesh
+	if mesh == null or not (mesh is ArrayMesh):
+		result["found"] = true
+		result["error"] = "array_mesh_not_found"
+		return result
+	result["found"] = true
+	var array_mesh := mesh as ArrayMesh
+	result["surface_count"] = array_mesh.get_surface_count()
+	var transform := instance.global_transform
+	var axis := int(face.get("axis", 0))
+	var plane := float(face.get("plane", 0.0))
+	var edge_keys := {}
+	for surface_index in range(array_mesh.get_surface_count()):
+		var arrays: Array = array_mesh.surface_get_arrays(surface_index)
+		if arrays.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices := PackedInt32Array()
+		if arrays.size() > Mesh.ARRAY_INDEX:
+			indices = arrays[Mesh.ARRAY_INDEX]
+		result["vertex_count"] = int(result["vertex_count"]) + vertices.size()
+		result["index_count"] = int(result["index_count"]) + indices.size()
+		if indices.is_empty():
+			for vertex_index in range(0, vertices.size() - 2, 3):
+				_human_artifact_accumulate_seam_triangle(
+					result,
+					edge_keys,
+					surface_index,
+					vertex_index,
+					vertex_index + 1,
+					vertex_index + 2,
+					transform * vertices[vertex_index],
+					transform * vertices[vertex_index + 1],
+					transform * vertices[vertex_index + 2],
+					axis,
+					plane,
+					focus,
+					window_radius
+				)
+		else:
+			for index_offset in range(0, indices.size() - 2, 3):
+				var index_a := int(indices[index_offset])
+				var index_b := int(indices[index_offset + 1])
+				var index_c := int(indices[index_offset + 2])
+				if index_a < 0 or index_b < 0 or index_c < 0 or \
+						index_a >= vertices.size() or index_b >= vertices.size() or index_c >= vertices.size():
+					continue
+				_human_artifact_accumulate_seam_triangle(
+					result,
+					edge_keys,
+					surface_index,
+					index_a,
+					index_b,
+					index_c,
+					transform * vertices[index_a],
+					transform * vertices[index_b],
+					transform * vertices[index_c],
+					axis,
+					plane,
+					focus,
+					window_radius
+				)
+	result["unique_seam_edge_count"] = edge_keys.size()
+	return result
+
+
+func _human_artifact_accumulate_seam_triangle(
+	result: Dictionary,
+	edge_keys: Dictionary,
+	surface_index: int,
+	index_a: int,
+	index_b: int,
+	index_c: int,
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	axis: int,
+	plane: float,
+	focus: Vector3,
+	window_radius: float
+) -> void:
+	var near_count := 0
+	if _human_artifact_on_face_plane(a, axis, plane):
+		near_count += 1
+	if _human_artifact_on_face_plane(b, axis, plane):
+		near_count += 1
+	if _human_artifact_on_face_plane(c, axis, plane):
+		near_count += 1
+	if near_count == 0:
+		return
+	var centroid := (a + b + c) / 3.0
+	if not _human_artifact_triangle_in_face_window(a, b, c, centroid, axis, focus, window_radius):
+		return
+	result["near_triangles_count"] = int(result["near_triangles_count"]) + 1
+	if Array(result["near_triangles"]).size() < 24:
+		result["near_triangles"].append({
+			"surface": surface_index,
+			"indices": [index_a, index_b, index_c],
+			"near_face_vertex_count": near_count,
+			"centroid": _vector3_summary(centroid),
+			"vertices": [_vector3_summary(a), _vector3_summary(b), _vector3_summary(c)],
+		})
+	var triangle_vertices := [a, b, c]
+	var triangle_indices := [index_a, index_b, index_c]
+	for edge_index in range(3):
+		var start_vertex: Vector3 = triangle_vertices[edge_index]
+		var end_vertex: Vector3 = triangle_vertices[(edge_index + 1) % 3]
+		if not _human_artifact_on_face_plane(start_vertex, axis, plane) or \
+				not _human_artifact_on_face_plane(end_vertex, axis, plane):
+			continue
+		var edge_key := _human_artifact_seam_edge_key(start_vertex, end_vertex, axis)
+		result["seam_edge_count"] = int(result["seam_edge_count"]) + 1
+		edge_keys[edge_key] = true
+		if Array(result["seam_edges"]).size() < 32:
+			result["seam_edges"].append({
+				"key": edge_key,
+				"indices": [triangle_indices[edge_index], triangle_indices[(edge_index + 1) % 3]],
+				"start": _vector3_summary(start_vertex),
+				"end": _vector3_summary(end_vertex),
+			})
+
+
+func _human_artifact_find_mesh_instance_by_name(root: Node, owner_name: String) -> MeshInstance3D:
+	if root == null:
+		return null
+	if root is MeshInstance3D and str(root.name) == owner_name:
+		return root as MeshInstance3D
+	for child in root.get_children():
+		if child is Node:
+			var found := _human_artifact_find_mesh_instance_by_name(child, owner_name)
+			if found != null:
+				return found
+	return null
+
+
+func _human_artifact_compare_seam_edges(owner_summary: Dictionary, neighbor_summary: Dictionary) -> Dictionary:
+	var owner_keys := {}
+	for edge in owner_summary.get("seam_edges", []):
+		if edge is Dictionary:
+			owner_keys[str(edge.get("key", ""))] = true
+	var neighbor_keys := {}
+	for edge in neighbor_summary.get("seam_edges", []):
+		if edge is Dictionary:
+			neighbor_keys[str(edge.get("key", ""))] = true
+	var missing_from_neighbor := []
+	for key in owner_keys.keys():
+		if not neighbor_keys.has(key) and missing_from_neighbor.size() < 16:
+			missing_from_neighbor.append(key)
+	var missing_from_owner := []
+	for key in neighbor_keys.keys():
+		if not owner_keys.has(key) and missing_from_owner.size() < 16:
+			missing_from_owner.append(key)
+	var matched := 0
+	for key in owner_keys.keys():
+		if neighbor_keys.has(key):
+			matched += 1
+	return {
+		"owner_unique_edges": owner_keys.size(),
+		"neighbor_unique_edges": neighbor_keys.size(),
+		"matched_edges": matched,
+		"missing_from_neighbor_count": maxi(0, owner_keys.size() - matched),
+		"missing_from_owner_count": maxi(0, neighbor_keys.size() - matched),
+		"missing_from_neighbor_samples": missing_from_neighbor,
+		"missing_from_owner_samples": missing_from_owner,
+		"exact_match": owner_keys.size() == neighbor_keys.size() and \
+			missing_from_neighbor.is_empty() and missing_from_owner.is_empty(),
+	}
+
+
+func _human_artifact_on_face_plane(point: Vector3, axis: int, plane: float) -> bool:
+	return absf(point[axis] - plane) <= 0.0001
+
+
+func _human_artifact_triangle_in_face_window(
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	centroid: Vector3,
+	axis: int,
+	focus: Vector3,
+	window_radius: float
+) -> bool:
+	return _human_artifact_point_in_face_window(a, axis, focus, window_radius) or \
+		_human_artifact_point_in_face_window(b, axis, focus, window_radius) or \
+		_human_artifact_point_in_face_window(c, axis, focus, window_radius) or \
+		_human_artifact_point_in_face_window(centroid, axis, focus, window_radius)
+
+
+func _human_artifact_point_in_face_window(
+	point: Vector3,
+	axis: int,
+	focus: Vector3,
+	window_radius: float
+) -> bool:
+	for component in range(3):
+		if component == axis:
+			continue
+		if absf(point[component] - focus[component]) > window_radius:
+			return false
+	return true
+
+
+func _human_artifact_seam_edge_key(a: Vector3, b: Vector3, axis: int) -> String:
+	var point_a := _human_artifact_face_point_key(a, axis)
+	var point_b := _human_artifact_face_point_key(b, axis)
+	if point_a <= point_b:
+		return "%s|%s" % [point_a, point_b]
+	return "%s|%s" % [point_b, point_a]
+
+
+func _human_artifact_face_point_key(point: Vector3, axis: int) -> String:
+	var values := []
+	for component in range(3):
+		if component == axis:
+			continue
+		values.append(str(int(round(point[component] * 10000.0))))
+	return ",".join(values)
+
+
+func _human_artifact_axis_name(axis: int) -> String:
+	match axis:
+		0:
+			return "x"
+		1:
+			return "y"
+		2:
+			return "z"
+	return "unknown"
 
 
 func _ray_triangle_intersection(
@@ -3464,6 +3996,9 @@ func _wait_for_manifold_stress_visual_ready(
 func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 	return {
 		"ok": bool(probe.get("ok", false)),
+		"edges": int(probe.get("edges", -1)),
+		"matched_edges": int(probe.get("matched_edges", -1)),
+		"maximum_edge_use": int(probe.get("maximum_edge_use", -1)),
 		"boundary_edges": int(probe.get("boundary_edges", -1)),
 		"interior_boundary_edges": int(probe.get("interior_boundary_edges", -1)),
 		"chunk_face_boundary_edges": int(probe.get("chunk_face_boundary_edges", -1)),
@@ -3485,6 +4020,16 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"repeated_point_key_triangles": int(probe.get("repeated_point_key_triangles", -1)),
 		"repeated_point_key_interior_triangles": int(probe.get("repeated_point_key_interior_triangles", -1)),
 		"repeated_point_key_unknown_triangles": int(probe.get("repeated_point_key_unknown_triangles", -1)),
+		"normal_agreement_positive": int(probe.get("normal_agreement_positive", -1)),
+		"normal_agreement_negative": int(probe.get("normal_agreement_negative", -1)),
+		"normal_agreement_near_zero": int(probe.get("normal_agreement_near_zero", -1)),
+		"winding_mixed": bool(probe.get("winding_mixed", false)),
+		"winding_minority": int(probe.get("winding_minority", -1)),
+		"lod0_triangles_in_region": int(probe.get("lod0_triangles_in_region", -1)),
+		"lod0_boundary_edges": int(probe.get("lod0_boundary_edges", -1)),
+		"lod0_interior_boundary_edges": int(probe.get("lod0_interior_boundary_edges", -1)),
+		"lod0_chunk_face_boundary_edges": int(probe.get("lod0_chunk_face_boundary_edges", -1)),
+		"lod0_orientation_conflict_edges": int(probe.get("lod0_orientation_conflict_edges", -1)),
 		"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
 		"minimum_edge_length_squared": float(probe.get("minimum_edge_length_squared", -1.0)),
 		"boundary_examples": probe.get("boundary_examples", []),
