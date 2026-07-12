@@ -114,10 +114,15 @@ These are local generated outputs and should not be treated as source:
 - `build/`
 - `artifacts/`
 
-`build/captures` images are useful proof artifacts, but because they live inside
-the Godot project folder, Godot may generate `.import` files for them during
-editor/import runs. Those generated capture imports are ignored and should not
-be committed.
+Validation capture images are useful proof artifacts, but they should not be
+written into normal `res://build` paths. Default automated captures go under:
+
+```text
+.godot/world_transvoxel_captures/
+```
+
+The import gate also writes `build/captures/.gdignore` so old generated capture
+folders are not imported by Godot.
 
 ## Practical workflow
 

@@ -49,6 +49,8 @@ Controls:
 - Click after release: capture mouse again
 
 Current source commits are recorded in `CURRENT_PLAYTEST_FRESHNESS.json`.
+Current Terrain 1.0 candidate state is recorded in
+`TERRAIN_1_0_CANDIDATE.md`.
 
 Godot import cache rule:
 
@@ -79,7 +81,7 @@ To launch the mountainous inspection profile directly from a terminal:
 Automated near/far deformation captures:
 
 ```console
-"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_near.png --human-visual-capture-mode edit_near --human-visual-capture-wait-frames 180
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture .godot/world_transvoxel_captures/interaction/edit_near.png --human-visual-capture-mode edit_near --human-visual-capture-wait-frames 180
 
-"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture .godot/world_transvoxel_captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
 ```

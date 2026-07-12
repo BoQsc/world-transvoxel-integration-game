@@ -3,6 +3,12 @@
 This repository is the current human-playable production integration game for
 the World Transvoxel addon stack.
 
+Current Terrain 1.0 candidate status is recorded in
+[TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate is
+the runtime source at commit `0050ed8ea01300394988442e5f19e7577575a3fe`,
+validated by the focused autonomous readiness suite. Fullscreen human playtest
+is the next confirmation step.
+
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is
 part of the runtime contract, and stale import cache can make visual testing
@@ -194,10 +200,11 @@ python tools/p2_production_integration_game_quality.py --skip-build --visual-smo
 
 This also captures the real compact human-play profile from ground,
 high-oblique, top-down, and edited-boundary watertightness views under
-`build/captures/terrain_1_0_visual_smoke/` and rejects regressions where the fake
-full-map visual is enabled, native material override is missing, visible native
-terrain coverage falls below the expected compact 2K profile thresholds, or the
-edited rendered mesh reports open edges / mixed triangle winding.
+`.godot/world_transvoxel_captures/terrain_1_0_visual_smoke/` and rejects
+regressions where the fake full-map visual is enabled, native material override
+is missing, visible native terrain coverage falls below the expected compact 2K
+profile thresholds, or the edited rendered mesh reports open edges / mixed
+triangle winding.
 
 For the movement/edit LOD gate, run:
 
@@ -244,7 +251,7 @@ multi-operation terrain edit batch, wait for world revision and streaming
 settlement, then capture the result:
 
 ```console
-"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_near.png --human-visual-capture-mode edit_near --human-visual-capture-wait-frames 180
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture .godot/world_transvoxel_captures/interaction/edit_near.png --human-visual-capture-mode edit_near --human-visual-capture-wait-frames 180
 
-"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture build/captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
+"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture .godot/world_transvoxel_captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
 ```
