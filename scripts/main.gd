@@ -1099,7 +1099,9 @@ func _capture_human_visual() -> void:
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
-	if human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
+	if human_visual_capture_mode == "edit_tunnel_gate" or \
+		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
@@ -1117,6 +1119,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
 		human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -1130,7 +1133,8 @@ func _capture_requires_watertightness_probe() -> bool:
 		human_visual_capture_mode == "edit_during_load_oracle" or \
 		human_visual_capture_mode == "edit_manifold_stress_gate" or \
 		human_visual_capture_mode == "edit_tunnel_gate" or \
-		human_visual_capture_mode == "edit_tunnel_crawl_gate"
+		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -1150,6 +1154,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return await _run_tunnel_gate(terrain_world)
 	if human_visual_capture_mode == "edit_tunnel_crawl_gate":
 		return await _run_tunnel_crawl_gate(terrain_world)
+	if human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+		return await _run_tunnel_transient_crawl_gate(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
@@ -1881,6 +1887,151 @@ func _run_tunnel_crawl_gate(terrain_world: Node) -> bool:
 	)
 
 
+func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
+	if player == null or game_world == null:
+		_fail("tunnel transient crawl gate requires player and game world")
+		return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("tunnel transient crawl gate backend unavailable")
+		return false
+	var path := _tunnel_crawl_path()
+	var operations := _tunnel_gate_operations()
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": false,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"gate_mode": "edit_tunnel_transient_crawl_gate",
+	}
+	if operations.is_empty():
+		last_tunnel_summary["error"] = "no_operations"
+		_fail("tunnel transient crawl gate produced no operations")
+		return false
+	if path.is_empty():
+		last_tunnel_summary["error"] = "empty_path"
+		_fail("tunnel transient crawl gate produced no camera path")
+		return false
+
+	var first_step: Dictionary = path[0]
+	await _set_capture_camera_pose(first_step.get("position", player.global_position), first_step.get("target", _tunnel_gate_center()))
+	var initial_notes := []
+	if not await _wait_for_tunnel_visual_ready(
+		backend,
+		"before tunnel transient crawl edits",
+		initial_notes,
+		Vector3.INF,
+		-1.0,
+		"edit_tunnel_transient_crawl_gate"
+	):
+		last_tunnel_summary["error"] = "initial_visual_not_ready"
+		return false
+
+	var operation_index := 0
+	var batch_size := 4
+	while operation_index < operations.size():
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		for _local_index in range(batch_size):
+			if operation_index >= operations.size():
+				break
+			if not batch.add_operation(operations[operation_index]):
+				last_tunnel_summary["error"] = "batch_add_failed"
+				last_tunnel_summary["failed_operation"] = operation_index
+				_fail("failed to add tunnel transient crawl operation %d" % operation_index)
+				return false
+			operation_index += 1
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9621)):
+			last_tunnel_summary["error"] = "edit_batch_rejected"
+			last_tunnel_summary["failed_operation"] = operation_index
+			last_tunnel_summary["last_error"] = str(terrain_world.call("get_last_error"))
+			_fail("tunnel transient crawl edit batch rejected: %s" % str(terrain_world.call("get_last_error")))
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			last_tunnel_summary["error"] = "revision_not_committed"
+			last_tunnel_summary["failed_operation"] = operation_index
+			_fail("tunnel transient crawl edit batch did not commit")
+			return false
+		for _frame in range(2):
+			await get_tree().process_frame
+
+	var start_notes := []
+	var start_center: Vector3 = first_step.get("probe_center", _tunnel_gate_center())
+	var start_radius := float(first_step.get("probe_radius", _tunnel_crawl_probe_radius()))
+	await _set_capture_camera_pose(first_step.get("position", player.global_position), first_step.get("target", _tunnel_gate_center()))
+	if not await _wait_for_tunnel_visual_ready(
+		backend,
+		"tunnel transient crawl start",
+		start_notes,
+		start_center,
+		start_radius,
+		"edit_tunnel_transient_crawl_gate"
+	):
+		last_tunnel_summary["error"] = "start_visual_not_ready"
+		return false
+
+	var baseline_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "tunnel transient crawl baseline")
+	if not bool(baseline_snapshot.get("ok", false)):
+		last_tunnel_summary["error"] = "baseline_snapshot_failed"
+		return false
+	if int(baseline_snapshot.get("air_sample_count", 0)) <= 0:
+		last_tunnel_summary["error"] = "no_carved_air_samples"
+		_fail("tunnel transient crawl gate did not sample carved air")
+		return false
+
+	var transient_probe_summaries := []
+	for step in path:
+		var step_summary := await _exercise_tunnel_transient_crawl_step(
+			backend,
+			step,
+			"edit_tunnel_transient_crawl_gate"
+		)
+		transient_probe_summaries.append(step_summary)
+		if not bool(step_summary.get("ok", false)):
+			last_tunnel_summary["error"] = "transient_probe_failed"
+			last_tunnel_summary["failed_step"] = step_summary
+			_fail("tunnel transient crawl probe failed: %s" % JSON.stringify(step_summary))
+			return false
+		var after_step_snapshot := await _collect_edit_persistence_snapshot(
+			terrain_world,
+			"tunnel transient crawl after %s" % str(step.get("label", "step"))
+		)
+		if not bool(after_step_snapshot.get("ok", false)):
+			last_tunnel_summary["error"] = "after_step_snapshot_failed"
+			return false
+		if not _compare_edit_persistence_snapshots(baseline_snapshot, after_step_snapshot):
+			last_tunnel_summary["error"] = "persistence_changed"
+			last_tunnel_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
+			return false
+
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	last_tunnel_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"operation_count": operations.size(),
+		"batch_size": batch_size,
+		"gate_mode": "edit_tunnel_transient_crawl_gate",
+		"start_settle_notes": start_notes,
+		"transient_probe_frames": _tunnel_transient_probe_frames(),
+		"transient_probe_summaries": transient_probe_summaries,
+		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+		"air_sample_count": int(baseline_snapshot.get("air_sample_count", 0)),
+		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"render_resources": int(runtime_summary.get("render_resources", 0)),
+		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
+		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
+	}
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
 func _run_tunnel_gate_path(
 	terrain_world: Node,
 	path: Array,
@@ -2248,6 +2399,78 @@ func _exercise_tunnel_step(
 	if not bool(digest.get("ok", false)):
 		digest["error"] = "open_gap_or_orientation_conflict"
 	return digest
+
+
+func _exercise_tunnel_transient_crawl_step(
+	backend: Node,
+	step: Dictionary,
+	probe_mode_prefix: String
+) -> Dictionary:
+	var label := str(step.get("label", "step"))
+	var probe_center: Vector3 = step.get("probe_center", _tunnel_gate_center())
+	var probe_radius := float(step.get("probe_radius", _tunnel_crawl_probe_radius()))
+	await _set_capture_camera_pose_with_wait(
+		step.get("position", player.global_position),
+		step.get("target", _tunnel_gate_center()),
+		0
+	)
+	var frame_probes := []
+	var frame_indices: Array = _tunnel_transient_probe_frames()
+	var current_frame := 0
+	var capture_saved := false
+	for frame_value in frame_indices:
+		var target_frame := int(frame_value)
+		while current_frame < target_frame:
+			await get_tree().process_frame
+			current_frame += 1
+		var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		var probe := WatertightnessProbe.collect(
+			backend,
+			"%s_%s_frame_%02d" % [probe_mode_prefix, label, target_frame],
+			probe_center,
+			probe_radius
+		)
+		var digest := _open_gap_probe_digest(probe)
+		digest["ok"] = _is_open_gap_free_probe(probe)
+		digest["label"] = label
+		digest["frame"] = target_frame
+		digest["queued_render"] = int(runtime_summary.get("queued_render", 0))
+		digest["queued_collision"] = int(runtime_summary.get("queued_collision", 0))
+		digest["scheduler_queued_jobs"] = int(runtime_summary.get("scheduler_queued_jobs", 0))
+		digest["pending_chunk_retirements"] = int(runtime_summary.get("pending_chunk_retirements", 0))
+		digest["render_resources"] = int(runtime_summary.get("render_resources", 0))
+		digest["collision_resources"] = int(runtime_summary.get("collision_resources", 0))
+		digest["active_chunk_records"] = int(runtime_summary.get("active_chunk_records", 0))
+		frame_probes.append(digest)
+		if target_frame == 1:
+			capture_saved = _save_tunnel_step_capture("transient_%s_frame_%02d" % [label, target_frame])
+			if not capture_saved:
+				return {
+					"ok": false,
+					"label": label,
+					"error": "step_capture_failed",
+					"frame_probes": frame_probes,
+				}
+		if not bool(digest.get("ok", false)):
+			_save_diagnostic_failure_capture("transient_%s_frame_%02d" % [label, target_frame])
+			digest["error"] = "transient_open_gap_or_orientation_conflict"
+			return {
+				"ok": false,
+				"label": label,
+				"failed_frame": target_frame,
+				"failed_probe": digest,
+				"frame_probes": frame_probes,
+			}
+	return {
+		"ok": true,
+		"label": label,
+		"capture_saved": capture_saved,
+		"frame_probes": frame_probes,
+	}
+
+
+func _tunnel_transient_probe_frames() -> Array:
+	return [0, 1, 3, 8, 16, 32]
 
 
 func _save_tunnel_step_capture(label: String) -> bool:
@@ -3248,6 +3471,10 @@ func _save_diagnostic_failure_capture(label: String) -> void:
 
 
 func _set_capture_camera_pose(position: Vector3, target: Vector3) -> void:
+	await _set_capture_camera_pose_with_wait(position, target, 12)
+
+
+func _set_capture_camera_pose_with_wait(position: Vector3, target: Vector3, wait_frames: int) -> void:
 	if player == null:
 		return
 	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
@@ -3262,7 +3489,7 @@ func _set_capture_camera_pose(position: Vector3, target: Vector3) -> void:
 	camera.make_current()
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", true)
-	for _frame in range(12):
+	for _frame in range(maxi(0, wait_frames)):
 		await get_tree().process_frame
 
 
@@ -3804,7 +4031,9 @@ func _edit_reload_test_center() -> Vector3:
 		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_center()
-	if human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
+	if human_visual_capture_mode == "edit_tunnel_gate" or \
+		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
@@ -3818,7 +4047,9 @@ func _watertightness_probe_center() -> Vector3:
 		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_center()
-	if human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
+	if human_visual_capture_mode == "edit_tunnel_gate" or \
+		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
@@ -3840,7 +4071,9 @@ func _watertightness_probe_radius() -> float:
 		return 14.0 if selected_profile == FLAT_PROFILE else 56.0
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
 		return _manifold_stress_probe_radius()
-	if human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
+	if human_visual_capture_mode == "edit_tunnel_gate" or \
+		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 		return _tunnel_probe_radius()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
@@ -3919,7 +4152,7 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle", "edit_manifold_stress_gate", "edit_tunnel_gate", "edit_tunnel_crawl_gate":
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle", "edit_manifold_stress_gate", "edit_tunnel_gate", "edit_tunnel_crawl_gate", "edit_tunnel_transient_crawl_gate":
 			var target_center := _watertightness_edit_center()
 			if human_visual_capture_mode == "edit_stability_gate":
 				target_center = _edit_stability_gate_center()
@@ -3929,10 +4162,14 @@ func _apply_capture_camera_mode() -> void:
 				target_center = _edit_during_load_oracle_center()
 			elif human_visual_capture_mode == "edit_manifold_stress_gate":
 				target_center = _manifold_stress_center()
-			elif human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
+			elif human_visual_capture_mode == "edit_tunnel_gate" or \
+				human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 				target_center = _tunnel_gate_center()
-			if human_visual_capture_mode == "edit_tunnel_gate" or human_visual_capture_mode == "edit_tunnel_crawl_gate":
-				var tunnel_path := _tunnel_crawl_path() if human_visual_capture_mode == "edit_tunnel_crawl_gate" else _tunnel_gate_path()
+			if human_visual_capture_mode == "edit_tunnel_gate" or \
+				human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+				var tunnel_path := _tunnel_crawl_path() if human_visual_capture_mode == "edit_tunnel_crawl_gate" or human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" else _tunnel_gate_path()
 				var tunnel_step: Dictionary = tunnel_path[1] if tunnel_path.size() > 1 else {}
 				capture_position = tunnel_step.get("position", target_center + Vector3(-10.0, 14.0, -34.0))
 				capture_target = tunnel_step.get("target", target_center)

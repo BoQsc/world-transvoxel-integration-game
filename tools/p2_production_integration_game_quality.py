@@ -34,6 +34,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_lod_movement_gate",
     "edit_tunnel_gate",
     "edit_tunnel_crawl_gate",
+    "edit_tunnel_transient_crawl_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -224,6 +225,7 @@ def validate_visual_summary(
             "edit_manifold_stress_gate",
             "edit_tunnel_gate",
             "edit_tunnel_crawl_gate",
+            "edit_tunnel_transient_crawl_gate",
         }
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
@@ -412,6 +414,36 @@ def run_tunnel_crawl_gate(
     return capture
 
 
+def run_tunnel_transient_crawl_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture_stem = f"terrain_1_0_{profile}_edit_tunnel_transient_crawl_gate"
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_tunnel_transient_crawl_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=capture_stem,
+    )
+    validate_tunnel_transient_crawl_summary(summary, profile)
+    step_captures = sorted(output_dir.glob(f"{capture_stem}_step_transient_*.png"))
+    if len(step_captures) < 16:
+        raise RuntimeError(
+            f"tunnel transient crawl expected at least 16 step captures, got "
+            f"{len(step_captures)} in {output_dir}"
+        )
+    for step_capture in step_captures:
+        if step_capture.stat().st_size < 10_000:
+            raise RuntimeError(f"tunnel transient crawl step capture too small: {step_capture}")
+    return capture
+
+
 def validate_open_gap_digest(digest: dict[str, object], context: str) -> None:
     if digest.get("ok") is not True:
         raise RuntimeError(f"{context} probe failed: {digest!r}")
@@ -549,6 +581,92 @@ def validate_tunnel_crawl_summary(
             profile,
             int(tunnel.get("operation_count", 0)),
             len(probe_summaries),
+        )
+    )
+
+
+def validate_tunnel_transient_crawl_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"tunnel transient crawl profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_tunnel_transient_crawl_gate":
+        raise RuntimeError(f"tunnel transient crawl mode mismatch: {summary!r}")
+    tunnel = summary.get("tunnel")
+    if not isinstance(tunnel, dict):
+        raise RuntimeError(f"tunnel transient crawl summary missing: {summary!r}")
+    if tunnel.get("enabled") is not True or tunnel.get("ok") is not True:
+        raise RuntimeError(f"tunnel transient crawl failed: {tunnel!r}")
+    if tunnel.get("gate_mode") != "edit_tunnel_transient_crawl_gate":
+        raise RuntimeError(
+            f"tunnel transient crawl mode missing from tunnel summary: {tunnel!r}"
+        )
+    if int(tunnel.get("operation_count", 0)) < 96:
+        raise RuntimeError(f"tunnel transient crawl did not exercise enough edits: {tunnel!r}")
+    if int(tunnel.get("sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel transient crawl sampled no authoritative points: {tunnel!r}")
+    if int(tunnel.get("air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel transient crawl sampled no carved air: {tunnel!r}")
+    if int(tunnel.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel transient crawl density mismatch: {tunnel!r}")
+    if int(tunnel.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel transient crawl material mismatch: {tunnel!r}")
+    if float(tunnel.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"tunnel transient crawl density delta: {tunnel!r}")
+    expected_frames = [0, 1, 3, 8, 16, 32]
+    if tunnel.get("transient_probe_frames") != expected_frames:
+        raise RuntimeError(
+            f"tunnel transient crawl frames expected {expected_frames}, "
+            f"got {tunnel.get('transient_probe_frames')!r}: {tunnel!r}"
+        )
+    transient_summaries = tunnel.get("transient_probe_summaries")
+    if not isinstance(transient_summaries, list) or len(transient_summaries) < 16:
+        raise RuntimeError(f"tunnel transient crawl probe summaries missing: {tunnel!r}")
+    expected_labels = {
+        *(f"main_crawl_{index:02d}" for index in range(9)),
+        *(f"descending_crawl_{index:02d}" for index in range(7)),
+    }
+    labels: set[str] = set()
+    total_frame_probes = 0
+    for step in transient_summaries:
+        if not isinstance(step, dict):
+            raise RuntimeError(f"tunnel transient crawl step malformed: {step!r}")
+        if step.get("ok") is not True:
+            raise RuntimeError(f"tunnel transient crawl step failed: {step!r}")
+        label = str(step.get("label", ""))
+        labels.add(label)
+        if step.get("capture_saved") is not True:
+            raise RuntimeError(f"tunnel transient crawl step capture missing: {step!r}")
+        frame_probes = step.get("frame_probes")
+        if not isinstance(frame_probes, list) or len(frame_probes) != len(expected_frames):
+            raise RuntimeError(f"tunnel transient crawl frame probes missing: {step!r}")
+        frames = [int(probe.get("frame", -1)) for probe in frame_probes if isinstance(probe, dict)]
+        if frames != expected_frames:
+            raise RuntimeError(
+                f"tunnel transient crawl frames for {label} expected {expected_frames}, "
+                f"got {frames}: {step!r}"
+            )
+        for probe in frame_probes:
+            if not isinstance(probe, dict):
+                raise RuntimeError(f"tunnel transient crawl probe malformed: {probe!r}")
+            validate_open_gap_digest(
+                probe,
+                f"tunnel transient crawl {label} frame={int(probe.get('frame', -1))}",
+            )
+            total_frame_probes += 1
+    if labels != expected_labels:
+        raise RuntimeError(
+            f"tunnel transient crawl labels expected {sorted(expected_labels)}, "
+            f"got {sorted(labels)}: {tunnel!r}"
+        )
+    print(
+        "WT_TUNNEL_TRANSIENT_CRAWL_GATE_PROFILE_PASS profile=%s operations=%d steps=%d frame_probes=%d"
+        % (
+            profile,
+            int(tunnel.get("operation_count", 0)),
+            len(transient_summaries),
+            total_frame_probes,
         )
     )
 
@@ -902,6 +1020,29 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for tunnel crawl gate PNG captures.",
     )
+    parser.add_argument(
+        "--tunnel-transient-crawl-gate",
+        action="store_true",
+        help=(
+            "Carve the tunnel/cavity, move the actual viewer through close crawl "
+            "positions, and probe frames 0/1/3/8/16/32 after each movement to "
+            "catch transient open, nonmanifold, or orientation-conflicted gaps."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-transient-crawl-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --tunnel-transient-crawl-gate. May be passed more "
+            "than once. Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-transient-crawl-output-dir",
+        default=None,
+        help="Directory for tunnel transient crawl gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -1055,6 +1196,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_CRAWL_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.tunnel_transient_crawl_gate:
+        tunnel_transient_crawl_profiles = (
+            tuple(args.tunnel_transient_crawl_profile)
+            if args.tunnel_transient_crawl_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.tunnel_transient_crawl_output_dir).resolve()
+            if args.tunnel_transient_crawl_output_dir
+            else project / "build" / "captures" / "terrain_1_0_tunnel_transient_crawl_gate"
+        )
+        captures = [
+            run_tunnel_transient_crawl_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in tunnel_transient_crawl_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_TRANSIENT_CRAWL_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0
