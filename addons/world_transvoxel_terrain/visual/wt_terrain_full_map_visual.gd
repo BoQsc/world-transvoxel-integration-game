@@ -46,6 +46,11 @@ func get_full_terrain_visual_summary() -> Dictionary:
 
 
 func sample_surface_height(x: float, z: float) -> float:
+	# Keep this expression in lockstep with
+	# addons/world_transvoxel/src/storage/wt_procedural_world_source.cpp. The
+	# compact human/visual profile uses this mesh as the far 2K terrain LOD below
+	# the native moving Transvoxel detail window, so a simplified height function
+	# can expose false sky holes while the viewer moves.
 	var width := max(16.0, float(chunk_count_x) * chunk_size)
 	var depth := max(16.0, float(chunk_count_z) * chunk_size)
 	var center_x: float = width * 0.5 - 0.5
@@ -53,11 +58,26 @@ func sample_surface_height(x: float, z: float) -> float:
 	var nx: float = (x - center_x) / max(center_x, 1.0)
 	var nz: float = (z - center_z) / max(center_z, 1.0)
 	var phase := float(abs(seed) % 100000) * 0.0001
-	var ridge := 3.2 * exp(-3.0 * (nx * nx + nz * nz))
-	var long_wave := 0.80 * sin(x * 0.018 + phase) + 0.60 * cos(z * 0.016 - phase)
-	var diagonal := 0.40 * sin((x + z) * 0.008 + phase * 0.5)
-	var local := 0.28 * cos((x - z) * 0.021 - phase * 0.25)
-	return 5.8 + ridge + long_wave + diagonal + local
+	var radial_distance := nx * nx + nz * nz
+	var central_highland := 18.0 * exp(-2.1 * radial_distance)
+	var ridge_axis := nz + nx * 0.34 - 0.06
+	var ridge_along := nx - 0.05
+	var mountain_range := 18.0 * exp(-48.0 * ridge_axis * ridge_axis) * exp(-1.2 * ridge_along * ridge_along)
+	var spire_a := 50.0 * exp(-165.0 * ((nx - 0.16) * (nx - 0.16) + (nz + 0.02) * (nz + 0.02)))
+	var spire_b := 38.0 * exp(-170.0 * ((nx + 0.16) * (nx + 0.16) + (nz - 0.19) * (nz - 0.19)))
+	var spire_c := 34.0 * exp(-190.0 * ((nx - 0.36) * (nx - 0.36) + (nz + 0.30) * (nz + 0.30)))
+	var knife_axis := nz + 0.22 * nx + 0.13
+	var knife_ridge := 20.0 * exp(-95.0 * knife_axis * knife_axis) * exp(-3.0 * (nx - 0.25) * (nx - 0.25))
+	var cliff := 10.0 / (1.0 + exp(-35.0 * (0.20 - nz + 0.18 * nx))) * exp(-1.8 * (nx - 0.18) * (nx - 0.18))
+	var basin := -12.0 * exp(-5.0 * ((nx + 0.44) * (nx + 0.44) + (nz - 0.27) * (nz - 0.27)))
+	var macro := 4.0 * sin(x * 0.0032 + phase * 1.7) + 3.2 * cos(z * 0.0038 - phase * 1.3) + 2.3 * sin((x + z) * 0.0024 + phase)
+	var hills := 2.6 * sin(x * 0.010 + phase) * cos(z * 0.0085 - phase * 0.5) + 1.6 * cos((x - z) * 0.0075 - phase * 0.25)
+	var crag := sin(x * 0.045 + phase) * cos(z * 0.041 - phase * 0.5)
+	var crag_positive: float = maxf(0.0, crag)
+	var crags := 6.0 * crag_positive * crag_positive * exp(-2.1 * radial_distance)
+	var long_wave := 1.0 * sin(x * 0.016 + phase) + 0.8 * cos(z * 0.014 - phase)
+	var local := 0.45 * cos((x - z) * 0.021 - phase * 0.25)
+	return 12.0 + central_highland + mountain_range + spire_a + spire_b + spire_c + knife_ridge + cliff + basin + macro + hills + crags + long_wave + local
 
 
 func sample_material_id(x: float, z: float) -> int:
@@ -168,7 +188,7 @@ func _make_material() -> Material:
 		return _make_clean_shader_material()
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
-	material.cull_mode = BaseMaterial3D.CULL_BACK
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.roughness = 1.0
 	material.albedo_color = Color.WHITE
 	return material
@@ -176,7 +196,13 @@ func _make_material() -> Material:
 
 func _make_clean_shader_material() -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	material.shader = TerrainPaletteShader
+	var shader := Shader.new()
+	# The full-map LOD is a far heightfield backdrop, not the native Transvoxel
+	# mesh. Disable culling only here so grazing/underside views of the backdrop
+	# do not look like terrain holes. Native chunks keep their normal material and
+	# remain single-sided for manifold/debug validation.
+	shader.code = TerrainPaletteShader.code.replace("cull_back", "cull_disabled")
+	material.shader = shader
 	material.set_shader_parameter("clean_visual_enabled", true)
 	material.set_shader_parameter("clean_albedo_color", clean_albedo_color)
 	material.set_shader_parameter("clean_texture_world_scale", clean_texture_world_scale)

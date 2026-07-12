@@ -50,6 +50,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_tunnel_gate",
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
+    "streaming_fly_gap_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -197,6 +198,7 @@ def validate_visual_summary(
 ) -> None:
     if not capture_path.is_file() or capture_path.stat().st_size < 10_000:
         raise RuntimeError(f"visual capture was not written: {capture_path}")
+    full_map_expected = expected_profile == VISUAL_CAPTURE_PROFILE
     checks = {
         "profile": expected_profile,
         "viewer_radius_chunks": 8,
@@ -210,7 +212,7 @@ def validate_visual_summary(
         "runtime_collision_activation_distance": 192.0,
         "runtime_collision_deactivation_distance": 256.0,
         "edit_failure_count": 0,
-        "full_map_enabled": False,
+        "full_map_enabled": full_map_expected,
         "native_render_material_override": True,
         "clean_material_variation_enabled": False,
         "clean_roughness": 1.0,
@@ -276,6 +278,29 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found zero-edge triangles: {watertightness!r}")
         if int(watertightness.get("triangles_in_region", 0)) <= 0:
             raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
+    if summary.get("mode") == "streaming_fly_gap_gate":
+        validate_streaming_fly_summary(summary)
+
+
+def validate_streaming_fly_summary(summary: dict[str, object]) -> None:
+    streaming_fly = summary.get("streaming_fly")
+    if not isinstance(streaming_fly, dict):
+        raise RuntimeError(f"streaming fly summary missing: {summary!r}")
+    if streaming_fly.get("enabled") is not True or streaming_fly.get("ok") is not True:
+        raise RuntimeError(f"streaming fly gap gate failed: {streaming_fly!r}")
+    if int(streaming_fly.get("sample_count", 0)) < 16:
+        raise RuntimeError(f"streaming fly gap gate sampled too little: {streaming_fly!r}")
+    if int(streaming_fly.get("failure_count", -1)) != 0:
+        raise RuntimeError(f"streaming fly gap gate reported failures: {streaming_fly!r}")
+    print(
+        "WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=%s samples=%d max_pending=%d max_jobs=%d"
+        % (
+            summary.get("profile"),
+            int(streaming_fly.get("sample_count", 0)),
+            int(streaming_fly.get("max_pending_chunk_retirements", 0)),
+            int(streaming_fly.get("max_scheduler_queued_jobs", 0)),
+        )
+    )
 
 
 def run_lod_movement_gate(

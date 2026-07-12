@@ -1,17 +1,11 @@
 # Terrain 1.0 candidate
 
-Status as of 2026-07-12: `CANDIDATE_AFTER_AUTONOMOUS_READINESS_WITH_HUMAN_ARTIFACT_REPRO`.
-
-Validated runtime source commit:
-
-```text
-0050ed8ea01300394988442e5f19e7577575a3fe
-```
+Status as of 2026-07-12: `CANDIDATE_AFTER_STREAMING_FLY_VISUAL_STABILITY_FIX`.
 
 This file records the current Terrain 1.0 candidate state for the
 `world-transvoxel-integration-game` repository. Later documentation-only commits
-may point back to this runtime commit; terrain/runtime source changes require a
-new candidate run.
+may point back to this candidate state; terrain/runtime source changes require a
+new candidate run and fresh pass evidence.
 
 ## Focused readiness suite
 
@@ -36,6 +30,57 @@ Required pass markers observed:
 - `WT_TUNNEL_VISUAL_ARTIFACT_GATE_PROFILE_PASS profile=flat_baseline analyzed=2 max_center_sky=0 max_sky=0`
 - `WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_VISUAL_ARTIFACT_GATE_PASS captures=2`
 
+## Compact streaming/fly visual-stability follow-up
+
+Human testing later exposed a different visual failure mode: while flying around
+the compact mountain profile, local LOD/streaming movement could expose sky
+through terrain. The root causes were:
+
+- human fly mode previously moved the player directly and could allow invalid
+  inside/below-terrain inspection views;
+- compact human visual mode had no full 2K terrain fallback/backdrop under the
+  native moving detail window;
+- the full-map visual, when re-enabled, used a simplified height expression and
+  one-sided culling, which could produce false sky cutouts on steep/grazing
+  views.
+
+Current fix boundary:
+
+- human fly mode is collision-aware;
+- autonomous native terrain proof remains full-map-free;
+- compact human/visual mode enables an exact deterministic 2048 by 2048
+  full-map LOD/backdrop using the same procedural height expression as the
+  native source;
+- only that full-map heightfield backdrop is cull-disabled. Native Transvoxel
+  chunks remain single-sided, so this is not a workaround for native mesh
+  nonmanifoldness.
+
+Command:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_gap_gate_wrapper --visual-wait-frames 180
+```
+
+Result: passed with exit code 0.
+
+Required pass markers observed:
+
+- `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
+- `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
+- `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
+- `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand samples=28 max_pending=71 max_jobs=79`
+- `WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS captures=1`
+
+Normal compact visual smoke was also rerun:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-output-dir .godot/world_transvoxel_captures/visual_smoke_compact --visual-wait-frames 180
+```
+
+Result: passed with exit code 0 and `full_map_enabled=true` in all compact
+human visual capture summaries, while the autonomous native proof still reported
+`full_map_visual=0`.
+
 Capture output root:
 
 ```text
@@ -57,6 +102,8 @@ This candidate covers:
 - player, camera, crosshair, terrain edit input, storage journal, and streaming
   readiness proof;
 - terrain material import/runtime proof with mipmapped sand texture;
+- compact human/visual full-map LOD/backdrop continuity during moving/flying
+  inspection;
 - tunnel/deformation persistence;
 - transient tunnel crawl topology probes across frames 0/1/3/8/16/32;
 - visual sky-pixel artifact gate for deep closed tunnel captures.
@@ -83,9 +130,12 @@ loading flashes, or interaction stalls remain visible during normal play.
 
 ## Human-reproduced artifact follow-up
 
-After this candidate was recorded, human testing reproduced small pixel-like
-sky-colored holes inside manually dug terrain. This means the candidate is not
-human-accepted yet.
+Earlier human testing reproduced small pixel-like sky-colored holes inside
+manually dug terrain and later reproduced compact-profile terrain disappearing
+while flying. The current autonomous follow-up covers the moving/flying compact
+terrain case. The candidate is still not human-accepted until a normal fullscreen
+playtest confirms no obvious terrain gaps, loading flashes, interaction stalls,
+or recurring sky-colored pinholes remain.
 
 Use `~`, then `M` during human play when the artifact is visible. The marker
 saves:

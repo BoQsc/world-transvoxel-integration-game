@@ -16,6 +16,7 @@ var human_command_armed := false
 var fly_mode_enabled := false
 var _walk_collision_layer := 0
 var _walk_collision_mask := 0
+var _walk_motion_mode := CharacterBody3D.MOTION_MODE_GROUNDED
 var _walk_collision_state_saved := false
 var _interaction_attempt_count := 0
 var _last_interaction_summary := {
@@ -122,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		game_world.call("update_player_viewer", false)
 
 
-func _physics_process_fly(delta: float) -> void:
+func _physics_process_fly(_delta: float) -> void:
 	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
 	var movement_basis := global_transform.basis
 	if camera != null:
@@ -145,8 +146,8 @@ func _physics_process_fly(delta: float) -> void:
 	var speed := fly_speed
 	if Input.is_key_pressed(KEY_SHIFT):
 		speed *= fly_fast_multiplier
-	global_position += direction * speed * delta
-	velocity = Vector3.ZERO
+	velocity = direction * speed
+	move_and_slide()
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 
@@ -282,12 +283,14 @@ func _set_fly_mode_enabled(enabled: bool) -> void:
 	if enabled:
 		_walk_collision_layer = collision_layer
 		_walk_collision_mask = collision_mask
+		_walk_motion_mode = motion_mode
 		_walk_collision_state_saved = true
-		collision_mask = 0
+		motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	else:
 		if _walk_collision_state_saved:
 			collision_layer = _walk_collision_layer
 			collision_mask = _walk_collision_mask
+			motion_mode = _walk_motion_mode
 			_walk_collision_state_saved = false
 	print("human_fly_mode=%s" % ("on" if fly_mode_enabled else "off"))
 

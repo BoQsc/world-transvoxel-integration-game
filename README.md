@@ -4,11 +4,11 @@ This repository is the current human-playable production integration game for
 the World Transvoxel addon stack.
 
 Current Terrain 1.0 candidate status is recorded in
-[TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate is
-the runtime source at commit `0050ed8ea01300394988442e5f19e7577575a3fe`,
-validated by the focused autonomous readiness suite. Human acceptance is not
-complete: a small sky-colored pixel artifact was reproduced during manual
-digging and is now tracked by the human artifact marker (`~`, then `M`).
+[TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate has
+focused autonomous readiness coverage plus a targeted compact-profile
+streaming/fly visual-stability gate. Human acceptance is still the final
+confirmation step; visible terrain artifacts during play must be marked with
+`~`, then `M`.
 
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is
@@ -68,9 +68,14 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - telemetry overlay and profile selector for autonomous proof;
 - default human profile is flat terrain; the mountainous 2K profile is explicit
   inspection coverage;
-- compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage,
-  capped radius-1 near-detail refinement, and no fake full-map visual in human
-  play;
+- compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage and
+  capped radius-1 near-detail refinement;
+- compact 2K human/visual mode includes an exact deterministic full-map terrain
+  LOD/backdrop underneath the native moving detail window. This layer uses the
+  same procedural height expression as the native source and is cull-disabled
+  because it is a far heightfield backdrop. Native Transvoxel chunks remain
+  single-sided and are still validated separately without relying on this
+  backdrop;
 - sharp deterministic mountain stress terrain inside the current procedural
   vertical budget, with tall ridges, spire-like peaks, steep slopes, and the
   human spawn placed above terrain and snapped to collision before input is
@@ -102,6 +107,14 @@ full native coarse coverage across the 2K map and
 entire visible world to refine. It is intentionally a stress profile: it is not
 the default terrain style, and it exists to inspect Transvoxel seams, lighting,
 materials, and edit replacement behavior on tall, sharper terrain.
+
+Important compact-profile visual boundary: the autonomous native terrain proof
+keeps `full_map_visual=0`, proving the native moving terrain window by itself.
+Normal human play and visual smoke keep `full_map_enabled=true` for the compact
+profile so the 2048 by 2048 terrain remains visually continuous while local
+detail chunks stream and refine. Treat sky seen through terrain during normal
+collision-aware flight as a bug unless the camera was intentionally forced
+inside/below terrain by an invalid noclip/debug path.
 
 The flat baseline profile remains available for proof automation:
 
@@ -147,7 +160,8 @@ Controls:
   classification, and normal plus high-precision local mesh watertightness
   probes under
   `.godot/world_transvoxel_captures/human_artifact_marks/`
-- Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
+- Fly mode: collision-aware inspection flight; WASD moves relative to camera,
+  Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again
 
@@ -181,6 +195,7 @@ available for validation.
 | Edits do not commit | Inspect `game_world.get_last_edit_summary()`, `edit_commit_count`, `edit_failure_count`, and the terrain edit journal under `res://build/<game>/<profile>/`. |
 | Clicks appear to do nothing | Confirm the player interaction summary reports `ray_hit=true`; visible render chunks are not enough if collision coverage is stale or too narrow. |
 | White/default chunks flash while moving | Confirm the material summary reports `native_render_material_override=true`; the old recursive-only material scan is not sufficient for human play. |
+| Terrain seems to disappear while flying | Confirm the run uses collision-aware human fly mode, not an old noclip/debug path. Then run the streaming-fly visual gate below and require `streaming_fly.ok=true`, `failure_count=0`, and `full_map_enabled=true` in the capture summary. |
 | Debug UI visible during human play | Confirm you are running this integration game main scene, not an older validation playtest scene. |
 
 ## Automated proof
@@ -208,10 +223,23 @@ python tools/p2_production_integration_game_quality.py --skip-build --visual-smo
 This also captures the real compact human-play profile from ground,
 high-oblique, top-down, and edited-boundary watertightness views under
 `.godot/world_transvoxel_captures/terrain_1_0_visual_smoke/` and rejects
-regressions where the fake full-map visual is enabled, native material override
-is missing, visible native terrain coverage falls below the expected compact 2K
-profile thresholds, or the edited rendered mesh reports open edges / mixed
-triangle winding.
+regressions where the compact human full-map LOD/backdrop is missing, native
+material override is missing, visible native terrain coverage falls below the
+expected compact 2K profile thresholds, or the edited rendered mesh reports open
+edges / mixed triangle winding.
+
+For the moving/flying compact terrain visual-stability gate, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_gap_gate --visual-wait-frames 180
+```
+
+This runs the native compact proof first, then captures deterministic
+camera-motion samples over the compact mountain profile while the viewer
+position changes and streaming/refinement work is allowed to happen. It fails on
+crosshair/lower-screen sky holes or isolated sky-colored pinholes in terrain
+view. Normal horizon sky is not a failure. The expected pass marker is
+`WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand`.
 
 For the movement/edit LOD gate, run:
 

@@ -67,6 +67,7 @@ var last_lod_movement_summary := {}
 var last_edit_during_load_summary := {}
 var last_manifold_stress_summary := {}
 var last_tunnel_summary := {}
+var last_streaming_fly_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -415,7 +416,7 @@ func _configure_presentation(_settings: Dictionary) -> void:
 
 	full_map_visual = FullMapVisual.new()
 	full_map_visual.name = "FullMapTerrainVisual"
-	full_map_visual.enabled = false
+	full_map_visual.enabled = not autonomous
 	full_map_visual.enabled_profile_id = COMPACT_PROFILE
 	full_map_visual.auto_detect_parent_profile = true
 	full_map_visual.chunk_count_x = 128
@@ -921,9 +922,13 @@ func _human_artifact_sky_pixel_rays(sky_summary: Dictionary) -> Array:
 func _human_artifact_sky_pixel_examples(sky_summary: Dictionary) -> Array:
 	var pixels := []
 	var seen := {}
-	var group_keys := ["isolated_crosshair_examples", "isolated_examples"]
+	var group_keys := [
+		"isolated_crosshair_examples",
+		"isolated_lower_center_examples",
+		"isolated_examples",
+	]
 	if int(sky_summary.get("whole_sky_pixels", 0)) <= 256:
-		group_keys.append_array(["crosshair_examples", "examples"])
+		group_keys.append_array(["crosshair_examples", "lower_center_examples", "examples"])
 	for group_key in group_keys:
 		var group: Array = sky_summary.get(group_key, [])
 		for value in group:
@@ -1748,6 +1753,8 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var center_right := int(width * 0.80)
 	var center_top := int(height * 0.20)
 	var center_bottom := int(height * 0.80)
+	var lower_center_top := int(height * 0.55)
+	var lower_center_bottom := int(height * 0.95)
 	var crosshair_half_size := 128
 	var cross_left := maxi(0, width / 2 - crosshair_half_size)
 	var cross_right := mini(width, width / 2 + crosshair_half_size)
@@ -1755,13 +1762,17 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var cross_bottom := mini(height, height / 2 + crosshair_half_size)
 	var whole_sky_pixels := 0
 	var center_sky_pixels := 0
+	var lower_center_sky_pixels := 0
 	var crosshair_sky_pixels := 0
 	var isolated_sky_pixels := 0
 	var isolated_center_sky_pixels := 0
+	var isolated_lower_center_sky_pixels := 0
 	var isolated_crosshair_sky_pixels := 0
 	var examples := []
 	var crosshair_examples := []
+	var lower_center_examples := []
 	var isolated_examples := []
+	var isolated_lower_center_examples := []
 	var isolated_crosshair_examples := []
 	for y in range(height):
 		for x in range(width):
@@ -1780,6 +1791,14 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 				center_sky_pixels += 1
 				if isolated:
 					isolated_center_sky_pixels += 1
+			if x >= center_left and x < center_right and y >= lower_center_top and y < lower_center_bottom:
+				lower_center_sky_pixels += 1
+				if lower_center_examples.size() < 8:
+					lower_center_examples.append(_pixel_summary(x, y, color))
+				if isolated:
+					isolated_lower_center_sky_pixels += 1
+					if isolated_lower_center_examples.size() < 8:
+						isolated_lower_center_examples.append(_pixel_summary(x, y, color))
 			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
 				crosshair_sky_pixels += 1
 				if crosshair_examples.size() < 8:
@@ -1793,13 +1812,17 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 		"height": height,
 		"whole_sky_pixels": whole_sky_pixels,
 		"center_sky_pixels": center_sky_pixels,
+		"lower_center_sky_pixels": lower_center_sky_pixels,
 		"crosshair_sky_pixels": crosshair_sky_pixels,
 		"isolated_sky_pixels": isolated_sky_pixels,
 		"isolated_center_sky_pixels": isolated_center_sky_pixels,
+		"isolated_lower_center_sky_pixels": isolated_lower_center_sky_pixels,
 		"isolated_crosshair_sky_pixels": isolated_crosshair_sky_pixels,
 		"examples": examples,
 		"crosshair_examples": crosshair_examples,
+		"lower_center_examples": lower_center_examples,
 		"isolated_examples": isolated_examples,
+		"isolated_lower_center_examples": isolated_lower_center_examples,
 		"isolated_crosshair_examples": isolated_crosshair_examples,
 	}
 
@@ -2290,12 +2313,16 @@ func _place_player_at_tunnel_playtest_start() -> bool:
 
 
 func _capture_human_visual() -> void:
-	if _capture_requires_interaction_inspection():
-		if not await _apply_interaction_inspection_edits():
+	if human_visual_capture_mode == "streaming_fly_gap_gate":
+		if not await _run_streaming_fly_gap_gate():
 			return
-	await _apply_capture_camera_mode()
-	for _frame in range(30):
-		await get_tree().process_frame
+	else:
+		if _capture_requires_interaction_inspection():
+			if not await _apply_interaction_inspection_edits():
+				return
+		await _apply_capture_camera_mode()
+		for _frame in range(30):
+			await get_tree().process_frame
 	last_watertightness_summary = _collect_watertightness_summary()
 	var image := get_viewport().get_texture().get_image()
 	image.save_png(human_visual_capture_path)
@@ -2345,6 +2372,7 @@ func _capture_human_visual() -> void:
 		"edit_during_load": _edit_during_load_summary(),
 		"manifold_stress": _manifold_stress_summary(),
 		"tunnel": _tunnel_summary(),
+		"streaming_fly": _streaming_fly_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
@@ -4358,6 +4386,194 @@ func _run_lod_movement_player_interactions(terrain_world: Node) -> Dictionary:
 	}
 
 
+func _run_streaming_fly_gap_gate() -> bool:
+	if player == null or game_world == null:
+		_fail("streaming fly gap gate requires player and game world")
+		return false
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		_fail("streaming fly gap gate requires camera")
+		return false
+	if player.has_method("set_human_input_enabled"):
+		player.call("set_human_input_enabled", false)
+	if player.has_method("set_fly_mode_enabled"):
+		player.call("set_fly_mode_enabled", false)
+	camera.fov = 75.0
+	camera.far = 5000.0
+	var path := _streaming_fly_gap_path()
+	if path.size() < 2:
+		_fail("streaming fly gap path is empty")
+		return false
+	await _set_capture_camera_pose_with_wait(
+		path[0].get("position", player.global_position),
+		path[0].get("target", _watertightness_probe_center()),
+		120
+	)
+	if not await _wait_for_streaming_fly_visual_ready("before streaming fly gap gate", 240):
+		return false
+	var samples := []
+	var failures := []
+	var max_pending_retirements := 0
+	var max_staged_render := 0
+	var max_queued_render := 0
+	var max_scheduler_jobs := 0
+	var min_render_resources := 9223372036854775807
+	var sample_index := 0
+	for segment_index in range(1, path.size()):
+		var previous: Dictionary = path[segment_index - 1]
+		var current: Dictionary = path[segment_index]
+		var frames := int(current.get("frames", 48))
+		for frame in range(frames + 1):
+			var t := 0.0 if frames <= 0 else float(frame) / float(frames)
+			var position: Vector3 = previous.get("position", player.global_position).lerp(
+				current.get("position", player.global_position),
+				t
+			)
+			var target: Vector3 = previous.get("target", _watertightness_probe_center()).lerp(
+				current.get("target", _watertightness_probe_center()),
+				t
+			)
+			player.global_position = position
+			player.velocity = Vector3.ZERO
+			camera.look_at_from_position(position, target, Vector3.UP)
+			camera.current = true
+			camera.make_current()
+			if game_world != null and game_world.has_method("update_player_viewer"):
+				game_world.call("update_player_viewer", false)
+			await get_tree().process_frame
+			var summary: Dictionary = game_world.get_game_world_summary()
+			max_pending_retirements = maxi(
+				max_pending_retirements,
+				int(summary.get("pending_chunk_retirements", 0))
+			)
+			max_staged_render = maxi(
+				max_staged_render,
+				int(summary.get("staged_render_resources", 0))
+			)
+			max_queued_render = maxi(max_queued_render, int(summary.get("queued_render", 0)))
+			max_scheduler_jobs = maxi(
+				max_scheduler_jobs,
+				int(summary.get("scheduler_queued_jobs", 0))
+			)
+			min_render_resources = mini(
+				min_render_resources,
+				int(summary.get("render_resources", 0))
+			)
+			if not _streaming_fly_should_sample_frame(frame, frames):
+				continue
+			var image := get_viewport().get_texture().get_image()
+			var sky := _screen_sky_pixel_summary(image)
+			var gap := _streaming_fly_sky_gap_detected(sky)
+			var label := "%02d_%s_f%03d" % [
+				sample_index,
+				str(current.get("label", "segment")),
+				frame,
+			]
+			var capture_path := _capture_variant_path("streaming_fly_" + label)
+			var image_error := image.save_png(capture_path)
+			var sample := {
+				"label": label,
+				"segment": str(current.get("label", "segment")),
+				"frame": frame,
+				"position": _vector3_summary(position),
+				"target": _vector3_summary(target),
+				"gap_detected": gap,
+				"capture_path": capture_path,
+				"capture_saved": image_error == OK,
+				"sky": sky,
+				"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+				"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
+				"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+				"render_resources": int(summary.get("render_resources", 0)),
+				"queued_render": int(summary.get("queued_render", 0)),
+				"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+				"staged_render_resources": int(summary.get("staged_render_resources", 0)),
+				"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+				"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
+			}
+			samples.append(sample)
+			if gap or image_error != OK:
+				failures.append(sample)
+			sample_index += 1
+	var ok := failures.is_empty()
+	last_streaming_fly_summary = {
+		"enabled": true,
+		"ok": ok,
+		"profile": str(selected_profile),
+		"sample_count": samples.size(),
+		"failure_count": failures.size(),
+		"max_pending_chunk_retirements": max_pending_retirements,
+		"max_staged_render_resources": max_staged_render,
+		"max_queued_render": max_queued_render,
+		"max_scheduler_queued_jobs": max_scheduler_jobs,
+		"min_render_resources": min_render_resources,
+		"failure_examples": failures.slice(0, mini(4, failures.size())),
+		"samples": samples,
+		"implementation": "streaming_fly_gap_gate_v1",
+	}
+	_write_streaming_fly_summary_json(last_streaming_fly_summary)
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	if not ok:
+		_fail("streaming fly gap gate found visible terrain gaps: %s" % JSON.stringify(last_streaming_fly_summary))
+		return false
+	return true
+
+
+func _streaming_fly_should_sample_frame(frame: int, frames: int) -> bool:
+	return frame == 0 or frame == 1 or frame == 3 or frame == 8 or \
+		frame == 16 or frame == 32 or frame == frames
+
+
+func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> bool:
+	var last_summary := {}
+	for _frame in range(frame_limit):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_lod_movement_visual_ready_summary(summary):
+			return true
+		await get_tree().process_frame
+	_fail("streaming fly visual-ready wait failed %s: %s" % [context, str(last_summary)])
+	return false
+
+
+func _streaming_fly_sky_gap_detected(sky: Dictionary) -> bool:
+	return int(sky.get("crosshair_sky_pixels", 0)) > 0 or \
+		int(sky.get("lower_center_sky_pixels", 0)) > 16 or \
+		int(sky.get("isolated_center_sky_pixels", 0)) > 0 or \
+		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 0
+
+
+func _write_streaming_fly_summary_json(summary: Dictionary) -> void:
+	if human_visual_capture_path.is_empty():
+		return
+	var dot_index := human_visual_capture_path.rfind(".")
+	var output_path := human_visual_capture_path + "_streaming_fly.json"
+	if dot_index > 0:
+		output_path = human_visual_capture_path.substr(0, dot_index) + "_streaming_fly.json"
+	var file := FileAccess.open(output_path, FileAccess.WRITE)
+	if file == null:
+		push_error("failed to write streaming fly summary json: %s" % output_path)
+		return
+	file.store_string(JSON.stringify(summary, "\t"))
+
+
+func _streaming_fly_gap_path() -> Array:
+	if selected_profile == FLAT_PROFILE:
+		return [
+			{"label": "flat_start", "position": Vector3(920.0, 74.0, 920.0), "target": Vector3(1032.0, 8.0, 1032.0)},
+			{"label": "flat_cross", "position": Vector3(1160.0, 74.0, 940.0), "target": Vector3(1040.0, 8.0, 1032.0), "frames": 48},
+			{"label": "flat_return", "position": Vector3(980.0, 68.0, 1190.0), "target": Vector3(1040.0, 8.0, 1040.0), "frames": 48},
+		]
+	return [
+		{"label": "mountain_start", "position": Vector3(930.0, 185.0, 850.0), "target": Vector3(1090.0, 78.0, 990.0)},
+		{"label": "ridge_cross", "position": Vector3(1140.0, 178.0, 930.0), "target": Vector3(1220.0, 92.0, 1060.0), "frames": 54},
+		{"label": "peak_sweep", "position": Vector3(1390.0, 166.0, 1110.0), "target": Vector3(1184.0, 84.0, 1008.0), "frames": 54},
+		{"label": "valley_return", "position": Vector3(1040.0, 152.0, 1240.0), "target": Vector3(980.0, 62.0, 1110.0), "frames": 54},
+		{"label": "low_slope", "position": Vector3(1184.0, 138.0, 1008.0), "target": Vector3(1212.0, 72.0, 1024.0), "frames": 42},
+	]
+
+
 func _edit_lod_movement_path() -> Array:
 	var center := _edit_lod_movement_gate_center()
 	var target := center + Vector3(0.0, -4.0, 0.0)
@@ -5079,6 +5295,15 @@ func _tunnel_summary() -> Dictionary:
 			"ok": true,
 		}
 	return last_tunnel_summary
+
+
+func _streaming_fly_summary() -> Dictionary:
+	if last_streaming_fly_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_streaming_fly_summary
 
 
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
