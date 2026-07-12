@@ -6,8 +6,9 @@ the World Transvoxel addon stack.
 Current Terrain 1.0 candidate status is recorded in
 [TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate is
 the runtime source at commit `0050ed8ea01300394988442e5f19e7577575a3fe`,
-validated by the focused autonomous readiness suite. Fullscreen human playtest
-is the next confirmation step.
+validated by the focused autonomous readiness suite. Human acceptance is not
+complete: a small sky-colored pixel artifact was reproduced during manual
+digging and is now tracked by the human artifact marker (`~`, then `M`).
 
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is
@@ -140,6 +141,10 @@ Controls:
 - `~`, then `L`: cycle global lighting preset
 - `~`, then `K`: toggle local terrain inspection lights near/above the player
   plus static colored terrain lights over the mountain/flat inspection area
+- `~`, then `M`: mark a currently visible terrain artifact; this saves a
+  screenshot, exact camera/raycast/edit context, sky-pixel counts around the
+  crosshair, and local mesh watertightness probes under
+  `.godot/world_transvoxel_captures/human_artifact_marks/`
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again

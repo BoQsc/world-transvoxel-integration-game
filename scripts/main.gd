@@ -17,6 +17,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_watertightness_probe.gd")
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
+const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/human_artifact_marks"
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -32,6 +33,7 @@ var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
 var human_playtest_preset := ""
+var human_artifact_marker_smoke := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -52,6 +54,8 @@ var terrain_static_light_markers: Array = []
 var lighting_preset_index := 0
 var initial_lighting_preset := 0
 var local_terrain_lights_enabled := false
+var human_artifact_marker_busy := false
+var human_artifact_mark_index := 0
 var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
@@ -73,6 +77,7 @@ func _ready() -> void:
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
 	human_playtest_preset = _arg_value(args, "--human-playtest-preset", "")
+	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -157,6 +162,9 @@ func _start_profile() -> void:
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
 	_update_telemetry()
+	if human_artifact_marker_smoke:
+		call_deferred("_run_human_artifact_marker_smoke")
+		return
 	if not autonomous:
 		if not human_playtest_preset.is_empty():
 			if not await _apply_human_playtest_preset():
@@ -599,7 +607,296 @@ func handle_human_command(command: StringName) -> bool:
 		&"toggle_local_lights":
 			_set_local_terrain_lights_enabled(not local_terrain_lights_enabled)
 			return true
+		&"mark_artifact":
+			call_deferred("_run_human_artifact_mark_from_input")
+			return true
 	return false
+
+
+func _run_human_artifact_mark_from_input() -> void:
+	await _capture_human_artifact_mark("human")
+
+
+func _run_human_artifact_marker_smoke() -> void:
+	var ok := await _capture_human_artifact_mark("smoke")
+	if ok:
+		print("WT_HUMAN_ARTIFACT_MARK_SMOKE_PASS")
+		get_tree().quit(0)
+	else:
+		push_error("WT_HUMAN_ARTIFACT_MARK_SMOKE_FAIL")
+		get_tree().quit(1)
+
+
+func _capture_human_artifact_mark(source: String) -> bool:
+	if human_artifact_marker_busy:
+		print("WT_HUMAN_ARTIFACT_MARK_BUSY")
+		return false
+	human_artifact_marker_busy = true
+	human_artifact_mark_index += 1
+	var root := _human_artifact_capture_root()
+	var marker_id := _human_artifact_marker_id(source)
+	var screenshot_path := root.path_join("%s.png" % marker_id)
+	var json_path := root.path_join("%s.json" % marker_id)
+	var image_error := ERR_UNAVAILABLE
+	var sky_summary := {"available": false, "reason": "viewport_image_unavailable"}
+	if DisplayServer.get_name() != "headless":
+		var viewport_texture := get_viewport().get_texture()
+		if viewport_texture != null:
+			var image := viewport_texture.get_image()
+			if image != null and image.get_width() > 0 and image.get_height() > 0:
+				image_error = image.save_png(screenshot_path)
+				sky_summary = _screen_sky_pixel_summary(image)
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	var backend: Node = null
+	if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
+		backend = terrain_world.call("get_backend_terrain")
+	var target_summary := _human_artifact_interaction_target()
+	var probe_specs := _human_artifact_probe_specs(target_summary)
+	var probes := _collect_human_artifact_probes(backend, probe_specs)
+	var problematic_probes := []
+	for probe in probes:
+		if _human_artifact_probe_is_problematic(probe):
+			problematic_probes.append(probe)
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var summary := {
+		"marker_id": marker_id,
+		"source": source,
+		"profile": str(selected_profile),
+		"screenshot_path": screenshot_path,
+		"json_path": json_path,
+		"screenshot_error": image_error,
+		"camera": _human_artifact_camera_summary(),
+		"player": _human_artifact_player_summary(),
+		"interaction_target": target_summary,
+		"last_interaction": _human_artifact_last_interaction(),
+		"runtime": runtime_summary,
+		"presentation": _presentation_summary(),
+		"screen_sky_pixels": sky_summary,
+		"probe_count": probes.size(),
+		"problematic_probe_count": problematic_probes.size(),
+		"problematic_probes": problematic_probes,
+		"probes": probes,
+	}
+	var file := FileAccess.open(json_path, FileAccess.WRITE)
+	var file_ok := file != null
+	if file_ok:
+		file.store_string(JSON.stringify(summary))
+		file.close()
+	print("WT_HUMAN_ARTIFACT_MARK_SUMMARY ", JSON.stringify({
+		"marker_id": marker_id,
+		"profile": str(selected_profile),
+		"screenshot_path": screenshot_path,
+		"json_path": json_path,
+		"screenshot_error": image_error,
+		"json_written": file_ok,
+		"crosshair_sky_pixels": int(sky_summary.get("crosshair_sky_pixels", 0)),
+		"center_sky_pixels": int(sky_summary.get("center_sky_pixels", 0)),
+		"whole_sky_pixels": int(sky_summary.get("whole_sky_pixels", 0)),
+		"probe_count": probes.size(),
+		"problematic_probe_count": problematic_probes.size(),
+	}))
+	if not file_ok:
+		push_error("failed to write human artifact mark json: %s" % json_path)
+	if image_error != OK and not (source == "smoke" and image_error == ERR_UNAVAILABLE):
+		push_error("failed to write human artifact mark screenshot: %s error=%d" % [screenshot_path, image_error])
+	human_artifact_marker_busy = false
+	return file_ok and (image_error == OK or (source == "smoke" and image_error == ERR_UNAVAILABLE))
+
+
+func _human_artifact_capture_root() -> String:
+	var root := ProjectSettings.globalize_path(HUMAN_ARTIFACT_CAPTURE_ROOT)
+	DirAccess.make_dir_recursive_absolute(root)
+	return root
+
+
+func _human_artifact_marker_id(source: String) -> String:
+	var stamp := Time.get_datetime_string_from_system(false)
+	stamp = stamp.replace("-", "")
+	stamp = stamp.replace(":", "")
+	stamp = stamp.replace(" ", "_")
+	return "%s_%03d_%s" % [stamp, human_artifact_mark_index, source]
+
+
+func _human_artifact_camera_summary() -> Dictionary:
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D if player != null else null
+	if camera == null:
+		return {"available": false}
+	return {
+		"available": true,
+		"position": _vector3_summary(camera.global_position),
+		"forward": _vector3_summary(-camera.global_transform.basis.z),
+		"rotation": _vector3_summary(camera.global_rotation),
+		"fov": camera.fov,
+	}
+
+
+func _human_artifact_player_summary() -> Dictionary:
+	if player == null:
+		return {"available": false}
+	return {
+		"available": true,
+		"position": _vector3_summary(player.global_position),
+		"rotation": _vector3_summary(player.global_rotation),
+		"fly_mode": bool(player.call("is_fly_mode_enabled")) if player.has_method("is_fly_mode_enabled") else false,
+	}
+
+
+func _human_artifact_interaction_target() -> Dictionary:
+	if player == null or not player.has_method("get_interaction_target_summary"):
+		return {"available": false}
+	var target: Dictionary = player.call("get_interaction_target_summary")
+	return _human_artifact_normalize_interaction(target)
+
+
+func _human_artifact_last_interaction() -> Dictionary:
+	if player == null or not player.has_method("get_last_interaction_summary"):
+		return {"available": false}
+	var interaction: Dictionary = player.call("get_last_interaction_summary")
+	return _human_artifact_normalize_interaction(interaction)
+
+
+func _human_artifact_normalize_interaction(input: Dictionary) -> Dictionary:
+	var result := input.duplicate(true)
+	if result.has("position") and result["position"] is Vector3:
+		result["position"] = _vector3_summary(result["position"])
+	return result
+
+
+func _human_artifact_probe_specs(target_summary: Dictionary) -> Array:
+	var specs := []
+	if bool(target_summary.get("ray_hit", false)) and target_summary.has("position"):
+		specs.append({
+			"label": "ray_hit",
+			"center": _vector3_from_summary(target_summary["position"]),
+		})
+	var last_interaction := _human_artifact_last_interaction()
+	if last_interaction.has("position"):
+		specs.append({
+			"label": "last_interaction",
+			"center": _vector3_from_summary(last_interaction["position"]),
+		})
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D if player != null else null
+	if camera != null:
+		var camera_position := camera.global_position
+		var camera_forward := -camera.global_transform.basis.z
+		for distance in [4.0, 8.0, 16.0, 32.0, 64.0]:
+			specs.append({
+				"label": "camera_forward_%03d" % int(distance),
+				"center": camera_position + camera_forward * distance,
+			})
+	if player != null:
+		specs.append({
+			"label": "player_position",
+			"center": player.global_position,
+		})
+	return specs
+
+
+func _collect_human_artifact_probes(backend: Node, probe_specs: Array) -> Array:
+	var probes := []
+	for spec in probe_specs:
+		var center: Vector3 = spec.get("center", Vector3.ZERO)
+		var label := str(spec.get("label", "unknown"))
+		for radius in [3.0, 6.0, 12.0, 24.0]:
+			var probe := WatertightnessProbe.collect(
+				backend,
+				"human_artifact_%s_r%02d" % [label, int(radius)],
+				center,
+				radius
+			)
+			var digest := _open_gap_probe_digest(probe)
+			digest["label"] = label
+			digest["center"] = _vector3_summary(center)
+			digest["radius"] = radius
+			digest["open_gap_free"] = _is_open_gap_free_probe(probe)
+			probes.append(digest)
+	return probes
+
+
+func _human_artifact_probe_is_problematic(probe: Dictionary) -> bool:
+	if int(probe.get("triangles_in_region", 0)) <= 0:
+		return false
+	return not bool(probe.get("open_gap_free", false))
+
+
+func _screen_sky_pixel_summary(image: Image) -> Dictionary:
+	var width := image.get_width()
+	var height := image.get_height()
+	var center_left := int(width * 0.20)
+	var center_right := int(width * 0.80)
+	var center_top := int(height * 0.20)
+	var center_bottom := int(height * 0.80)
+	var crosshair_half_size := 128
+	var cross_left := maxi(0, width / 2 - crosshair_half_size)
+	var cross_right := mini(width, width / 2 + crosshair_half_size)
+	var cross_top := maxi(0, height / 2 - crosshair_half_size)
+	var cross_bottom := mini(height, height / 2 + crosshair_half_size)
+	var whole_sky_pixels := 0
+	var center_sky_pixels := 0
+	var crosshair_sky_pixels := 0
+	var examples := []
+	var crosshair_examples := []
+	for y in range(height):
+		for x in range(width):
+			var color := image.get_pixel(x, y)
+			if not _is_sky_like_pixel(color):
+				continue
+			whole_sky_pixels += 1
+			if examples.size() < 8:
+				examples.append(_pixel_summary(x, y, color))
+			if x >= center_left and x < center_right and y >= center_top and y < center_bottom:
+				center_sky_pixels += 1
+			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
+				crosshair_sky_pixels += 1
+				if crosshair_examples.size() < 8:
+					crosshair_examples.append(_pixel_summary(x, y, color))
+	return {
+		"width": width,
+		"height": height,
+		"whole_sky_pixels": whole_sky_pixels,
+		"center_sky_pixels": center_sky_pixels,
+		"crosshair_sky_pixels": crosshair_sky_pixels,
+		"examples": examples,
+		"crosshair_examples": crosshair_examples,
+	}
+
+
+func _is_sky_like_pixel(color: Color) -> bool:
+	return color.b >= 0.65 and \
+		color.g >= 0.45 and \
+		color.r <= 0.72 and \
+		color.b >= color.r + 0.10 and \
+		color.b >= color.g + 0.02
+
+
+func _pixel_summary(x: int, y: int, color: Color) -> Dictionary:
+	return {
+		"x": x,
+		"y": y,
+		"r": color.r,
+		"g": color.g,
+		"b": color.b,
+	}
+
+
+func _vector3_summary(value: Vector3) -> Dictionary:
+	return {
+		"x": value.x,
+		"y": value.y,
+		"z": value.z,
+	}
+
+
+func _vector3_from_summary(value) -> Vector3:
+	if value is Vector3:
+		return value
+	if value is Dictionary:
+		return Vector3(
+			float(value.get("x", 0.0)),
+			float(value.get("y", 0.0)),
+			float(value.get("z", 0.0))
+		)
+	return Vector3.ZERO
 
 
 func _apply_lighting_preset(index: int) -> void:

@@ -44,6 +44,9 @@ Controls:
 - `~`, then `L`: cycle global lighting preset
 - `~`, then `K`: toggle local terrain inspection lights near/above the player
   and static colored lights over the terrain
+- `~`, then `M`: mark a visible terrain artifact at the current camera view;
+  this saves screenshot/JSON diagnostics under
+  `.godot/world_transvoxel_captures/human_artifact_marks/`
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again

@@ -52,6 +52,10 @@ func get_last_interaction_summary() -> Dictionary:
 	return _last_interaction_summary.duplicate(true)
 
 
+func get_interaction_target_summary() -> Dictionary:
+	return _interaction_target()
+
+
 func autonomous_look_at(target: Vector3) -> bool:
 	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
@@ -168,6 +172,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if human_command_armed and (event.keycode == KEY_K or event.physical_keycode == KEY_K):
 			human_command_armed = false
 			_forward_human_command(&"toggle_local_lights")
+			return
+		if human_command_armed and (event.keycode == KEY_M or event.physical_keycode == KEY_M):
+			human_command_armed = false
+			_forward_human_command(&"mark_artifact")
 			return
 		human_command_armed = false
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

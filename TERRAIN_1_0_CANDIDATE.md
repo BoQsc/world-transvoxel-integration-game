@@ -1,6 +1,6 @@
 # Terrain 1.0 candidate
 
-Status as of 2026-07-12: `CANDIDATE_AFTER_AUTONOMOUS_READINESS`.
+Status as of 2026-07-12: `CANDIDATE_AFTER_AUTONOMOUS_READINESS_WITH_HUMAN_ARTIFACT_REPRO`.
 
 Validated runtime source commit:
 
@@ -80,3 +80,24 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 Human review should check normal player movement, mouse capture, fly inspection,
 dig/place interaction, terrain visuals, and whether any obvious terrain gaps,
 loading flashes, or interaction stalls remain visible during normal play.
+
+## Human-reproduced artifact follow-up
+
+After this candidate was recorded, human testing reproduced small pixel-like
+sky-colored holes inside manually dug terrain. This means the candidate is not
+human-accepted yet.
+
+Use `~`, then `M` during human play when the artifact is visible. The marker
+saves:
+
+- current screenshot;
+- camera, player, raycast target, and last terrain edit context;
+- sky-like pixel counts in the whole image, central image, and crosshair region;
+- local mesh watertightness probes around the ray hit, last interaction,
+  camera-forward samples, and player position.
+
+Diagnostic files are written under:
+
+```text
+.godot/world_transvoxel_captures/human_artifact_marks/
+```
