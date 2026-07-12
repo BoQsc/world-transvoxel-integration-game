@@ -21,6 +21,21 @@ import godot_import_assets
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
 LOD_MOVEMENT_GATE_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
+TUNNEL_VISUAL_SKY_FREE_LABELS = {
+    "g19_compact_2k_on_demand": (
+        "descending_crawl_02",
+        "descending_crawl_03",
+        "descending_crawl_04",
+        "descending_crawl_05",
+        "descending_crawl_06",
+    ),
+    "flat_baseline": (
+        "descending_crawl_05",
+        "descending_crawl_06",
+    ),
+}
+TUNNEL_VISUAL_CENTER_MARGIN_RATIO = 0.20
+TUNNEL_VISUAL_WHOLE_IMAGE_SKY_TOLERANCE = 16
 DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown", "watertight_boundary_near")
 VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "small_edit_near",
@@ -402,15 +417,11 @@ def run_tunnel_crawl_gate(
         capture_stem=capture_stem,
     )
     validate_tunnel_crawl_summary(summary, profile)
-    step_captures = sorted(output_dir.glob(f"{capture_stem}_step_*.png"))
-    if len(step_captures) < 16:
-        raise RuntimeError(
-            f"tunnel crawl expected at least 16 step captures, got "
-            f"{len(step_captures)} in {output_dir}"
-        )
-    for step_capture in step_captures:
-        if step_capture.stat().st_size < 10_000:
-            raise RuntimeError(f"tunnel crawl step capture too small: {step_capture}")
+    validate_tunnel_step_captures(
+        output_dir,
+        f"{capture_stem}_step_*.png",
+        "tunnel crawl",
+    )
     return capture
 
 
@@ -432,16 +443,154 @@ def run_tunnel_transient_crawl_gate(
         capture_stem=capture_stem,
     )
     validate_tunnel_transient_crawl_summary(summary, profile)
-    step_captures = sorted(output_dir.glob(f"{capture_stem}_step_transient_*.png"))
+    validate_tunnel_step_captures(
+        output_dir,
+        f"{capture_stem}_step_transient_*.png",
+        "tunnel transient crawl",
+    )
+    return capture
+
+
+def run_tunnel_visual_artifact_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture_stem = f"terrain_1_0_{profile}_edit_tunnel_visual_artifact_gate"
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_tunnel_transient_crawl_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=capture_stem,
+    )
+    validate_tunnel_transient_crawl_summary(summary, profile)
+    validate_tunnel_step_captures(
+        output_dir,
+        f"{capture_stem}_step_transient_*.png",
+        "tunnel visual artifact",
+    )
+    analyses = validate_tunnel_visual_artifact_captures(
+        profile,
+        output_dir,
+        capture_stem,
+    )
+    print(
+        "WT_TUNNEL_VISUAL_ARTIFACT_GATE_PROFILE_PASS "
+        "profile=%s analyzed=%d max_center_sky=%d max_sky=%d"
+        % (
+            profile,
+            len(analyses),
+            max(int(analysis["center_sky_pixels"]) for analysis in analyses),
+            max(int(analysis["sky_pixels"]) for analysis in analyses),
+        )
+    )
+    return capture
+
+
+def validate_tunnel_step_captures(
+    output_dir: pathlib.Path,
+    glob_pattern: str,
+    context: str,
+) -> list[pathlib.Path]:
+    step_captures = sorted(output_dir.glob(glob_pattern))
     if len(step_captures) < 16:
         raise RuntimeError(
-            f"tunnel transient crawl expected at least 16 step captures, got "
+            f"{context} expected at least 16 step captures, got "
             f"{len(step_captures)} in {output_dir}"
         )
     for step_capture in step_captures:
         if step_capture.stat().st_size < 10_000:
-            raise RuntimeError(f"tunnel transient crawl step capture too small: {step_capture}")
-    return capture
+            raise RuntimeError(f"{context} step capture too small: {step_capture}")
+    return step_captures
+
+
+def validate_tunnel_visual_artifact_captures(
+    profile: str,
+    output_dir: pathlib.Path,
+    capture_stem: str,
+) -> list[dict[str, object]]:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            "Pillow is required for --tunnel-visual-artifact-gate image analysis."
+        ) from exc
+
+    labels = TUNNEL_VISUAL_SKY_FREE_LABELS.get(profile)
+    if not labels:
+        raise RuntimeError(f"tunnel visual artifact labels missing for profile {profile!r}")
+    analyses: list[dict[str, object]] = []
+    for label in labels:
+        image_path = output_dir / f"{capture_stem}_step_transient_{label}_frame_01.png"
+        analysis = analyze_tunnel_sky_pixels(Image, image_path)
+        analyses.append(analysis)
+        center_sky_pixels = int(analysis["center_sky_pixels"])
+        sky_pixels = int(analysis["sky_pixels"])
+        if center_sky_pixels != 0:
+            raise RuntimeError(
+                "tunnel visual artifact gate found central sky-colored pixels "
+                f"in {label}: {analysis!r}"
+            )
+        if sky_pixels > TUNNEL_VISUAL_WHOLE_IMAGE_SKY_TOLERANCE:
+            raise RuntimeError(
+                "tunnel visual artifact gate found unexpected sky-colored pixels "
+                f"in {label}: {analysis!r}"
+            )
+    return analyses
+
+
+def analyze_tunnel_sky_pixels(image_module: object, image_path: pathlib.Path) -> dict[str, object]:
+    if not image_path.is_file() or image_path.stat().st_size < 10_000:
+        raise RuntimeError(f"tunnel visual artifact image missing or too small: {image_path}")
+    with image_module.open(image_path) as image:
+        rgb_image = image.convert("RGB")
+        width, height = rgb_image.size
+        margin = TUNNEL_VISUAL_CENTER_MARGIN_RATIO
+        center_left = int(width * margin)
+        center_right = int(width * (1.0 - margin))
+        center_top = int(height * margin)
+        center_bottom = int(height * (1.0 - margin))
+        sky_pixels = 0
+        center_sky_pixels = 0
+        sky_examples: list[tuple[int, int, tuple[int, int, int]]] = []
+        center_examples: list[tuple[int, int, tuple[int, int, int]]] = []
+        for index, pixel in enumerate(rgb_image.getdata()):
+            if not is_tunnel_sky_pixel(pixel):
+                continue
+            x = index % width
+            y = index // width
+            sky_pixels += 1
+            if len(sky_examples) < 8:
+                sky_examples.append((x, y, pixel))
+            if center_left <= x < center_right and center_top <= y < center_bottom:
+                center_sky_pixels += 1
+                if len(center_examples) < 8:
+                    center_examples.append((x, y, pixel))
+    return {
+        "path": str(image_path),
+        "width": width,
+        "height": height,
+        "sky_pixels": sky_pixels,
+        "center_sky_pixels": center_sky_pixels,
+        "sky_examples": sky_examples,
+        "center_examples": center_examples,
+    }
+
+
+def is_tunnel_sky_pixel(pixel: tuple[int, int, int]) -> bool:
+    red, green, blue = pixel
+    return (
+        blue >= 165
+        and green >= 115
+        and red <= 180
+        and blue >= red + 25
+        and blue >= green + 5
+    )
 
 
 def validate_open_gap_digest(digest: dict[str, object], context: str) -> None:
@@ -1043,6 +1192,28 @@ def main(argv: list[str]) -> int:
         default=None,
         help="Directory for tunnel transient crawl gate PNG captures.",
     )
+    parser.add_argument(
+        "--tunnel-visual-artifact-gate",
+        action="store_true",
+        help=(
+            "Run the transient tunnel crawl and image-analyze deep closed-tunnel "
+            "captures for unexpected sky-colored pixels."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-visual-artifact-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --tunnel-visual-artifact-gate. May be passed more "
+            "than once. Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-visual-artifact-output-dir",
+        default=None,
+        help="Directory for tunnel visual artifact gate PNG captures.",
+    )
     args = parser.parse_args(argv)
 
     godot = find_godot(args.godot)
@@ -1221,6 +1392,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_TRANSIENT_CRAWL_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.tunnel_visual_artifact_gate:
+        tunnel_visual_artifact_profiles = (
+            tuple(args.tunnel_visual_artifact_profile)
+            if args.tunnel_visual_artifact_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.tunnel_visual_artifact_output_dir).resolve()
+            if args.tunnel_visual_artifact_output_dir
+            else project / "build" / "captures" / "terrain_1_0_tunnel_visual_artifact_gate"
+        )
+        captures = [
+            run_tunnel_visual_artifact_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in tunnel_visual_artifact_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_VISUAL_ARTIFACT_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     return 0
