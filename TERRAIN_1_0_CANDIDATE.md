@@ -95,6 +95,8 @@ saves:
 - sky-like pixel counts in the whole image, central image, and crosshair region;
 - isolated/pinhole-like sky-pixel counts and screen-pixel rays, ignoring normal
   open-sky/horizon regions;
+- CPU render-ray classification for isolated sky pixels, used to distinguish
+  missing render geometry from backface/culling/material/raster cases;
 - local mesh watertightness probes around the ray hit, last interaction,
   camera-forward samples, and player position.
 - high-precision seam probes for the ray hit, last interaction, and isolated

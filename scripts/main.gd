@@ -652,6 +652,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		backend = terrain_world.call("get_backend_terrain")
 	var target_summary := _human_artifact_interaction_target()
 	var sky_pixel_rays := _human_artifact_sky_pixel_rays(sky_summary)
+	var render_ray_hits := _human_artifact_render_ray_hits(backend, sky_pixel_rays)
 	var probe_specs := _human_artifact_probe_specs(target_summary)
 	probe_specs.append_array(_human_artifact_sky_pixel_probe_specs(sky_pixel_rays))
 	var probes := _collect_human_artifact_probes(backend, probe_specs)
@@ -680,6 +681,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"presentation": _presentation_summary(),
 		"screen_sky_pixels": sky_summary,
 		"sky_pixel_rays": sky_pixel_rays,
+		"render_ray_hits": render_ray_hits,
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
 		"problematic_probes": problematic_probes,
@@ -708,6 +710,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"isolated_center_sky_pixels": int(sky_summary.get("isolated_center_sky_pixels", 0)),
 		"isolated_sky_pixels": int(sky_summary.get("isolated_sky_pixels", 0)),
 		"sky_pixel_rays": sky_pixel_rays.size(),
+		"render_ray_hits": render_ray_hits.size(),
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
 		"precise_probe_count": precise_probes.size(),
@@ -892,6 +895,234 @@ func _human_artifact_sky_pixel_probe_specs(sky_pixel_rays: Array) -> Array:
 				"center": origin + direction * distance,
 			})
 	return specs
+
+
+func _human_artifact_render_ray_hits(backend: Node, sky_pixel_rays: Array) -> Array:
+	if backend == null:
+		return []
+	var reports := []
+	for ray in sky_pixel_rays:
+		var origin := _vector3_from_summary(ray.get("origin", {}))
+		var direction := _vector3_from_summary(ray.get("direction", {})).normalized()
+		if direction.length_squared() == 0.0:
+			continue
+		var max_distance := float(ray.get("max_distance", 512.0))
+		if bool(ray.get("physics_hit", false)) and ray.has("hit_distance"):
+			max_distance = minf(max_distance, float(ray.get("hit_distance", max_distance)) + 1.0)
+		var report := {
+			"index": int(ray.get("index", reports.size())),
+			"pixel": ray.get("pixel", {}),
+			"origin": _vector3_summary(origin),
+			"direction": _vector3_summary(direction),
+			"max_distance": max_distance,
+			"physics_hit": bool(ray.get("physics_hit", false)),
+			"physics_hit_distance": float(ray.get("hit_distance", -1.0)),
+			"physics_hit_collider": str(ray.get("hit_collider", "")),
+			"tested_mesh_instances": 0,
+			"tested_surfaces": 0,
+			"tested_triangles": 0,
+			"render_any_hit": false,
+			"render_front_like_hit": false,
+			"render_back_like_hit": false,
+		}
+		_collect_render_ray_hit_for_node(backend, origin, direction, max_distance, report)
+		reports.append(report)
+	return reports
+
+
+func _collect_render_ray_hit_for_node(
+	node: Node,
+	origin: Vector3,
+	direction: Vector3,
+	max_distance: float,
+	report: Dictionary
+) -> void:
+	if node is MeshInstance3D:
+		_accumulate_render_ray_hit(
+			node as MeshInstance3D,
+			origin,
+			direction,
+			max_distance,
+			report
+		)
+	for child in node.get_children():
+		if child is Node:
+			_collect_render_ray_hit_for_node(child, origin, direction, max_distance, report)
+
+
+func _accumulate_render_ray_hit(
+	instance: MeshInstance3D,
+	origin: Vector3,
+	direction: Vector3,
+	max_distance: float,
+	report: Dictionary
+) -> void:
+	if not instance.is_visible_in_tree():
+		return
+	var mesh := instance.mesh
+	if mesh == null or not (mesh is ArrayMesh):
+		return
+	var array_mesh := mesh as ArrayMesh
+	var world_aabb := instance.global_transform * array_mesh.get_aabb()
+	if not _ray_intersects_aabb(origin, direction, world_aabb.grow(0.25), max_distance):
+		return
+	report["tested_mesh_instances"] = int(report.get("tested_mesh_instances", 0)) + 1
+	var transform := instance.global_transform
+	for surface_index in range(array_mesh.get_surface_count()):
+		report["tested_surfaces"] = int(report.get("tested_surfaces", 0)) + 1
+		var arrays: Array = array_mesh.surface_get_arrays(surface_index)
+		if arrays.size() <= Mesh.ARRAY_INDEX:
+			continue
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		if vertices.is_empty():
+			continue
+		if indices.is_empty():
+			for vertex_index in range(0, vertices.size() - 2, 3):
+				_accumulate_render_ray_triangle(
+					transform,
+					vertices,
+					vertex_index,
+					vertex_index + 1,
+					vertex_index + 2,
+					origin,
+					direction,
+					max_distance,
+					str(instance.name),
+					report
+				)
+		else:
+			for index_offset in range(0, indices.size() - 2, 3):
+				_accumulate_render_ray_triangle(
+					transform,
+					vertices,
+					int(indices[index_offset]),
+					int(indices[index_offset + 1]),
+					int(indices[index_offset + 2]),
+					origin,
+					direction,
+					max_distance,
+					str(instance.name),
+					report
+				)
+
+
+func _accumulate_render_ray_triangle(
+	transform: Transform3D,
+	vertices: PackedVector3Array,
+	index_a: int,
+	index_b: int,
+	index_c: int,
+	origin: Vector3,
+	direction: Vector3,
+	max_distance: float,
+	owner: String,
+	report: Dictionary
+) -> void:
+	report["tested_triangles"] = int(report.get("tested_triangles", 0)) + 1
+	if index_a < 0 or index_b < 0 or index_c < 0 or \
+			index_a >= vertices.size() or index_b >= vertices.size() or index_c >= vertices.size():
+		return
+	var a: Vector3 = transform * vertices[index_a]
+	var b: Vector3 = transform * vertices[index_b]
+	var c: Vector3 = transform * vertices[index_c]
+	var hit := _ray_triangle_intersection(origin, direction, a, b, c, max_distance)
+	if hit.is_empty():
+		return
+	hit["owner"] = owner
+	_update_render_ray_hit(report, "any", hit)
+	var normal := _vector3_from_summary(hit.get("normal", {}))
+	var facing_dot := normal.dot(direction)
+	if facing_dot < -0.0001:
+		_update_render_ray_hit(report, "front_like", hit)
+	elif facing_dot > 0.0001:
+		_update_render_ray_hit(report, "back_like", hit)
+
+
+func _update_render_ray_hit(report: Dictionary, kind: String, hit: Dictionary) -> void:
+	var key := "render_%s" % kind
+	var distance_key := "%s_distance" % key
+	if bool(report.get("%s_hit" % key, false)) and \
+			float(report.get(distance_key, INF)) <= float(hit.get("distance", INF)):
+		return
+	report["%s_hit" % key] = true
+	report[distance_key] = float(hit.get("distance", INF))
+	report["%s_owner" % key] = str(hit.get("owner", ""))
+	report["%s_position" % key] = hit.get("position", {})
+	report["%s_normal" % key] = hit.get("normal", {})
+	report["%s_normal_dot_ray" % key] = float(hit.get("normal_dot_ray", 0.0))
+
+
+func _ray_triangle_intersection(
+	origin: Vector3,
+	direction: Vector3,
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	max_distance: float
+) -> Dictionary:
+	var edge_ab := b - a
+	var edge_ac := c - a
+	var normal := edge_ab.cross(edge_ac)
+	var normal_length := normal.length()
+	if normal_length <= 0.00000001:
+		return {}
+	normal /= normal_length
+	var h := direction.cross(edge_ac)
+	var determinant := edge_ab.dot(h)
+	if absf(determinant) <= 0.0000001:
+		return {}
+	var inverse_determinant := 1.0 / determinant
+	var s := origin - a
+	var u := s.dot(h) * inverse_determinant
+	if u < -0.000001 or u > 1.000001:
+		return {}
+	var q := s.cross(edge_ab)
+	var v := direction.dot(q) * inverse_determinant
+	if v < -0.000001 or u + v > 1.000001:
+		return {}
+	var distance := edge_ac.dot(q) * inverse_determinant
+	if distance <= 0.0001 or distance > max_distance:
+		return {}
+	return {
+		"distance": distance,
+		"position": _vector3_summary(origin + direction * distance),
+		"normal": _vector3_summary(normal),
+		"normal_dot_ray": normal.dot(direction),
+		"u": u,
+		"v": v,
+	}
+
+
+func _ray_intersects_aabb(
+	origin: Vector3,
+	direction: Vector3,
+	aabb: AABB,
+	max_distance: float
+) -> bool:
+	var minimum := aabb.position
+	var maximum := aabb.position + aabb.size
+	var tmin := 0.0
+	var tmax := max_distance
+	for axis in range(3):
+		var origin_axis := origin[axis]
+		var direction_axis := direction[axis]
+		if absf(direction_axis) < 0.0000001:
+			if origin_axis < minimum[axis] or origin_axis > maximum[axis]:
+				return false
+			continue
+		var inverse_direction := 1.0 / direction_axis
+		var t1 := (minimum[axis] - origin_axis) * inverse_direction
+		var t2 := (maximum[axis] - origin_axis) * inverse_direction
+		if t1 > t2:
+			var swap := t1
+			t1 = t2
+			t2 = swap
+		tmin = maxf(tmin, t1)
+		tmax = minf(tmax, t2)
+		if tmin > tmax:
+			return false
+	return tmax >= 0.0 and tmin <= max_distance
 
 
 func _collect_human_artifact_probes(backend: Node, probe_specs: Array) -> Array:
