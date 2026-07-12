@@ -47,6 +47,8 @@ Controls:
 - `~`, then `M`: mark a visible terrain artifact at the current camera view;
   this saves screenshot/JSON diagnostics under
   `.godot/world_transvoxel_captures/human_artifact_marks/`
+  including isolated sky-pixel counts, exact screen-pixel rays for pinhole-like
+  sky leaks, normal mesh probes, and high-precision seam probes.
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse
 - Click after release: capture mouse again

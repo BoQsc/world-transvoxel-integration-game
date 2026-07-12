@@ -7,6 +7,9 @@ const CHUNK_CELLS_PER_AXIS := 16
 const POINT_KEY_SCALE := 1024
 const CHUNK_FACE_TOLERANCE_KEYS := 2
 
+static var _active_point_key_scale := POINT_KEY_SCALE
+static var _active_chunk_face_tolerance_keys := CHUNK_FACE_TOLERANCE_KEYS
+
 
 static func collect(backend: Node, mode: String, center: Vector3, radius: float) -> Dictionary:
 	if backend == null:
@@ -26,6 +29,8 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"mode": mode,
 		"center": _vector_summary(center),
 		"radius": radius,
+		"point_key_scale": _active_point_key_scale,
+		"chunk_face_tolerance_keys": _active_chunk_face_tolerance_keys,
 		"mesh_instances": 0,
 		"mesh_instances_in_region": 0,
 		"surfaces": 0,
@@ -87,6 +92,24 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		int(stats.get("zero_edge_triangles", 0)) == 0 and \
 		int(stats.get("triangles_in_region", 0)) > 0
 	return stats
+
+
+static func collect_precise(
+	backend: Node,
+	mode: String,
+	center: Vector3,
+	radius: float,
+	point_key_scale: int = 1048576,
+	chunk_face_tolerance_keys: int = 2
+) -> Dictionary:
+	var previous_point_key_scale := _active_point_key_scale
+	var previous_chunk_face_tolerance_keys := _active_chunk_face_tolerance_keys
+	_active_point_key_scale = maxi(1, point_key_scale)
+	_active_chunk_face_tolerance_keys = maxi(0, chunk_face_tolerance_keys)
+	var result := collect(backend, mode, center, radius)
+	_active_point_key_scale = previous_point_key_scale
+	_active_chunk_face_tolerance_keys = previous_chunk_face_tolerance_keys
+	return result
 
 
 static func _collect_edges(
@@ -488,7 +511,7 @@ static func _directed_edge_key(a: Vector3, b: Vector3) -> String:
 
 
 static func _point_key(point: Vector3) -> String:
-	var scale := float(POINT_KEY_SCALE)
+	var scale := float(_active_point_key_scale)
 	return "%d,%d,%d" % [
 		roundi(point.x * scale),
 		roundi(point.y * scale),
@@ -608,22 +631,24 @@ static func _edge_on_chunk_face(first: Array, second: Array, chunk: Dictionary) 
 	if lod < 0:
 		return false
 	var extent := CHUNK_CELLS_PER_AXIS * int(1 << lod)
+	var point_key_scale := _active_point_key_scale
 	var minimum := [
-		int(chunk.get("x", 0)) * extent * POINT_KEY_SCALE,
-		int(chunk.get("y", 0)) * extent * POINT_KEY_SCALE,
-		int(chunk.get("z", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("x", 0)) * extent * point_key_scale,
+		int(chunk.get("y", 0)) * extent * point_key_scale,
+		int(chunk.get("z", 0)) * extent * point_key_scale,
 	]
 	var maximum := [
-		(int(chunk.get("x", 0)) * extent + extent) * POINT_KEY_SCALE,
-		(int(chunk.get("y", 0)) * extent + extent) * POINT_KEY_SCALE,
-		(int(chunk.get("z", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("x", 0)) * extent + extent) * point_key_scale,
+		(int(chunk.get("y", 0)) * extent + extent) * point_key_scale,
+		(int(chunk.get("z", 0)) * extent + extent) * point_key_scale,
 	]
+	var tolerance := _active_chunk_face_tolerance_keys
 	for axis in range(3):
-		if abs(int(first[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(second[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+		if abs(int(first[axis]) - int(minimum[axis])) <= tolerance and \
+				abs(int(second[axis]) - int(minimum[axis])) <= tolerance:
 			return true
-		if abs(int(first[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(second[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+		if abs(int(first[axis]) - int(maximum[axis])) <= tolerance and \
+				abs(int(second[axis]) - int(maximum[axis])) <= tolerance:
 			return true
 	return false
 
@@ -633,24 +658,26 @@ static func _triangle_on_chunk_face(first: Array, second: Array, third: Array, c
 	if lod < 0:
 		return false
 	var extent := CHUNK_CELLS_PER_AXIS * int(1 << lod)
+	var point_key_scale := _active_point_key_scale
 	var minimum := [
-		int(chunk.get("x", 0)) * extent * POINT_KEY_SCALE,
-		int(chunk.get("y", 0)) * extent * POINT_KEY_SCALE,
-		int(chunk.get("z", 0)) * extent * POINT_KEY_SCALE,
+		int(chunk.get("x", 0)) * extent * point_key_scale,
+		int(chunk.get("y", 0)) * extent * point_key_scale,
+		int(chunk.get("z", 0)) * extent * point_key_scale,
 	]
 	var maximum := [
-		(int(chunk.get("x", 0)) * extent + extent) * POINT_KEY_SCALE,
-		(int(chunk.get("y", 0)) * extent + extent) * POINT_KEY_SCALE,
-		(int(chunk.get("z", 0)) * extent + extent) * POINT_KEY_SCALE,
+		(int(chunk.get("x", 0)) * extent + extent) * point_key_scale,
+		(int(chunk.get("y", 0)) * extent + extent) * point_key_scale,
+		(int(chunk.get("z", 0)) * extent + extent) * point_key_scale,
 	]
+	var tolerance := _active_chunk_face_tolerance_keys
 	for axis in range(3):
-		if abs(int(first[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(second[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(third[axis]) - int(minimum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+		if abs(int(first[axis]) - int(minimum[axis])) <= tolerance and \
+				abs(int(second[axis]) - int(minimum[axis])) <= tolerance and \
+				abs(int(third[axis]) - int(minimum[axis])) <= tolerance:
 			return true
-		if abs(int(first[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(second[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS and \
-				abs(int(third[axis]) - int(maximum[axis])) <= CHUNK_FACE_TOLERANCE_KEYS:
+		if abs(int(first[axis]) - int(maximum[axis])) <= tolerance and \
+				abs(int(second[axis]) - int(maximum[axis])) <= tolerance and \
+				abs(int(third[axis]) - int(maximum[axis])) <= tolerance:
 			return true
 	return false
 

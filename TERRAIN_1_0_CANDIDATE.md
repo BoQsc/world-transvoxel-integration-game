@@ -93,8 +93,13 @@ saves:
 - current screenshot;
 - camera, player, raycast target, and last terrain edit context;
 - sky-like pixel counts in the whole image, central image, and crosshair region;
+- isolated/pinhole-like sky-pixel counts and screen-pixel rays, ignoring normal
+  open-sky/horizon regions;
 - local mesh watertightness probes around the ray hit, last interaction,
   camera-forward samples, and player position.
+- high-precision seam probes for the ray hit, last interaction, and isolated
+  sky-pixel rays so subpixel chunk/LOD seam mismatches are not hidden by the
+  coarse regular topology key.
 
 Diagnostic files are written under:
 

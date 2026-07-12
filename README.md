@@ -143,7 +143,8 @@ Controls:
   plus static colored terrain lights over the mountain/flat inspection area
 - `~`, then `M`: mark a currently visible terrain artifact; this saves a
   screenshot, exact camera/raycast/edit context, sky-pixel counts around the
-  crosshair, and local mesh watertightness probes under
+  crosshair, isolated/pinhole-like sky-pixel ray diagnostics, and normal plus
+  high-precision local mesh watertightness probes under
   `.godot/world_transvoxel_captures/human_artifact_marks/`
 - Fly mode: WASD moves relative to camera, Space rises, Q/C descends, Shift flies faster
 - Escape: release mouse

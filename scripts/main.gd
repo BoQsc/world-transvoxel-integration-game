@@ -651,12 +651,19 @@ func _capture_human_artifact_mark(source: String) -> bool:
 	if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
 		backend = terrain_world.call("get_backend_terrain")
 	var target_summary := _human_artifact_interaction_target()
+	var sky_pixel_rays := _human_artifact_sky_pixel_rays(sky_summary)
 	var probe_specs := _human_artifact_probe_specs(target_summary)
+	probe_specs.append_array(_human_artifact_sky_pixel_probe_specs(sky_pixel_rays))
 	var probes := _collect_human_artifact_probes(backend, probe_specs)
+	var precise_probes := _collect_human_artifact_precise_probes(backend, probe_specs)
 	var problematic_probes := []
 	for probe in probes:
 		if _human_artifact_probe_is_problematic(probe):
 			problematic_probes.append(probe)
+	var problematic_precise_probes := []
+	for probe in precise_probes:
+		if _human_artifact_precise_probe_is_problematic(probe):
+			problematic_precise_probes.append(probe)
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var summary := {
 		"marker_id": marker_id,
@@ -672,10 +679,15 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"runtime": runtime_summary,
 		"presentation": _presentation_summary(),
 		"screen_sky_pixels": sky_summary,
+		"sky_pixel_rays": sky_pixel_rays,
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
 		"problematic_probes": problematic_probes,
 		"probes": probes,
+		"precise_probe_count": precise_probes.size(),
+		"problematic_precise_probe_count": problematic_precise_probes.size(),
+		"problematic_precise_probes": problematic_precise_probes,
+		"precise_probes": precise_probes,
 	}
 	var file := FileAccess.open(json_path, FileAccess.WRITE)
 	var file_ok := file != null
@@ -692,8 +704,14 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"crosshair_sky_pixels": int(sky_summary.get("crosshair_sky_pixels", 0)),
 		"center_sky_pixels": int(sky_summary.get("center_sky_pixels", 0)),
 		"whole_sky_pixels": int(sky_summary.get("whole_sky_pixels", 0)),
+		"isolated_crosshair_sky_pixels": int(sky_summary.get("isolated_crosshair_sky_pixels", 0)),
+		"isolated_center_sky_pixels": int(sky_summary.get("isolated_center_sky_pixels", 0)),
+		"isolated_sky_pixels": int(sky_summary.get("isolated_sky_pixels", 0)),
+		"sky_pixel_rays": sky_pixel_rays.size(),
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
+		"precise_probe_count": precise_probes.size(),
+		"problematic_precise_probe_count": problematic_precise_probes.size(),
 	}))
 	if not file_ok:
 		push_error("failed to write human artifact mark json: %s" % json_path)
@@ -792,6 +810,90 @@ func _human_artifact_probe_specs(target_summary: Dictionary) -> Array:
 	return specs
 
 
+func _human_artifact_sky_pixel_rays(sky_summary: Dictionary) -> Array:
+	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D if player != null else null
+	if camera == null or get_world_3d() == null:
+		return []
+	var pixel_summaries := _human_artifact_sky_pixel_examples(sky_summary)
+	var reports := []
+	var direct_space_state := get_world_3d().direct_space_state
+	for index in range(pixel_summaries.size()):
+		var pixel: Dictionary = pixel_summaries[index]
+		var screen_point := Vector2(float(pixel.get("x", 0.0)), float(pixel.get("y", 0.0)))
+		var origin := camera.project_ray_origin(screen_point)
+		var direction := camera.project_ray_normal(screen_point).normalized()
+		var end := origin + direction * 512.0
+		var query := PhysicsRayQueryParameters3D.create(origin, end)
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		if player is CollisionObject3D:
+			query.exclude = [(player as CollisionObject3D).get_rid()]
+		var hit := direct_space_state.intersect_ray(query)
+		var report := {
+			"index": index,
+			"pixel": pixel,
+			"screen_point": {"x": screen_point.x, "y": screen_point.y},
+			"origin": _vector3_summary(origin),
+			"direction": _vector3_summary(direction),
+			"max_distance": 512.0,
+			"physics_hit": not hit.is_empty(),
+		}
+		if not hit.is_empty():
+			var hit_position: Vector3 = hit.get("position", origin)
+			report["hit_position"] = _vector3_summary(hit_position)
+			report["hit_distance"] = origin.distance_to(hit_position)
+			report["hit_normal"] = _vector3_summary(hit.get("normal", Vector3.ZERO))
+			var collider = hit.get("collider", null)
+			report["hit_collider"] = str(collider.name) if collider is Node else str(collider)
+		reports.append(report)
+	return reports
+
+
+func _human_artifact_sky_pixel_examples(sky_summary: Dictionary) -> Array:
+	var pixels := []
+	var seen := {}
+	var group_keys := ["isolated_crosshair_examples", "isolated_examples"]
+	if int(sky_summary.get("whole_sky_pixels", 0)) <= 256:
+		group_keys.append_array(["crosshair_examples", "examples"])
+	for group_key in group_keys:
+		var group: Array = sky_summary.get(group_key, [])
+		for value in group:
+			if not value is Dictionary:
+				continue
+			var pixel: Dictionary = value
+			var key := "%d,%d" % [int(pixel.get("x", 0)), int(pixel.get("y", 0))]
+			if seen.has(key):
+				continue
+			seen[key] = true
+			pixels.append(pixel)
+			if pixels.size() >= 12:
+				return pixels
+	return pixels
+
+
+func _human_artifact_sky_pixel_probe_specs(sky_pixel_rays: Array) -> Array:
+	var specs := []
+	var ray_limit := mini(4, sky_pixel_rays.size())
+	for index in range(ray_limit):
+		var ray: Dictionary = sky_pixel_rays[index]
+		var label_prefix := "sky_pixel_%02d" % index
+		if bool(ray.get("physics_hit", false)) and ray.has("hit_position"):
+			specs.append({
+				"label": "%s_hit" % label_prefix,
+				"center": _vector3_from_summary(ray["hit_position"]),
+			})
+		var origin := _vector3_from_summary(ray.get("origin", {}))
+		var direction := _vector3_from_summary(ray.get("direction", {})).normalized()
+		if direction.length_squared() == 0.0:
+			continue
+		for distance in [4.0, 8.0, 16.0, 32.0, 64.0]:
+			specs.append({
+				"label": "%s_d%03d" % [label_prefix, int(distance)],
+				"center": origin + direction * distance,
+			})
+	return specs
+
+
 func _collect_human_artifact_probes(backend: Node, probe_specs: Array) -> Array:
 	var probes := []
 	for spec in probe_specs:
@@ -813,10 +915,67 @@ func _collect_human_artifact_probes(backend: Node, probe_specs: Array) -> Array:
 	return probes
 
 
+func _collect_human_artifact_precise_probes(backend: Node, probe_specs: Array) -> Array:
+	var probes := []
+	var selected_specs := _human_artifact_precise_probe_specs(probe_specs)
+	for spec in selected_specs:
+		var center: Vector3 = spec.get("center", Vector3.ZERO)
+		var label := str(spec.get("label", "unknown"))
+		for radius in [3.0, 6.0, 12.0]:
+			var probe: Dictionary = WatertightnessProbe.collect_precise(
+				backend,
+				"human_artifact_precise_%s_r%02d" % [label, int(radius)],
+				center,
+				radius,
+				1048576,
+				2
+			)
+			var digest := _open_gap_probe_digest(probe)
+			digest["label"] = label
+			digest["center"] = _vector3_summary(center)
+			digest["radius"] = radius
+			digest["point_key_scale"] = int(probe.get("point_key_scale", 0))
+			digest["chunk_face_tolerance_keys"] = int(probe.get("chunk_face_tolerance_keys", 0))
+			digest["open_gap_free"] = _is_open_gap_free_probe(probe)
+			probes.append(digest)
+	return probes
+
+
+func _human_artifact_precise_probe_specs(probe_specs: Array) -> Array:
+	var selected := []
+	var seen := {}
+	for spec in probe_specs:
+		var label := str(spec.get("label", "unknown"))
+		if label != "ray_hit" and label != "last_interaction" and not label.begins_with("sky_pixel_"):
+			continue
+		var center: Vector3 = spec.get("center", Vector3.ZERO)
+		var key := "%s:%0.3f,%0.3f,%0.3f" % [label, center.x, center.y, center.z]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		selected.append(spec)
+		if selected.size() >= 20:
+			break
+	return selected
+
+
 func _human_artifact_probe_is_problematic(probe: Dictionary) -> bool:
 	if int(probe.get("triangles_in_region", 0)) <= 0:
 		return false
 	return not bool(probe.get("open_gap_free", false))
+
+
+func _human_artifact_precise_probe_is_problematic(probe: Dictionary) -> bool:
+	if int(probe.get("triangles_in_region", 0)) <= 0:
+		return false
+	if not bool(probe.get("open_gap_free", false)):
+		return true
+	if int(probe.get("chunk_face_boundary_edges", 0)) > 0:
+		return true
+	if float(probe.get("minimum_area_squared", INF)) > 0.0 and \
+			float(probe.get("minimum_area_squared", INF)) < 0.00000025:
+		return true
+	return false
 
 
 func _screen_sky_pixel_summary(image: Image) -> Dictionary:
@@ -834,8 +993,13 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var whole_sky_pixels := 0
 	var center_sky_pixels := 0
 	var crosshair_sky_pixels := 0
+	var isolated_sky_pixels := 0
+	var isolated_center_sky_pixels := 0
+	var isolated_crosshair_sky_pixels := 0
 	var examples := []
 	var crosshair_examples := []
+	var isolated_examples := []
+	var isolated_crosshair_examples := []
 	for y in range(height):
 		for x in range(width):
 			var color := image.get_pixel(x, y)
@@ -844,20 +1008,36 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 			whole_sky_pixels += 1
 			if examples.size() < 8:
 				examples.append(_pixel_summary(x, y, color))
+			var isolated := _is_isolated_sky_pixel(image, x, y)
+			if isolated:
+				isolated_sky_pixels += 1
+				if isolated_examples.size() < 8:
+					isolated_examples.append(_pixel_summary(x, y, color))
 			if x >= center_left and x < center_right and y >= center_top and y < center_bottom:
 				center_sky_pixels += 1
+				if isolated:
+					isolated_center_sky_pixels += 1
 			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
 				crosshair_sky_pixels += 1
 				if crosshair_examples.size() < 8:
 					crosshair_examples.append(_pixel_summary(x, y, color))
+				if isolated:
+					isolated_crosshair_sky_pixels += 1
+					if isolated_crosshair_examples.size() < 8:
+						isolated_crosshair_examples.append(_pixel_summary(x, y, color))
 	return {
 		"width": width,
 		"height": height,
 		"whole_sky_pixels": whole_sky_pixels,
 		"center_sky_pixels": center_sky_pixels,
 		"crosshair_sky_pixels": crosshair_sky_pixels,
+		"isolated_sky_pixels": isolated_sky_pixels,
+		"isolated_center_sky_pixels": isolated_center_sky_pixels,
+		"isolated_crosshair_sky_pixels": isolated_crosshair_sky_pixels,
 		"examples": examples,
 		"crosshair_examples": crosshair_examples,
+		"isolated_examples": isolated_examples,
+		"isolated_crosshair_examples": isolated_crosshair_examples,
 	}
 
 
@@ -867,6 +1047,21 @@ func _is_sky_like_pixel(color: Color) -> bool:
 		color.r <= 0.72 and \
 		color.b >= color.r + 0.10 and \
 		color.b >= color.g + 0.02
+
+
+func _is_isolated_sky_pixel(image: Image, x: int, y: int) -> bool:
+	var sky_neighbor_count := 0
+	var left := maxi(0, x - 2)
+	var right := mini(image.get_width() - 1, x + 2)
+	var top := maxi(0, y - 2)
+	var bottom := mini(image.get_height() - 1, y + 2)
+	for yy in range(top, bottom + 1):
+		for xx in range(left, right + 1):
+			if _is_sky_like_pixel(image.get_pixel(xx, yy)):
+				sky_neighbor_count += 1
+				if sky_neighbor_count > 6:
+					return false
+	return true
 
 
 func _pixel_summary(x: int, y: int, color: Color) -> Dictionary:
