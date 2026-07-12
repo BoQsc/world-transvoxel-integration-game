@@ -28,6 +28,9 @@ REQUIRED_TEXTURE_IMPORTS = {
         "compress/normal_map": "0",
     },
 }
+GENERATED_CAPTURE_IGNORE_MARKERS = (
+    "build/captures/.gdignore",
+)
 
 
 def repo_root() -> pathlib.Path:
@@ -60,7 +63,21 @@ def find_godot(explicit: str | None) -> pathlib.Path:
     )
 
 
+def ensure_generated_capture_dirs_ignored(project: pathlib.Path) -> None:
+    """Keep generated screenshots out of Godot's resource import scan."""
+    for relative in GENERATED_CAPTURE_IGNORE_MARKERS:
+        marker = project / relative
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        if marker.is_file():
+            continue
+        marker.write_text(
+            "Generated validation screenshots. Do not import into Godot.\n",
+            encoding="utf-8",
+        )
+
+
 def run_godot_import(godot: pathlib.Path, project: pathlib.Path) -> None:
+    ensure_generated_capture_dirs_ignored(project)
     cmd = [str(godot), "--headless", "--path", str(project), "--import"]
     print("importing:", " ".join(cmd), flush=True)
     completed = subprocess.run(cmd, cwd=project, text=True, capture_output=True)

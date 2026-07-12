@@ -55,10 +55,15 @@ VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
 )
+DEFAULT_CAPTURE_ROOT_NAME = "world_transvoxel_captures"
 
 
 def repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[1]
+
+
+def default_capture_dir(project: pathlib.Path, gate_name: str) -> pathlib.Path:
+    return project / ".godot" / DEFAULT_CAPTURE_ROOT_NAME / gate_name
 
 
 def find_godot(explicit: str | None) -> pathlib.Path:
@@ -1228,7 +1233,7 @@ def main(argv: list[str]) -> int:
     if args.visual_smoke:
         modes = tuple(args.visual_mode) if args.visual_mode else DEFAULT_VISUAL_MODES
         output_dir = pathlib.Path(args.visual_output_dir).resolve() if args.visual_output_dir else (
-            project / "build" / "captures" / "terrain_1_0_visual_smoke"
+            default_capture_dir(project, "terrain_1_0_visual_smoke")
         )
         captures = [
             run_visual_capture(
@@ -1253,7 +1258,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.lod_movement_output_dir).resolve()
             if args.lod_movement_output_dir
-            else project / "build" / "captures" / "terrain_1_0_lod_movement_gate"
+            else default_capture_dir(project, "terrain_1_0_lod_movement_gate")
         )
         captures = [
             run_lod_movement_gate(
@@ -1278,7 +1283,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.edit_during_load_output_dir).resolve()
             if args.edit_during_load_output_dir
-            else project / "build" / "captures" / "terrain_1_0_edit_during_load_gate"
+            else default_capture_dir(project, "terrain_1_0_edit_during_load_gate")
         )
         captures = [
             run_edit_during_load_gate(
@@ -1303,7 +1308,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.manifold_stress_output_dir).resolve()
             if args.manifold_stress_output_dir
-            else project / "build" / "captures" / "terrain_1_0_manifold_stress_gate"
+            else default_capture_dir(project, "terrain_1_0_manifold_stress_gate")
         )
         captures = [
             run_manifold_stress_gate(
@@ -1328,7 +1333,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.tunnel_output_dir).resolve()
             if args.tunnel_output_dir
-            else project / "build" / "captures" / "terrain_1_0_tunnel_gate"
+            else default_capture_dir(project, "terrain_1_0_tunnel_gate")
         )
         captures = [
             run_tunnel_gate(
@@ -1353,7 +1358,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.tunnel_crawl_output_dir).resolve()
             if args.tunnel_crawl_output_dir
-            else project / "build" / "captures" / "terrain_1_0_tunnel_crawl_gate"
+            else default_capture_dir(project, "terrain_1_0_tunnel_crawl_gate")
         )
         captures = [
             run_tunnel_crawl_gate(
@@ -1378,7 +1383,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.tunnel_transient_crawl_output_dir).resolve()
             if args.tunnel_transient_crawl_output_dir
-            else project / "build" / "captures" / "terrain_1_0_tunnel_transient_crawl_gate"
+            else default_capture_dir(project, "terrain_1_0_tunnel_transient_crawl_gate")
         )
         captures = [
             run_tunnel_transient_crawl_gate(
@@ -1403,7 +1408,7 @@ def main(argv: list[str]) -> int:
         output_dir = (
             pathlib.Path(args.tunnel_visual_artifact_output_dir).resolve()
             if args.tunnel_visual_artifact_output_dir
-            else project / "build" / "captures" / "terrain_1_0_tunnel_visual_artifact_gate"
+            else default_capture_dir(project, "terrain_1_0_tunnel_visual_artifact_gate")
         )
         captures = [
             run_tunnel_visual_artifact_gate(
