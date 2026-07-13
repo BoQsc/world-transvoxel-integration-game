@@ -101,23 +101,32 @@ through terrain. The root causes were:
 
 - human fly mode previously moved the player directly and could allow invalid
   inside/below-terrain inspection views;
-- compact human visual mode had no full 2K terrain fallback/backdrop outside the
-  native moving detail window;
-- the full-map visual, when re-enabled, used a simplified height expression and
-  one-sided culling, which could produce false sky cutouts on steep/grazing
-  views.
+- the native moving detail window still has visible streaming/LOD continuity
+  cases that must be fixed in native terrain rather than hidden with a backdrop;
+- a full-map presentation backing layer was temporarily restored and then
+  narrowed with edit exclusions, but that path is not authoritative terrain and
+  must not be used to claim Terrain 1.0 correctness.
 
 Current fix boundary:
 
 - human fly mode is collision-aware;
-- autonomous native terrain proof remains full-map-free;
-- compact human/visual mode enables an exact deterministic 2048 by 2048
-  full-map LOD/backdrop using the same procedural height expression as the
-  native source, with edit-region exclusions so the backdrop does not render
-  underneath edited native Transvoxel holes;
-- only that full-map heightfield backdrop is cull-disabled. Native Transvoxel
-  chunks remain single-sided, so this is not a workaround for native mesh
-  nonmanifoldness.
+- autonomous proof, normal human play, and terrain-correctness visual gates must
+  remain full-map-free and report `full_map_enabled=false`;
+- `backdrop_exclusion_gate` and `--p2-enable-compact-presentation-backing` exist
+  only to inspect the optional presentation backing layer itself;
+- native Transvoxel chunks remain single-sided, and any sky leak, open edge,
+  zero-area triangle, harsh edited-LOD change, or transient streaming gap in
+  native-only mode remains a real terrain issue.
+
+Current native-only status:
+
+- native compact ground capture passes with `full_map_enabled=false`;
+- native compact streaming/fly capture passes with `full_map_enabled=false`;
+- native compact edited `edit_near` capture still fails watertightness because
+  the probe finds `zero_area_interior_triangles=4` after the edit batch. It does
+  not report open interior boundary edges, nonmanifold edges, or orientation
+  conflict edges in that capture, but the zero-area interior triangles keep the
+  edited native mesh from being accepted as Terrain 1.0-ready.
 
 Command:
 
@@ -125,7 +134,9 @@ Command:
 python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_gap_gate_wrapper --visual-wait-frames 180
 ```
 
-Result: passed with exit code 0.
+Result before this correction: passed with exit code 0 while using the optional
+presentation backing. This evidence is no longer accepted as terrain-correctness
+proof; rerun native-only gates after native streaming/LOD fixes.
 
 Required pass markers observed:
 
@@ -141,11 +152,10 @@ Normal compact visual smoke was also rerun:
 python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-output-dir .godot/world_transvoxel_captures/visual_smoke_compact --visual-wait-frames 180
 ```
 
-Result: passed with exit code 0 and `full_map_enabled=true` in all compact
-human visual capture summaries, while the autonomous native proof still reported
-`full_map_visual=0`. Current compact edited visual captures must also report
-`local_detail_exclusion=true` and a positive `local_detail_exclusion_regions`
-count.
+Result before this correction: passed with exit code 0 and
+`full_map_enabled=true` in compact human visual capture summaries. This is now
+classified as presentation/backdrop evidence only. Terrain-correctness visual
+captures must report `full_map_enabled=false`.
 
 Capture output root:
 

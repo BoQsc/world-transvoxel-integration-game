@@ -38,6 +38,7 @@ var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
+var compact_presentation_backing_enabled := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -85,6 +86,8 @@ func _ready() -> void:
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
+	compact_presentation_backing_enabled = args.has("--p2-enable-compact-presentation-backing") or \
+		human_visual_capture_mode == "backdrop_exclusion_gate"
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -419,13 +422,12 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
-	# Human compact runs need a stable 2K visual backing layer. The native
-	# streamed Transvoxel chunks remain the editable/collidable detail layer;
-	# autonomous proof mode keeps this disabled so native streaming regressions
-	# cannot be hidden by the presentation layer.
+	# The full-map visual is an explicit opt-in presentation/backdrop diagnostic.
+	# Terrain correctness and normal human playtest paths keep this disabled so
+	# native Transvoxel streaming, LOD, and edit failures cannot be hidden.
 	full_map_visual = FullMapVisual.new()
 	full_map_visual.name = "FullMapTerrainVisual"
-	full_map_visual.enabled = not autonomous
+	full_map_visual.enabled = compact_presentation_backing_enabled and not autonomous
 	full_map_visual.enabled_profile_id = COMPACT_PROFILE
 	full_map_visual.auto_detect_parent_profile = true
 	full_map_visual.chunk_count_x = 128
@@ -459,6 +461,8 @@ func _configure_presentation(_settings: Dictionary) -> void:
 
 func register_terrain_edit_exclusion(center: Vector3, radius: float) -> void:
 	if autonomous or full_map_visual == null or player == null:
+		return
+	if not compact_presentation_backing_enabled:
 		return
 	if selected_profile != COMPACT_PROFILE:
 		return

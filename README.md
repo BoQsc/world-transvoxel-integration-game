@@ -126,15 +126,18 @@ entire visible world to refine. It is intentionally a stress profile: it is not
 the default terrain style, and it exists to inspect Transvoxel seams, lighting,
 materials, and edit replacement behavior on tall, sharper terrain.
 
-Important compact-profile visual boundary: the autonomous native terrain proof
-keeps `full_map_visual=0`, proving the native moving terrain window by itself.
-Normal human play and visual smoke keep `full_map_enabled=true` for the compact
-profile so the 2048 by 2048 terrain remains visually continuous while local
-detail chunks stream and refine. Accepted edits add local exclusion regions so
-the backing layer does not draw a second unedited surface under carved/placed
-terrain. Treat sky seen through terrain during normal collision-aware flight as
-a bug unless the camera was intentionally forced inside/below terrain by an
-invalid noclip/debug path.
+Important compact-profile visual boundary: native Transvoxel terrain is the
+authoritative path. Normal human play, visual smoke, and terrain-correctness
+gates must report `full_map_enabled=false`; sky seen through terrain during
+normal collision-aware flight is a bug unless the camera was intentionally
+forced inside/below terrain by an invalid noclip/debug path.
+
+The full-map visual backing layer is an explicit opt-in presentation diagnostic,
+not a terrain-correctness solution and not a standard Transvoxel architecture.
+Use it only with `--p2-enable-compact-presentation-backing` or the dedicated
+`backdrop_exclusion_gate` when testing the backdrop itself. It must not be used
+to claim seamless LOD, manifold terrain, edit persistence, or production
+terrain readiness.
 
 The flat baseline profile remains available for proof automation:
 
@@ -215,7 +218,7 @@ available for validation.
 | Edits do not commit | Inspect `game_world.get_last_edit_summary()`, `edit_commit_count`, `edit_failure_count`, and the terrain edit journal under `res://build/<game>/<profile>/`. |
 | Clicks appear to do nothing | Confirm the player interaction summary reports `ray_hit=true`; visible render chunks are not enough if collision coverage is stale or too narrow. |
 | White/default chunks flash while moving | Confirm the material summary reports `native_render_material_override=true`; the old recursive-only material scan is not sufficient for human play. |
-| Terrain seems to disappear while flying | Confirm the run uses collision-aware human fly mode, not an old noclip/debug path. Then run the streaming-fly visual gate below and require `streaming_fly.ok=true`, `failure_count=0`, and `full_map_enabled=true` in the capture summary. |
+| Terrain seems to disappear while flying | Confirm the run uses collision-aware human fly mode, not an old noclip/debug path. Then run the streaming-fly visual gate below and require `streaming_fly.ok=true`, `failure_count=0`, and `full_map_enabled=false` in the capture summary. |
 | Debug UI visible during human play | Confirm you are running this integration game main scene, not an older validation playtest scene. |
 
 ## Automated proof
