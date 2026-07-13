@@ -4207,18 +4207,16 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 				await get_tree().process_frame
 	if not await _wait_for_current_profile_settled("after LOD movement direct edits"):
 		return false
-	if lod_movement_direct_only:
-		last_lod_movement_summary = {
-			"enabled": true,
-			"ok": true,
-			"profile": str(selected_profile),
-			"direct_only": true,
-			"direct_operation_count": operations.size(),
-			"mode_counts": mode_counts,
-		}
-		interaction_inspection_applied = true
-		return true
-	var interaction_result: Dictionary = await _run_lod_movement_player_interactions(terrain_world)
+	var interaction_result: Dictionary = {
+		"ok": true,
+		"direct_only": true,
+		"operation_count": 0,
+		"operations": [],
+		"summaries": [],
+		"strict_settle_notes": [],
+	}
+	if not lod_movement_direct_only:
+		interaction_result = await _run_lod_movement_player_interactions(terrain_world)
 	if not bool(interaction_result.get("ok", false)):
 		last_lod_movement_summary = {
 			"enabled": true,
@@ -4286,6 +4284,7 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 		"enabled": true,
 		"ok": true,
 		"profile": str(selected_profile),
+		"direct_only": lod_movement_direct_only,
 		"direct_operation_count": operations.size(),
 		"interaction_operation_count": interaction_operations.size(),
 		"total_operation_count": edit_persistence_operations.size(),
