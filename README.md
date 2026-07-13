@@ -10,6 +10,24 @@ streaming/fly visual-stability gate. Human acceptance is still the final
 confirmation step; visible terrain artifacts during play must be marked with
 `~`, then `M`.
 
+## Critical edited-terrain LOD boundary
+
+This integration game inherits the core World Transvoxel edited-LOD-retention
+contract. Edited terrain is persistent world state, but high-detail visibility of
+every mined, dug, placed, or restored area from every distance is budgeted, not
+unlimited. Recent edit-retention keeps player edits refined longer and prevents
+the known all-retention fallback collapse, but a project can still choose camera
+distances, active chunk capacity, viewer radius, or retention budgets that make
+distant edited shapes simplify.
+
+Any repository that uses this project as a reference must carry this boundary
+forward. A profile may claim seamless edited terrain only after player-like
+edits are validated across close, mid, far, and return movement with persistence,
+rendered-gap, and acceptable far-LOD shape-continuity checks. Human reports of
+harsh dug-hole changes, transient terrain disappearance, or pinhole sky leaks
+must be marked with `~`, then `M`, and promoted into targeted gates instead of
+being treated as subjective visual feedback.
+
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is
 part of the runtime contract, and stale import cache can make visual testing

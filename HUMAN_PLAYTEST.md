@@ -75,6 +75,16 @@ Use these names when reporting terrain problems:
   the camera moves away and returns. This is an edit-retention/LOD-continuity
   symptom.
 
+Edited-LOD retention is a serious budgeted limitation, not a solved-for-all-time
+promise. The current runtime prevents the known fallback path where all recent
+edit-retention viewers were dropped under planner pressure, but it still cannot
+keep unlimited edited terrain high-detail from every distance. If many edits are
+spread over a wide area, or if a profile chooses tight active chunk/viewer/LOD
+budgets, distant edited shapes may simplify until a viewer moves close again.
+Report harsh changes, transient sky gaps, or pinhole sky leaks with `~`, then
+`M`; those marks are the required bridge from human observation to a targeted
+automated gate.
+
 Before requesting another human playtest, run both automated gates:
 
 ```console

@@ -22,6 +22,9 @@ Current runtime/source changes in this candidate follow-up:
 - recent edit LOD-retention zones remain active even when the player flies away,
   so recent dug/placed areas keep detailed LOD longer instead of immediately
   collapsing to coarse terrain;
+- edit-retention fallback is budgeted and prioritized newest/visible first; this
+  prevents the known all-retention fallback collapse, but it does not guarantee
+  unlimited high-detail visibility of every edited region from every distance;
 - newly created native render chunks are not faded in from transparent/sky when
   transition fading is enabled by a project;
 - the integration profile keeps native render transition fading disabled
@@ -172,6 +175,10 @@ This candidate does not claim:
 
 - GPU/compute-shader terrain acceleration;
 - water, lava, vegetation, buildings, biomes, multiplayer, or entity systems;
+- unlimited high-detail visibility of every edited/mined region from every
+  distance;
+- seamless dynamic LOD for arbitrary future camera paths beyond the recorded
+  gates;
 - final human acceptance;
 - final game production readiness outside this integration game scope.
 
@@ -212,6 +219,13 @@ saves:
 - high-precision seam probes for the ray hit, last interaction, and isolated
   sky-pixel rays so subpixel chunk/LOD seam mismatches are not hidden by the
   coarse regular topology key.
+
+Every new human-marked artifact path must either be explained as an intentional
+profile/budget tradeoff or promoted into an automated targeted gate before the
+same profile can be treated as accepted. This is especially important for edited
+terrain: close-range manifold probes, persistence samples, and far-distance LOD
+shape continuity are separate claims and must not be collapsed into one generic
+"terrain works" statement.
 
 Diagnostic files are written under:
 
