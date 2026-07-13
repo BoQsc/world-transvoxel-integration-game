@@ -89,11 +89,11 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage and
   capped radius-1 near-detail refinement;
 - compact 2K human/visual mode includes an exact deterministic full-map terrain
-  LOD/backdrop underneath the native moving detail window. This layer uses the
-  same procedural height expression as the native source and is cull-disabled
-  because it is a far heightfield backdrop. Native Transvoxel chunks remain
-  single-sided and are still validated separately without relying on this
-  backdrop;
+  LOD/backdrop outside the local native/editable detail window. This layer uses
+  the same procedural height expression as the native source and is cull-disabled
+  because it is a far heightfield backdrop. It must not render underneath local
+  edited Transvoxel holes. Native Transvoxel chunks remain single-sided and are
+  still validated separately without relying on this backdrop;
 - sharp deterministic mountain stress terrain inside the current procedural
   vertical budget, with tall ridges, spire-like peaks, steep slopes, and the
   human spawn placed above terrain and snapped to collision before input is
@@ -130,9 +130,11 @@ Important compact-profile visual boundary: the autonomous native terrain proof
 keeps `full_map_visual=0`, proving the native moving terrain window by itself.
 Normal human play and visual smoke keep `full_map_enabled=true` for the compact
 profile so the 2048 by 2048 terrain remains visually continuous while local
-detail chunks stream and refine. Treat sky seen through terrain during normal
-collision-aware flight as a bug unless the camera was intentionally forced
-inside/below terrain by an invalid noclip/debug path.
+detail chunks stream and refine. Accepted edits add local exclusion regions so
+the backing layer does not draw a second unedited surface under carved/placed
+terrain. Treat sky seen through terrain during normal collision-aware flight as
+a bug unless the camera was intentionally forced inside/below terrain by an
+invalid noclip/debug path.
 
 The flat baseline profile remains available for proof automation:
 

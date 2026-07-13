@@ -27,10 +27,10 @@ Expected baseline:
   spire-like peaks, and steep slopes for seam, lighting, material, and edit
   inspection
 - compact human/visual runs use a deterministic 2048 by 2048 full-map terrain
-  backing layer under the streamed native Transvoxel detail window. This is part
-  of the expected human/game presentation, not a debug fake. Autonomous proof
-  mode disables it and must continue reporting `full_map_visual=0` so native
-  streaming remains tested separately.
+  backing layer outside the local streamed native Transvoxel detail window. This
+  is part of the expected human/game presentation, but it must not render under
+  local edited holes. Autonomous proof mode disables it and must continue
+  reporting `full_map_visual=0` so native streaming remains tested separately.
 - fullscreen by default
 - crosshair only by default; no debug telemetry UI unless running autonomous proof
 - sand-textured clean terrain presentation using `assets/terrain_textures/coast_sand_01_diff_1k.jpg`
@@ -77,7 +77,9 @@ Use these names when reporting terrain problems:
   symptom, not automatically proof that the generated mesh is nonmanifold.
   In compact normal human play, this must not be caused by a missing full-map
   backing layer; if it appears, run the streaming-fly gate and require
-  `full_map_enabled=true` plus `streaming_fly.failure_count=0`.
+  `full_map_enabled=true` and `streaming_fly.failure_count=0`. For edited
+  captures, also require `local_detail_exclusion=true` and at least one
+  `local_detail_exclusion_regions` entry.
 - Edited-LOD popping: a dug or placed shape changes harshly or disappears when
   the camera moves away and returns. This is an edit-retention/LOD-continuity
   symptom.

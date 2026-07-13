@@ -51,6 +51,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
     "edit_tunnel_upward_lod_gate",
+    "backdrop_exclusion_gate",
     "streaming_fly_gap_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
@@ -225,6 +226,21 @@ def validate_visual_summary(
                 f"visual capture field {key} expected {expected!r}, "
                 f"got {summary.get(key)!r}: {summary!r}"
             )
+    mode = str(summary.get("mode", ""))
+    edit_region_exclusion_expected = full_map_expected and mode in {
+        "small_edit_near",
+        "small_edit_mid",
+        "small_edit_far",
+        "edit_near",
+        "edit_far",
+        "edit_aerial",
+        "backdrop_exclusion_gate",
+    }
+    if edit_region_exclusion_expected:
+        if summary.get("local_detail_exclusion") is not True:
+            raise RuntimeError(f"edited compact capture missing local detail exclusion: {summary!r}")
+        if int(summary.get("local_detail_exclusion_regions", 0)) <= 0:
+            raise RuntimeError(f"edited compact capture has no exclusion regions: {summary!r}")
     minimums = {
         "runtime_demand_capacity_per_viewer": 8192,
         "active_chunk_records": 64,

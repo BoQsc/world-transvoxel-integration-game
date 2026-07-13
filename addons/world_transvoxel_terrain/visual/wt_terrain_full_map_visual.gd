@@ -17,13 +17,19 @@ const TerrainPaletteShader := preload("res://addons/world_transvoxel_terrain/mat
 @export var local_detail_exclusion_enabled: bool = false
 @export var local_detail_exclusion_center: Vector2 = Vector2(1024.0, 1024.0)
 @export var local_detail_exclusion_half_extent: Vector2 = Vector2(96.0, 96.0)
+@export_range(1.0, 128.0, 1.0) var local_detail_exclusion_rebuild_distance: float = 16.0
+@export_range(0, 1024, 1) var max_local_detail_exclusion_regions: int = 256
 @export var visual_mode: StringName = &"material_id"
 @export var clean_albedo_color: Color = Color(0.72, 0.65, 0.50, 1.0)
 @export var clean_albedo_texture_path: String = ""
 @export_range(0.001, 1.0, 0.001) var clean_texture_world_scale: float = 0.125
 
+var local_detail_exclusion_regions: Array = []
 var _built_profile_id: StringName = &""
 var _summary: Dictionary = {"enabled": false}
+var _applied_exclusion_enabled: bool = false
+var _applied_exclusion_center: Vector2 = Vector2(INF, INF)
+var _applied_exclusion_half_extent: Vector2 = Vector2(-1.0, -1.0)
 
 
 func _ready() -> void:
@@ -43,6 +49,31 @@ func _process(_delta: float) -> void:
 
 func get_full_terrain_visual_summary() -> Dictionary:
 	return _summary.duplicate(true)
+
+
+func set_local_detail_exclusion(center: Vector2, half_extent: Vector2, exclusion_enabled: bool = true) -> void:
+	local_detail_exclusion_center = center
+	local_detail_exclusion_half_extent = half_extent
+	local_detail_exclusion_enabled = exclusion_enabled
+	if mesh == null or not bool(_summary.get("enabled", false)):
+		return
+	if not _needs_exclusion_rebuild():
+		return
+	_build_visual(_built_profile_id)
+
+
+func add_local_detail_exclusion_region(center: Vector2, half_extent: Vector2) -> void:
+	if max_local_detail_exclusion_regions <= 0:
+		return
+	local_detail_exclusion_regions.append({
+		"center": center,
+		"half_extent": half_extent,
+	})
+	while local_detail_exclusion_regions.size() > max_local_detail_exclusion_regions:
+		local_detail_exclusion_regions.remove_at(0)
+	if mesh == null or not bool(_summary.get("enabled", false)):
+		return
+	_build_visual(_built_profile_id)
 
 
 func sample_surface_height(x: float, z: float) -> float:
@@ -180,7 +211,11 @@ func _build_visual(profile_id: StringName) -> void:
 		"local_detail_exclusion_half_extent_x": local_detail_exclusion_half_extent.x,
 		"local_detail_exclusion_half_extent_z": local_detail_exclusion_half_extent.y,
 		"local_detail_exclusion_cells": excluded_cells,
+		"local_detail_exclusion_regions": local_detail_exclusion_regions.size(),
 	}
+	_applied_exclusion_enabled = local_detail_exclusion_enabled
+	_applied_exclusion_center = local_detail_exclusion_center
+	_applied_exclusion_half_extent = local_detail_exclusion_half_extent
 
 
 func _make_material() -> Material:
@@ -258,10 +293,26 @@ func _visual_color(material_id: int) -> Color:
 
 
 func _is_inside_local_detail_exclusion(x: float, z: float) -> bool:
-	if not local_detail_exclusion_enabled:
-		return false
-	return abs(x - local_detail_exclusion_center.x) <= local_detail_exclusion_half_extent.x and \
-			abs(z - local_detail_exclusion_center.y) <= local_detail_exclusion_half_extent.y
+	if local_detail_exclusion_enabled and \
+			abs(x - local_detail_exclusion_center.x) <= local_detail_exclusion_half_extent.x and \
+			abs(z - local_detail_exclusion_center.y) <= local_detail_exclusion_half_extent.y:
+		return true
+	for region in local_detail_exclusion_regions:
+		if not region is Dictionary:
+			continue
+		var center: Vector2 = region.get("center", Vector2.ZERO)
+		var half_extent: Vector2 = region.get("half_extent", Vector2.ZERO)
+		if abs(x - center.x) <= half_extent.x and abs(z - center.y) <= half_extent.y:
+			return true
+	return false
+
+
+func _needs_exclusion_rebuild() -> bool:
+	if local_detail_exclusion_enabled != _applied_exclusion_enabled:
+		return true
+	if local_detail_exclusion_half_extent.distance_to(_applied_exclusion_half_extent) > 0.001:
+		return true
+	return local_detail_exclusion_center.distance_to(_applied_exclusion_center) >= local_detail_exclusion_rebuild_distance
 
 
 func _floor_div(value: int, divisor: int) -> int:

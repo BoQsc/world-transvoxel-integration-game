@@ -101,7 +101,7 @@ through terrain. The root causes were:
 
 - human fly mode previously moved the player directly and could allow invalid
   inside/below-terrain inspection views;
-- compact human visual mode had no full 2K terrain fallback/backdrop under the
+- compact human visual mode had no full 2K terrain fallback/backdrop outside the
   native moving detail window;
 - the full-map visual, when re-enabled, used a simplified height expression and
   one-sided culling, which could produce false sky cutouts on steep/grazing
@@ -113,7 +113,8 @@ Current fix boundary:
 - autonomous native terrain proof remains full-map-free;
 - compact human/visual mode enables an exact deterministic 2048 by 2048
   full-map LOD/backdrop using the same procedural height expression as the
-  native source;
+  native source, with edit-region exclusions so the backdrop does not render
+  underneath edited native Transvoxel holes;
 - only that full-map heightfield backdrop is cull-disabled. Native Transvoxel
   chunks remain single-sided, so this is not a workaround for native mesh
   nonmanifoldness.
@@ -142,7 +143,9 @@ python tools/p2_production_integration_game_quality.py --skip-build --profile g1
 
 Result: passed with exit code 0 and `full_map_enabled=true` in all compact
 human visual capture summaries, while the autonomous native proof still reported
-`full_map_visual=0`.
+`full_map_visual=0`. Current compact edited visual captures must also report
+`local_detail_exclusion=true` and a positive `local_detail_exclusion_regions`
+count.
 
 Capture output root:
 

@@ -18,6 +18,8 @@ const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debu
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/human_artifact_marks"
+const COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT := 160.0
+const COMPACT_FULL_MAP_LOCAL_EXCLUSION_REBUILD_DISTANCE := 16.0
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -438,14 +440,43 @@ func _configure_presentation(_settings: Dictionary) -> void:
 		full_map_visual.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
 		full_map_visual.clean_texture_world_scale = 0.22
 		full_map_visual.vertical_offset = -0.75
-	var viewer_position: Vector3 = _settings["viewers"][0]
+	var viewer_position: Vector3 = player.global_position if player != null else _settings["viewers"][0]
+	var exclusion_half_extent := float(_settings.get(
+		"detail_exclusion_half_extent",
+		COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT
+	))
+	if exclusion_half_extent <= 0.0:
+		exclusion_half_extent = COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT
 	full_map_visual.local_detail_exclusion_enabled = false
 	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
 	full_map_visual.local_detail_exclusion_half_extent = Vector2(
-		float(_settings.get("detail_exclusion_half_extent", 96.0)),
-		float(_settings.get("detail_exclusion_half_extent", 96.0))
+		exclusion_half_extent,
+		exclusion_half_extent
 	)
+	full_map_visual.local_detail_exclusion_rebuild_distance = COMPACT_FULL_MAP_LOCAL_EXCLUSION_REBUILD_DISTANCE
 	add_child(full_map_visual)
+
+
+func register_terrain_edit_exclusion(center: Vector3, radius: float) -> void:
+	if autonomous or full_map_visual == null or player == null:
+		return
+	if selected_profile != COMPACT_PROFILE:
+		return
+	if not full_map_visual.has_method("add_local_detail_exclusion_region"):
+		return
+	var exclusion_radius := maxf(radius + 18.0, 32.0)
+	var half_extent := Vector2(
+		exclusion_radius,
+		exclusion_radius
+	)
+	full_map_visual.call("add_local_detail_exclusion_region", Vector2(center.x, center.z), half_extent)
+
+
+func _register_terrain_edit_operation_exclusions(operations: Array) -> void:
+	for operation in operations:
+		if operation == null:
+			continue
+		register_terrain_edit_exclusion(operation.center, float(operation.radius))
 
 
 func _create_player(start: Vector3) -> CharacterBody3D:
@@ -497,7 +528,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_collision_activation_distance": 192.0,
 			"runtime_collision_deactivation_distance": 256.0,
 			"edit_point": Vector3(1032, 8, 1032),
-			"detail_exclusion_half_extent": 0.0,
+			"detail_exclusion_half_extent": COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT,
 		}
 	return {
 		"start": Vector3(1184, 142, 1008),
@@ -525,7 +556,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_collision_activation_distance": 192.0,
 		"runtime_collision_deactivation_distance": 256.0,
 		"edit_point": Vector3(1184, 119, 1008),
-		"detail_exclusion_half_extent": 0.0,
+		"detail_exclusion_half_extent": COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT,
 	}
 
 
@@ -2119,6 +2150,7 @@ func _presentation_summary() -> Dictionary:
 	var full_map_summary := {}
 	if full_map_visual != null and full_map_visual.has_method("get_full_terrain_visual_summary"):
 		full_map_summary = full_map_visual.call("get_full_terrain_visual_summary")
+	var exclusion_regions := int(full_map_summary.get("local_detail_exclusion_regions", 0))
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
@@ -2132,8 +2164,9 @@ func _presentation_summary() -> Dictionary:
 		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
 		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
 		"full_map_layer": str(full_map_summary.get("visual_layer_kind", "")),
-		"local_detail_exclusion": bool(full_map_summary.get("local_detail_exclusion_enabled", false)),
+		"local_detail_exclusion": bool(full_map_summary.get("local_detail_exclusion_enabled", false)) or exclusion_regions > 0,
 		"local_detail_exclusion_cells": int(full_map_summary.get("local_detail_exclusion_cells", 0)),
+		"local_detail_exclusion_regions": exclusion_regions,
 	}
 
 
@@ -2391,6 +2424,9 @@ func _capture_human_visual() -> void:
 		"edit_lod_retention_plans": int(summary.get("edit_lod_retention_plans", 0)),
 		"edit_lod_retention_fallbacks": int(summary.get("edit_lod_retention_fallbacks", 0)),
 		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
+		"local_detail_exclusion": bool(presentation.get("local_detail_exclusion", false)),
+		"local_detail_exclusion_cells": int(presentation.get("local_detail_exclusion_cells", 0)),
+		"local_detail_exclusion_regions": int(presentation.get("local_detail_exclusion_regions", 0)),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
@@ -2434,6 +2470,7 @@ func _capture_requires_interaction_inspection() -> bool:
 	return human_visual_capture_mode.begins_with("edit_") or \
 		human_visual_capture_mode.begins_with("small_edit_") or \
 		human_visual_capture_mode.begins_with("watertight_") or \
+		human_visual_capture_mode == "backdrop_exclusion_gate" or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
@@ -2486,7 +2523,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return await _apply_sequential_interaction_inspection_edits(terrain_world)
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
 	var batch = EditBatch.new()
-	for operation in _interaction_inspection_operations():
+	var operations := _interaction_inspection_operations()
+	for operation in operations:
 		if not batch.add_operation(operation):
 			_fail("failed to add interaction inspection operation")
 			return false
@@ -2500,6 +2538,7 @@ func _apply_interaction_inspection_edits() -> bool:
 	if not await game_world.wait_for_world_revision(before_revision + 1):
 		_fail("interaction inspection edit did not commit")
 		return false
+	_register_terrain_edit_operation_exclusions(operations)
 	if not await _wait_for_current_profile_settled("after interaction inspection edits"):
 		return false
 	if material_applicator != null:
@@ -2537,6 +2576,7 @@ func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool
 		if not await game_world.wait_for_world_revision(before_revision + 1):
 			_fail("sequential interaction inspection edit %d did not commit" % index)
 			return false
+		_register_terrain_edit_operation_exclusions([operations[index]])
 		if human_visual_capture_mode == "watertight_many_small_near":
 			if index % 8 == 7:
 				if not await _wait_for_current_profile_settled("after sequential interaction edit %d" % index):
@@ -5711,6 +5751,12 @@ func _watertightness_probe_radius() -> float:
 
 
 func _collect_watertightness_summary() -> Dictionary:
+	if human_visual_capture_mode == "backdrop_exclusion_gate":
+		return {
+			"enabled": false,
+			"ok": true,
+			"reason": "presentation_exclusion_gate",
+		}
 	if not _capture_requires_interaction_inspection():
 		return {
 			"enabled": false,
@@ -5825,6 +5871,11 @@ func _apply_capture_camera_mode() -> void:
 		"small_edit_far":
 			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
 			capture_position = edit_point + Vector3(-130.0, 145.0, -410.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"backdrop_exclusion_gate":
+			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
+			capture_position = edit_point + Vector3(-8.0, 18.0, -46.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"edit_near", "interaction_near":
