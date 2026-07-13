@@ -20,6 +20,8 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
+@export var runtime_shader_fade_parameter_enabled: bool = false
 @export_range(0, 128, 1) var runtime_streaming_burst_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_streaming_burst_collision_apply_budget: int = 0
 @export_range(0, 600, 1) var runtime_streaming_burst_frames: int = 0
@@ -307,6 +309,7 @@ func get_game_world_summary() -> Dictionary:
 		"player_attached": _player != null,
 		"player_human_input_enabled": _player != null and bool(_player.get("human_input_enabled")),
 		"player_driven_viewer_enabled": player_driven_viewer_enabled,
+		"player_viewer_update_distance": player_viewer_update_distance,
 		"player_viewer_updates": _accepted_player_viewer_updates,
 		"viewer_positions": _viewer_positions.size(),
 		"viewer_radius_chunks": _viewer_radius_chunks,
@@ -315,6 +318,8 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
+		"runtime_render_transition_frames": runtime_render_transition_frames,
+		"runtime_shader_fade_parameter_enabled": runtime_shader_fade_parameter_enabled,
 		"runtime_streaming_burst_render_apply_budget": runtime_streaming_burst_render_apply_budget,
 		"runtime_streaming_burst_collision_apply_budget": runtime_streaming_burst_collision_apply_budget,
 		"runtime_streaming_burst_frames": runtime_streaming_burst_frames,
@@ -449,6 +454,8 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
 	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
+	terrain_world.runtime_render_transition_frames = runtime_render_transition_frames
+	terrain_world.runtime_shader_fade_parameter_enabled = runtime_shader_fade_parameter_enabled
 	terrain_world.runtime_collision_activation_distance = runtime_collision_activation_distance
 	terrain_world.runtime_collision_deactivation_distance = runtime_collision_deactivation_distance
 

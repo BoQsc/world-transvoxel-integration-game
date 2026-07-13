@@ -193,10 +193,13 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
 		["runtime_render_apply_budget", "render_apply_budget"],
 		["runtime_collision_apply_budget", "collision_apply_budget"],
+		["runtime_render_transition_frames", "render_transition_frames"],
 	]:
 		var value := int(world.get(pair[0]))
 		if value > 0:
 			config.set(pair[1], value)
+	if bool(world.get("runtime_shader_fade_parameter_enabled")):
+		config.set("shader_fade_parameter_enabled", true)
 	var collision_activation_distance := float(world.get("runtime_collision_activation_distance"))
 	if collision_activation_distance > 0.0:
 		config.set("collision_activation_distance", collision_activation_distance)

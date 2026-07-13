@@ -38,6 +38,8 @@ signal edit_failed(error: String)
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
+@export var runtime_shader_fade_parameter_enabled: bool = false
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 

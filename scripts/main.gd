@@ -126,6 +126,7 @@ func _start_profile() -> void:
 	game_world = GameWorldNode.new()
 	game_world.name = "WtGameWorld"
 	game_world.human_input_enabled = false
+	game_world.player_viewer_update_distance = float(settings.get("player_viewer_update_distance", 8.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
 	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
@@ -136,6 +137,8 @@ func _start_profile() -> void:
 	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
 	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
+	game_world.runtime_render_transition_frames = int(settings.get("runtime_render_transition_frames", 0))
+	game_world.runtime_shader_fade_parameter_enabled = bool(settings.get("runtime_shader_fade_parameter_enabled", false))
 	game_world.runtime_streaming_burst_render_apply_budget = int(settings.get("runtime_streaming_burst_render_apply_budget", 0))
 	game_world.runtime_streaming_burst_collision_apply_budget = int(settings.get("runtime_streaming_burst_collision_apply_budget", 0))
 	game_world.runtime_streaming_burst_frames = int(settings.get("runtime_streaming_burst_frames", 0))
@@ -450,6 +453,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"maximum_lod": 3,
 			"expected_resources": 32,
 			"expected_max_resources": 1024,
+			"player_viewer_update_distance": 4.0,
 			"startup_requires_cold_idle": false,
 			"startup_minimum_render_resources": 32,
 			"startup_minimum_collision_resources": 32,
@@ -460,6 +464,8 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
 			"runtime_collision_apply_budget": 8,
+			"runtime_render_transition_frames": 0,
+			"runtime_shader_fade_parameter_enabled": false,
 			"runtime_streaming_burst_render_apply_budget": 128,
 			"runtime_streaming_burst_collision_apply_budget": 128,
 			"runtime_streaming_burst_frames": 30,
@@ -475,6 +481,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"maximum_lod": 3,
 		"expected_resources": 32,
 		"expected_max_resources": 1024,
+		"player_viewer_update_distance": 4.0,
 		"startup_requires_cold_idle": false,
 		"startup_minimum_render_resources": 32,
 		"startup_minimum_collision_resources": 32,
@@ -485,6 +492,8 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": 1,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
+		"runtime_render_transition_frames": 0,
+		"runtime_shader_fade_parameter_enabled": false,
 		"runtime_streaming_burst_render_apply_budget": 128,
 		"runtime_streaming_burst_collision_apply_budget": 128,
 		"runtime_streaming_burst_frames": 30,
@@ -1734,6 +1743,10 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var center_bottom := int(height * 0.80)
 	var lower_center_top := int(height * 0.55)
 	var lower_center_bottom := int(height * 0.95)
+	var terrain_band_left := int(width * 0.05)
+	var terrain_band_right := int(width * 0.95)
+	var terrain_band_top := int(height * 0.20)
+	var terrain_band_bottom := int(height * 0.95)
 	var crosshair_half_size := 128
 	var cross_left := maxi(0, width / 2 - crosshair_half_size)
 	var cross_right := mini(width, width / 2 + crosshair_half_size)
@@ -1742,16 +1755,20 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var whole_sky_pixels := 0
 	var center_sky_pixels := 0
 	var lower_center_sky_pixels := 0
+	var terrain_band_sky_pixels := 0
 	var crosshair_sky_pixels := 0
 	var isolated_sky_pixels := 0
 	var isolated_center_sky_pixels := 0
 	var isolated_lower_center_sky_pixels := 0
+	var isolated_terrain_band_sky_pixels := 0
 	var isolated_crosshair_sky_pixels := 0
 	var examples := []
 	var crosshair_examples := []
 	var lower_center_examples := []
+	var terrain_band_examples := []
 	var isolated_examples := []
 	var isolated_lower_center_examples := []
+	var isolated_terrain_band_examples := []
 	var isolated_crosshair_examples := []
 	for y in range(height):
 		for x in range(width):
@@ -1778,6 +1795,14 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 					isolated_lower_center_sky_pixels += 1
 					if isolated_lower_center_examples.size() < 8:
 						isolated_lower_center_examples.append(_pixel_summary(x, y, color))
+			if x >= terrain_band_left and x < terrain_band_right and y >= terrain_band_top and y < terrain_band_bottom:
+				terrain_band_sky_pixels += 1
+				if terrain_band_examples.size() < 8:
+					terrain_band_examples.append(_pixel_summary(x, y, color))
+				if isolated:
+					isolated_terrain_band_sky_pixels += 1
+					if isolated_terrain_band_examples.size() < 8:
+						isolated_terrain_band_examples.append(_pixel_summary(x, y, color))
 			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
 				crosshair_sky_pixels += 1
 				if crosshair_examples.size() < 8:
@@ -1792,16 +1817,20 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 		"whole_sky_pixels": whole_sky_pixels,
 		"center_sky_pixels": center_sky_pixels,
 		"lower_center_sky_pixels": lower_center_sky_pixels,
+		"terrain_band_sky_pixels": terrain_band_sky_pixels,
 		"crosshair_sky_pixels": crosshair_sky_pixels,
 		"isolated_sky_pixels": isolated_sky_pixels,
 		"isolated_center_sky_pixels": isolated_center_sky_pixels,
 		"isolated_lower_center_sky_pixels": isolated_lower_center_sky_pixels,
+		"isolated_terrain_band_sky_pixels": isolated_terrain_band_sky_pixels,
 		"isolated_crosshair_sky_pixels": isolated_crosshair_sky_pixels,
 		"examples": examples,
 		"crosshair_examples": crosshair_examples,
 		"lower_center_examples": lower_center_examples,
+		"terrain_band_examples": terrain_band_examples,
 		"isolated_examples": isolated_examples,
 		"isolated_lower_center_examples": isolated_lower_center_examples,
+		"isolated_terrain_band_examples": isolated_terrain_band_examples,
 		"isolated_crosshair_examples": isolated_crosshair_examples,
 	}
 
@@ -2312,10 +2341,13 @@ func _capture_human_visual() -> void:
 		"profile": str(selected_profile),
 		"viewer_radius_chunks": int(summary.get("viewer_radius_chunks", 0)),
 		"viewer_maximum_lod": int(summary.get("viewer_maximum_lod", 0)),
+		"player_viewer_update_distance": float(summary.get("player_viewer_update_distance", 0.0)),
 		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
 		"runtime_render_apply_budget": int(summary.get("runtime_render_apply_budget", 0)),
 		"runtime_collision_apply_budget": int(summary.get("runtime_collision_apply_budget", 0)),
+		"runtime_render_transition_frames": int(summary.get("runtime_render_transition_frames", 0)),
+		"runtime_shader_fade_parameter_enabled": bool(summary.get("runtime_shader_fade_parameter_enabled", false)),
 		"runtime_streaming_burst_render_apply_budget": int(summary.get("runtime_streaming_burst_render_apply_budget", 0)),
 		"runtime_streaming_burst_collision_apply_budget": int(summary.get("runtime_streaming_burst_collision_apply_budget", 0)),
 		"runtime_streaming_burst_frames": int(summary.get("runtime_streaming_burst_frames", 0)),
@@ -4611,7 +4643,8 @@ func _streaming_fly_sky_gap_detected(sky: Dictionary) -> bool:
 	return int(sky.get("crosshair_sky_pixels", 0)) > 0 or \
 		int(sky.get("lower_center_sky_pixels", 0)) > 16 or \
 		int(sky.get("isolated_center_sky_pixels", 0)) > 0 or \
-		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 0
+		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 0 or \
+		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 0
 
 
 func _write_streaming_fly_summary_json(summary: Dictionary) -> void:

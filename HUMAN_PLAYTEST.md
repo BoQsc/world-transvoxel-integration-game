@@ -20,6 +20,9 @@ Expected baseline:
 - mountainous inspection profile: `g19_compact_2k_on_demand`
 - mountain map: 2048 by 2048 blocks
 - mountain runtime LOD: `viewer_maximum_lod=3`, `viewer_radius_chunks=8`, near-detail refinement radius 1
+- player-driven viewer updates use a 4 m movement threshold in the current
+  profiles; this keeps LOD movement deltas smaller during fly inspection while
+  avoiding excessive viewer churn
 - mountain terrain: intentionally sharp/tall stress terrain with ridges,
   spire-like peaks, and steep slopes for seam, lighting, material, and edit
   inspection
@@ -57,6 +60,33 @@ Controls:
 Current source commits are recorded in `CURRENT_PLAYTEST_FRESHNESS.json`.
 Current Terrain 1.0 candidate state is recorded in
 `TERRAIN_1_0_CANDIDATE.md`.
+
+## Visual artifact terminology
+
+Use these names when reporting terrain problems:
+
+- Pinhole sky leak: tiny sky-colored pixels visible through nearby terrain,
+  especially inside dug tunnels or holes. This is a mesh visibility/manifold
+  symptom and should be marked with `~`, then `M`.
+- Transient streaming/LOD gap: larger terrain pieces vanish or reveal sky for a
+  frame or short moment while moving or flying. This is a streaming continuity
+  symptom, not automatically proof that the generated mesh is nonmanifold.
+- Edited-LOD popping: a dug or placed shape changes harshly or disappears when
+  the camera moves away and returns. This is an edit-retention/LOD-continuity
+  symptom.
+
+Before requesting another human playtest, run both automated gates:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --visual-wait-frames 720
+
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-wait-frames 240
+```
+
+Passing these gates means the known automated tunnel/manifold probes and the
+current autonomous streaming-fly screenshot detector passed. It does not mean
+future camera paths are impossible to break; if a human sees a new issue, mark
+it with `~`, then `M` so the exact view can become a new targeted gate.
 
 Godot import cache rule:
 

@@ -1,11 +1,71 @@
 # Terrain 1.0 candidate
 
-Status as of 2026-07-12: `CANDIDATE_AFTER_STREAMING_FLY_VISUAL_STABILITY_FIX`.
+Status as of 2026-07-13:
+`CANDIDATE_AFTER_EDIT_LOD_RETENTION_AND_STREAMING_VISUAL_FOLLOWUP`.
 
 This file records the current Terrain 1.0 candidate state for the
 `world-transvoxel-integration-game` repository. Later documentation-only commits
 may point back to this candidate state; terrain/runtime source changes require a
 new candidate run and fresh pass evidence.
+
+## 2026-07-13 visual-continuity follow-up
+
+Human testing distinguished three separate issues that must not be mixed:
+
+- nearby dug-tunnel pinhole sky leaks are mesh/watertightness symptoms;
+- large pieces flashing during flight are streaming/LOD visual-continuity
+  symptoms;
+- dug holes changing harshly at distance are edited-LOD-retention symptoms.
+
+Current runtime/source changes in this candidate follow-up:
+
+- recent edit LOD-retention zones remain active even when the player flies away,
+  so recent dug/placed areas keep detailed LOD longer instead of immediately
+  collapsing to coarse terrain;
+- newly created native render chunks are not faded in from transparent/sky when
+  transition fading is enabled by a project;
+- the integration profile keeps native render transition fading disabled
+  (`runtime_render_transition_frames=0`) because fade/crossfade is an opt-in
+  presentation feature, not the default terrain correctness path;
+- the production/human profiles use a 4 m player-viewer update threshold so
+  fast fly inspection creates smaller LOD movement deltas;
+- the streaming fly gate now fails on isolated sky-colored pixels in the
+  terrain band, not only near the crosshair/lower-center screen area.
+
+Fresh follow-up evidence:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --tunnel-upward-lod-output-dir .godot/world_transvoxel_captures/tunnel_upward_lod_after_transition_fix --visual-wait-frames 720
+```
+
+Result: passed with exit code 0.
+
+Observed pass markers:
+
+- `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
+- `WT_TUNNEL_UPWARD_LOD_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand operations=110 probes=6`
+- `WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_UPWARD_LOD_GATE_PASS captures=1`
+
+The generated summary reported `runtime_render_transition_frames=0`,
+`edit_persistence.ok=true`, `tunnel.ok=true`, and `watertightness.ok=true` for
+the probed edited tunnel/upward-LOD path.
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_final --visual-wait-frames 240
+```
+
+Result: passed with exit code 0.
+
+Observed pass markers:
+
+- `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
+- `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand samples=28 max_pending=53 max_jobs=59`
+- `WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS captures=1`
+
+Important boundary: this proves the current autonomous fly path did not detect
+screen-space terrain-band sky leaks. It does not prove all possible human flight
+paths are seamless. New human-visible paths must be captured with `~`, then `M`
+and promoted into targeted gates.
 
 ## Focused readiness suite
 
