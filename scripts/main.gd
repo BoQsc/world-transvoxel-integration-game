@@ -2363,7 +2363,8 @@ func _capture_human_visual() -> void:
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
@@ -2382,6 +2383,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -2396,7 +2398,8 @@ func _capture_requires_watertightness_probe() -> bool:
 		human_visual_capture_mode == "edit_manifold_stress_gate" or \
 		human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate"
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate"
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -2418,6 +2421,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return await _run_tunnel_crawl_gate(terrain_world)
 	if human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
 		return await _run_tunnel_transient_crawl_gate(terrain_world)
+	if human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
+		return await _run_tunnel_upward_lod_gate(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
@@ -3149,6 +3154,15 @@ func _run_tunnel_crawl_gate(terrain_world: Node) -> bool:
 	)
 
 
+func _run_tunnel_upward_lod_gate(terrain_world: Node) -> bool:
+	return await _run_tunnel_gate_path(
+		terrain_world,
+		_tunnel_upward_lod_path(),
+		"edit_tunnel_upward_lod_gate",
+		"tunnel upward LOD gate"
+	)
+
+
 func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 	if player == null or game_world == null:
 		_fail("tunnel transient crawl gate requires player and game world")
@@ -3604,6 +3618,66 @@ func _tunnel_crawl_path() -> Array:
 			"save_capture": true,
 		})
 	return path
+
+
+func _tunnel_upward_lod_path() -> Array:
+	var center: Vector3 = _tunnel_gate_center()
+	var descending_start: Vector3 = _tunnel_descending_start()
+	var descending_direction: Vector3 = _tunnel_descending_direction()
+	var descending_length: float = float(_tunnel_descending_step_count() - 1) * _tunnel_descending_spacing()
+	var descending_mid: Vector3 = descending_start + descending_direction * descending_length * 0.52
+	var descending_deep: Vector3 = descending_start + descending_direction * descending_length * 0.82
+	var probe_radius := _tunnel_descending_probe_radius()
+	return [
+		{
+			"label": "close_descending",
+			"position": descending_mid - descending_direction * 4.0 + Vector3(0.0, 1.2, 0.0),
+			"target": descending_mid + descending_direction * 6.0,
+			"probe_center": descending_mid,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+		{
+			"label": "surface_oblique",
+			"position": descending_start + Vector3(-28.0, 23.0, -44.0),
+			"target": descending_mid,
+			"probe_center": descending_mid,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+		{
+			"label": "upward_low",
+			"position": descending_mid + Vector3(-42.0, 76.0, -64.0),
+			"target": descending_mid,
+			"probe_center": descending_mid,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+		{
+			"label": "upward_mid",
+			"position": descending_mid + Vector3(-72.0, 138.0, -108.0),
+			"target": descending_mid,
+			"probe_center": descending_mid,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+		{
+			"label": "upward_high",
+			"position": descending_mid + Vector3(-118.0, 238.0, -172.0),
+			"target": descending_mid,
+			"probe_center": descending_mid,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+		{
+			"label": "deep_return",
+			"position": descending_deep - descending_direction * 7.0 + Vector3(0.0, 1.1, 0.0),
+			"target": descending_deep + descending_direction * 4.0,
+			"probe_center": descending_deep,
+			"probe_radius": probe_radius,
+			"save_capture": true,
+		},
+	]
 
 
 func _set_tunnel_camera(label: String) -> bool:
@@ -5522,7 +5596,8 @@ func _edit_reload_test_center() -> Vector3:
 		return _manifold_stress_center()
 	if human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
 		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
@@ -5538,7 +5613,8 @@ func _watertightness_probe_center() -> Vector3:
 		return _manifold_stress_center()
 	if human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
 		return _tunnel_gate_center()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return _edit_stability_gate_center()
@@ -5562,7 +5638,8 @@ func _watertightness_probe_radius() -> float:
 		return _manifold_stress_probe_radius()
 	if human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+		human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
 		return _tunnel_probe_radius()
 	if human_visual_capture_mode == "edit_stability_gate":
 		return 11.0 if selected_profile == FLAT_PROFILE else 48.0
@@ -5658,12 +5735,18 @@ func _apply_capture_camera_mode() -> void:
 				target_center = _manifold_stress_center()
 			elif human_visual_capture_mode == "edit_tunnel_gate" or \
 				human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+				human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
 				target_center = _tunnel_gate_center()
 			if human_visual_capture_mode == "edit_tunnel_gate" or \
 				human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
-				var tunnel_path := _tunnel_crawl_path() if human_visual_capture_mode == "edit_tunnel_crawl_gate" or human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" else _tunnel_gate_path()
+				human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+				human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
+				var tunnel_path := _tunnel_gate_path()
+				if human_visual_capture_mode == "edit_tunnel_crawl_gate" or human_visual_capture_mode == "edit_tunnel_transient_crawl_gate":
+					tunnel_path = _tunnel_crawl_path()
+				elif human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
+					tunnel_path = _tunnel_upward_lod_path()
 				var tunnel_step: Dictionary = tunnel_path[1] if tunnel_path.size() > 1 else {}
 				capture_position = tunnel_step.get("position", target_center + Vector3(-10.0, 14.0, -34.0))
 				capture_target = tunnel_step.get("target", target_center)

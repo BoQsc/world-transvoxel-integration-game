@@ -50,6 +50,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_tunnel_gate",
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
+    "edit_tunnel_upward_lod_gate",
     "streaming_fly_gap_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
@@ -455,6 +456,33 @@ def run_tunnel_crawl_gate(
     return capture
 
 
+def run_tunnel_upward_lod_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture_stem = f"terrain_1_0_{profile}_edit_tunnel_upward_lod_gate"
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_tunnel_upward_lod_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=capture_stem,
+    )
+    validate_tunnel_upward_lod_summary(summary, profile)
+    validate_tunnel_step_captures(
+        output_dir,
+        f"{capture_stem}_step_*.png",
+        "tunnel upward LOD",
+        minimum_count=6,
+    )
+    return capture
+
+
 def run_tunnel_transient_crawl_gate(
     godot: pathlib.Path,
     project: pathlib.Path,
@@ -526,11 +554,12 @@ def validate_tunnel_step_captures(
     output_dir: pathlib.Path,
     glob_pattern: str,
     context: str,
+    minimum_count: int = 16,
 ) -> list[pathlib.Path]:
     step_captures = sorted(output_dir.glob(glob_pattern))
-    if len(step_captures) < 16:
+    if len(step_captures) < minimum_count:
         raise RuntimeError(
-            f"{context} expected at least 16 step captures, got "
+            f"{context} expected at least {minimum_count} step captures, got "
             f"{len(step_captures)} in {output_dir}"
         )
     for step_capture in step_captures:
@@ -756,6 +785,76 @@ def validate_tunnel_crawl_summary(
         )
     print(
         "WT_TUNNEL_CRAWL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
+        % (
+            profile,
+            int(tunnel.get("operation_count", 0)),
+            len(probe_summaries),
+        )
+    )
+
+
+def validate_tunnel_upward_lod_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"tunnel upward LOD profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_tunnel_upward_lod_gate":
+        raise RuntimeError(f"tunnel upward LOD mode mismatch: {summary!r}")
+    tunnel = summary.get("tunnel")
+    if not isinstance(tunnel, dict):
+        raise RuntimeError(f"tunnel upward LOD summary missing: {summary!r}")
+    if tunnel.get("enabled") is not True or tunnel.get("ok") is not True:
+        raise RuntimeError(f"tunnel upward LOD failed: {tunnel!r}")
+    if tunnel.get("gate_mode") != "edit_tunnel_upward_lod_gate":
+        raise RuntimeError(
+            f"tunnel upward LOD mode missing from tunnel summary: {tunnel!r}"
+        )
+    if int(tunnel.get("operation_count", 0)) < 96:
+        raise RuntimeError(f"tunnel upward LOD did not exercise enough edits: {tunnel!r}")
+    if int(tunnel.get("sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel upward LOD sampled no authoritative points: {tunnel!r}")
+    if int(tunnel.get("air_sample_count", 0)) <= 0:
+        raise RuntimeError(f"tunnel upward LOD sampled no carved air: {tunnel!r}")
+    if int(tunnel.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel upward LOD density mismatch: {tunnel!r}")
+    if int(tunnel.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"tunnel upward LOD material mismatch: {tunnel!r}")
+    if float(tunnel.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"tunnel upward LOD density delta: {tunnel!r}")
+    probe_summaries = tunnel.get("probe_summaries")
+    expected_labels = {
+        "close_descending",
+        "surface_oblique",
+        "upward_low",
+        "upward_mid",
+        "upward_high",
+        "deep_return",
+    }
+    if not isinstance(probe_summaries, list) or len(probe_summaries) < len(expected_labels):
+        raise RuntimeError(f"tunnel upward LOD probe summaries missing: {tunnel!r}")
+    labels: set[str] = set()
+    for probe in probe_summaries:
+        if not isinstance(probe, dict):
+            raise RuntimeError(f"tunnel upward LOD probe malformed: {probe!r}")
+        label = str(probe.get("label", ""))
+        labels.add(label)
+        validate_open_gap_digest(probe, f"tunnel upward LOD {label}")
+        if label.startswith("upward_") and int(probe.get("lod0_triangles_in_region", 0)) <= 0:
+            raise RuntimeError(
+                f"tunnel upward LOD lost local edit detail at {label}: {probe!r}"
+            )
+    if labels != expected_labels:
+        raise RuntimeError(
+            f"tunnel upward LOD labels expected {sorted(expected_labels)}, "
+            f"got {sorted(labels)}: {tunnel!r}"
+        )
+    if int(summary.get("edit_lod_retention_active_viewers", 0)) <= 0:
+        raise RuntimeError(f"tunnel upward LOD had no active edit retention viewers: {summary!r}")
+    if int(summary.get("edit_lod_retention_fallbacks", 0)) != 0:
+        raise RuntimeError(f"tunnel upward LOD edit retention fell back: {summary!r}")
+    print(
+        "WT_TUNNEL_UPWARD_LOD_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
         % (
             profile,
             int(tunnel.get("operation_count", 0)),
@@ -1223,6 +1322,29 @@ def main(argv: list[str]) -> int:
         help="Directory for tunnel transient crawl gate PNG captures.",
     )
     parser.add_argument(
+        "--tunnel-upward-lod-gate",
+        action="store_true",
+        help=(
+            "Carve the descending tunnel, inspect it from close/surface/upward "
+            "camera distances, and verify visible edited detail is retained "
+            "instead of falling back to coarse LOD."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-upward-lod-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --tunnel-upward-lod-gate. May be passed more "
+            "than once. Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--tunnel-upward-lod-output-dir",
+        default=None,
+        help="Directory for tunnel upward LOD gate PNG captures.",
+    )
+    parser.add_argument(
         "--tunnel-visual-artifact-gate",
         action="store_true",
         help=(
@@ -1422,6 +1544,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_TRANSIENT_CRAWL_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.tunnel_upward_lod_gate:
+        tunnel_upward_lod_profiles = (
+            tuple(args.tunnel_upward_lod_profile)
+            if args.tunnel_upward_lod_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.tunnel_upward_lod_output_dir).resolve()
+            if args.tunnel_upward_lod_output_dir
+            else default_capture_dir(project, "terrain_1_0_tunnel_upward_lod_gate")
+        )
+        captures = [
+            run_tunnel_upward_lod_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in tunnel_upward_lod_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_UPWARD_LOD_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     if args.tunnel_visual_artifact_gate:
