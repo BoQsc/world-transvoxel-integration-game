@@ -90,6 +90,8 @@ func submit_edit_input(mode_name: StringName, center: Vector3, ray_hit: bool = f
 	var material_id := -1 if mode_name == &"carve" else 4
 	var accepted := bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
 	_record_interaction(mode_name, ray_hit, accepted, "raycast_hit" if ray_hit and accepted else ("direct_center" if accepted else "edit_rejected"), center)
+	if game_world.has_method("get_last_edit_summary"):
+		_last_interaction_summary["edit_summary"] = game_world.call("get_last_edit_summary")
 	return accepted
 
 

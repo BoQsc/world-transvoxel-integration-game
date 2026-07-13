@@ -130,12 +130,12 @@ func update_player_viewer(force: bool = false) -> bool:
 		return false
 	var position: Vector3 = _player.global_position
 	if not force and not _should_update_player_viewer(position):
-		return false
+		return true
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
-		return _fail("player viewer update failed")
+		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
 	_begin_streaming_burst()
@@ -511,12 +511,15 @@ func _on_terrain_edit_failed(error: String) -> void:
 
 
 func _submit_initial_viewers() -> bool:
-	var viewer_id := 1
+	# Viewer 1 is reserved for the live player viewer. Startup viewers are
+	# persistent world-coverage viewers and must not be overwritten when the
+	# player moves.
+	var viewer_id := 2 if player_driven_viewer_enabled else 1
 	for position in _viewer_positions:
 		if not bool(_reference_scene.call("update_reference_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, _viewer_maximum_lod)):
 			return _fail("initial viewer update failed: %s" % _terrain_world_error())
 		viewer_id += 1
-	return viewer_id > 1
+	return viewer_id > (2 if player_driven_viewer_enabled else 1)
 
 
 func _wait_for_world_state(expected: String) -> bool:

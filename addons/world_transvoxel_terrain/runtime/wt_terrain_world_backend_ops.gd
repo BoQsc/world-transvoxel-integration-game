@@ -41,7 +41,7 @@ static func stop_backend_world(world) -> bool:
 
 static func submit_edit_batch(world, batch: Resource, author_id: int) -> bool:
 	if not world.is_backend_world_running():
-		world._last_error = "backend world must be running before edit submission"
+		world._last_error = "backend world must be running before edit submission: %s" % world.get_backend_world_error()
 		return false
 	var edit_bridge := EditBridge.new()
 	if not edit_bridge.commit_batch(world._backend_terrain, batch, author_id):
@@ -93,7 +93,7 @@ static func request_authoritative_samples(world, points: Array, lod: int) -> int
 
 static func update_viewer(world, viewer_id: int, revision: int, position: Vector3, radius_chunks: int, maximum_lod: int) -> bool:
 	if not world.is_backend_world_running():
-		world._last_error = "backend world must be running before viewer updates"
+		world._last_error = "backend world must be running before viewer updates: %s" % world.get_backend_world_error()
 		return false
 	if not world._backend_terrain.has_method("update_viewer"):
 		world._last_error = "backend terrain cannot update viewers"

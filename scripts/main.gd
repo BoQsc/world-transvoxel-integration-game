@@ -414,31 +414,10 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
-	full_map_visual = FullMapVisual.new()
-	full_map_visual.name = "FullMapTerrainVisual"
-	full_map_visual.enabled = not autonomous
-	full_map_visual.enabled_profile_id = COMPACT_PROFILE
-	full_map_visual.auto_detect_parent_profile = true
-	full_map_visual.chunk_count_x = 128
-	full_map_visual.chunk_count_z = 128
-	full_map_visual.chunk_size = 16.0
-	full_map_visual.grid_segments_x = 128
-	full_map_visual.grid_segments_z = 128
-	full_map_visual.seed = 19019
-	full_map_visual.visual_mode = &"material_id" if autonomous else &"clean"
-	if not autonomous:
-		full_map_visual.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
-		full_map_visual.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
-		full_map_visual.clean_texture_world_scale = 0.22
-		full_map_visual.vertical_offset = -0.75
-	var viewer_position: Vector3 = _settings["viewers"][0]
-	full_map_visual.local_detail_exclusion_enabled = false
-	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
-	full_map_visual.local_detail_exclusion_half_extent = Vector2(
-		float(_settings.get("detail_exclusion_half_extent", 96.0)),
-		float(_settings.get("detail_exclusion_half_extent", 96.0))
-	)
-	add_child(full_map_visual)
+	# Human and validation runs must show the native streamed Transvoxel terrain.
+	# The older full-map heightfield fallback caused visible overlap/dimming with
+	# native chunks and hid streaming regressions instead of fixing them.
+	full_map_visual = null
 
 
 func _create_player(start: Vector3) -> CharacterBody3D:
@@ -466,7 +445,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
 		return {
 			"start": Vector3(1032, 18, 1032),
-			"viewers": [Vector3(1032, 18, 1032)],
+			"viewers": [Vector3(1024, 18, 1024)],
 			"radius": 8,
 			"maximum_lod": 3,
 			"expected_resources": 32,
@@ -491,7 +470,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		}
 	return {
 		"start": Vector3(1184, 142, 1008),
-		"viewers": [Vector3(1184, 142, 1008)],
+		"viewers": [Vector3(1024, 142, 1024)],
 		"radius": 8,
 		"maximum_lod": 3,
 		"expected_resources": 32,
@@ -4491,6 +4470,23 @@ func _run_streaming_fly_gap_gate() -> bool:
 				"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
 				"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
 			}
+			if gap:
+				var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+				var backend: Node = null
+				if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
+					backend = terrain_world.call("get_backend_terrain")
+				var sky_pixel_rays := _human_artifact_sky_pixel_rays(sky)
+				var render_ray_hits := _human_artifact_render_ray_hits(backend, sky_pixel_rays)
+				sample["sky_pixel_rays"] = sky_pixel_rays
+				sample["render_ray_hits"] = render_ray_hits
+				sample["chunk_neighborhood"] = _human_artifact_chunk_neighborhood(
+					terrain_world,
+					render_ray_hits
+				)
+				sample["render_seam_diagnostics"] = _human_artifact_render_seam_diagnostics(
+					backend,
+					render_ray_hits
+				)
 			samples.append(sample)
 			if gap or image_error != OK:
 				failures.append(sample)
@@ -5638,6 +5634,11 @@ func _apply_capture_camera_mode() -> void:
 		"local_overlap":
 			capture_position = Vector3(1180.0, 150.0, 940.0)
 			capture_target = Vector3(1184.0, 118.0, 1008.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"streaming_ridge_settled":
+			capture_position = Vector3(1140.0, 178.0, 930.0)
+			capture_target = Vector3(1220.0, 92.0, 1060.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"watertight_boundary_near":
