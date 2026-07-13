@@ -417,10 +417,35 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
-	# Human and validation runs must show the native streamed Transvoxel terrain.
-	# The older full-map heightfield fallback caused visible overlap/dimming with
-	# native chunks and hid streaming regressions instead of fixing them.
-	full_map_visual = null
+	# Human compact runs need a stable 2K visual backing layer. The native
+	# streamed Transvoxel chunks remain the editable/collidable detail layer;
+	# autonomous proof mode keeps this disabled so native streaming regressions
+	# cannot be hidden by the presentation layer.
+	full_map_visual = FullMapVisual.new()
+	full_map_visual.name = "FullMapTerrainVisual"
+	full_map_visual.enabled = not autonomous
+	full_map_visual.enabled_profile_id = COMPACT_PROFILE
+	full_map_visual.auto_detect_parent_profile = true
+	full_map_visual.chunk_count_x = 128
+	full_map_visual.chunk_count_z = 128
+	full_map_visual.chunk_size = 16.0
+	full_map_visual.grid_segments_x = 128
+	full_map_visual.grid_segments_z = 128
+	full_map_visual.seed = 19019
+	full_map_visual.visual_mode = &"material_id" if autonomous else &"clean"
+	if not autonomous:
+		full_map_visual.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+		full_map_visual.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
+		full_map_visual.clean_texture_world_scale = 0.22
+		full_map_visual.vertical_offset = -0.75
+	var viewer_position: Vector3 = _settings["viewers"][0]
+	full_map_visual.local_detail_exclusion_enabled = false
+	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
+	full_map_visual.local_detail_exclusion_half_extent = Vector2(
+		float(_settings.get("detail_exclusion_half_extent", 96.0)),
+		float(_settings.get("detail_exclusion_half_extent", 96.0))
+	)
+	add_child(full_map_visual)
 
 
 func _create_player(start: Vector3) -> CharacterBody3D:

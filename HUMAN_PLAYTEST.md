@@ -26,7 +26,11 @@ Expected baseline:
 - mountain terrain: intentionally sharp/tall stress terrain with ridges,
   spire-like peaks, and steep slopes for seam, lighting, material, and edit
   inspection
-- no fake full-map visual in normal human play
+- compact human/visual runs use a deterministic 2048 by 2048 full-map terrain
+  backing layer under the streamed native Transvoxel detail window. This is part
+  of the expected human/game presentation, not a debug fake. Autonomous proof
+  mode disables it and must continue reporting `full_map_visual=0` so native
+  streaming remains tested separately.
 - fullscreen by default
 - crosshair only by default; no debug telemetry UI unless running autonomous proof
 - sand-textured clean terrain presentation using `assets/terrain_textures/coast_sand_01_diff_1k.jpg`
@@ -71,6 +75,9 @@ Use these names when reporting terrain problems:
 - Transient streaming/LOD gap: larger terrain pieces vanish or reveal sky for a
   frame or short moment while moving or flying. This is a streaming continuity
   symptom, not automatically proof that the generated mesh is nonmanifold.
+  In compact normal human play, this must not be caused by a missing full-map
+  backing layer; if it appears, run the streaming-fly gate and require
+  `full_map_enabled=true` plus `streaming_fly.failure_count=0`.
 - Edited-LOD popping: a dug or placed shape changes harshly or disappears when
   the camera moves away and returns. This is an edit-retention/LOD-continuity
   symptom.
