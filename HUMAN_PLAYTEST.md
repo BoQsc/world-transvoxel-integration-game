@@ -26,11 +26,10 @@ Expected baseline:
 - mountain terrain: intentionally sharp/tall stress terrain with ridges,
   spire-like peaks, and steep slopes for seam, lighting, material, and edit
   inspection
-- compact human/visual runs are native Transvoxel terrain by default and must
-  report `full_map_enabled=false` for terrain-correctness review. The full-map
-  backing layer is opt-in only for the dedicated presentation/backdrop diagnostic
-  path; it is not evidence of seamless native terrain, edit persistence, or
-  manifold correctness.
+- compact human/visual runs are native Transvoxel terrain only. There is no
+  full-map/backdrop backing layer for terrain-correctness review; visible native
+  terrain gaps, edit artifacts, or LOD/streaming holes must be fixed in the
+  terrain path.
 - fullscreen by default
 - crosshair only by default; no debug telemetry UI unless running autonomous proof
 - sand-textured clean terrain presentation using `assets/terrain_textures/coast_sand_01_diff_1k.jpg`
@@ -74,11 +73,10 @@ Use these names when reporting terrain problems:
   symptom and should be marked with `~`, then `M`.
 - Transient streaming/LOD gap: larger terrain pieces vanish or reveal sky for a
   frame or short moment while moving or flying. This is a streaming continuity
-  symptom, not automatically proof that the generated mesh is nonmanifold. In
-  compact normal human play and correctness gates, require
-  `full_map_enabled=false`; do not use the full-map backing layer to hide the
-  symptom. If it appears, run the streaming-fly gate and promote the path into a
-  targeted native fix.
+  symptom, not automatically proof that the generated mesh is nonmanifold. Do
+  not hide it with a full-map/backdrop layer or double-sided terrain material. If
+  it appears, run the streaming-fly gate and promote the path into a targeted
+  native fix.
 - Edited-LOD popping: a dug or placed shape changes harshly or disappears when
   the camera moves away and returns. This is an edit-retention/LOD-continuity
   symptom.
@@ -93,18 +91,23 @@ Report harsh changes, transient sky gaps, or pinhole sky leaks with `~`, then
 `M`; those marks are the required bridge from human observation to a targeted
 automated gate.
 
-Before requesting another human playtest, run both automated gates:
+Before requesting another human playtest, run the current automated gate set:
 
 ```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode edit_near --visual-wait-frames 180
+
 python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --visual-wait-frames 720
 
 python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-wait-frames 240
 ```
 
-Passing these gates means the known automated tunnel/manifold probes and the
-current autonomous streaming-fly screenshot detector passed. It does not mean
-future camera paths are impossible to break; if a human sees a new issue, mark
-it with `~`, then `M` so the exact view can become a new targeted gate.
+Passing these gates means the known edited-near topology probe, tunnel/upward
+LOD persistence probes, and autonomous streaming-fly screenshot detector passed.
+The screenshot detector fails on centered/lower terrain holes and clustered
+isolated terrain-band sky pixels; it intentionally ignores isolated
+single-pixel horizon/edge noise. Passing these gates does not mean future camera
+paths are impossible to break; if a human sees a new issue, mark it with `~`,
+then `M` so the exact view can become a new targeted gate.
 
 Godot import cache rule:
 

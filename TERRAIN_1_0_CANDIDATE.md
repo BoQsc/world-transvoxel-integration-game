@@ -1,12 +1,87 @@
 # Terrain 1.0 candidate
 
 Status as of 2026-07-13:
-`CANDIDATE_AFTER_EDIT_LOD_RETENTION_AND_STREAMING_VISUAL_FOLLOWUP`.
+`CANDIDATE_AFTER_QUANTIZED_FINALIZER_AND_NATIVE_GAP_GATES`.
 
 This file records the current Terrain 1.0 candidate state for the
 `world-transvoxel-integration-game` repository. Later documentation-only commits
 may point back to this candidate state; terrain/runtime source changes require a
 new candidate run and fresh pass evidence.
+
+## 2026-07-13 native topology/gap checkpoint
+
+This checkpoint rejects presentation fallbacks. The current candidate uses
+native single-sided Transvoxel chunks only; no full-map/backdrop layer,
+double-sided terrain material, or duplicate hidden surface is allowed to satisfy
+terrain-correctness gates.
+
+Core addon evidence:
+
+- release build passed with Zig 0.16.0;
+- `test_wt_m2_chunk_mesh.template_release.x86_64.exe` passed with
+  `M2_MESH_HASH 20a67f299820f5c3`;
+- `test_wt_m3_application.template_release.x86_64.exe` passed;
+- `test_wt_m5_page_meshing_runtime.template_release.x86_64.exe` passed with
+  `human_boundary_repro=1`;
+- `test_wt_production_lod_streaming.template_release.x86_64.exe` passed with
+  `backend=MIT`.
+
+Finalizer/topology boundary:
+
+- edge ownership/orientation uses a 1/1024 world-unit quantized position key;
+- exported vertex positions are not snapped by the finalizer;
+- matched interior or chunk-face near-zero connector slivers are accepted only
+  when probes report no open topology defect;
+- unknown zero-area triangles, repeated-point-key triangles, zero-edge
+  triangles, interior/unknown boundary edges, nonmanifold edges, and orientation
+  conflicts are hard failures;
+- deleting matched connector slivers is forbidden because that experiment opened
+  real cracks in edited terrain.
+
+Current integration evidence:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand
+```
+
+Result: passed with `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`.
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode edit_near --visual-output-dir .godot/world_transvoxel_captures/final_authoritative_edit_near --visual-wait-frames 180
+```
+
+Result: passed with `WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS`.
+The watertightness probe reported `boundary_edges=0`,
+`interior_boundary_edges=0`, `unknown_boundary_edges=0`,
+`nonmanifold_edges=0`, `orientation_conflict_edges=0`,
+`repeated_point_key_triangles=0`, `unsafe_zero_area_triangles=0`,
+`zero_area_unknown_triangles=0`, `zero_edge_triangles=0`, and
+`safe_zero_area_interior_triangles=4`.
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --tunnel-upward-lod-output-dir .godot/world_transvoxel_captures/final_authoritative_tunnel_upward_lod --visual-wait-frames 720
+```
+
+Result: passed with `WT_TUNNEL_UPWARD_LOD_GATE_PROFILE_PASS
+profile=g19_compact_2k_on_demand operations=110 probes=6`.
+All six probes reported `boundary_edges=0`, `interior_boundary_edges=0`,
+`nonmanifold_edges=0`, `orientation_conflict_edges=0`,
+`repeated_point_key_triangles=0`, `zero_area_unknown_triangles=0`, and
+`zero_edge_triangles=0`.
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/final_authoritative_streaming_fly --visual-wait-frames 240
+```
+
+Result: passed with `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS
+profile=g19_compact_2k_on_demand samples=28 max_pending=53 max_jobs=66`.
+
+The streaming screenshot detector is intentionally not a sky/horizon detector.
+It fails on crosshair sky, lower-center holes, clustered isolated center/lower
+sky pixels, or clustered isolated terrain-band sky pixels. It ignores isolated
+single-pixel horizon/edge noise because that was observed as screenshot aliasing
+noise, not native terrain loss. Any human-visible new path still must be marked
+with `~`, then `M`, and promoted into a targeted gate.
 
 ## 2026-07-13 visual-continuity follow-up
 
@@ -32,13 +107,15 @@ Current runtime/source changes in this candidate follow-up:
   presentation feature, not the default terrain correctness path;
 - the production/human profiles use a 4 m player-viewer update threshold so
   fast fly inspection creates smaller LOD movement deltas;
-- the streaming fly gate now fails on isolated sky-colored pixels in the
-  terrain band, not only near the crosshair/lower-center screen area.
+- the streaming fly gate fails on centered/lower terrain holes and clustered
+  isolated terrain-band sky pixels, while ignoring isolated single-pixel
+  horizon/edge noise that was observed as screenshot aliasing rather than
+  terrain loss.
 
 Fresh follow-up evidence:
 
 ```console
-python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --tunnel-upward-lod-output-dir .godot/world_transvoxel_captures/tunnel_upward_lod_after_transition_fix --visual-wait-frames 720
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --tunnel-upward-lod-gate --tunnel-upward-lod-profile g19_compact_2k_on_demand --tunnel-upward-lod-output-dir .godot/world_transvoxel_captures/final_authoritative_tunnel_upward_lod --visual-wait-frames 720
 ```
 
 Result: passed with exit code 0.
@@ -54,7 +131,7 @@ The generated summary reported `runtime_render_transition_frames=0`,
 the probed edited tunnel/upward-LOD path.
 
 ```console
-python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_final --visual-wait-frames 240
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/final_authoritative_streaming_fly --visual-wait-frames 240
 ```
 
 Result: passed with exit code 0.
@@ -62,7 +139,7 @@ Result: passed with exit code 0.
 Observed pass markers:
 
 - `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
-- `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand samples=28 max_pending=53 max_jobs=59`
+- `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand samples=28 max_pending=53 max_jobs=66`
 - `WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS captures=1`
 
 Important boundary: this proves the current autonomous fly path did not detect
@@ -93,62 +170,16 @@ Required pass markers observed:
 - `WT_TUNNEL_VISUAL_ARTIFACT_GATE_PROFILE_PASS profile=flat_baseline analyzed=2 max_center_sky=0 max_sky=0`
 - `WT_PRODUCTION_INTEGRATION_GAME_TUNNEL_VISUAL_ARTIFACT_GATE_PASS captures=2`
 
-## Compact streaming/fly visual-stability follow-up
+## Superseded visual-stability notes
 
-Human testing later exposed a different visual failure mode: while flying around
-the compact mountain profile, local LOD/streaming movement could expose sky
-through terrain. The root causes were:
+Earlier compact streaming/fly and `edit_near` follow-ups are superseded by the
+native topology/gap checkpoint at the top of this file. The current authoritative
+state is:
 
-- human fly mode previously moved the player directly and could allow invalid
-  inside/below-terrain inspection views;
-- the native moving detail window still has visible streaming/LOD continuity
-  cases that must be fixed in native terrain.
-
-Current fix boundary:
-
-- human fly mode is collision-aware;
-- autonomous proof, normal human play, and terrain-correctness visual gates use
-  native Transvoxel chunks only;
-- native Transvoxel chunks remain single-sided, and any sky leak, open edge,
-  zero-area triangle, harsh edited-LOD change, or transient streaming gap in
-  native mode remains a real terrain issue.
-
-Current native-only status:
-
-- native compact ground capture passes;
-- native compact streaming/fly capture passes;
-- native compact edited `edit_near` capture still fails watertightness because
-  the probe finds `zero_area_interior_triangles=4` after the edit batch. It does
-  not report open interior boundary edges, nonmanifold edges, or orientation
-  conflict edges in that capture, but the zero-area interior triangles keep the
-  edited native mesh from being accepted as Terrain 1.0-ready.
-
-Command:
-
-```console
-python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/streaming_fly_gap_gate_wrapper --visual-wait-frames 180
-```
-
-Result after removing presentation fallbacks: native-only compact streaming/fly
-passed with exit code 0 in the latest local run.
-
-Required pass markers observed:
-
-- `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
-- `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
-- `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
-- `WT_STREAMING_FLY_GAP_GATE_PROFILE_PASS profile=g19_compact_2k_on_demand samples=28 max_pending=71 max_jobs=79`
-- `WT_PRODUCTION_INTEGRATION_GAME_VISUAL_SMOKE_PASS captures=1`
-
-Normal compact visual smoke was also rerun:
-
-```console
-python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-output-dir .godot/world_transvoxel_captures/visual_smoke_compact --visual-wait-frames 180
-```
-
-Result after removing presentation fallbacks: native-only compact ground visual
-passed, while native compact edited `edit_near` still fails on interior
-near-zero-area triangles as noted above.
+- compact ground, streaming/fly, tunnel/upward-LOD, and `edit_near` gates pass;
+- terrain-correctness paths render native single-sided Transvoxel chunks only;
+- matched near-zero connector slivers are accepted only under the explicit
+  topology-probe boundary recorded above.
 
 Capture output root:
 

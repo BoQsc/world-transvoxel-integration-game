@@ -243,6 +243,7 @@ def validate_visual_summary(
     if watertightness.get("enabled"):
         mode = str(summary.get("mode", ""))
         allow_safe_near_zero_slivers = mode in {
+            "edit_near",
             "edit_during_load_oracle",
             "edit_manifold_stress_gate",
             "edit_tunnel_gate",

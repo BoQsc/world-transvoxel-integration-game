@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode diffuse_burley, cull_disabled;
+render_mode diffuse_burley, cull_back;
 
 uniform sampler2D checker_texture : source_color, repeat_enable;
 uniform sampler2D terrain_albedo_atlas : source_color, repeat_enable;

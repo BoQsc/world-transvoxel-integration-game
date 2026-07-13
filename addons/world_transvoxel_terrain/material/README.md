@@ -12,15 +12,14 @@ repository.
 
 ## Godot terrain culling policy
 
-The default streamed terrain material must use `cull_disabled`.
+The default streamed terrain material uses `cull_back`.
 
-This is a Godot presentation rule, not a native topology workaround. The native
-backend is still validated by mesh/topology tests, while Godot rendering must
-not expose protected LOD seam or near-coplanar interior slivers as sky-colored
-single-pixel holes during movement, digging, or LOD replacement. Do not add
-duplicate backstop geometry to hide this; the current standard is one native
-mesh plus a terrain material that renders both sides.
+This is intentional. Normal human play and terrain-correctness gates must render
+the native Transvoxel mesh as single-sided terrain so missing faces, bad winding,
+near-zero slivers, LOD cracks, and streaming gaps remain visible during testing.
+Do not add duplicate backstop geometry or double-sided terrain rendering to hide
+native mesh defects.
 
-`cull_back` is allowed only as a diagnostic or future performance experiment
-after an equivalent no-sky-gap visual gate passes. It is not the default human
-playtest or production validation material.
+`cull_disabled` is allowed only as a diagnostic or game-specific presentation
+experiment after the same scene passes the single-sided visual/topology gates. It
+is not the default human playtest or production validation material.

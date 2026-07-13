@@ -5,10 +5,10 @@ the World Transvoxel addon stack.
 
 Current Terrain 1.0 candidate status is recorded in
 [TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate has
-focused autonomous readiness coverage plus a targeted compact-profile
-streaming/fly visual-stability gate. Human acceptance is still the final
-confirmation step; visible terrain artifacts during play must be marked with
-`~`, then `M`.
+focused autonomous readiness coverage, edited-near watertightness coverage,
+tunnel/upward-LOD edit persistence coverage, and compact-profile streaming/fly
+visual-stability coverage. Human acceptance is still the final confirmation
+step; visible terrain artifacts during play must be marked with `~`, then `M`.
 
 ## Critical edited-terrain LOD boundary
 
@@ -27,6 +27,19 @@ rendered-gap, and acceptable far-LOD shape-continuity checks. Human reports of
 harsh dug-hole changes, transient terrain disappearance, or pinhole sky leaks
 must be marked with `~`, then `M`, and promoted into targeted gates instead of
 being treated as subjective visual feedback.
+
+## Critical native topology boundary
+
+The current candidate rejects presentation fallbacks. Terrain-correctness
+validation uses native single-sided Transvoxel chunks only: no full-map/backdrop
+layer, no duplicate hidden surface, and no double-sided material to hide missing
+faces.
+
+Matched interior or chunk-face near-zero connector slivers are accepted only
+when topology probes report no interior/unknown boundary edges, no nonmanifold
+edges, no orientation conflicts, no repeated point-key triangles, no unknown
+zero-area triangles, and no zero-edge triangles. Unknown slivers or open
+topology defects remain hard failures.
 
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is

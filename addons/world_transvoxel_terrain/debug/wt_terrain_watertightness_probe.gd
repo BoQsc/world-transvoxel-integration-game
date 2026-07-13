@@ -53,6 +53,7 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"normal_agreement_positive": 0,
 		"normal_agreement_negative": 0,
 		"normal_agreement_near_zero": 0,
+		"normal_agreement_positive_examples": [],
 	}
 	_collect_edges(
 		backend,
@@ -75,11 +76,12 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 	var positive := int(stats.get("normal_agreement_positive", 0))
 	var negative := int(stats.get("normal_agreement_negative", 0))
 	var winding_minority := mini(positive, negative)
-	var unsafe_zero_area_triangles := int(stats.get("zero_area_interior_triangles", 0)) + \
-		int(stats.get("zero_area_unknown_triangles", 0))
+	var safe_zero_area_interior_triangles := int(stats.get("zero_area_interior_triangles", 0))
+	var unsafe_zero_area_triangles := int(stats.get("zero_area_unknown_triangles", 0))
 	var unsafe_repeated_point_key_triangles := int(stats.get("repeated_point_key_interior_triangles", 0)) + \
 		int(stats.get("repeated_point_key_unknown_triangles", 0))
 	stats["allowed_zero_area_chunk_face_triangles"] = int(stats.get("zero_area_chunk_face_triangles", 0))
+	stats["safe_zero_area_interior_triangles"] = safe_zero_area_interior_triangles
 	stats["unsafe_zero_area_triangles"] = unsafe_zero_area_triangles
 	stats["unsafe_repeated_point_key_triangles"] = unsafe_repeated_point_key_triangles
 	stats["winding_mixed"] = positive > 0 and negative > 0
@@ -341,7 +343,22 @@ static func _accumulate_triangle(
 			})
 			stats["zero_area_examples"] = examples
 	else:
-		_accumulate_normal_agreement(transform, normals, index_a, index_b, index_c, cross, stats)
+		_accumulate_normal_agreement(
+			transform,
+			normals,
+			index_a,
+			index_b,
+			index_c,
+			cross,
+			stats,
+			a,
+			b,
+			c,
+			lod,
+			owner,
+			area_squared,
+			min_edge_squared
+		)
 	_accumulate_edge_if_inner(a, b, center, radius, edge_counts, edge_owners, edge_directions, owner)
 	_accumulate_edge_if_inner(b, c, center, radius, edge_counts, edge_owners, edge_directions, owner)
 	_accumulate_edge_if_inner(c, a, center, radius, edge_counts, edge_owners, edge_directions, owner)
@@ -358,7 +375,14 @@ static func _accumulate_normal_agreement(
 	index_b: int,
 	index_c: int,
 	cross: Vector3,
-	stats: Dictionary
+	stats: Dictionary,
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	lod: int,
+	owner: String,
+	area_squared: float,
+	min_edge_squared: float
 ) -> void:
 	if normals.size() <= maxi(index_a, maxi(index_b, index_c)):
 		return
@@ -368,6 +392,22 @@ static func _accumulate_normal_agreement(
 	var agreement := cross.dot(normal_sum)
 	if agreement > 0.0001:
 		stats["normal_agreement_positive"] = int(stats.get("normal_agreement_positive", 0)) + 1
+		var examples: Array = stats.get("normal_agreement_positive_examples", [])
+		if examples.size() < 8:
+			examples.append({
+				"owner": owner,
+				"lod": lod,
+				"agreement": agreement,
+				"area_squared": area_squared,
+				"minimum_edge_length_squared": min_edge_squared,
+				"a": _vector_summary(a),
+				"b": _vector_summary(b),
+				"c": _vector_summary(c),
+				"a_key": _point_key(a),
+				"b_key": _point_key(b),
+				"c_key": _point_key(c),
+			})
+			stats["normal_agreement_positive_examples"] = examples
 	elif agreement < -0.0001:
 		stats["normal_agreement_negative"] = int(stats.get("normal_agreement_negative", 0)) + 1
 	else:

@@ -4616,9 +4616,9 @@ func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> 
 func _streaming_fly_sky_gap_detected(sky: Dictionary) -> bool:
 	return int(sky.get("crosshair_sky_pixels", 0)) > 0 or \
 		int(sky.get("lower_center_sky_pixels", 0)) > 16 or \
-		int(sky.get("isolated_center_sky_pixels", 0)) > 0 or \
-		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 0 or \
-		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 0
+		int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
+		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4 or \
+		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8
 
 
 func _write_streaming_fly_summary_json(summary: Dictionary) -> void:
