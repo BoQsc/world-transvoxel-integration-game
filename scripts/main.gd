@@ -10,7 +10,6 @@ const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
 const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
-const FullMapVisual := preload("res://addons/world_transvoxel_terrain/visual/wt_terrain_full_map_visual.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -18,8 +17,6 @@ const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debu
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/human_artifact_marks"
-const COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT := 160.0
-const COMPACT_FULL_MAP_LOCAL_EXCLUSION_REBUILD_DISTANCE := 16.0
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -28,7 +25,6 @@ var telemetry_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
 var material_applicator: Node
-var full_map_visual: MeshInstance3D
 var selected_profile: StringName = DEFAULT_HUMAN_PROFILE
 var autonomous := false
 var human_visual_capture_path := ""
@@ -38,7 +34,6 @@ var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
-var compact_presentation_backing_enabled := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -86,8 +81,6 @@ func _ready() -> void:
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
-	compact_presentation_backing_enabled = args.has("--p2-enable-compact-presentation-backing") or \
-		human_visual_capture_mode == "backdrop_exclusion_gate"
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -240,7 +233,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d full_map_visual=%d full_map_blocks_x=%d full_map_blocks_z=%d local_detail_exclusion=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -256,10 +249,6 @@ func _run_autonomous_proof() -> void:
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
 		1 if bool(presentation.get("native_render_material_override", false)) else 0,
-		1 if bool(presentation.get("full_map_enabled", false)) else 0,
-		int(presentation.get("full_map_blocks_x", 0)),
-		int(presentation.get("full_map_blocks_z", 0)),
-		1 if bool(presentation.get("local_detail_exclusion", false)) else 0,
 	])
 	await get_tree().process_frame
 	get_tree().quit(0)
@@ -422,66 +411,6 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
-	# The full-map visual is an explicit opt-in presentation/backdrop diagnostic.
-	# Terrain correctness and normal human playtest paths keep this disabled so
-	# native Transvoxel streaming, LOD, and edit failures cannot be hidden.
-	full_map_visual = FullMapVisual.new()
-	full_map_visual.name = "FullMapTerrainVisual"
-	full_map_visual.enabled = compact_presentation_backing_enabled and not autonomous
-	full_map_visual.enabled_profile_id = COMPACT_PROFILE
-	full_map_visual.auto_detect_parent_profile = true
-	full_map_visual.chunk_count_x = 128
-	full_map_visual.chunk_count_z = 128
-	full_map_visual.chunk_size = 16.0
-	full_map_visual.grid_segments_x = 128
-	full_map_visual.grid_segments_z = 128
-	full_map_visual.seed = 19019
-	full_map_visual.visual_mode = &"material_id" if autonomous else &"clean"
-	if not autonomous:
-		full_map_visual.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
-		full_map_visual.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
-		full_map_visual.clean_texture_world_scale = 0.22
-		full_map_visual.vertical_offset = -0.75
-	var viewer_position: Vector3 = player.global_position if player != null else _settings["viewers"][0]
-	var exclusion_half_extent := float(_settings.get(
-		"detail_exclusion_half_extent",
-		COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT
-	))
-	if exclusion_half_extent <= 0.0:
-		exclusion_half_extent = COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT
-	full_map_visual.local_detail_exclusion_enabled = false
-	full_map_visual.local_detail_exclusion_center = Vector2(viewer_position.x, viewer_position.z)
-	full_map_visual.local_detail_exclusion_half_extent = Vector2(
-		exclusion_half_extent,
-		exclusion_half_extent
-	)
-	full_map_visual.local_detail_exclusion_rebuild_distance = COMPACT_FULL_MAP_LOCAL_EXCLUSION_REBUILD_DISTANCE
-	add_child(full_map_visual)
-
-
-func register_terrain_edit_exclusion(center: Vector3, radius: float) -> void:
-	if autonomous or full_map_visual == null or player == null:
-		return
-	if not compact_presentation_backing_enabled:
-		return
-	if selected_profile != COMPACT_PROFILE:
-		return
-	if not full_map_visual.has_method("add_local_detail_exclusion_region"):
-		return
-	var exclusion_radius := maxf(radius + 18.0, 32.0)
-	var half_extent := Vector2(
-		exclusion_radius,
-		exclusion_radius
-	)
-	full_map_visual.call("add_local_detail_exclusion_region", Vector2(center.x, center.z), half_extent)
-
-
-func _register_terrain_edit_operation_exclusions(operations: Array) -> void:
-	for operation in operations:
-		if operation == null:
-			continue
-		register_terrain_edit_exclusion(operation.center, float(operation.radius))
-
 
 func _create_player(start: Vector3) -> CharacterBody3D:
 	var p := CharacterBody3D.new()
@@ -532,7 +461,6 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_collision_activation_distance": 192.0,
 			"runtime_collision_deactivation_distance": 256.0,
 			"edit_point": Vector3(1032, 8, 1032),
-			"detail_exclusion_half_extent": COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT,
 		}
 	return {
 		"start": Vector3(1184, 142, 1008),
@@ -560,7 +488,6 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_collision_activation_distance": 192.0,
 		"runtime_collision_deactivation_distance": 256.0,
 		"edit_point": Vector3(1184, 119, 1008),
-		"detail_exclusion_half_extent": COMPACT_FULL_MAP_LOCAL_EXCLUSION_HALF_EXTENT,
 	}
 
 
@@ -2151,10 +2078,6 @@ func _presentation_summary() -> Dictionary:
 	var material_summary := {}
 	if material_applicator != null and material_applicator.has_method("get_material_quality_summary"):
 		material_summary = material_applicator.call("get_material_quality_summary")
-	var full_map_summary := {}
-	if full_map_visual != null and full_map_visual.has_method("get_full_terrain_visual_summary"):
-		full_map_summary = full_map_visual.call("get_full_terrain_visual_summary")
-	var exclusion_regions := int(full_map_summary.get("local_detail_exclusion_regions", 0))
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
@@ -2164,13 +2087,6 @@ func _presentation_summary() -> Dictionary:
 		"clean_material_variation_strength": float(material_summary.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(material_summary.get("clean_roughness", 0.0)),
 		"clean_specular": float(material_summary.get("clean_specular", 1.0)),
-		"full_map_enabled": bool(full_map_summary.get("enabled", false)),
-		"full_map_blocks_x": int(full_map_summary.get("coverage_blocks_x", 0)),
-		"full_map_blocks_z": int(full_map_summary.get("coverage_blocks_z", 0)),
-		"full_map_layer": str(full_map_summary.get("visual_layer_kind", "")),
-		"local_detail_exclusion": bool(full_map_summary.get("local_detail_exclusion_enabled", false)) or exclusion_regions > 0,
-		"local_detail_exclusion_cells": int(full_map_summary.get("local_detail_exclusion_cells", 0)),
-		"local_detail_exclusion_regions": exclusion_regions,
 	}
 
 
@@ -2186,9 +2102,6 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
-		return false
-	if bool(summary.get("full_map_enabled", false)):
-		_fail("playable terrain must not depend on compact full-map visual: %s" % str(summary))
 		return false
 	return true
 
@@ -2427,10 +2340,6 @@ func _capture_human_visual() -> void:
 		"edit_lod_retention_active_viewers": int(summary.get("edit_lod_retention_active_viewers", 0)),
 		"edit_lod_retention_plans": int(summary.get("edit_lod_retention_plans", 0)),
 		"edit_lod_retention_fallbacks": int(summary.get("edit_lod_retention_fallbacks", 0)),
-		"full_map_enabled": bool(presentation.get("full_map_enabled", false)),
-		"local_detail_exclusion": bool(presentation.get("local_detail_exclusion", false)),
-		"local_detail_exclusion_cells": int(presentation.get("local_detail_exclusion_cells", 0)),
-		"local_detail_exclusion_regions": int(presentation.get("local_detail_exclusion_regions", 0)),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
@@ -2474,7 +2383,6 @@ func _capture_requires_interaction_inspection() -> bool:
 	return human_visual_capture_mode.begins_with("edit_") or \
 		human_visual_capture_mode.begins_with("small_edit_") or \
 		human_visual_capture_mode.begins_with("watertight_") or \
-		human_visual_capture_mode == "backdrop_exclusion_gate" or \
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
@@ -2542,7 +2450,6 @@ func _apply_interaction_inspection_edits() -> bool:
 	if not await game_world.wait_for_world_revision(before_revision + 1):
 		_fail("interaction inspection edit did not commit")
 		return false
-	_register_terrain_edit_operation_exclusions(operations)
 	if not await _wait_for_current_profile_settled("after interaction inspection edits"):
 		return false
 	if material_applicator != null:
@@ -2580,7 +2487,6 @@ func _apply_sequential_interaction_inspection_edits(terrain_world: Node) -> bool
 		if not await game_world.wait_for_world_revision(before_revision + 1):
 			_fail("sequential interaction inspection edit %d did not commit" % index)
 			return false
-		_register_terrain_edit_operation_exclusions([operations[index]])
 		if human_visual_capture_mode == "watertight_many_small_near":
 			if index % 8 == 7:
 				if not await _wait_for_current_profile_settled("after sequential interaction edit %d" % index):
@@ -5755,12 +5661,6 @@ func _watertightness_probe_radius() -> float:
 
 
 func _collect_watertightness_summary() -> Dictionary:
-	if human_visual_capture_mode == "backdrop_exclusion_gate":
-		return {
-			"enabled": false,
-			"ok": true,
-			"reason": "presentation_exclusion_gate",
-		}
 	if not _capture_requires_interaction_inspection():
 		return {
 			"enabled": false,
@@ -5875,11 +5775,6 @@ func _apply_capture_camera_mode() -> void:
 		"small_edit_far":
 			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
 			capture_position = edit_point + Vector3(-130.0, 145.0, -410.0)
-			player.global_position = capture_position
-			player.rotation = Vector3.ZERO
-		"backdrop_exclusion_gate":
-			capture_target = edit_point + Vector3(1.2, 0.0, 1.2)
-			capture_position = edit_point + Vector3(-8.0, 18.0, -46.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"edit_near", "interaction_near":

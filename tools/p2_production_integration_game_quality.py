@@ -51,7 +51,6 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
     "edit_tunnel_upward_lod_gate",
-    "backdrop_exclusion_gate",
     "streaming_fly_gap_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
@@ -125,7 +124,6 @@ def run_visual_capture_summary(
     profile: str = VISUAL_CAPTURE_PROFILE,
     capture_stem: str | None = None,
     extra_args: tuple[str, ...] = (),
-    enable_presentation_backing: bool | None = None,
 ) -> tuple[pathlib.Path, dict[str, object]]:
     output_dir.mkdir(parents=True, exist_ok=True)
     if capture_stem is None:
@@ -145,10 +143,6 @@ def run_visual_capture_summary(
         "--human-visual-capture-wait-frames",
         str(wait_frames),
     ]
-    if enable_presentation_backing is None:
-        enable_presentation_backing = mode == "backdrop_exclusion_gate"
-    if enable_presentation_backing:
-        cmd.append("--p2-enable-compact-presentation-backing")
     cmd.extend(extra_args)
     print("capturing:", " ".join(cmd), flush=True)
     completed = subprocess.run(cmd, text=True, capture_output=True)
@@ -160,7 +154,7 @@ def run_visual_capture_summary(
         raise subprocess.CalledProcessError(completed.returncode, cmd)
 
     summary = parse_visual_summary(completed.stdout, mode)
-    validate_visual_summary(summary, capture_path, profile, enable_presentation_backing)
+    validate_visual_summary(summary, capture_path, profile)
     return capture_path, summary
 
 
@@ -202,13 +196,9 @@ def validate_visual_summary(
     summary: dict[str, object],
     capture_path: pathlib.Path,
     expected_profile: str = VISUAL_CAPTURE_PROFILE,
-    presentation_backing_expected: bool = False,
 ) -> None:
     if not capture_path.is_file() or capture_path.stat().st_size < 10_000:
         raise RuntimeError(f"visual capture was not written: {capture_path}")
-    full_map_expected = (
-        presentation_backing_expected and expected_profile == VISUAL_CAPTURE_PROFILE
-    )
     checks = {
         "profile": expected_profile,
         "viewer_radius_chunks": 8,
@@ -222,7 +212,6 @@ def validate_visual_summary(
         "runtime_collision_activation_distance": 192.0,
         "runtime_collision_deactivation_distance": 256.0,
         "edit_failure_count": 0,
-        "full_map_enabled": full_map_expected,
         "native_render_material_override": True,
         "clean_material_variation_enabled": False,
         "clean_roughness": 1.0,
@@ -235,20 +224,6 @@ def validate_visual_summary(
                 f"got {summary.get(key)!r}: {summary!r}"
             )
     mode = str(summary.get("mode", ""))
-    edit_region_exclusion_expected = full_map_expected and mode in {
-        "small_edit_near",
-        "small_edit_mid",
-        "small_edit_far",
-        "edit_near",
-        "edit_far",
-        "edit_aerial",
-        "backdrop_exclusion_gate",
-    }
-    if edit_region_exclusion_expected:
-        if summary.get("local_detail_exclusion") is not True:
-            raise RuntimeError(f"edited compact capture missing local detail exclusion: {summary!r}")
-        if int(summary.get("local_detail_exclusion_regions", 0)) <= 0:
-            raise RuntimeError(f"edited compact capture has no exclusion regions: {summary!r}")
     minimums = {
         "runtime_demand_capacity_per_viewer": 8192,
         "active_chunk_records": 64,

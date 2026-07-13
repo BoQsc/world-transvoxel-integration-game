@@ -88,12 +88,10 @@ as mipmaps to actually reach the runtime `.ctex` texture.
   inspection coverage;
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage and
   capped radius-1 near-detail refinement;
-- compact 2K human/visual mode includes an exact deterministic full-map terrain
-  LOD/backdrop outside the local native/editable detail window. This layer uses
-  the same procedural height expression as the native source and is cull-disabled
-  because it is a far heightfield backdrop. It must not render underneath local
-  edited Transvoxel holes. Native Transvoxel chunks remain single-sided and are
-  still validated separately without relying on this backdrop;
+- compact 2K human/visual mode renders native Transvoxel chunks only. There is
+  no full-map/backdrop presentation fallback; visible terrain disappearance,
+  pinhole sky leaks, harsh edited-LOD changes, or edit artifacts must be fixed in
+  native terrain;
 - sharp deterministic mountain stress terrain inside the current procedural
   vertical budget, with tall ridges, spire-like peaks, steep slopes, and the
   human spawn placed above terrain and snapped to collision before input is
@@ -128,16 +126,10 @@ materials, and edit replacement behavior on tall, sharper terrain.
 
 Important compact-profile visual boundary: native Transvoxel terrain is the
 authoritative path. Normal human play, visual smoke, and terrain-correctness
-gates must report `full_map_enabled=false`; sky seen through terrain during
-normal collision-aware flight is a bug unless the camera was intentionally
-forced inside/below terrain by an invalid noclip/debug path.
-
-The full-map visual backing layer is an explicit opt-in presentation diagnostic,
-not a terrain-correctness solution and not a standard Transvoxel architecture.
-Use it only with `--p2-enable-compact-presentation-backing` or the dedicated
-`backdrop_exclusion_gate` when testing the backdrop itself. It must not be used
-to claim seamless LOD, manifold terrain, edit persistence, or production
-terrain readiness.
+gates use native chunks only; sky seen through terrain during normal
+collision-aware flight is a bug unless the camera was intentionally forced
+inside/below terrain by an invalid noclip/debug path. Do not add presentation
+fallbacks to hide native LOD, streaming, or edit artifacts.
 
 The flat baseline profile remains available for proof automation:
 
@@ -218,7 +210,7 @@ available for validation.
 | Edits do not commit | Inspect `game_world.get_last_edit_summary()`, `edit_commit_count`, `edit_failure_count`, and the terrain edit journal under `res://build/<game>/<profile>/`. |
 | Clicks appear to do nothing | Confirm the player interaction summary reports `ray_hit=true`; visible render chunks are not enough if collision coverage is stale or too narrow. |
 | White/default chunks flash while moving | Confirm the material summary reports `native_render_material_override=true`; the old recursive-only material scan is not sufficient for human play. |
-| Terrain seems to disappear while flying | Confirm the run uses collision-aware human fly mode, not an old noclip/debug path. Then run the streaming-fly visual gate below and require `streaming_fly.ok=true`, `failure_count=0`, and `full_map_enabled=false` in the capture summary. |
+| Terrain seems to disappear while flying | Confirm the run uses collision-aware human fly mode, not an old noclip/debug path. Then run the streaming-fly visual gate below and require `streaming_fly.ok=true` and `failure_count=0`. |
 | Debug UI visible during human play | Confirm you are running this integration game main scene, not an older validation playtest scene. |
 
 ## Automated proof
@@ -246,10 +238,9 @@ python tools/p2_production_integration_game_quality.py --skip-build --visual-smo
 This also captures the real compact human-play profile from ground,
 high-oblique, top-down, and edited-boundary watertightness views under
 `.godot/world_transvoxel_captures/terrain_1_0_visual_smoke/` and rejects
-regressions where the compact human full-map LOD/backdrop is missing, native
-material override is missing, visible native terrain coverage falls below the
-expected compact 2K profile thresholds, or the edited rendered mesh reports open
-edges / mixed triangle winding.
+regressions where native material override is missing, visible native terrain
+coverage falls below the expected compact 2K profile thresholds, or the edited
+rendered mesh reports open edges / mixed triangle winding.
 
 For the moving/flying compact terrain visual-stability gate, run:
 
