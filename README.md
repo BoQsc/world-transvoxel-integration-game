@@ -12,9 +12,11 @@ step; visible terrain artifacts during play must be marked with `~`, then `M`.
 
 ## Critical edited-terrain LOD boundary
 
-This integration game inherits the core World Transvoxel edited-LOD-retention
-contract. Edited terrain is persistent world state, but high-detail visibility of
-every mined, dug, placed, or restored area from every distance is budgeted, not
+This integration game inherits the core World Transvoxel edited-terrain LOD
+correctness contract:
+`world-transvoxel/docs/contracts/PRODUCTION_EDITED_TERRAIN_LOD_CORRECTNESS_CONTRACT.md`.
+Edited terrain is persistent world state, but high-detail visibility of every
+mined, dug, placed, or restored area from every distance is budgeted, not
 unlimited. Recent edit-retention keeps player edits refined longer and prevents
 the known all-retention fallback collapse, but a project can still choose camera
 distances, active chunk capacity, viewer radius, or retention budgets that make
@@ -30,10 +32,12 @@ reports of holes changing or disappearing after moving away and returning.
 Any repository that uses this project as a reference must carry this boundary
 forward. A profile may claim seamless edited terrain only after player-like
 edits are validated across close, mid, far, and return movement with persistence,
-rendered-gap, and acceptable far-LOD shape-continuity checks. Human reports of
-harsh dug-hole changes, transient terrain disappearance, or pinhole sky leaks
-must be marked with `~`, then `M`, and promoted into targeted gates instead of
-being treated as subjective visual feedback.
+rendered-gap, and acceptable far-LOD shape-continuity checks. Full-resolution
+visibility of every edited region from every distance is a separate exact-global
+profile claim, not the default terrain claim. Human reports of harsh dug-hole
+changes, transient terrain disappearance, or pinhole sky leaks must be marked
+with `~`, then `M`, and promoted into targeted gates instead of being treated as
+subjective visual feedback.
 
 ## Critical native topology boundary
 
@@ -284,10 +288,12 @@ python tools/p2_production_integration_game_quality.py --skip-build --lod-moveme
 This exercises deterministic edit batches, real player interaction edits, and
 close/mid/far viewer movement on the compact and flat profiles. It fails on
 permanent authoritative edit loss, settled open rendered edges, or transient
-movement-triggered LOD crack probes. The gameworld keeps a low steady render /
-collision apply budget of 8 and uses a short viewer-movement burst budget of 128
-for 30 frames to avoid exposing partial LOD replacement sets while the player is
-moving.
+movement-triggered LOD crack probes. It does not by itself prove exact
+full-resolution edited visibility from every distance; that requires the
+separate edited-terrain LOD correctness contract gates. The gameworld keeps a
+low steady render / collision apply budget of 8 and uses a short viewer-movement
+burst budget of 128 for 30 frames to avoid exposing partial LOD replacement sets
+while the player is moving.
 
 For the two-site edited-retention gate, run:
 

@@ -92,6 +92,9 @@ Human testing distinguished three separate issues that must not be mixed:
   symptoms;
 - dug holes changing harshly at distance are edited-LOD-retention symptoms.
 
+The authoritative boundary for these claims is the core contract:
+`world-transvoxel/docs/contracts/PRODUCTION_EDITED_TERRAIN_LOD_CORRECTNESS_CONTRACT.md`.
+
 Current runtime/source changes in this candidate follow-up:
 
 - recent edit LOD-retention zones remain active even when the player flies away,
@@ -232,6 +235,9 @@ This candidate does not claim:
 - water, lava, vegetation, buildings, biomes, multiplayer, or entity systems;
 - unlimited high-detail visibility of every edited/mined region from every
   distance;
+- exact full-resolution visibility of every player or map edit from every
+  distance without an explicit exact-global-edit-visibility profile or
+  editor-baked multi-LOD validation gate;
 - seamless dynamic LOD for arbitrary future camera paths beyond the recorded
   gates;
 - final human acceptance;
