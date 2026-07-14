@@ -228,6 +228,8 @@ func _run_autonomous_proof() -> void:
 		return
 	if not _verify_standard_volume_contract(terrain_world):
 		return
+	if not await _verify_standard_material_strata_contract(terrain_world):
+		return
 	if not _verify_standard_multiplayer_server_contract(terrain_world):
 		return
 	await get_tree().physics_frame
@@ -751,6 +753,134 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 			horizontal_cells,
 			vertical_cells,
 			str(generation.get("source_mode", "")),
+		]
+	)
+	return true
+
+
+func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
+	if terrain_world == null or not terrain_world.has_method("get_profile_summaries"):
+		_fail("terrain world does not expose profile summaries for material strata contract")
+		return false
+	var summaries_value = terrain_world.call("get_profile_summaries")
+	if not (summaries_value is Dictionary):
+		_fail("terrain profile summaries are not a dictionary for material strata: %s" % str(summaries_value))
+		return false
+	var summaries: Dictionary = summaries_value
+	var generation_value = summaries.get("generation", {})
+	if not (generation_value is Dictionary):
+		_fail("generation summary missing from material strata contract: %s" % str(summaries))
+		return false
+	var generation: Dictionary = generation_value
+	if str(generation.get("material_strata_model", "")) != "standard_density_depth_material_strata_v1":
+		_fail("standard material strata model mismatch: %s" % str(generation))
+		return false
+	if str(generation.get("material_palette_version", "")) != "world_transvoxel_material_palette_v1":
+		_fail("standard material palette version mismatch: %s" % str(generation))
+		return false
+	if str(generation.get("underground_depth_bands", "")) != "deep>=8:1,mid>=3:7,shallow>=1:4":
+		_fail("standard material depth bands mismatch: %s" % str(generation))
+		return false
+	var standard_ids := Array(generation.get("standard_material_ids", []))
+	for material_id in [1, 2, 3, 4, 7]:
+		if not standard_ids.has(material_id):
+			_fail("standard material ID missing from profile: id=%d summary=%s" % [material_id, str(generation)])
+			return false
+	var center := Vector3i(
+		int(round(edit_point.x)),
+		int(round(edit_point.y)),
+		int(round(edit_point.z))
+	)
+	var probes: Array = [
+		{
+			"label": "shallow",
+			"point": Vector3i(center.x, center.y - 1, center.z),
+			"expected_material": 4,
+			"minimum_solid_depth": 1.0,
+		},
+		{
+			"label": "mid",
+			"point": Vector3i(center.x, center.y - 3, center.z),
+			"expected_material": 7,
+			"minimum_solid_depth": 3.0,
+		},
+		{
+			"label": "deep",
+			"point": Vector3i(center.x, center.y - 8, center.z),
+			"expected_material": 1,
+			"minimum_solid_depth": 8.0,
+		},
+	]
+	var points: Array = []
+	for probe in probes:
+		points.append(probe["point"])
+	_ensure_authoritative_sample_connections(terrain_world)
+	var request_id := int(terrain_world.call("request_authoritative_samples", points, 0))
+	if request_id <= 0:
+		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "unknown"
+		_fail("material strata authoritative sample query rejected: %s" % error)
+		return false
+	for _frame in range(240):
+		if authoritative_sample_failures.has(request_id):
+			var failure_error := str(authoritative_sample_failures[request_id])
+			authoritative_sample_failures.erase(request_id)
+			_fail("material strata authoritative sample query failed: %s" % failure_error)
+			return false
+		if authoritative_sample_batches.has(request_id):
+			var samples: Array = authoritative_sample_batches[request_id]
+			authoritative_sample_batches.erase(request_id)
+			return _verify_material_strata_samples(probes, samples)
+		await get_tree().process_frame
+	_fail("material strata authoritative sample query timed out request=%d" % request_id)
+	return false
+
+
+func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
+	var by_point := {}
+	for sample in samples:
+		if sample == null:
+			continue
+		var point: Vector3i = sample.call("get_grid_point")
+		by_point[_grid_point_key(point)] = sample
+	var observed := {}
+	for probe in probes:
+		var point: Vector3i = probe["point"]
+		var key := _grid_point_key(point)
+		if not by_point.has(key):
+			_fail("material strata sample missing for point=%s samples=%d" % [key, samples.size()])
+			return false
+		var sample = by_point[key]
+		var density := float(sample.call("get_density"))
+		var material := int(sample.call("get_material"))
+		var expected_material := int(probe["expected_material"])
+		var label := str(probe["label"])
+		observed[label] = {
+			"point": key,
+			"density": density,
+			"material": material,
+		}
+		if density >= 0.0:
+			_fail("material strata sample is not solid: label=%s point=%s density=%.6f material=%d" % [
+				label,
+				key,
+				density,
+				material,
+			])
+			return false
+		if material != expected_material:
+			_fail("material strata sample material mismatch: label=%s point=%s expected=%d got=%d observed=%s" % [
+				label,
+				key,
+				expected_material,
+				material,
+				JSON.stringify(observed),
+			])
+			return false
+	print(
+		"WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=%s palette=world_transvoxel_material_palette_v1 shallow=4 mid=7 deep=1 samples=%s" %
+		[
+			str(selected_profile),
+			JSON.stringify(observed),
 		]
 	)
 	return true

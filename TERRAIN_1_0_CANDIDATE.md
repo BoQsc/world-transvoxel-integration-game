@@ -26,6 +26,7 @@ latest terrain/runtime source change:
 | Godot setup | Texture import settings and generated import cache are valid before visual testing. | `python tools/godot_import_assets.py` or any P2 proof that prints `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`. |
 | Runtime launch | Real `project.godot`, real main scene, addon stack loaded, no stale validation scene. | P2 profile proof prints `WT_PRODUCTION_GAME_P2_PASS` for `flat_baseline` and `g19_compact_2k_on_demand`. |
 | Volumetric terrain | Terrain is authoritative signed density/material volume, not a heightmap-only mesh. | P2 proof prints `WT_STANDARD_VOLUME_CONTRACT_PASS` for both standard profiles. |
+| Material strata | Terrain profile exposes standard material palette and authoritative shallow/mid/deep underground depth bands. | P2 proof prints `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS` for both standard profiles. |
 | Future server compatibility | Terrain authority remains compatible with future multiplayer/dedicated servers. | P2 proof prints `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS` for both standard profiles. |
 | No presentation fallback | Native single-sided Transvoxel chunks only for terrain correctness. No full-map layer, duplicate terrain skin, or double-sided material used to hide holes. | Visual/topology gates below must pass without presentation fallback. |
 | Player interaction | Player/camera/crosshair, raycast edit path, committed edit revision, storage journal, and no edit failures. | P2 proof fields: `player=1`, `camera=1`, `crosshair=1`, `interaction_raycast=1`, `storage_journal=1`, `edit_failures=0`. |
@@ -113,6 +114,7 @@ Observed pass markers:
 
 - `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
 - `WT_STANDARD_VOLUME_CONTRACT_PASS profile=flat_baseline`
+- `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=flat_baseline`
 - `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=flat_baseline`
 - `WT_PRODUCTION_GAME_P2_PASS profile=flat_baseline`
 - `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
@@ -125,6 +127,7 @@ Observed pass markers:
 
 - `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
 - `WT_STANDARD_VOLUME_CONTRACT_PASS profile=g19_compact_2k_on_demand`
+- `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=g19_compact_2k_on_demand`
 - `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=g19_compact_2k_on_demand`
 - `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
 - `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`

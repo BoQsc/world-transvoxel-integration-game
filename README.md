@@ -13,6 +13,9 @@ marked with `~`, then `M`.
 The terrain standard is explicitly volumetric, not heightmap-only. The
 authoritative density/material boundary is documented in
 [STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md](STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md).
+The current standard material palette and shallow/mid/deep underground strata
+are documented in
+[STANDARD_MATERIAL_STRATA_CONTRACT.md](STANDARD_MATERIAL_STRATA_CONTRACT.md).
 Future multiplayer, persistent-world, and dedicated-server compatibility is
 documented in
 [STANDARD_MULTIPLAYER_SERVER_CONTRACT.md](STANDARD_MULTIPLAYER_SERVER_CONTRACT.md).
@@ -139,6 +142,9 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - production terrain material texture pipeline installed through the native
   render material override, so newly streamed chunks do not flash with the
   engine default material;
+- standard material palette `world_transvoxel_material_palette_v1`, with
+  authoritative shallow/mid/deep depth bands `4/7/1` exposed through terrain
+  generation profiles and checked by autonomous sample queries;
 - normal human play uses the sand texture at
   `res://assets/terrain_textures/coast_sand_01_diff_1k.jpg` and keeps
   material-ID tinting off by default;
@@ -193,6 +199,8 @@ building your own game setup.
 
 Terrain edits operate on the volumetric density/material contract documented in
 [STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md](STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md).
+Material IDs and underground depth bands are defined in
+[STANDARD_MATERIAL_STRATA_CONTRACT.md](STANDARD_MATERIAL_STRATA_CONTRACT.md).
 
 The current standard edit brush is documented in
 [STANDARD_EDIT_BRUSH_CONTRACT.md](STANDARD_EDIT_BRUSH_CONTRACT.md). The

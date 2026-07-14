@@ -45,6 +45,7 @@ The current standard profiles expose:
 - `WtTerrainProfile.finite_closed_boundary`;
 - `WtTerrainGenerationProfile.supports_underground_volume`;
 - `WtTerrainGenerationProfile.underground_model`;
+- `WtTerrainGenerationProfile.material_strata_model`;
 - `WtTerrainGenerationProfile.underground_depth_bands`.
 
 The current deterministic and flat generation sources are allowed to derive the
@@ -56,6 +57,12 @@ full signed volume:
 - edits mutate authoritative density/material samples;
 - LOD, render, collision, save/reload, and revisit behavior must be derived
   from the edited samples.
+
+The current standard material IDs and underground depth bands are defined in
+[STANDARD_MATERIAL_STRATA_CONTRACT.md](STANDARD_MATERIAL_STRATA_CONTRACT.md).
+That document controls material meanings such as shallow surface fill,
+mid-depth rock, and deep stone. Shaders and textures may present those IDs
+differently, but they do not redefine the authoritative material samples.
 
 This means flat terrain is still volumetric terrain. It is the default baseline
 because it is the simplest way to prove edits, collision, reload, and LOD
@@ -111,6 +118,7 @@ volumetric contract fields. At minimum, it must verify:
 - finite closed boundary semantics for the current bounded reference world;
 - `supports_underground_volume == true`;
 - a named underground model and depth/material contract;
+- the standard material palette and shallow/mid/deep depth-band material IDs;
 - unchanged edit persistence and LOD gates.
 
 Human playtesting is useful for noticing visual failures, but human acceptance

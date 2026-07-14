@@ -9,8 +9,19 @@ enum SourceMode {
 }
 
 const UNDERGROUND_MODEL := "density_volume_vertical_strata_v1"
+const MATERIAL_STRATA_MODEL := "standard_density_depth_material_strata_v1"
+const MATERIAL_PALETTE_VERSION := "world_transvoxel_material_palette_v1"
+const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 7]
+const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 7]
 const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 7, 4]
 const UNDERGROUND_DEPTH_BANDS := "deep>=8:1,mid>=3:7,shallow>=1:4"
+const STANDARD_MATERIAL_MEANINGS := {
+	1: "deep_stone",
+	2: "lowland_surface",
+	3: "dry_surface_soil",
+	4: "shallow_surface_sand_or_player_fill",
+	7: "mid_depth_rock_or_high_surface_rock",
+}
 
 @export var source_mode: SourceMode = SourceMode.DETERMINISTIC_REFERENCE
 @export var seed: int = 1
@@ -30,8 +41,13 @@ func get_contract_summary() -> Dictionary:
 		"default_solid_material": default_solid_material,
 		"supports_underground_volume": supports_underground_volume,
 		"underground_model": UNDERGROUND_MODEL,
+		"material_strata_model": MATERIAL_STRATA_MODEL,
+		"material_palette_version": MATERIAL_PALETTE_VERSION,
+		"standard_material_ids": STANDARD_MATERIAL_IDS,
+		"surface_material_ids": SURFACE_MATERIAL_IDS,
 		"underground_strata_material_ids": UNDERGROUND_STRATA_MATERIAL_IDS,
 		"underground_depth_bands": UNDERGROUND_DEPTH_BANDS,
+		"standard_material_meanings": STANDARD_MATERIAL_MEANINGS,
 		"flat_world_underground_contract": "same density/material volume semantics as procedural profiles",
 		"world_chunk_count_x": world_chunk_count_x,
 		"world_chunk_count_z": world_chunk_count_z,
