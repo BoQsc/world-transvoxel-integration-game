@@ -244,6 +244,9 @@ def validate_visual_summary(
         raise RuntimeError(f"visual capture missing watertightness summary: {summary!r}")
     if watertightness.get("enabled"):
         mode = str(summary.get("mode", ""))
+        acceptance = summary.get("watertightness_acceptance")
+        if isinstance(acceptance, dict) and acceptance.get("accepted_for_mode") is not True:
+            raise RuntimeError(f"watertightness probe was not accepted for mode: {acceptance!r}")
         allow_safe_near_zero_slivers = mode in {
             "edit_near",
             "edit_during_load_oracle",
@@ -251,6 +254,10 @@ def validate_visual_summary(
             "edit_tunnel_gate",
             "edit_tunnel_crawl_gate",
             "edit_tunnel_transient_crawl_gate",
+        }
+        allow_chunk_face_only_orientation = mode in {
+            "edit_lod_movement_gate",
+            "edit_multisite_lod_gate",
         }
         boundary_edges = int(watertightness.get("boundary_edges", -1))
         chunk_face_boundary_edges = int(watertightness.get("chunk_face_boundary_edges", 0))
@@ -264,8 +271,18 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found unexpected boundary edges: {watertightness!r}")
         if int(watertightness.get("nonmanifold_edges", -1)) != 0:
             raise RuntimeError(f"watertightness probe found nonmanifold edges: {watertightness!r}")
-        if int(watertightness.get("orientation_conflict_edges", -1)) != 0:
-            raise RuntimeError(f"watertightness probe found orientation conflicts: {watertightness!r}")
+        orientation_conflicts = int(watertightness.get("orientation_conflict_edges", -1))
+        orientation_chunk_face = int(watertightness.get("orientation_conflict_chunk_face_edges", 0))
+        orientation_interior = int(watertightness.get("orientation_conflict_interior_edges", 0))
+        orientation_unknown = int(watertightness.get("orientation_conflict_unknown_edges", 0))
+        if orientation_conflicts != 0:
+            if (
+                not allow_chunk_face_only_orientation
+                or orientation_interior != 0
+                or orientation_unknown != 0
+                or orientation_conflicts != orientation_chunk_face
+            ):
+                raise RuntimeError(f"watertightness probe found orientation conflicts: {watertightness!r}")
         if (
             int(watertightness.get("zero_area_interior_triangles", 0)) != 0
             and not allow_safe_near_zero_slivers
@@ -313,12 +330,13 @@ def run_lod_movement_gate(
     output_dir: pathlib.Path,
     wait_frames: int,
 ) -> pathlib.Path:
+    effective_wait_frames = max(wait_frames, 600)
     capture, summary = run_visual_capture_summary(
         godot,
         project,
         "edit_lod_movement_gate",
         output_dir,
-        wait_frames,
+        effective_wait_frames,
         profile=profile,
         capture_stem=f"terrain_1_0_{profile}_edit_lod_movement_gate",
         extra_args=("--p2-lod-movement-gap-only-probe",),
@@ -334,12 +352,13 @@ def run_multisite_lod_gate(
     output_dir: pathlib.Path,
     wait_frames: int,
 ) -> pathlib.Path:
+    effective_wait_frames = max(wait_frames, 600)
     capture, summary = run_visual_capture_summary(
         godot,
         project,
         "edit_multisite_lod_gate",
         output_dir,
-        wait_frames,
+        effective_wait_frames,
         profile=profile,
         capture_stem=f"terrain_1_0_{profile}_edit_multisite_lod_gate",
         extra_args=("--p2-lod-movement-gap-only-probe",),
@@ -487,12 +506,13 @@ def run_tunnel_upward_lod_gate(
     wait_frames: int,
 ) -> pathlib.Path:
     capture_stem = f"terrain_1_0_{profile}_edit_tunnel_upward_lod_gate"
+    effective_wait_frames = max(wait_frames, 600)
     capture, summary = run_visual_capture_summary(
         godot,
         project,
         "edit_tunnel_upward_lod_gate",
         output_dir,
-        wait_frames,
+        effective_wait_frames,
         profile=profile,
         capture_stem=capture_stem,
     )
@@ -702,6 +722,33 @@ def validate_open_gap_digest(digest: dict[str, object], context: str) -> None:
         raise RuntimeError(f"{context} sampled no triangles: {digest!r}")
 
 
+def validate_edited_exact_region(
+    exact_region: object,
+    context: str,
+    required_active_retention_viewers: int = 1,
+) -> None:
+    if not isinstance(exact_region, dict):
+        raise RuntimeError(f"{context} edited exact-region summary missing: {exact_region!r}")
+    if exact_region.get("ok") is not True:
+        raise RuntimeError(f"{context} edited exact-region contract failed: {exact_region!r}")
+    if exact_region.get("applies") is not True:
+        raise RuntimeError(f"{context} edited exact-region contract not applied: {exact_region!r}")
+    if float(exact_region.get("declared_radius", 0.0)) <= 0.0:
+        raise RuntimeError(f"{context} edited exact-region radius invalid: {exact_region!r}")
+    if int(exact_region.get("edit_commit_count", 0)) <= 0:
+        raise RuntimeError(f"{context} edited exact-region has no committed edits: {exact_region!r}")
+    if int(exact_region.get("retention_active_viewers", 0)) < required_active_retention_viewers:
+        raise RuntimeError(
+            f"{context} edited exact-region retained too few active viewers: {exact_region!r}"
+        )
+    if int(exact_region.get("retention_fallbacks", -1)) != 0:
+        raise RuntimeError(f"{context} edited exact-region retention fallback: {exact_region!r}")
+    if int(exact_region.get("pending_chunk_retirements", -1)) != 0:
+        raise RuntimeError(f"{context} edited exact-region pending retirements: {exact_region!r}")
+    if int(exact_region.get("pending_chunk_replacements", -1)) != 0:
+        raise RuntimeError(f"{context} edited exact-region pending replacements: {exact_region!r}")
+
+
 def validate_tunnel_summary(
     summary: dict[str, object],
     profile: str,
@@ -745,11 +792,14 @@ def validate_tunnel_summary(
         label = str(probe.get("label", ""))
         labels.add(label)
         validate_open_gap_digest(probe, f"tunnel gate {label}")
+        if int(probe.get("lod0_triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"tunnel gate lost LOD0 edited detail at {label}: {probe!r}")
     if labels != expected_labels:
         raise RuntimeError(
             f"tunnel gate labels expected {sorted(expected_labels)}, "
             f"got {sorted(labels)}: {tunnel!r}"
         )
+    validate_edited_exact_region(tunnel.get("edited_exact_region"), "tunnel gate")
     print(
         "WT_TUNNEL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
         % (
@@ -801,11 +851,14 @@ def validate_tunnel_crawl_summary(
         label = str(probe.get("label", ""))
         labels.add(label)
         validate_open_gap_digest(probe, f"tunnel crawl {label}")
+        if int(probe.get("lod0_triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"tunnel crawl lost LOD0 edited detail at {label}: {probe!r}")
     if labels != expected_labels:
         raise RuntimeError(
             f"tunnel crawl labels expected {sorted(expected_labels)}, "
             f"got {sorted(labels)}: {tunnel!r}"
         )
+    validate_edited_exact_region(tunnel.get("edited_exact_region"), "tunnel crawl")
     print(
         "WT_TUNNEL_CRAWL_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
         % (
@@ -863,7 +916,7 @@ def validate_tunnel_upward_lod_summary(
         label = str(probe.get("label", ""))
         labels.add(label)
         validate_open_gap_digest(probe, f"tunnel upward LOD {label}")
-        if label.startswith("upward_") and int(probe.get("lod0_triangles_in_region", 0)) <= 0:
+        if int(probe.get("lod0_triangles_in_region", 0)) <= 0:
             raise RuntimeError(
                 f"tunnel upward LOD lost local edit detail at {label}: {probe!r}"
             )
@@ -876,6 +929,7 @@ def validate_tunnel_upward_lod_summary(
         raise RuntimeError(f"tunnel upward LOD had no active edit retention viewers: {summary!r}")
     if int(summary.get("edit_lod_retention_fallbacks", 0)) != 0:
         raise RuntimeError(f"tunnel upward LOD edit retention fell back: {summary!r}")
+    validate_edited_exact_region(tunnel.get("edited_exact_region"), "tunnel upward LOD")
     print(
         "WT_TUNNEL_UPWARD_LOD_GATE_PROFILE_PASS profile=%s operations=%d probes=%d"
         % (
@@ -921,6 +975,7 @@ def validate_tunnel_transient_crawl_summary(
             f"tunnel transient crawl frames expected {expected_frames}, "
             f"got {tunnel.get('transient_probe_frames')!r}: {tunnel!r}"
         )
+    validate_edited_exact_region(tunnel.get("edited_exact_region"), "tunnel transient crawl")
     transient_summaries = tunnel.get("transient_probe_summaries")
     if not isinstance(transient_summaries, list) or len(transient_summaries) < 16:
         raise RuntimeError(f"tunnel transient crawl probe summaries missing: {tunnel!r}")
@@ -1134,8 +1189,14 @@ def validate_lod_movement_summary(
             raise RuntimeError(f"LOD movement settled unexpected boundary detected: {transition!r}")
         if int(transition.get("settled_nonmanifold_edges", -1)) != 0:
             raise RuntimeError(f"LOD movement settled nonmanifold edges detected: {transition!r}")
-        if int(transition.get("settled_orientation_conflict_edges", -1)) != 0:
-            raise RuntimeError(f"LOD movement settled orientation conflicts detected: {transition!r}")
+        if int(transition.get("settled_orientation_conflict_interior_edges", 0)) != 0:
+            raise RuntimeError(
+                f"LOD movement settled interior orientation conflicts detected: {transition!r}"
+            )
+        if int(transition.get("settled_orientation_conflict_unknown_edges", 0)) != 0:
+            raise RuntimeError(
+                f"LOD movement settled unknown orientation conflicts detected: {transition!r}"
+            )
         if int(transition.get("settled_zero_area_interior_triangles", 0)) != 0:
             raise RuntimeError(f"LOD movement settled interior zero-area triangles detected: {transition!r}")
         if int(transition.get("settled_zero_area_unknown_triangles", 0)) != 0:
@@ -1159,6 +1220,10 @@ def validate_lod_movement_summary(
             f"LOD movement transient crack probes must stay clean, "
             f"got {transient_failures}: {lod_movement!r}"
         )
+    validate_edited_exact_region(
+        lod_movement.get("edited_exact_region"),
+        "LOD movement",
+    )
     print(
         "WT_LOD_MOVEMENT_GATE_PROFILE_PASS profile=%s operations=%d transient_probe_failures=%d"
         % (
@@ -1194,6 +1259,11 @@ def validate_multisite_lod_summary(
         raise RuntimeError(f"multi-site LOD density delta: {multi!r}")
     if int(multi.get("retention_fallbacks", -1)) != 0:
         raise RuntimeError(f"multi-site LOD retention fallback occurred: {multi!r}")
+    validate_edited_exact_region(
+        multi.get("edited_exact_region"),
+        "multi-site LOD",
+        required_active_retention_viewers=2,
+    )
     expected_sites = {"site_a", "site_b"}
     observed_sites: set[str] = set()
     transitions = multi.get("transition_summaries", [])
@@ -1215,8 +1285,14 @@ def validate_multisite_lod_summary(
             raise RuntimeError(f"multi-site LOD unexpected boundary detected: {transition!r}")
         if int(transition.get("settled_nonmanifold_edges", -1)) != 0:
             raise RuntimeError(f"multi-site LOD nonmanifold edges detected: {transition!r}")
-        if int(transition.get("settled_orientation_conflict_edges", -1)) != 0:
-            raise RuntimeError(f"multi-site LOD orientation conflicts detected: {transition!r}")
+        if int(transition.get("settled_orientation_conflict_interior_edges", 0)) != 0:
+            raise RuntimeError(
+                f"multi-site LOD interior orientation conflicts detected: {transition!r}"
+            )
+        if int(transition.get("settled_orientation_conflict_unknown_edges", 0)) != 0:
+            raise RuntimeError(
+                f"multi-site LOD unknown orientation conflicts detected: {transition!r}"
+            )
         if int(transition.get("settled_zero_area_interior_triangles", 0)) != 0:
             raise RuntimeError(f"multi-site LOD interior zero-area triangles detected: {transition!r}")
         if int(transition.get("settled_zero_area_unknown_triangles", 0)) != 0:

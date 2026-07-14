@@ -2303,7 +2303,9 @@ func _apply_human_tunnel_playtest() -> bool:
 			"human tunnel preload %s" % preload_label,
 			preload_notes,
 			preload_center,
-			preload_radius
+			preload_radius,
+			"human_tunnel_playtest",
+			true
 		):
 			last_tunnel_summary["error"] = "preload_visual_not_ready"
 			last_tunnel_summary["failed_preload"] = preload_label
@@ -2401,6 +2403,7 @@ func _capture_human_visual() -> void:
 	image.save_png(human_visual_capture_path)
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var presentation: Dictionary = _presentation_summary()
+	var watertightness_acceptance := _watertightness_acceptance_summary(last_watertightness_summary)
 	print("WT_HUMAN_VISUAL_CAPTURE_SUMMARY ", JSON.stringify({
 		"mode": human_visual_capture_mode,
 		"profile": str(selected_profile),
@@ -2447,6 +2450,10 @@ func _capture_human_visual() -> void:
 		"edit_lod_retention_active_viewers": int(summary.get("edit_lod_retention_active_viewers", 0)),
 		"edit_lod_retention_plans": int(summary.get("edit_lod_retention_plans", 0)),
 		"edit_lod_retention_fallbacks": int(summary.get("edit_lod_retention_fallbacks", 0)),
+		"edited_exact_region": _edited_exact_region_contract_summary(
+			summary,
+			_declared_exact_region_radius_for_mode(human_visual_capture_mode)
+		),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
@@ -2458,6 +2465,7 @@ func _capture_human_visual() -> void:
 		"interaction_inspection_applied": interaction_inspection_applied,
 		"interaction_inspection_operation_count": interaction_inspection_operation_count,
 		"watertightness": last_watertightness_summary,
+		"watertightness_acceptance": watertightness_acceptance,
 		"edit_persistence": _edit_persistence_summary(),
 		"edit_stability": _edit_stability_summary(),
 		"lod_movement": _lod_movement_summary(),
@@ -2468,20 +2476,7 @@ func _capture_human_visual() -> void:
 		"streaming_fly": _streaming_fly_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
-	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
-	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
-		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
-	if human_visual_capture_mode == "edit_multisite_lod_gate" and lod_movement_gap_only_probe:
-		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
-	if human_visual_capture_mode == "edit_during_load_oracle":
-		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
-	if human_visual_capture_mode == "edit_manifold_stress_gate":
-		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
-	if human_visual_capture_mode == "edit_tunnel_gate" or \
-		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
-		human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
-		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
+	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
 		get_tree().quit(1)
@@ -2518,6 +2513,42 @@ func _capture_requires_watertightness_probe() -> bool:
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_upward_lod_gate"
+
+
+func _watertightness_acceptance_summary(probe: Dictionary) -> Dictionary:
+	var boundary := "exact_topology"
+	var accepted := bool(probe.get("ok", false))
+	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
+		boundary = "lod_movement_gap_only"
+		accepted = _is_lod_movement_probe_ready(probe)
+	elif human_visual_capture_mode == "edit_multisite_lod_gate" and lod_movement_gap_only_probe:
+		boundary = "lod_movement_gap_only"
+		accepted = _is_lod_movement_probe_ready(probe)
+	elif human_visual_capture_mode == "edit_during_load_oracle":
+		boundary = "open_gap_only"
+		accepted = _is_open_gap_free_probe(probe)
+	elif human_visual_capture_mode == "edit_manifold_stress_gate":
+		boundary = "open_gap_only"
+		accepted = _is_open_gap_free_probe(probe)
+	elif human_visual_capture_mode == "edit_tunnel_gate" or \
+			human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
+			human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
+			human_visual_capture_mode == "edit_tunnel_upward_lod_gate":
+		boundary = "open_gap_only"
+		accepted = _is_open_gap_free_probe(probe)
+	return {
+		"accepted_for_mode": accepted,
+		"boundary": boundary,
+		"raw_probe_ok": bool(probe.get("ok", false)),
+		"boundary_edges": int(probe.get("boundary_edges", -1)),
+		"interior_boundary_edges": int(probe.get("interior_boundary_edges", -1)),
+		"unknown_boundary_edges": int(probe.get("unknown_boundary_edges", -1)),
+		"nonmanifold_edges": int(probe.get("nonmanifold_edges", -1)),
+		"orientation_conflict_edges": int(probe.get("orientation_conflict_edges", -1)),
+		"orientation_conflict_chunk_face_edges": int(probe.get("orientation_conflict_chunk_face_edges", 0)),
+		"orientation_conflict_interior_edges": int(probe.get("orientation_conflict_interior_edges", 0)),
+		"orientation_conflict_unknown_edges": int(probe.get("orientation_conflict_unknown_edges", 0)),
+	}
 
 
 func _apply_interaction_inspection_edits() -> bool:
@@ -3364,7 +3395,8 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 		start_notes,
 		start_center,
 		start_radius,
-		"edit_tunnel_transient_crawl_gate"
+		"edit_tunnel_transient_crawl_gate",
+		true
 	):
 		last_tunnel_summary["error"] = "start_visual_not_ready"
 		return false
@@ -3404,6 +3436,22 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 			return false
 
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var exact_region := _edited_exact_region_contract_summary(
+		runtime_summary,
+		_tunnel_crawl_probe_radius()
+	)
+	if not bool(exact_region.get("ok", false)):
+		last_tunnel_summary = {
+			"enabled": true,
+			"ok": false,
+			"profile": str(selected_profile),
+			"operation_count": operations.size(),
+			"gate_mode": "edit_tunnel_transient_crawl_gate",
+			"error": "edited_exact_region_not_retained",
+			"edited_exact_region": exact_region,
+		}
+		_fail("tunnel transient crawl exact-region contract failed: %s" % JSON.stringify(exact_region))
+		return false
 	last_tunnel_summary = {
 		"enabled": true,
 		"ok": true,
@@ -3419,6 +3467,7 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
 		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
 		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"edited_exact_region": exact_region,
 		"render_resources": int(runtime_summary.get("render_resources", 0)),
 		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
 		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
@@ -3518,7 +3567,8 @@ func _run_tunnel_gate_path(
 			preload_notes,
 			preload_center,
 			preload_radius,
-			probe_mode_prefix
+			probe_mode_prefix,
+			true
 		):
 			last_tunnel_summary["error"] = "preload_visual_not_ready"
 			last_tunnel_summary["failed_preload"] = preload_label
@@ -3564,6 +3614,22 @@ func _run_tunnel_gate_path(
 			return false
 
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var exact_region := _edited_exact_region_contract_summary(
+		runtime_summary,
+		_declared_exact_region_radius_for_mode(probe_mode_prefix)
+	)
+	if not bool(exact_region.get("ok", false)):
+		last_tunnel_summary = {
+			"enabled": true,
+			"ok": false,
+			"profile": str(selected_profile),
+			"operation_count": operations.size(),
+			"gate_mode": probe_mode_prefix,
+			"error": "edited_exact_region_not_retained",
+			"edited_exact_region": exact_region,
+		}
+		_fail("%s exact-region contract failed: %s" % [gate_label, JSON.stringify(exact_region)])
+		return false
 	last_tunnel_summary = {
 		"enabled": true,
 		"ok": true,
@@ -3578,6 +3644,7 @@ func _run_tunnel_gate_path(
 		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
 		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
 		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"edited_exact_region": exact_region,
 		"render_resources": int(runtime_summary.get("render_resources", 0)),
 		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
 		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
@@ -3826,7 +3893,8 @@ func _exercise_tunnel_step(
 		notes,
 		probe_center,
 		probe_radius,
-		probe_mode_prefix
+		probe_mode_prefix,
+		true
 	):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		return {
@@ -3949,10 +4017,12 @@ func _wait_for_tunnel_visual_ready(
 	settle_notes: Array,
 	probe_center: Vector3 = Vector3.INF,
 	probe_radius: float = -1.0,
-	probe_mode_prefix: String = "edit_tunnel_gate"
+	probe_mode_prefix: String = "edit_tunnel_gate",
+	require_edited_exact_region: bool = false
 ) -> bool:
 	var last_summary := {}
 	var last_probe := {}
+	var last_exact_region := {}
 	if probe_center == Vector3.INF:
 		probe_center = _tunnel_gate_center()
 	if probe_radius <= 0.0:
@@ -3973,6 +4043,12 @@ func _wait_for_tunnel_visual_ready(
 			)
 			last_probe = _open_gap_probe_digest(probe)
 			if _is_open_gap_free_probe(probe):
+				if require_edited_exact_region:
+					var exact_region := _edited_exact_region_contract_summary(summary, probe_radius)
+					last_exact_region = exact_region
+					if not bool(exact_region.get("ok", false)):
+						await get_tree().process_frame
+						continue
 				if int(probe.get("zero_area_triangles", 0)) != 0:
 					settle_notes.append({
 						"context": context,
@@ -3987,7 +4063,7 @@ func _wait_for_tunnel_visual_ready(
 	_fail("tunnel visual-ready wait failed %s: summary=%s probe=%s" % [
 		context,
 		str(last_summary),
-		str(last_probe),
+		str({"probe": last_probe, "edited_exact_region": last_exact_region}),
 	])
 	return false
 
@@ -4368,7 +4444,37 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 		})
 	if not await _save_lod_movement_gate_captures():
 		return false
+	var final_capture_settle_notes := []
+	if not await _wait_for_lod_movement_visual_ready(
+		backend,
+		"after LOD movement gate captures",
+		final_capture_settle_notes
+	):
+		last_lod_movement_summary = {
+			"enabled": true,
+			"ok": false,
+			"profile": str(selected_profile),
+			"error": "post_capture_visual_streaming_not_ready",
+			"transition_summaries": transition_summaries,
+			"final_capture_settle_notes": final_capture_settle_notes,
+		}
+		return false
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var exact_region := _edited_exact_region_contract_summary(
+		runtime_summary,
+		_edit_lod_movement_probe_radius()
+	)
+	if not bool(exact_region.get("ok", false)):
+		last_lod_movement_summary = {
+			"enabled": true,
+			"ok": false,
+			"profile": str(selected_profile),
+			"error": "edited_exact_region_not_retained",
+			"edited_exact_region": exact_region,
+			"transition_summaries": transition_summaries,
+		}
+		_fail("LOD movement exact-region contract failed: %s" % JSON.stringify(exact_region))
+		return false
 	last_lod_movement_summary = {
 		"enabled": true,
 		"ok": true,
@@ -4379,12 +4485,14 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 		"total_operation_count": edit_persistence_operations.size(),
 		"mode_counts": mode_counts,
 		"interaction_strict_settle_notes": interaction_result.get("strict_settle_notes", []),
+		"final_capture_settle_notes": final_capture_settle_notes,
 		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
 		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
 		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
 		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
 		"transition_summaries": transition_summaries,
 		"persistence_summaries": persistence_summaries,
+		"edited_exact_region": exact_region,
 		"render_resources": int(runtime_summary.get("render_resources", 0)),
 		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
 		"active_chunk_records": int(runtime_summary.get("active_chunk_records", 0)),
@@ -4488,6 +4596,11 @@ func _run_edit_multisite_lod_gate(terrain_world: Node) -> bool:
 				"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
 			})
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var exact_region := _edited_exact_region_contract_summary(
+		runtime_summary,
+		_edit_lod_movement_probe_radius(),
+		2
+	)
 	last_multisite_lod_summary = {
 		"enabled": true,
 		"ok": true,
@@ -4503,6 +4616,7 @@ func _run_edit_multisite_lod_gate(terrain_world: Node) -> bool:
 		"retention_zones": int(runtime_summary.get("edit_lod_retention_zones", 0)),
 		"retention_active_viewers": int(runtime_summary.get("edit_lod_retention_active_viewers", 0)),
 		"retention_fallbacks": int(runtime_summary.get("edit_lod_retention_fallbacks", 0)),
+		"edited_exact_region": exact_region,
 		"pending_chunk_retirements": int(runtime_summary.get("pending_chunk_retirements", 0)),
 		"pending_chunk_replacements": int(runtime_summary.get("pending_chunk_replacements", 0)),
 		"render_resources": int(runtime_summary.get("render_resources", 0)),
@@ -4514,6 +4628,11 @@ func _run_edit_multisite_lod_gate(terrain_world: Node) -> bool:
 		last_multisite_lod_summary["ok"] = false
 		last_multisite_lod_summary["error"] = "retention_fallback"
 		_fail("multi-site LOD retention fallback: %s" % JSON.stringify(last_multisite_lod_summary))
+		return false
+	if not bool(exact_region.get("ok", false)):
+		last_multisite_lod_summary["ok"] = false
+		last_multisite_lod_summary["error"] = "edited_exact_region_not_retained"
+		_fail("multi-site LOD exact-region contract failed: %s" % JSON.stringify(last_multisite_lod_summary))
 		return false
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
@@ -4743,7 +4862,13 @@ func _exercise_multisite_lod_step(
 		"settled_chunk_face_boundary_edges": int(settled_probe.get("chunk_face_boundary_edges", -1)),
 		"settled_unknown_boundary_edges": int(settled_probe.get("unknown_boundary_edges", -1)),
 		"settled_nonmanifold_edges": int(settled_probe.get("nonmanifold_edges", -1)),
+		"settled_nonmanifold_chunk_face_edges": int(settled_probe.get("nonmanifold_chunk_face_edges", -1)),
+		"settled_nonmanifold_interior_edges": int(settled_probe.get("nonmanifold_interior_edges", -1)),
+		"settled_nonmanifold_unknown_edges": int(settled_probe.get("nonmanifold_unknown_edges", -1)),
 		"settled_orientation_conflict_edges": int(settled_probe.get("orientation_conflict_edges", -1)),
+		"settled_orientation_conflict_chunk_face_edges": int(settled_probe.get("orientation_conflict_chunk_face_edges", -1)),
+		"settled_orientation_conflict_interior_edges": int(settled_probe.get("orientation_conflict_interior_edges", -1)),
+		"settled_orientation_conflict_unknown_edges": int(settled_probe.get("orientation_conflict_unknown_edges", -1)),
 		"settled_zero_area_interior_triangles": int(settled_probe.get("zero_area_interior_triangles", -1)),
 		"settled_zero_area_unknown_triangles": int(settled_probe.get("zero_area_unknown_triangles", -1)),
 		"settled_repeated_point_key_interior_triangles": int(settled_probe.get("repeated_point_key_interior_triangles", -1)),
@@ -5551,6 +5676,11 @@ func _wait_for_lod_movement_visual_ready(
 				"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
 			}
 			if _is_lod_movement_probe_ready(probe):
+				var exact_region := _edited_exact_region_contract_summary(summary, radius)
+				last_probe["edited_exact_region"] = exact_region
+				if not bool(exact_region.get("ok", false)):
+					await get_tree().process_frame
+					continue
 				if int(summary.get("pending_chunk_retirements", 0)) != 0 or \
 						int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 					strict_settle_notes.append({
@@ -5602,6 +5732,66 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 			int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 		return false
 	return true
+
+
+func _declared_exact_region_radius_for_mode(mode: String) -> float:
+	if mode == "edit_lod_movement_gate" or mode == "edit_multisite_lod_gate":
+		return _edit_lod_movement_probe_radius()
+	if mode == "edit_manifold_stress_gate":
+		return _manifold_stress_probe_radius()
+	if mode == "edit_tunnel_crawl_gate" or mode == "edit_tunnel_transient_crawl_gate":
+		return _tunnel_crawl_probe_radius()
+	if mode == "edit_tunnel_upward_lod_gate":
+		return _tunnel_descending_probe_radius()
+	if mode == "edit_tunnel_gate" or mode == "human_tunnel_playtest":
+		return _tunnel_probe_radius()
+	return -1.0
+
+
+func _edited_exact_region_contract_summary(
+	summary: Dictionary,
+	declared_radius: float,
+	required_active_retention_viewers: int = 1
+) -> Dictionary:
+	var result := {
+		"ok": true,
+		"applies": declared_radius > 0.0,
+		"implementation": "edited_exact_region_profile_contract_v1",
+		"declared_radius": declared_radius,
+		"required_active_retention_viewers": required_active_retention_viewers,
+		"edit_commit_count": int(summary.get("edit_commit_count", 0)),
+		"retention_zones": int(summary.get("edit_lod_retention_zones", 0)),
+		"retention_active_viewers": int(summary.get("edit_lod_retention_active_viewers", 0)),
+		"retention_plans": int(summary.get("edit_lod_retention_plans", 0)),
+		"retention_fallbacks": int(summary.get("edit_lod_retention_fallbacks", 0)),
+		"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+		"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
+		"queued_render": int(summary.get("queued_render", 0)),
+		"queued_collision": int(summary.get("queued_collision", 0)),
+	}
+	var failures := []
+	if declared_radius <= 0.0:
+		result["failures"] = failures
+		result["ok"] = true
+		return result
+	if int(result["edit_commit_count"]) <= 0:
+		failures.append("no_committed_edits")
+	if required_active_retention_viewers > 0 and \
+			int(result["retention_active_viewers"]) < required_active_retention_viewers:
+		failures.append("insufficient_active_retention_viewers")
+	if int(result["retention_fallbacks"]) != 0:
+		failures.append("retention_fallback")
+	if int(result["pending_chunk_retirements"]) != 0:
+		failures.append("pending_chunk_retirements")
+	if int(result["pending_chunk_replacements"]) != 0:
+		failures.append("pending_chunk_replacements")
+	if int(result["queued_render"]) != 0:
+		failures.append("queued_render")
+	if int(result["queued_collision"]) != 0:
+		failures.append("queued_collision")
+	result["failures"] = failures
+	result["ok"] = failures.is_empty()
+	return result
 
 
 func _wait_for_edit_during_load_visual_ready(
@@ -5805,7 +5995,8 @@ func _is_lod_movement_probe_ready(probe: Dictionary) -> bool:
 	return int(probe.get("interior_boundary_edges", -1)) == 0 and \
 		int(probe.get("unknown_boundary_edges", -1)) == 0 and \
 		int(probe.get("nonmanifold_edges", -1)) == 0 and \
-		int(probe.get("orientation_conflict_edges", -1)) == 0 and \
+		int(probe.get("orientation_conflict_interior_edges", 0)) == 0 and \
+		int(probe.get("orientation_conflict_unknown_edges", 0)) == 0 and \
 		int(probe.get("zero_area_interior_triangles", 0)) == 0 and \
 		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \

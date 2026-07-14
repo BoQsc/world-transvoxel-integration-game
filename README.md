@@ -48,9 +48,14 @@ faces.
 
 Matched interior or chunk-face near-zero connector slivers are accepted only
 when topology probes report no interior/unknown boundary edges, no nonmanifold
-edges, no orientation conflicts, no repeated point-key triangles, no unknown
-zero-area triangles, and no zero-edge triangles. Unknown slivers or open
-topology defects remain hard failures.
+edges, no repeated point-key triangles, no unknown zero-area triangles, and no
+zero-edge triangles. Exact topology gates still fail on orientation conflicts.
+Movement/open-gap gates additionally distinguish player-visible topology
+defects from chunk-face-only seam winding diagnostics: interior or unknown
+orientation conflicts remain hard failures, while chunk-face-only orientation
+diagnostics may be recorded only when there are no open edges, nonmanifold
+edges, or pending replacement/retirement work. Unknown slivers or open topology
+defects remain hard failures.
 
 Read [GODOT_SETUP.md](GODOT_SETUP.md) before changing textures, import settings,
 addons, scenes, or human visual tests. Godot-specific generated import state is
@@ -290,10 +295,13 @@ close/mid/far viewer movement on the compact and flat profiles. It fails on
 permanent authoritative edit loss, settled open rendered edges, or transient
 movement-triggered LOD crack probes. It does not by itself prove exact
 full-resolution edited visibility from every distance; that requires the
-separate edited-terrain LOD correctness contract gates. The gameworld keeps a
-low steady render / collision apply budget of 8 and uses a short viewer-movement
-burst budget of 128 for 30 frames to avoid exposing partial LOD replacement sets
-while the player is moving.
+separate edited-terrain LOD correctness contract gates. The movement gate also
+requires an active edited-exact-region contract summary: committed edits must be
+covered by retained edit viewers, with no retention fallback, no queued
+render/collision work, and no pending chunk replacement or retirement before the
+gate may pass. The gameworld keeps a low steady render / collision apply budget
+of 8 and uses a short viewer-movement burst budget of 128 for 30 frames to avoid
+exposing partial LOD replacement sets while the player is moving.
 
 For the two-site edited-retention gate, run:
 

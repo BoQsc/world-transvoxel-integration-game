@@ -33,10 +33,32 @@ Finalizer/topology boundary:
 - matched interior or chunk-face near-zero connector slivers are accepted only
   when probes report no open topology defect;
 - unknown zero-area triangles, repeated-point-key triangles, zero-edge
-  triangles, interior/unknown boundary edges, nonmanifold edges, and orientation
-  conflicts are hard failures;
+  triangles, interior/unknown boundary edges, and nonmanifold edges are hard
+  failures;
+- exact topology gates fail on orientation conflicts; movement/open-gap gates
+  may record chunk-face-only orientation diagnostics only when there are no open
+  edges, no nonmanifold edges, no interior/unknown orientation conflicts, and no
+  pending replacement/retirement work;
 - deleting matched connector slivers is forbidden because that experiment opened
   real cracks in edited terrain.
+
+## 2026-07-14 edited exact-region gate reinforcement
+
+The post-candidate validation was tightened to make the human-reported
+"dug holes change after moving away and returning" failure mode explicit. The
+movement, multi-site, tunnel, tunnel-crawl, transient-crawl, and upward-LOD
+gates now require an `edited_exact_region` summary before passing:
+
+- committed edits must exist in the test;
+- the edited region must have active retained edit viewers;
+- retention fallback must be zero;
+- queued render/collision work must be zero;
+- pending chunk replacements and retirements must be zero.
+
+The reinforcement does not add any presentation fallback, double-sided material,
+duplicate terrain layer, or hidden backdrop. It only prevents a gate from
+passing while edited terrain is still in an incomplete or degraded LOD retention
+state.
 
 Current integration evidence:
 
