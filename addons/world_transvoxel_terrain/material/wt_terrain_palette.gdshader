@@ -22,6 +22,9 @@ uniform float clean_material_variation_strength = 0.08;
 uniform float clean_roughness = 1.0;
 uniform float clean_specular = 0.0;
 
+const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
+const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
+
 varying vec3 world_position;
 varying vec3 world_normal;
 
@@ -43,8 +46,8 @@ float material_tile(float material_id) {
 	return 1.0;
 }
 
-vec2 atlas_uv(float material_id, vec3 world_pos) {
-	vec2 local_uv = fract(world_pos.xz * 0.125);
+vec2 atlas_uv(float material_id, vec2 plane_pos) {
+	vec2 local_uv = fract(plane_pos * PRODUCTION_TEXTURE_WORLD_SCALE);
 	return vec2((material_tile(material_id) + local_uv.x) * 0.25, local_uv.y);
 }
 
@@ -61,6 +64,38 @@ vec3 clean_texture_color(vec3 world_pos, vec3 normal) {
 	vec3 x_projection = texture(clean_albedo_texture, world_pos.zy * clean_texture_world_scale).rgb;
 	vec3 y_projection = texture(clean_albedo_texture, world_pos.xz * clean_texture_world_scale).rgb;
 	vec3 z_projection = texture(clean_albedo_texture, world_pos.xy * clean_texture_world_scale).rgb;
+	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+vec3 production_checker_color(vec3 world_pos, vec3 normal) {
+	vec3 weights = triplanar_weights(normal, PRODUCTION_TRIPLANAR_BLEND_SHARPNESS);
+	vec3 x_projection = texture(checker_texture, world_pos.zy * PRODUCTION_TEXTURE_WORLD_SCALE).rgb;
+	vec3 y_projection = texture(checker_texture, world_pos.xz * PRODUCTION_TEXTURE_WORLD_SCALE).rgb;
+	vec3 z_projection = texture(checker_texture, world_pos.xy * PRODUCTION_TEXTURE_WORLD_SCALE).rgb;
+	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+vec4 production_albedo_color(float material_id, vec3 world_pos, vec3 normal) {
+	vec3 weights = triplanar_weights(normal, PRODUCTION_TRIPLANAR_BLEND_SHARPNESS);
+	vec4 x_projection = texture(terrain_albedo_atlas, atlas_uv(material_id, world_pos.zy));
+	vec4 y_projection = texture(terrain_albedo_atlas, atlas_uv(material_id, world_pos.xz));
+	vec4 z_projection = texture(terrain_albedo_atlas, atlas_uv(material_id, world_pos.xy));
+	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+vec3 production_normal_color(float material_id, vec3 world_pos, vec3 normal) {
+	vec3 weights = triplanar_weights(normal, PRODUCTION_TRIPLANAR_BLEND_SHARPNESS);
+	vec3 x_projection = texture(terrain_normal_atlas, atlas_uv(material_id, world_pos.zy)).rgb;
+	vec3 y_projection = texture(terrain_normal_atlas, atlas_uv(material_id, world_pos.xz)).rgb;
+	vec3 z_projection = texture(terrain_normal_atlas, atlas_uv(material_id, world_pos.xy)).rgb;
+	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+float production_roughness_value(float material_id, vec3 world_pos, vec3 normal) {
+	vec3 weights = triplanar_weights(normal, PRODUCTION_TRIPLANAR_BLEND_SHARPNESS);
+	float x_projection = texture(terrain_roughness_atlas, atlas_uv(material_id, world_pos.zy)).g;
+	float y_projection = texture(terrain_roughness_atlas, atlas_uv(material_id, world_pos.xz)).g;
+	float z_projection = texture(terrain_roughness_atlas, atlas_uv(material_id, world_pos.xy)).g;
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
 }
 
@@ -104,12 +139,12 @@ void fragment() {
 		} else if (material_id > 6.5 && material_id < 7.5) {
 			base = material_7_color;
 		}
-		vec4 texel = texture(checker_texture, world_position.xz * 0.125);
-		vec2 uv = atlas_uv(material_id, world_position);
-		vec4 albedo_texel = texture(terrain_albedo_atlas, uv);
-		vec3 normal_texel = texture(terrain_normal_atlas, uv).rgb * 2.0 - vec3(1.0);
-		float roughness_texel = texture(terrain_roughness_atlas, uv).g;
-		ALBEDO = mix(base.rgb * texel.rgb, albedo_texel.rgb, 0.72);
+		vec3 surface_normal = normalize(world_normal);
+		vec3 texel = production_checker_color(world_position, surface_normal);
+		vec4 albedo_texel = production_albedo_color(material_id, world_position, surface_normal);
+		vec3 normal_texel = production_normal_color(material_id, world_position, surface_normal) * 2.0 - vec3(1.0);
+		float roughness_texel = production_roughness_value(material_id, world_position, surface_normal);
+		ALBEDO = mix(base.rgb * texel, albedo_texel.rgb, 0.72);
 		NORMAL_MAP = normalize(normal_texel);
 		ROUGHNESS = clamp(roughness_texel, 0.45, 0.98);
 	}
