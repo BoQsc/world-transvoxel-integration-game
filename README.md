@@ -13,6 +13,13 @@ step; visible terrain artifacts during play must be marked with `~`, then `M`.
 The terrain standard is explicitly volumetric, not heightmap-only. The
 authoritative density/material boundary is documented in
 [STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md](STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md).
+Future multiplayer, persistent-world, and dedicated-server compatibility is
+documented in
+[STANDARD_MULTIPLAYER_SERVER_CONTRACT.md](STANDARD_MULTIPLAYER_SERVER_CONTRACT.md).
+Current play is local/single-process, but terrain authority must remain
+server-compatible: density/material samples, world revisions, journals,
+snapshots, and validated edit transactions are authoritative; client meshes,
+materials, lighting, and HUD are presentation.
 
 ## Critical edited-terrain LOD boundary
 
@@ -269,7 +276,10 @@ terrain edits through player input methods, verifies repeated committed edits,
 proves a camera raycast interaction against terrain collision, verifies storage
 journals, requires gameplay-settled streaming for the compact LOD profile, keeps
 strict cold-idle for the flat baseline, proves the spawn floor, and proves the
-Terrain 1.0 presentation marker fields.
+Terrain 1.0 presentation marker fields. It also requires
+`WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS`, which proves the current runtime
+still exposes server-compatible authority primitives; it is not a multiplayer
+implementation claim.
 
 For terrain presentation smoke, run:
 

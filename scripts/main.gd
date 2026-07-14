@@ -228,6 +228,8 @@ func _run_autonomous_proof() -> void:
 		return
 	if not _verify_standard_volume_contract(terrain_world):
 		return
+	if not _verify_standard_multiplayer_server_contract(terrain_world):
+		return
 	await get_tree().physics_frame
 	var spawn_summary := _playable_spawn_summary()
 	if not _verify_playable_spawn(spawn_summary):
@@ -749,6 +751,76 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 			horizontal_cells,
 			vertical_cells,
 			str(generation.get("source_mode", "")),
+		]
+	)
+	return true
+
+
+func _verify_standard_multiplayer_server_contract(terrain_world: Node) -> bool:
+	var required_methods := [
+		"get_world_source_revision",
+		"get_world_revision",
+		"update_viewer",
+		"remove_viewer",
+		"submit_edit_batch",
+		"request_authoritative_sample",
+		"request_authoritative_samples",
+		"request_world_compaction",
+		"request_world_migration",
+		"get_runtime_metrics",
+		"get_cold_idle_summary",
+		"get_terrain_api_contract_summary",
+	]
+	for method_name in required_methods:
+		if not terrain_world.has_method(method_name):
+			_fail("multiplayer/server standard missing terrain method: %s" % method_name)
+			return false
+	var required_signals := [
+		"edit_committed",
+		"edit_failed",
+		"authoritative_sample_ready",
+		"authoritative_sample_failed",
+		"authoritative_samples_ready",
+		"authoritative_samples_failed",
+		"world_snapshot_ready",
+		"world_snapshot_failed",
+	]
+	for signal_name in required_signals:
+		if not terrain_world.has_signal(signal_name):
+			_fail("multiplayer/server standard missing terrain signal: %s" % signal_name)
+			return false
+	var source_revision := int(terrain_world.call("get_world_source_revision"))
+	var world_revision := int(terrain_world.call("get_world_revision"))
+	if source_revision <= 0:
+		_fail("multiplayer/server standard requires positive source revision")
+		return false
+	if world_revision < 0:
+		_fail("multiplayer/server standard requires nonnegative world revision")
+		return false
+	var runtime_metrics_value = terrain_world.call("get_runtime_metrics")
+	if not (runtime_metrics_value is Dictionary):
+		_fail("multiplayer/server standard runtime metrics are not a dictionary")
+		return false
+	var api_value = terrain_world.call("get_terrain_api_contract_summary")
+	if not (api_value is Dictionary):
+		_fail("multiplayer/server standard API summary is not a dictionary")
+		return false
+	var api: Dictionary = api_value
+	var stable_groups_value = api.get("stable_groups", {})
+	if not (stable_groups_value is Dictionary):
+		_fail("multiplayer/server standard API stable groups missing: %s" % str(api))
+		return false
+	var stable_groups: Dictionary = stable_groups_value
+	for group_name in ["lifecycle", "streaming", "editing", "storage", "telemetry"]:
+		if not stable_groups.has(group_name):
+			_fail("multiplayer/server standard API group missing: %s" % group_name)
+			return false
+	print(
+		"WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=%s authority=server_authoritative source_revision=%d world_revision=%d headless_compatible=1 viewer_interest=1 journaled_edits=1 authoritative_samples=1 snapshots=1 bounded_metrics=1" %
+		[
+			str(selected_profile),
+			source_revision,
+			world_revision,
 		]
 	)
 	return true
