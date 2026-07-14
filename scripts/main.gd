@@ -22,12 +22,14 @@ var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
 var player: CharacterBody3D
 var telemetry_label: Label
+var launch_command_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
 var loading_overlay: CanvasLayer
 var loading_label: Label
 var material_applicator: Node
 var selected_profile: StringName = DEFAULT_HUMAN_PROFILE
+var human_launch_command_line := ""
 var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
@@ -94,6 +96,7 @@ func _ready() -> void:
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
+	human_launch_command_line = _human_launch_command_text(args)
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
 	else:
@@ -417,6 +420,8 @@ func _build_hud() -> void:
 	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	crosshair.visible = autonomous
 	canvas.add_child(crosshair)
+	if not autonomous:
+		_build_human_launch_command_label(canvas)
 	_build_loading_overlay()
 	if not autonomous:
 		return
@@ -431,6 +436,26 @@ func _build_hud() -> void:
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
 	canvas.add_child(profile_selector)
+
+
+func _build_human_launch_command_label(canvas: CanvasLayer) -> void:
+	launch_command_label = Label.new()
+	launch_command_label.name = "LaunchCommandLabel"
+	launch_command_label.text = human_launch_command_line
+	launch_command_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	launch_command_label.offset_left = 8.0
+	launch_command_label.offset_top = -30.0
+	launch_command_label.offset_right = 1880.0
+	launch_command_label.offset_bottom = -8.0
+	launch_command_label.clip_text = true
+	launch_command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	launch_command_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	launch_command_label.add_theme_font_size_override("font_size", 12)
+	launch_command_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.72))
+	launch_command_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	launch_command_label.add_theme_constant_override("shadow_offset_x", 1)
+	launch_command_label.add_theme_constant_override("shadow_offset_y", 1)
+	canvas.add_child(launch_command_label)
 
 
 func _build_loading_overlay() -> void:
@@ -2253,6 +2278,32 @@ func _arg_value(args: Array, key: String, default_value: String) -> String:
 	if index >= 0 and index + 1 < args.size():
 		return str(args[index + 1])
 	return default_value
+
+
+func _human_launch_command_text(user_args: Array) -> String:
+	var displayed_args := PackedStringArray()
+	var has_profile := false
+	for index in range(user_args.size()):
+		var value := str(user_args[index])
+		displayed_args.append(_quote_command_arg(value))
+		if value == "--p2-profile":
+			has_profile = true
+	if not has_profile:
+		displayed_args.append("--p2-profile")
+		displayed_args.append(_quote_command_arg(str(selected_profile)))
+	var project_path := ProjectSettings.globalize_path("res://").trim_suffix("/")
+	var command := "godot --path %s" % _quote_command_arg(project_path)
+	if not displayed_args.is_empty():
+		command = "%s -- %s" % [command, " ".join(displayed_args)]
+	return "launch: %s" % command
+
+
+func _quote_command_arg(value: String) -> String:
+	if value.is_empty():
+		return "\"\""
+	if value.find(" ") < 0 and value.find("\t") < 0 and value.find("\"") < 0:
+		return value
+	return "\"%s\"" % value.replace("\"", "\\\"")
 
 
 func _apply_human_playtest_preset() -> bool:
