@@ -24,6 +24,8 @@ var player: CharacterBody3D
 var telemetry_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
+var loading_overlay: CanvasLayer
+var loading_label: Label
 var material_applicator: Node
 var selected_profile: StringName = DEFAULT_HUMAN_PROFILE
 var autonomous := false
@@ -181,6 +183,10 @@ func _start_profile() -> void:
 	await get_tree().process_frame
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
+	if not autonomous:
+		if not await _wait_for_human_startup_visual_ready():
+			return
+		_set_human_loading_visible(false)
 	_update_telemetry()
 	if not human_artifact_replay_marker_path.is_empty():
 		call_deferred("_run_human_artifact_replay_marker")
@@ -382,6 +388,19 @@ func _wait_for_current_profile_settled(context: String) -> bool:
 	return false
 
 
+func _wait_for_human_startup_visual_ready() -> bool:
+	var frame_limit := 900
+	var last_summary := {}
+	for _frame in range(frame_limit):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_lod_movement_visual_ready_summary(summary):
+			return true
+		await get_tree().process_frame
+	_fail("human-visible startup terrain did not reach strict ready state: %s" % str(last_summary))
+	return false
+
+
 func _build_hud() -> void:
 	var canvas := CanvasLayer.new()
 	canvas.name = "GameHUD"
@@ -396,7 +415,9 @@ func _build_hud() -> void:
 	crosshair.offset_bottom = 10.0
 	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	crosshair.visible = autonomous
 	canvas.add_child(crosshair)
+	_build_loading_overlay()
 	if not autonomous:
 		return
 	telemetry_label = Label.new()
@@ -410,6 +431,36 @@ func _build_hud() -> void:
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
 	canvas.add_child(profile_selector)
+
+
+func _build_loading_overlay() -> void:
+	if autonomous:
+		return
+	loading_overlay = CanvasLayer.new()
+	loading_overlay.name = "StartupLoadingOverlay"
+	loading_overlay.layer = 100
+	add_child(loading_overlay)
+	var cover := ColorRect.new()
+	cover.name = "StartupLoadingCover"
+	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cover.color = Color(0.03, 0.035, 0.04, 1.0)
+	loading_overlay.add_child(cover)
+	loading_label = Label.new()
+	loading_label.name = "StartupLoadingLabel"
+	loading_label.text = "Loading terrain..."
+	loading_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loading_overlay.add_child(loading_label)
+
+
+func _set_human_loading_visible(visible: bool) -> void:
+	if autonomous:
+		return
+	if loading_overlay != null:
+		loading_overlay.visible = visible
+	if crosshair != null:
+		crosshair.visible = not visible
 
 
 func _configure_presentation(_settings: Dictionary) -> void:
@@ -4877,6 +4928,11 @@ func _run_post_edit_streaming_fly_gap_gate() -> bool:
 		return false
 	if not await _submit_post_edit_streaming_fly_operations(terrain_world, operations):
 		return false
+	if not await _wait_for_streaming_fly_visual_ready(
+		"after post-edit streaming fly operations",
+		maxi(240, human_visual_capture_wait_frames)
+	):
+		return false
 	edit_persistence_operations = operations.duplicate()
 	interaction_inspection_operation_count = operations.size()
 	interaction_inspection_applied = true
@@ -4906,7 +4962,10 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 		path[0].get("target", _watertightness_probe_center()),
 		16 if post_edit else 120
 	)
-	if not await _wait_for_streaming_fly_start_coverage_ready("before streaming fly gap gate", 240):
+	if not await _wait_for_streaming_fly_visual_ready(
+		"before streaming fly gap gate",
+		maxi(240, human_visual_capture_wait_frames)
+	):
 		return false
 	var samples := []
 	var failures := []

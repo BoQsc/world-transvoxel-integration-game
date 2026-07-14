@@ -207,6 +207,25 @@ This candidate covers:
 - transient tunnel crawl topology probes across frames 0/1/3/8/16/32;
 - visual sky-pixel artifact gate for deep closed tunnel captures.
 
+## Human-visible startup boundary
+
+Normal human play must not expose partially loaded terrain as gameplay. The
+integration scene may show a plain loading cover while the runtime reaches strict
+visual readiness, but the cover must stay up until render/collision queues,
+scheduled completions, pending replacements, pending retirements, staged render
+resources, and render-fading resources are all idle and the active chunk records
+are fully ready.
+
+This boundary distinguishes acceptable startup loading from terrain failure:
+
+- terrain hidden behind the loading cover is startup loading, not a gameplay
+  seamlessness claim;
+- visible terrain after the cover disappears must not contain unloaded rectangular
+  patches, sky leaks, or missing LOD replacement chunks;
+- visual gates that are not explicitly testing transient replacement behavior
+  must start from a settled post-edit state so startup/edit replacement bursts
+  are not confused with normal play.
+
 This candidate does not claim:
 
 - GPU/compute-shader terrain acceleration;
