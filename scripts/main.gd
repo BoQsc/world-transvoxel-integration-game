@@ -44,6 +44,7 @@ var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
+var human_artifact_inspect_marker_path := ""
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -92,6 +93,7 @@ func _ready() -> void:
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
+	human_artifact_inspect_marker_path = _arg_value(args, "--human-artifact-inspect-marker", "")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -110,7 +112,7 @@ func _ready() -> void:
 	else:
 		if human_visual_capture_path.is_empty():
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty():
+		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
 			_clear_human_storage()
 	_configure_game_lighting()
 	_build_hud()
@@ -208,6 +210,9 @@ func _start_profile() -> void:
 		call_deferred("_run_human_artifact_marker_smoke")
 		return
 	if not autonomous:
+		if not human_artifact_inspect_marker_path.is_empty():
+			if not await _run_human_artifact_inspect_marker():
+				return
 		if not human_playtest_preset.is_empty():
 			if not await _apply_human_playtest_preset():
 				return
@@ -1131,6 +1136,22 @@ func _run_human_artifact_replay_marker() -> void:
 	else:
 		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_FAIL")
 		get_tree().quit(1)
+
+
+func _run_human_artifact_inspect_marker() -> bool:
+	var marker := _load_human_artifact_marker_json(human_artifact_inspect_marker_path)
+	if marker.is_empty():
+		_fail("human artifact inspect marker could not be loaded: %s" % human_artifact_inspect_marker_path)
+		return false
+	await _apply_human_artifact_marker_pose(marker)
+	for _index in range(180):
+		await get_tree().physics_frame
+	_update_telemetry()
+	print("WT_HUMAN_ARTIFACT_INSPECT_MARKER_READY marker_id=%s path=%s" % [
+		str(marker.get("marker_id", "unknown")),
+		human_artifact_inspect_marker_path,
+	])
+	return true
 
 
 func _load_human_artifact_marker_json(path: String) -> Dictionary:
@@ -2698,10 +2719,12 @@ func _human_test_context_text() -> String:
 	var test_name := "human_playtest"
 	if not human_visual_capture_path.is_empty():
 		test_name = "visual_capture:%s" % human_visual_capture_mode
+	elif not human_artifact_inspect_marker_path.is_empty():
+		test_name = "human_marker_inspect"
 	elif not human_playtest_preset.is_empty():
 		test_name = "human_playtest:%s" % human_playtest_preset
 	var storage_mode := "preserve"
-	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty():
+	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
 		storage_mode = "fresh"
 	return "test: %s | profile: %s | storage: %s" % [
 		test_name,
