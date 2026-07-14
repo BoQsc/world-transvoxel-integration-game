@@ -1,12 +1,157 @@
-# Terrain 1.0 candidate
+# Terrain 1.0 candidate and release checklist
 
-Status as of 2026-07-13:
-`CANDIDATE_AFTER_QUANTIZED_FINALIZER_AND_NATIVE_GAP_GATES`.
+Status as of 2026-07-14:
+`ACTIVE_RELEASE_CLOSURE_CHECKLIST_AFTER_SERVER_COMPATIBILITY_GATE`.
 
-This file records the current Terrain 1.0 candidate state for the
-`world-transvoxel-integration-game` repository. Later documentation-only commits
-may point back to this candidate state; terrain/runtime source changes require a
-new candidate run and fresh pass evidence.
+This file is the authoritative Terrain 1.0 release closure checklist for the
+`world-transvoxel-integration-game` repository. Lower dated sections preserve
+evidence/history, but this top checklist controls the release decision. If a
+README, human-playtest note, or older evidence block conflicts with this
+checklist, this checklist wins.
+
+Documentation-only commits may point back to the last valid candidate evidence.
+Terrain/runtime/source changes require a new candidate run and fresh pass
+evidence before Terrain 1.0 can be called releasable.
+
+## Release decision boundary
+
+Terrain 1.0 is not a generic game-world release. It is the release candidate for
+the terrain addon stack as exercised by this integration game.
+
+Terrain 1.0 may be called ready only when all blocking rows below pass after the
+latest terrain/runtime source change:
+
+| Area | Required standard | Blocking gate / evidence |
+| --- | --- | --- |
+| Godot setup | Texture import settings and generated import cache are valid before visual testing. | `python tools/godot_import_assets.py` or any P2 proof that prints `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`. |
+| Runtime launch | Real `project.godot`, real main scene, addon stack loaded, no stale validation scene. | P2 profile proof prints `WT_PRODUCTION_GAME_P2_PASS` for `flat_baseline` and `g19_compact_2k_on_demand`. |
+| Volumetric terrain | Terrain is authoritative signed density/material volume, not a heightmap-only mesh. | P2 proof prints `WT_STANDARD_VOLUME_CONTRACT_PASS` for both standard profiles. |
+| Future server compatibility | Terrain authority remains compatible with future multiplayer/dedicated servers. | P2 proof prints `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS` for both standard profiles. |
+| No presentation fallback | Native single-sided Transvoxel chunks only for terrain correctness. No full-map layer, duplicate terrain skin, or double-sided material used to hide holes. | Visual/topology gates below must pass without presentation fallback. |
+| Player interaction | Player/camera/crosshair, raycast edit path, committed edit revision, storage journal, and no edit failures. | P2 proof fields: `player=1`, `camera=1`, `crosshair=1`, `interaction_raycast=1`, `storage_journal=1`, `edit_failures=0`. |
+| Materials | Human terrain material uses native render material override and mipmapped imported texture cache. | P2 proof fields: `material=1`, `production_texture_active=1`, `native_render_material_override=1`; import gate passes. |
+| Startup visibility | Human play must not expose partially loaded terrain after the loading cover disappears. | Startup visual readiness and P2 proof pass; human-visible unloaded rectangular patches after readiness are release blockers. |
+| Streaming/fly continuity | Moving/flying compact terrain must not expose centered/lower terrain sky holes or clustered terrain-band pinholes. | Streaming fly gap gate passes. |
+| Edited terrain LOD | Recent player edits must persist through close/mid/far/return movement without harsh restoration, lost edits, or incomplete retained edited regions under the standard profile budgets. | LOD movement and multi-site LOD gates pass with `edited_exact_region` summary and zero retention fallback. |
+| Edit during load | Edits submitted while target terrain is still streaming must not be restored/lost after load completion or reload. | Edit-during-load gate passes. |
+| Manifold / tunnel edits | Realistic small-radius/deep/diagonal tunnel edits must not produce open, nonmanifold, or visible sky-leak terrain under the standard gates. | Tunnel, tunnel-crawl, tunnel-transient-crawl, tunnel-upward-LOD, tunnel visual artifact, and manifold stress gates pass. |
+| Human acceptance | Human playtest is final confirmation only, not the primary proof mechanism. | One normal fullscreen human playtest from `project.godot`, with any visible issue marked using `~`, then `M`. |
+
+## Finite release command suite
+
+Run this suite for release closure. Do not replace it with ad hoc screenshots or
+random gate selection.
+
+Baseline profiles:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile flat_baseline --profile g19_compact_2k_on_demand
+```
+
+General visual smoke:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --visual-smoke --visual-wait-frames 240
+```
+
+Compact streaming/fly continuity:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --profile g19_compact_2k_on_demand --visual-smoke --visual-mode streaming_fly_gap_gate --visual-output-dir .godot/world_transvoxel_captures/release_streaming_fly_gap_gate --visual-wait-frames 240
+```
+
+Edited terrain LOD:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --lod-movement-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --multisite-lod-gate
+```
+
+Edit persistence during streaming:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --edit-during-load-gate
+```
+
+Manifold/tunnel/deformation stress:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --manifold-stress-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --tunnel-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --tunnel-crawl-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --tunnel-transient-crawl-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --tunnel-upward-lod-gate
+
+python tools/p2_production_integration_game_quality.py --skip-build --tunnel-visual-artifact-gate
+```
+
+Final human confirmation:
+
+```text
+C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game\project.godot
+```
+
+Use default `flat_baseline` for normal play and
+`--p2-profile g19_compact_2k_on_demand` for mountainous inspection. Mark visible
+terrain artifacts with `~`, then `M`; every marked release-blocking artifact
+must be fixed or converted into a targeted automated gate.
+
+## Current recorded release evidence
+
+Fresh 2026-07-14 profile proof after the server-compatibility standard:
+
+```console
+python tools/p2_production_integration_game_quality.py --godot "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --project . --profile flat_baseline
+```
+
+Observed pass markers:
+
+- `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
+- `WT_STANDARD_VOLUME_CONTRACT_PASS profile=flat_baseline`
+- `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=flat_baseline`
+- `WT_PRODUCTION_GAME_P2_PASS profile=flat_baseline`
+- `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
+
+```console
+python tools/p2_production_integration_game_quality.py --godot "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --project . --profile g19_compact_2k_on_demand
+```
+
+Observed pass markers:
+
+- `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
+- `WT_STANDARD_VOLUME_CONTRACT_PASS profile=g19_compact_2k_on_demand`
+- `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=g19_compact_2k_on_demand`
+- `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
+- `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
+
+The remaining release command suite is finite and must be rerun before tagging
+or announcing Terrain 1.0 if any terrain/runtime source changes occur.
+
+## Accepted Terrain 1.0 non-goals
+
+These are intentionally outside Terrain 1.0 and must not be allowed to block the
+terrain release checklist:
+
+- GPU/compute-shader terrain acceleration;
+- water/lava;
+- vegetation;
+- block/building systems;
+- biomes beyond the current material proof;
+- multiplayer gameplay implementation;
+- dedicated-server deployment;
+- entity systems;
+- collapse/stability simulation;
+- ore/vein generation;
+- unlimited full-resolution visibility of every edit from every distance;
+- exact global map-editor multi-LOD baking.
+
+These future systems must build on the same volumetric, server-compatible,
+authoritative terrain state. They must not introduce a second terrain truth.
 
 ## 2026-07-13 native topology/gap checkpoint
 

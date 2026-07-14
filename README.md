@@ -3,12 +3,12 @@
 This repository is the current human-playable production integration game for
 the World Transvoxel addon stack.
 
-Current Terrain 1.0 candidate status is recorded in
-[TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). The current candidate has
-focused autonomous readiness coverage, edited-near watertightness coverage,
-tunnel/upward-LOD edit persistence coverage, and compact-profile streaming/fly
-visual-stability coverage. Human acceptance is still the final confirmation
-step; visible terrain artifacts during play must be marked with `~`, then `M`.
+Current Terrain 1.0 release closure is controlled by
+[TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). That file is the
+authoritative checklist: it defines required gates, accepted non-goals, current
+evidence, and the final human-confirmation boundary. Human acceptance is still
+the final confirmation step; visible terrain artifacts during play must be
+marked with `~`, then `M`.
 
 The terrain standard is explicitly volumetric, not heightmap-only. The
 authoritative density/material boundary is documented in

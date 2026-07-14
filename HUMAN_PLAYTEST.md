@@ -61,8 +61,9 @@ Controls:
 - Click after release: capture mouse again
 
 Current source commits are recorded in `CURRENT_PLAYTEST_FRESHNESS.json`.
-Current Terrain 1.0 candidate state is recorded in
-`TERRAIN_1_0_CANDIDATE.md`.
+Current Terrain 1.0 release closure is controlled by
+`TERRAIN_1_0_CANDIDATE.md`. Use that file as the authoritative checklist before
+asking for final human verification.
 
 ## Visual artifact terminology
 
