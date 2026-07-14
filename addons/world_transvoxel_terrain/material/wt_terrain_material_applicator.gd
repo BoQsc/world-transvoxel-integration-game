@@ -38,6 +38,9 @@ var _summary := {
 	"profile_shader_mode": "",
 	"profile_id": "",
 	"material_ids": [],
+	"visual_mode": "production",
+	"clean_texture_enabled": false,
+	"clean_triplanar_enabled": true,
 	"auto_apply_count": 0,
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
@@ -78,6 +81,7 @@ func apply_materials_now() -> Dictionary:
 		_summary["applied"] = false
 		return get_material_summary()
 	var material := _material_instance()
+	_apply_visual_mode(material)
 	var native_override_set := _set_native_material_override(backend, material)
 	var result := _apply_to_meshes(backend, material)
 	var profile := _material_profile_summary()
@@ -119,6 +123,10 @@ func apply_materials_now() -> Dictionary:
 		"mapping_policy": str(profile.get("mapping_policy", "")),
 		"blending_policy": str(profile.get("blending_policy", "")),
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
+		"visual_mode": str(visual_mode),
+		"clean_texture_enabled": not clean_albedo_texture_path.is_empty(),
+		"clean_albedo_texture_path": clean_albedo_texture_path,
+		"clean_triplanar_enabled": clean_triplanar_enabled,
 		"clean_material_variation_enabled": clean_material_variation_enabled,
 		"clean_material_variation_strength": clean_material_variation_strength,
 		"clean_roughness": clean_roughness,

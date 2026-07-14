@@ -19,6 +19,10 @@ const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debu
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/human_artifact_marks"
+const HUMAN_MATERIAL_MODE_SAND_TRIPLANAR := "sand_triplanar"
+const HUMAN_MATERIAL_MODE_FLAT_CLEAN := "flat_clean"
+const HUMAN_MATERIAL_MODE_MATERIAL_TINT := "material_tint"
+const HUMAN_MATERIAL_MODE_PRODUCTION := "production_atlas"
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -45,6 +49,7 @@ var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
 var human_artifact_inspect_marker_path := ""
+var initial_human_material_mode := ""
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -65,6 +70,7 @@ var terrain_static_light_markers: Array = []
 var lighting_preset_index := 0
 var initial_lighting_preset := 0
 var local_terrain_lights_enabled := false
+var human_material_mode_index := 0
 var human_artifact_marker_busy := false
 var human_artifact_mark_index := 0
 var interaction_inspection_applied := false
@@ -94,6 +100,7 @@ func _ready() -> void:
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
 	human_artifact_inspect_marker_path = _arg_value(args, "--human-artifact-inspect-marker", "")
+	initial_human_material_mode = _arg_value(args, "--human-material-mode", "")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -104,9 +111,11 @@ func _ready() -> void:
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
+	if not initial_human_material_mode.is_empty():
+		_set_human_material_mode_by_name(initial_human_material_mode)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights"
+	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights | Tilde+T material"
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
 	else:
@@ -556,9 +565,7 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	material_applicator.reference_scene_path = NodePath("../WtGameWorldTerrain")
 	material_applicator.visual_mode = &"production" if autonomous else &"clean"
 	if not autonomous:
-		material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
-		material_applicator.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
-		material_applicator.clean_texture_world_scale = 0.22
+		_apply_human_material_mode_to_applicator()
 	game_world.add_child(material_applicator)
 	material_applicator.call("apply_materials_now")
 
@@ -1102,7 +1109,84 @@ func handle_human_command(command: StringName) -> bool:
 		&"mark_artifact":
 			call_deferred("_run_human_artifact_mark_from_input")
 			return true
+		&"cycle_material_mode":
+			_cycle_human_material_mode()
+			return true
 	return false
+
+
+func _human_material_modes() -> Array:
+	return [
+		HUMAN_MATERIAL_MODE_SAND_TRIPLANAR,
+		HUMAN_MATERIAL_MODE_FLAT_CLEAN,
+		HUMAN_MATERIAL_MODE_MATERIAL_TINT,
+		HUMAN_MATERIAL_MODE_PRODUCTION,
+	]
+
+
+func _human_material_mode_name() -> String:
+	var modes := _human_material_modes()
+	if modes.is_empty():
+		return HUMAN_MATERIAL_MODE_SAND_TRIPLANAR
+	return str(modes[clampi(human_material_mode_index, 0, modes.size() - 1)])
+
+
+func _set_human_material_mode_by_name(mode: String) -> bool:
+	var requested := mode.strip_edges()
+	var modes := _human_material_modes()
+	for index in range(modes.size()):
+		if str(modes[index]) == requested:
+			human_material_mode_index = index
+			return true
+	push_warning("unknown human material mode: %s" % mode)
+	return false
+
+
+func _apply_human_material_mode_to_applicator() -> void:
+	if material_applicator == null:
+		return
+	var mode := _human_material_mode_name()
+	material_applicator.clean_albedo_color = HUMAN_CLEAN_TERRAIN_COLOR
+	material_applicator.clean_texture_world_scale = 0.22
+	material_applicator.clean_triplanar_enabled = true
+	material_applicator.clean_triplanar_blend_sharpness = 4.0
+	material_applicator.clean_material_variation_strength = 0.08
+	material_applicator.clean_roughness = 1.0
+	material_applicator.clean_specular = 0.0
+	match mode:
+		HUMAN_MATERIAL_MODE_FLAT_CLEAN:
+			material_applicator.visual_mode = &"clean"
+			material_applicator.clean_albedo_texture_path = ""
+			material_applicator.clean_material_variation_enabled = false
+		HUMAN_MATERIAL_MODE_MATERIAL_TINT:
+			material_applicator.visual_mode = &"clean"
+			material_applicator.clean_albedo_texture_path = ""
+			material_applicator.clean_material_variation_enabled = true
+			material_applicator.clean_material_variation_strength = 0.45
+		HUMAN_MATERIAL_MODE_PRODUCTION:
+			material_applicator.visual_mode = &"production"
+			material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+			material_applicator.clean_material_variation_enabled = false
+		_:
+			material_applicator.visual_mode = &"clean"
+			material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+			material_applicator.clean_material_variation_enabled = false
+
+
+func _cycle_human_material_mode() -> void:
+	if autonomous:
+		return
+	var modes := _human_material_modes()
+	if modes.is_empty():
+		return
+	human_material_mode_index = (human_material_mode_index + 1) % modes.size()
+	_apply_human_material_mode_to_applicator()
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	human_test_context_line = _human_test_context_text()
+	if test_context_label != null:
+		test_context_label.text = human_test_context_line
+	print("human_material_mode=%s" % _human_material_mode_name())
 
 
 func _run_human_artifact_mark_from_input() -> void:
@@ -1229,6 +1313,10 @@ func _capture_human_artifact_mark(source: String) -> bool:
 	for probe in precise_probes:
 		if _human_artifact_precise_probe_is_problematic(probe):
 			problematic_precise_probes.append(probe)
+	var mesh_quality_warning_precise_probes := []
+	for probe in precise_probes:
+		if _human_artifact_precise_probe_is_mesh_quality_warning(probe):
+			mesh_quality_warning_precise_probes.append(probe)
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var summary := {
 		"marker_id": marker_id,
@@ -1255,6 +1343,8 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"precise_probe_count": precise_probes.size(),
 		"problematic_precise_probe_count": problematic_precise_probes.size(),
 		"problematic_precise_probes": problematic_precise_probes,
+		"mesh_quality_warning_precise_probe_count": mesh_quality_warning_precise_probes.size(),
+		"mesh_quality_warning_precise_probes": mesh_quality_warning_precise_probes,
 		"precise_probes": precise_probes,
 	}
 	var file := FileAccess.open(json_path, FileAccess.WRITE)
@@ -2241,6 +2331,16 @@ func _human_artifact_precise_probe_is_problematic(probe: Dictionary) -> bool:
 		return true
 	if int(probe.get("chunk_face_boundary_edges", 0)) > 0:
 		return true
+	return false
+
+
+func _human_artifact_precise_probe_is_mesh_quality_warning(probe: Dictionary) -> bool:
+	if int(probe.get("triangles_in_region", 0)) <= 0:
+		return false
+	if not bool(probe.get("open_gap_free", false)):
+		return false
+	if int(probe.get("chunk_face_boundary_edges", 0)) > 0:
+		return false
 	if float(probe.get("minimum_area_squared", INF)) > 0.0 and \
 			float(probe.get("minimum_area_squared", INF)) < 0.00000025:
 		return true
@@ -2612,6 +2712,10 @@ func _presentation_summary() -> Dictionary:
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
+		"visual_mode": str(material_summary.get("visual_mode", "")),
+		"human_material_mode": _human_material_mode_name(),
+		"clean_texture_enabled": bool(material_summary.get("clean_texture_enabled", false)),
+		"clean_triplanar_enabled": bool(material_summary.get("clean_triplanar_enabled", false)),
 		"clean_material_variation_enabled": bool(material_summary.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(material_summary.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(material_summary.get("clean_roughness", 0.0)),
@@ -2726,10 +2830,11 @@ func _human_test_context_text() -> String:
 	var storage_mode := "preserve"
 	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
 		storage_mode = "fresh"
-	return "test: %s | profile: %s | storage: %s" % [
+	return "test: %s | profile: %s | storage: %s | material: %s" % [
 		test_name,
 		str(selected_profile),
 		storage_mode,
+		_human_material_mode_name(),
 	]
 
 

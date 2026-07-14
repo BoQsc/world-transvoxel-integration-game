@@ -465,6 +465,18 @@ saves:
   sky-pixel rays so subpixel chunk/LOD seam mismatches are not hidden by the
   coarse regular topology key.
 
+Use `~`, then `T` to cycle material views when a report looks like melted,
+stretched, or streaked texture rather than a sky leak. The standard diagnostic
+order is textured triplanar, flat clean color, material-ID tint, and production
+atlas. If the artifact disappears in flat color, classify it as material/texture
+presentation until a geometry probe proves otherwise.
+
+Marker JSON separates hard topology/render problems from quality warnings:
+`problematic_*` means open-gap/topology evidence that can block release;
+`mesh_quality_warning_precise_*` means the probed area is open-gap-free but has
+near-thin triangles or similar quality signals that may explain lighting or
+texture interpolation artifacts.
+
 Every new human-marked artifact path must either be explained as an intentional
 profile/budget tradeoff or promoted into an automated targeted gate before the
 same profile can be treated as accepted. This is especially important for edited

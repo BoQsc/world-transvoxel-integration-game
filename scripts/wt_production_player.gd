@@ -180,6 +180,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			human_command_armed = false
 			_forward_human_command(&"mark_artifact")
 			return
+		if human_command_armed and (event.keycode == KEY_T or event.physical_keycode == KEY_T):
+			human_command_armed = false
+			_forward_human_command(&"cycle_material_mode")
+			return
 		human_command_armed = false
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
