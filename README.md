@@ -129,6 +129,9 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 - telemetry overlay and profile selector for autonomous proof;
 - default human profile is flat terrain; the mountainous 2K profile is explicit
   inspection coverage;
+- deep 2K inspection profile `g20_deep_2k_256_on_demand` expands native
+  vertical coverage to 256 cells with origin `-128`, so underground/tunnel
+  behavior is tested as real volume rather than a surface cap;
 - compact 2K terrain through `WtGameWorld` with native LOD3 coarse coverage and
   capped radius-1 near-detail refinement;
 - compact 2K human/visual mode renders native Transvoxel chunks only. There is
@@ -176,6 +179,15 @@ gates use native chunks only; sky seen through terrain during normal
 collision-aware flight is a bug unless the camera was intentionally forced
 inside/below terrain by an invalid noclip/debug path. Do not add presentation
 fallbacks to hide native LOD, streaming, or edit artifacts.
+
+The deeper-underground inspection profile is `g20_deep_2k_256_on_demand`. It
+keeps the same 2048 by 2048 horizontal reference map but starts the native
+procedural source with `128 x 16 x 128` LOD0 chunk coverage, vertical origin
+`-8` chunks, and `256` reported vertical cells. This gives a bounded finite
+reference volume from `-128` to `127` cells in Y for proving diagonal downward
+tunnels, material strata queries, and deep edit persistence without switching
+to a different terrain type. It is a stress/proof profile, not the default
+terrain style.
 
 The flat baseline profile remains available for proof automation:
 

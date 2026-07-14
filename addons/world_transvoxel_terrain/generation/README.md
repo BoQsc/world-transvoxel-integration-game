@@ -13,3 +13,10 @@ palette version, stable material IDs, surface material IDs, and
 `deep>=8:1,mid>=3:7,shallow>=1:4` underground depth bands. The authoritative
 contract is
 [../../../STANDARD_MATERIAL_STRATA_CONTRACT.md](../../../STANDARD_MATERIAL_STRATA_CONTRACT.md).
+
+Vertical volume shape is part of generation ownership. Profiles expose
+`world_chunk_count_y` and `world_chunk_origin_y`; downstream runtime bridges
+must forward those values to native procedural startup when available. The
+standard deep proof profile uses `world_chunk_count_y=16` and
+`world_chunk_origin_y=-8`, producing 256 vertical cells from `-128` through
+`127` for real underground/tunnel testing.

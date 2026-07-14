@@ -29,6 +29,8 @@ const STANDARD_MATERIAL_MEANINGS := {
 @export var supports_underground_volume: bool = true
 @export var profile_id: StringName = &"deterministic_reference"
 @export_range(1, 4096, 1) var world_chunk_count_x: int = 128
+@export_range(1, 4096, 1) var world_chunk_count_y: int = 8
+@export_range(-4096, 4096, 1) var world_chunk_origin_y: int = 0
 @export_range(1, 4096, 1) var world_chunk_count_z: int = 128
 @export var source_revision: int = 190001
 
@@ -50,6 +52,10 @@ func get_contract_summary() -> Dictionary:
 		"standard_material_meanings": STANDARD_MATERIAL_MEANINGS,
 		"flat_world_underground_contract": "same density/material volume semantics as procedural profiles",
 		"world_chunk_count_x": world_chunk_count_x,
+		"world_chunk_count_y": world_chunk_count_y,
+		"world_chunk_origin_y": world_chunk_origin_y,
+		"vertical_origin_cell": world_chunk_origin_y * 16,
+		"vertical_cells": world_chunk_count_y * 16,
 		"world_chunk_count_z": world_chunk_count_z,
 		"source_revision": source_revision,
 	}

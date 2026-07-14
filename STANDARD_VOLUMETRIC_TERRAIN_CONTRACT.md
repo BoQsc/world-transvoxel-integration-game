@@ -41,8 +41,11 @@ The current standard profiles expose:
 
 - `WtTerrainProfile.horizontal_cells`;
 - `WtTerrainProfile.vertical_cells`;
+- `WtTerrainProfile.vertical_origin_cell`;
 - `WtTerrainProfile.plus_y_is_up`;
 - `WtTerrainProfile.finite_closed_boundary`;
+- `WtTerrainGenerationProfile.world_chunk_count_y`;
+- `WtTerrainGenerationProfile.world_chunk_origin_y`;
 - `WtTerrainGenerationProfile.supports_underground_volume`;
 - `WtTerrainGenerationProfile.underground_model`;
 - `WtTerrainGenerationProfile.material_strata_model`;
@@ -80,8 +83,20 @@ behavior without hiding problems behind procedural mountains.
 
 ## Deeper underground
 
-The current public profile is a finite reference volume. Deeper underground is
+The current public profiles are finite reference volumes. Deeper underground is
 a profile/runtime expansion, not a different terrain type.
+
+The current deep standard proof profile is `g20_deep_2k_256_on_demand`:
+
+- horizontal coverage: `2048 x 2048` cells;
+- vertical coverage: `256` cells;
+- vertical origin: `-128` cells (`world_chunk_origin_y=-8`);
+- native procedural chunk coverage: `128 x 16 x 128` LOD0 chunks;
+- native procedural/catalog page ceiling: `524288` pages;
+- proven page count for this profile: about `299520` procedural pages across
+  LOD0 through LOD3;
+- current role: standard deeper-underground proof and stress profile, not the
+  default player terrain style.
 
 Before claiming a deeper world, the implementation must prove:
 
@@ -114,6 +129,8 @@ Autonomous terrain qualification must fail if a standard profile loses the
 volumetric contract fields. At minimum, it must verify:
 
 - positive horizontal and vertical terrain dimensions;
+- correct vertical origin and expanded vertical-cell reporting for deep
+  profiles;
 - plus-Y-up semantics;
 - finite closed boundary semantics for the current bounded reference world;
 - `supports_underground_volume == true`;

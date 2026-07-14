@@ -24,10 +24,11 @@ latest terrain/runtime source change:
 | Area | Required standard | Blocking gate / evidence |
 | --- | --- | --- |
 | Godot setup | Texture import settings and generated import cache are valid before visual testing. | `python tools/godot_import_assets.py` or any P2 proof that prints `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`. |
-| Runtime launch | Real `project.godot`, real main scene, addon stack loaded, no stale validation scene. | P2 profile proof prints `WT_PRODUCTION_GAME_P2_PASS` for `flat_baseline` and `g19_compact_2k_on_demand`. |
-| Volumetric terrain | Terrain is authoritative signed density/material volume, not a heightmap-only mesh. | P2 proof prints `WT_STANDARD_VOLUME_CONTRACT_PASS` for both standard profiles. |
-| Material strata | Terrain profile exposes standard material palette and authoritative shallow/mid/deep underground depth bands. | P2 proof prints `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS` for both standard profiles. |
-| Future server compatibility | Terrain authority remains compatible with future multiplayer/dedicated servers. | P2 proof prints `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS` for both standard profiles. |
+| Runtime launch | Real `project.godot`, real main scene, addon stack loaded, no stale validation scene. | P2 profile proof prints `WT_PRODUCTION_GAME_P2_PASS` for `flat_baseline`, `g19_compact_2k_on_demand`, and `g20_deep_2k_256_on_demand`. |
+| Volumetric terrain | Terrain is authoritative signed density/material volume, not a heightmap-only mesh. | P2 proof prints `WT_STANDARD_VOLUME_CONTRACT_PASS` for all standard profiles. |
+| Deeper underground profile | Standard deeper terrain expands native vertical chunk coverage instead of faking underground with caps or presentation meshes. | P2 proof prints `WT_STANDARD_VOLUME_CONTRACT_PASS` and `WT_PRODUCTION_GAME_P2_PASS` for `g20_deep_2k_256_on_demand` with `vertical_cells=256`. |
+| Material strata | Terrain profile exposes standard material palette and authoritative shallow/mid/deep underground depth bands. | P2 proof prints `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS` for all standard profiles. |
+| Future server compatibility | Terrain authority remains compatible with future multiplayer/dedicated servers. | P2 proof prints `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS` for all standard profiles. |
 | No presentation fallback | Native single-sided Transvoxel chunks only for terrain correctness. No full-map layer, duplicate terrain skin, or double-sided material used to hide holes. | Visual/topology gates below must pass without presentation fallback. |
 | Player interaction | Player/camera/crosshair, raycast edit path, committed edit revision, storage journal, and no edit failures. | P2 proof fields: `player=1`, `camera=1`, `crosshair=1`, `interaction_raycast=1`, `storage_journal=1`, `edit_failures=0`. |
 | Materials | Human terrain material uses native render material override and mipmapped imported texture cache. | P2 proof fields: `material=1`, `production_texture_active=1`, `native_render_material_override=1`; import gate passes. |
@@ -46,7 +47,7 @@ random gate selection.
 Baseline profiles:
 
 ```console
-python tools/p2_production_integration_game_quality.py --skip-build --profile flat_baseline --profile g19_compact_2k_on_demand
+python tools/p2_production_integration_game_quality.py --skip-build --profile flat_baseline --profile g19_compact_2k_on_demand --profile g20_deep_2k_256_on_demand
 ```
 
 General visual smoke:
@@ -130,6 +131,19 @@ Observed pass markers:
 - `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=g19_compact_2k_on_demand`
 - `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=g19_compact_2k_on_demand`
 - `WT_PRODUCTION_GAME_P2_PASS profile=g19_compact_2k_on_demand`
+- `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
+
+```console
+python tools/p2_production_integration_game_quality.py --godot "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --project . --profile g20_deep_2k_256_on_demand
+```
+
+Observed pass markers:
+
+- `WT_GODOT_IMPORT_ASSETS_PASS required_imports=1`
+- `WT_STANDARD_VOLUME_CONTRACT_PASS profile=g20_deep_2k_256_on_demand horizontal_cells=2048 vertical_cells=256 vertical_origin_cell=-128`
+- `WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=g20_deep_2k_256_on_demand`
+- `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS profile=g20_deep_2k_256_on_demand`
+- `WT_PRODUCTION_GAME_P2_PASS profile=g20_deep_2k_256_on_demand`
 - `WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=1`
 
 The remaining release command suite is finite and must be rerun before tagging

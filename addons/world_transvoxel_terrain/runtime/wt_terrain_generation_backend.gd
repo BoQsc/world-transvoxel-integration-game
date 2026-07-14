@@ -9,7 +9,24 @@ static func start_backend_world(
 	object_root: String
 ) -> Dictionary:
 	var source_mode := _source_mode_name(generation_profile)
+	var chunk_count_x := int(generation_profile.get("world_chunk_count_x"))
+	var chunk_count_y := int(generation_profile.get("world_chunk_count_y"))
+	var chunk_origin_y := int(generation_profile.get("world_chunk_origin_y"))
+	var chunk_count_z := int(generation_profile.get("world_chunk_count_z"))
 	if source_mode == "FLAT":
+		if backend_terrain.has_method("start_flat_world_with_vertical_origin"):
+			return {
+				"started": bool(backend_terrain.call(
+					"start_flat_world_with_vertical_origin",
+					chunk_count_x,
+					chunk_count_y,
+					chunk_origin_y,
+					chunk_count_z,
+					int(generation_profile.get("source_revision")),
+					object_root
+				)),
+				"error": "",
+			}
 		if not backend_terrain.has_method("start_flat_world"):
 			return {
 				"started": false,
@@ -18,14 +35,28 @@ static func start_backend_world(
 		return {
 			"started": bool(backend_terrain.call(
 				"start_flat_world",
-				int(generation_profile.get("world_chunk_count_x")),
-				int(generation_profile.get("world_chunk_count_z")),
+				chunk_count_x,
+				chunk_count_z,
 				int(generation_profile.get("source_revision")),
 				object_root
 			)),
 			"error": "",
 		}
 	if source_mode == "DETERMINISTIC_REFERENCE":
+		if backend_terrain.has_method("start_procedural_world_with_vertical_origin"):
+			return {
+				"started": bool(backend_terrain.call(
+					"start_procedural_world_with_vertical_origin",
+					chunk_count_x,
+					chunk_count_y,
+					chunk_origin_y,
+					chunk_count_z,
+					int(generation_profile.get("seed")),
+					int(generation_profile.get("source_revision")),
+					object_root
+				)),
+				"error": "",
+			}
 		if not backend_terrain.has_method("start_procedural_world"):
 			return {
 				"started": false,
@@ -34,8 +65,8 @@ static func start_backend_world(
 		return {
 			"started": bool(backend_terrain.call(
 				"start_procedural_world",
-				int(generation_profile.get("world_chunk_count_x")),
-				int(generation_profile.get("world_chunk_count_z")),
+				chunk_count_x,
+				chunk_count_z,
 				int(generation_profile.get("seed")),
 				int(generation_profile.get("source_revision")),
 				object_root

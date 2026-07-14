@@ -3,10 +3,12 @@ extends Node3D
 const MARKER := "WT_PRODUCTION_GAME_P2_PASS"
 const ADDON_ID := "world_transvoxel_gameworld"
 const COMPACT_PROFILE := &"g19_compact_2k_on_demand"
+const DEEP_PROFILE := &"g20_deep_2k_256_on_demand"
 const FLAT_PROFILE := &"flat_baseline"
 const DEFAULT_HUMAN_PROFILE := FLAT_PROFILE
 const DEFAULT_AUTONOMOUS_PROFILE := COMPACT_PROFILE
 const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
+const TerrainProfile := preload("res://addons/world_transvoxel_terrain/api/wt_terrain_profile.gd")
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
 const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
@@ -145,6 +147,7 @@ func _start_profile() -> void:
 	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
 	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
+	game_world.startup_world_state_timeout_frames = int(settings.get("startup_world_state_timeout_frames", 900))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
 	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
 	game_world.runtime_active_chunk_capacity = int(settings.get("runtime_active_chunk_capacity", 0))
@@ -179,7 +182,8 @@ func _start_profile() -> void:
 		int(settings["radius"]),
 		expected_resources,
 		settings["start"],
-		expected_maximum_lod
+		expected_maximum_lod,
+		_terrain_profile(selected_profile)
 	)
 	game_world.attach_player(player, settings["start"])
 	if not await game_world.start_world():
@@ -451,6 +455,7 @@ func _build_hud() -> void:
 	profile_selector.position = Vector2(12, 44)
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
+	profile_selector.add_item("g20_deep_2k_256_on_demand")
 	canvas.add_child(profile_selector)
 
 
@@ -589,6 +594,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"player_focus_viewer_enabled": false,
 			"player_focus_viewer_distance": 0.0,
 			"startup_requires_cold_idle": false,
+			"startup_world_state_timeout_frames": 900,
 			"startup_minimum_render_resources": 32,
 			"startup_minimum_collision_resources": 32,
 			"runtime_active_chunk_capacity": 4096,
@@ -612,26 +618,27 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_collision_deactivation_distance": 256.0,
 			"edit_point": Vector3(1032, 8, 1032),
 		}
-	return {
+	var settings := {
 		"start": Vector3(1184, 142, 1008),
 		"viewers": [Vector3(1024, 142, 1024)],
 		"radius": 10,
 		"maximum_lod": 3,
-			"expected_resources": 32,
-			"expected_max_resources": 4096,
-			"player_viewer_update_distance": 2.0,
-			"player_predictive_viewer_enabled": false,
-			"player_predictive_viewer_distance": 0.0,
-			"player_focus_viewer_enabled": false,
-			"player_focus_viewer_distance": 0.0,
+		"expected_resources": 32,
+		"expected_max_resources": 8192,
+		"player_viewer_update_distance": 2.0,
+		"player_predictive_viewer_enabled": false,
+		"player_predictive_viewer_distance": 0.0,
+		"player_focus_viewer_enabled": false,
+		"player_focus_viewer_distance": 0.0,
 		"startup_requires_cold_idle": false,
+		"startup_world_state_timeout_frames": 2400 if profile_id == DEEP_PROFILE else 900,
 		"startup_minimum_render_resources": 32,
 		"startup_minimum_collision_resources": 32,
-		"runtime_active_chunk_capacity": 4096,
-			"runtime_viewer_capacity": 2,
-		"runtime_demand_capacity_per_viewer": 10000,
-		"runtime_render_entry_capacity": 4096,
-		"runtime_collision_entry_capacity": 4096,
+		"runtime_active_chunk_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
+		"runtime_viewer_capacity": 2,
+		"runtime_demand_capacity_per_viewer": 16000 if profile_id == DEEP_PROFILE else 10000,
+		"runtime_render_entry_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
+		"runtime_collision_entry_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
 		"runtime_lod_refinement_radius_chunks": 1,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
@@ -648,6 +655,10 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_collision_deactivation_distance": 256.0,
 		"edit_point": Vector3(1184, 119, 1008),
 	}
+	if profile_id == DEEP_PROFILE:
+		settings["start"] = Vector3(1184, 146, 1008)
+		settings["viewers"] = [Vector3(1024, 146, 1024)]
+	return settings
 
 
 func _generation_profile(profile_id: StringName) -> Resource:
@@ -656,15 +667,42 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	generation.seed = 19019
 	generation.source_revision = 190019
 	generation.world_chunk_count_x = 128
+	generation.world_chunk_count_y = 8
+	generation.world_chunk_origin_y = 0
 	generation.world_chunk_count_z = 128
 	generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
 	if profile_id == FLAT_PROFILE:
 		generation.seed = 101
 		generation.source_revision = 101
 		generation.world_chunk_count_x = 128
+		generation.world_chunk_count_y = 8
+		generation.world_chunk_origin_y = 0
 		generation.world_chunk_count_z = 128
 		generation.source_mode = GenerationProfile.SourceMode.FLAT
+	elif profile_id == DEEP_PROFILE:
+		generation.seed = 19020
+		generation.source_revision = 190256
+		generation.world_chunk_count_x = 128
+		generation.world_chunk_count_y = 16
+		generation.world_chunk_origin_y = -8
+		generation.world_chunk_count_z = 128
+		generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
 	return generation
+
+
+func _terrain_profile(profile_id: StringName) -> Resource:
+	var terrain = TerrainProfile.new()
+	var generation := _generation_profile(profile_id)
+	terrain.horizontal_cells = int(generation.get("world_chunk_count_x")) * 16
+	terrain.vertical_cells = int(generation.get("world_chunk_count_y")) * 16
+	terrain.profile_id = StringName("reference_%dx%d" % [
+		terrain.horizontal_cells,
+		terrain.vertical_cells,
+	])
+	terrain.vertical_origin_cell = int(generation.get("world_chunk_origin_y")) * 16
+	terrain.finite_closed_boundary = true
+	terrain.plus_y_is_up = true
+	return terrain
 
 
 func _storage_profile(profile_id: StringName) -> Resource:
@@ -704,7 +742,7 @@ func _update_telemetry() -> void:
 
 
 func _verify_scene_contract() -> bool:
-	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 2 and telemetry_label != null and 			player.has_method("submit_edit_input")
+	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 3 and telemetry_label != null and 			player.has_method("submit_edit_input")
 
 
 func _verify_standard_volume_contract(terrain_world: Node) -> bool:
@@ -725,11 +763,26 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 	var generation: Dictionary = generation_value
 	var horizontal_cells := int(terrain.get("horizontal_cells", 0))
 	var vertical_cells := int(terrain.get("vertical_cells", 0))
+	var vertical_origin_cell := int(terrain.get("vertical_origin_cell", 0))
+	var generation_vertical_cells := int(generation.get("vertical_cells", 0))
+	var generation_vertical_origin_cell := int(generation.get("vertical_origin_cell", 0))
 	if horizontal_cells < 2048:
 		_fail("standard terrain horizontal volume is below 2K reference: %s" % str(terrain))
 		return false
-	if vertical_cells < 64:
+	if vertical_cells < 128:
 		_fail("standard terrain vertical volume is below reference depth: %s" % str(terrain))
+		return false
+	if selected_profile == DEEP_PROFILE and vertical_cells < 256:
+		_fail("deep terrain vertical volume is below deep-underground reference: %s" % str(terrain))
+		return false
+	if generation_vertical_cells != vertical_cells:
+		_fail("terrain/generation vertical cell counts disagree: terrain=%s generation=%s" % [str(terrain), str(generation)])
+		return false
+	if generation_vertical_origin_cell != vertical_origin_cell:
+		_fail("terrain/generation vertical origins disagree: terrain=%s generation=%s" % [str(terrain), str(generation)])
+		return false
+	if selected_profile == DEEP_PROFILE and vertical_origin_cell != -128:
+		_fail("deep terrain vertical origin must be -128 cells: %s" % str(terrain))
 		return false
 	if not bool(terrain.get("plus_y_is_up", false)):
 		_fail("standard terrain volume must use plus-Y-up semantics: %s" % str(terrain))
@@ -747,11 +800,12 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 		_fail("standard underground depth/material bands are missing: %s" % str(generation))
 		return false
 	print(
-		"WT_STANDARD_VOLUME_CONTRACT_PASS profile=%s horizontal_cells=%d vertical_cells=%d source_mode=%s" %
+		"WT_STANDARD_VOLUME_CONTRACT_PASS profile=%s horizontal_cells=%d vertical_cells=%d vertical_origin_cell=%d source_mode=%s" %
 		[
 			str(selected_profile),
 			horizontal_cells,
 			vertical_cells,
+			vertical_origin_cell,
 			str(generation.get("source_mode", "")),
 		]
 	)
