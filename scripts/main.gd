@@ -247,6 +247,8 @@ func _run_autonomous_proof() -> void:
 		return
 	if not await _wait_for_current_profile_settled("after edit"):
 		return
+	if not _verify_standard_edit_metadata(&"carve"):
+		return
 	if not await _run_repeated_edit_health_proof(terrain_world):
 		return
 	if not await _run_interaction_raycast_proof(terrain_world):
@@ -697,6 +699,47 @@ func _update_telemetry() -> void:
 
 func _verify_scene_contract() -> bool:
 	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 2 and telemetry_label != null and 			player.has_method("submit_edit_input")
+
+
+func _verify_standard_edit_metadata(expected_mode: StringName) -> bool:
+	if game_world == null or not game_world.has_method("get_last_edit_summary"):
+		_fail("gameworld does not expose last edit summary")
+		return false
+	var edit_summary: Dictionary = game_world.call("get_last_edit_summary")
+	if not bool(edit_summary.get("accepted", false)):
+		_fail("standard edit metadata check saw rejected edit: %s" % JSON.stringify(edit_summary))
+		return false
+	var terrain_summary_value = edit_summary.get("terrain_summary", {})
+	if not (terrain_summary_value is Dictionary):
+		_fail("standard edit metadata missing terrain summary: %s" % JSON.stringify(edit_summary))
+		return false
+	var terrain_summary: Dictionary = terrain_summary_value
+	var operations_value = terrain_summary.get("operation_summaries", [])
+	if not (operations_value is Array):
+		_fail("standard edit metadata operation_summaries is not an array: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operations: Array = operations_value
+	if operations.is_empty():
+		_fail("standard edit metadata operation_summaries is empty: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operation_value = operations[0]
+	if not (operation_value is Dictionary):
+		_fail("standard edit metadata first operation is not a dictionary: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operation: Dictionary = operation_value
+	if str(operation.get("operation", "")) != str(expected_mode):
+		_fail("standard edit metadata operation mismatch: %s" % JSON.stringify(operation))
+		return false
+	if str(operation.get("brush_shape", "")) != "sphere":
+		_fail("standard edit metadata brush is not sphere: %s" % JSON.stringify(operation))
+		return false
+	if float(operation.get("radius", 0.0)) <= 0.0:
+		_fail("standard edit metadata radius is invalid: %s" % JSON.stringify(operation))
+		return false
+	if not operation.has("affected_aabb"):
+		_fail("standard edit metadata missing affected_aabb: %s" % JSON.stringify(operation))
+		return false
+	return true
 
 
 func _configure_game_lighting() -> void:

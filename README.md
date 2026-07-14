@@ -180,6 +180,12 @@ building your own game setup.
 
 ## Terrain editing
 
+The current standard edit brush is documented in
+[STANDARD_EDIT_BRUSH_CONTRACT.md](STANDARD_EDIT_BRUSH_CONTRACT.md). The
+player-facing default is an SDF sphere. Collapse, octahedron mining, debris,
+and other gameplay-specific edit systems are intentionally not part of the
+current Terrain 1.0 standard.
+
 Normal play edits the terrain through the game-world addon boundary:
 
 ```gdscript

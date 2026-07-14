@@ -77,6 +77,7 @@ func apply_batch_to_transaction(transaction: Object, batch: Resource) -> bool:
 		"operation_count": batch.get_operation_count(),
 		"backend_command_count": backend_command_count,
 		"transaction_command_count": int(transaction.call("get_command_count")),
+		"operation_summaries": batch.call("to_bridge_commands") if batch.has_method("to_bridge_commands") else [],
 		"implementation": "bridge_edit_submission",
 	}
 	_last_error = "ok"
@@ -260,5 +261,6 @@ func _reset_summary() -> void:
 		"operation_count": 0,
 		"backend_command_count": 0,
 		"transaction_command_count": 0,
+		"operation_summaries": [],
 		"implementation": "bridge_edit_submission",
 	}
