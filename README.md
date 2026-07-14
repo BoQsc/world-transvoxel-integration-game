@@ -20,6 +20,13 @@ the known all-retention fallback collapse, but a project can still choose camera
 distances, active chunk capacity, viewer radius, or retention budgets that make
 distant edited shapes simplify.
 
+For the compact 2K inspection profile, two edited sites separated by player
+flight are qualified with `runtime_active_chunk_capacity=2048`,
+`runtime_render_entry_capacity=2048`, and `runtime_collision_entry_capacity=2048`.
+The earlier 1024-capacity configuration was not enough: it could force an edit
+retention fallback after digging in multiple distant areas, which matched human
+reports of holes changing or disappearing after moving away and returning.
+
 Any repository that uses this project as a reference must carry this boundary
 forward. A profile may claim seamless edited terrain only after player-like
 edits are validated across close, mid, far, and return movement with persistence,
@@ -281,6 +288,19 @@ movement-triggered LOD crack probes. The gameworld keeps a low steady render /
 collision apply budget of 8 and uses a short viewer-movement burst budget of 128
 for 30 frames to avoid exposing partial LOD replacement sets while the player is
 moving.
+
+For the two-site edited-retention gate, run:
+
+```console
+python tools/p2_production_integration_game_quality.py --skip-build --multisite-lod-gate
+```
+
+This reproduces the human pattern of digging in one area, moving far away,
+digging in another area, then revisiting both areas at close, mid, and far
+distances. The compact profile must report `retention_active_viewers=2`,
+`retention_fallbacks=0`, `pending_chunk_replacements=0`,
+`pending_chunk_retirements=0`, zero persistence mismatches, and zero transient
+probe failures before the multi-site edit/LOD behavior may be called stable.
 
 For the edit-during-load persistence gate, run:
 

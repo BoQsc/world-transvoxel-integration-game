@@ -187,6 +187,7 @@ static func _validate_storage_profile(world) -> bool:
 static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 	for pair in [
 		["runtime_active_chunk_capacity", "active_chunk_capacity"],
+		["runtime_viewer_capacity", "viewer_capacity"],
 		["runtime_demand_capacity_per_viewer", "demand_capacity_per_viewer"],
 		["runtime_render_entry_capacity", "render_entry_capacity"],
 		["runtime_collision_entry_capacity", "collision_entry_capacity"],
@@ -200,6 +201,8 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 			config.set(pair[1], value)
 	if bool(world.get("runtime_shader_fade_parameter_enabled")):
 		config.set("shader_fade_parameter_enabled", true)
+	if bool(world.get("runtime_global_coarse_lod_coverage")):
+		config.set("global_coarse_lod_coverage", true)
 	var collision_activation_distance := float(world.get("runtime_collision_activation_distance"))
 	if collision_activation_distance > 0.0:
 		config.set("collision_activation_distance", collision_activation_distance)

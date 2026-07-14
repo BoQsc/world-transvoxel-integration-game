@@ -62,6 +62,7 @@ var last_watertightness_summary := {}
 var last_edit_persistence_summary := {}
 var last_edit_stability_summary := {}
 var last_lod_movement_summary := {}
+var last_multisite_lod_summary := {}
 var last_edit_during_load_summary := {}
 var last_manifold_stress_summary := {}
 var last_tunnel_summary := {}
@@ -125,10 +126,18 @@ func _start_profile() -> void:
 	game_world.name = "WtGameWorld"
 	game_world.human_input_enabled = false
 	game_world.player_viewer_update_distance = float(settings.get("player_viewer_update_distance", 8.0))
+	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
+	if autonomous and human_visual_capture_path.is_empty():
+		predictive_viewer_enabled = false
+	game_world.player_predictive_viewer_enabled = predictive_viewer_enabled
+	game_world.player_predictive_viewer_distance = float(settings.get("player_predictive_viewer_distance", 0.0))
+	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
+	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
 	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
 	game_world.runtime_active_chunk_capacity = int(settings.get("runtime_active_chunk_capacity", 0))
+	game_world.runtime_viewer_capacity = int(settings.get("runtime_viewer_capacity", 0))
 	game_world.runtime_demand_capacity_per_viewer = int(settings.get("runtime_demand_capacity_per_viewer", 0))
 	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
 	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
@@ -137,9 +146,13 @@ func _start_profile() -> void:
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
 	game_world.runtime_render_transition_frames = int(settings.get("runtime_render_transition_frames", 0))
 	game_world.runtime_shader_fade_parameter_enabled = bool(settings.get("runtime_shader_fade_parameter_enabled", false))
+	game_world.runtime_global_coarse_lod_coverage = bool(settings.get("runtime_global_coarse_lod_coverage", false))
 	game_world.runtime_streaming_burst_render_apply_budget = int(settings.get("runtime_streaming_burst_render_apply_budget", 0))
 	game_world.runtime_streaming_burst_collision_apply_budget = int(settings.get("runtime_streaming_burst_collision_apply_budget", 0))
 	game_world.runtime_streaming_burst_frames = int(settings.get("runtime_streaming_burst_frames", 0))
+	game_world.runtime_edit_burst_render_apply_budget = int(settings.get("runtime_edit_burst_render_apply_budget", 0))
+	game_world.runtime_edit_burst_collision_apply_budget = int(settings.get("runtime_edit_burst_collision_apply_budget", 0))
+	game_world.runtime_edit_burst_frames = int(settings.get("runtime_edit_burst_frames", 0))
 	game_world.runtime_collision_activation_distance = float(settings.get("runtime_collision_activation_distance", 0.0))
 	game_world.runtime_collision_deactivation_distance = float(settings.get("runtime_collision_deactivation_distance", 0.0))
 	add_child(game_world)
@@ -438,26 +451,35 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		return {
 			"start": Vector3(1032, 18, 1032),
 			"viewers": [Vector3(1024, 18, 1024)],
-			"radius": 8,
+			"radius": 10,
 			"maximum_lod": 3,
 			"expected_resources": 32,
-			"expected_max_resources": 1024,
-			"player_viewer_update_distance": 4.0,
+			"expected_max_resources": 4096,
+			"player_viewer_update_distance": 2.0,
+			"player_predictive_viewer_enabled": false,
+			"player_predictive_viewer_distance": 0.0,
+			"player_focus_viewer_enabled": false,
+			"player_focus_viewer_distance": 0.0,
 			"startup_requires_cold_idle": false,
 			"startup_minimum_render_resources": 32,
 			"startup_minimum_collision_resources": 32,
-			"runtime_active_chunk_capacity": 1024,
-			"runtime_demand_capacity_per_viewer": 8192,
-			"runtime_render_entry_capacity": 1024,
-			"runtime_collision_entry_capacity": 1024,
+			"runtime_active_chunk_capacity": 4096,
+			"runtime_viewer_capacity": 2,
+			"runtime_demand_capacity_per_viewer": 10000,
+			"runtime_render_entry_capacity": 4096,
+			"runtime_collision_entry_capacity": 4096,
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
 			"runtime_collision_apply_budget": 8,
 			"runtime_render_transition_frames": 0,
 			"runtime_shader_fade_parameter_enabled": false,
+			"runtime_global_coarse_lod_coverage": true,
 			"runtime_streaming_burst_render_apply_budget": 128,
 			"runtime_streaming_burst_collision_apply_budget": 128,
 			"runtime_streaming_burst_frames": 30,
+			"runtime_edit_burst_render_apply_budget": 128,
+			"runtime_edit_burst_collision_apply_budget": 128,
+			"runtime_edit_burst_frames": 240,
 			"runtime_collision_activation_distance": 192.0,
 			"runtime_collision_deactivation_distance": 256.0,
 			"edit_point": Vector3(1032, 8, 1032),
@@ -465,26 +487,35 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 	return {
 		"start": Vector3(1184, 142, 1008),
 		"viewers": [Vector3(1024, 142, 1024)],
-		"radius": 8,
+		"radius": 10,
 		"maximum_lod": 3,
-		"expected_resources": 32,
-		"expected_max_resources": 1024,
-		"player_viewer_update_distance": 4.0,
+			"expected_resources": 32,
+			"expected_max_resources": 4096,
+			"player_viewer_update_distance": 2.0,
+			"player_predictive_viewer_enabled": false,
+			"player_predictive_viewer_distance": 0.0,
+			"player_focus_viewer_enabled": false,
+			"player_focus_viewer_distance": 0.0,
 		"startup_requires_cold_idle": false,
 		"startup_minimum_render_resources": 32,
 		"startup_minimum_collision_resources": 32,
-		"runtime_active_chunk_capacity": 1024,
-		"runtime_demand_capacity_per_viewer": 8192,
-		"runtime_render_entry_capacity": 1024,
-		"runtime_collision_entry_capacity": 1024,
+		"runtime_active_chunk_capacity": 4096,
+			"runtime_viewer_capacity": 2,
+		"runtime_demand_capacity_per_viewer": 10000,
+		"runtime_render_entry_capacity": 4096,
+		"runtime_collision_entry_capacity": 4096,
 		"runtime_lod_refinement_radius_chunks": 1,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
 		"runtime_render_transition_frames": 0,
 		"runtime_shader_fade_parameter_enabled": false,
+		"runtime_global_coarse_lod_coverage": true,
 		"runtime_streaming_burst_render_apply_budget": 128,
 		"runtime_streaming_burst_collision_apply_budget": 128,
 		"runtime_streaming_burst_frames": 30,
+		"runtime_edit_burst_render_apply_budget": 128,
+		"runtime_edit_burst_collision_apply_budget": 128,
+		"runtime_edit_burst_frames": 240,
 		"runtime_collision_activation_distance": 192.0,
 		"runtime_collision_deactivation_distance": 256.0,
 		"edit_point": Vector3(1184, 119, 1008),
@@ -901,9 +932,11 @@ func _human_artifact_sky_pixel_examples(sky_summary: Dictionary) -> Array:
 		"isolated_crosshair_examples",
 		"isolated_lower_center_examples",
 		"isolated_examples",
+		"crosshair_examples",
+		"lower_center_examples",
 	]
 	if int(sky_summary.get("whole_sky_pixels", 0)) <= 256:
-		group_keys.append_array(["crosshair_examples", "lower_center_examples", "examples"])
+		group_keys.append("examples")
 	for group_key in group_keys:
 		var group: Array = sky_summary.get(group_key, [])
 		for value in group:
@@ -1721,9 +1754,11 @@ func _human_artifact_precise_probe_is_problematic(probe: Dictionary) -> bool:
 	return false
 
 
-func _screen_sky_pixel_summary(image: Image) -> Dictionary:
+func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 	var width := image.get_width()
 	var height := image.get_height()
+	stride = maxi(1, stride)
+	var sample_weight := stride * stride
 	var center_left := int(width * 0.20)
 	var center_right := int(width * 0.80)
 	var center_top := int(height * 0.20)
@@ -1757,50 +1792,51 @@ func _screen_sky_pixel_summary(image: Image) -> Dictionary:
 	var isolated_lower_center_examples := []
 	var isolated_terrain_band_examples := []
 	var isolated_crosshair_examples := []
-	for y in range(height):
-		for x in range(width):
+	for y in range(0, height, stride):
+		for x in range(0, width, stride):
 			var color := image.get_pixel(x, y)
 			if not _is_sky_like_pixel(color):
 				continue
-			whole_sky_pixels += 1
+			whole_sky_pixels += sample_weight
 			if examples.size() < 8:
 				examples.append(_pixel_summary(x, y, color))
 			var isolated := _is_isolated_sky_pixel(image, x, y)
 			if isolated:
-				isolated_sky_pixels += 1
+				isolated_sky_pixels += sample_weight
 				if isolated_examples.size() < 8:
 					isolated_examples.append(_pixel_summary(x, y, color))
 			if x >= center_left and x < center_right and y >= center_top and y < center_bottom:
-				center_sky_pixels += 1
+				center_sky_pixels += sample_weight
 				if isolated:
-					isolated_center_sky_pixels += 1
+					isolated_center_sky_pixels += sample_weight
 			if x >= center_left and x < center_right and y >= lower_center_top and y < lower_center_bottom:
-				lower_center_sky_pixels += 1
+				lower_center_sky_pixels += sample_weight
 				if lower_center_examples.size() < 8:
 					lower_center_examples.append(_pixel_summary(x, y, color))
 				if isolated:
-					isolated_lower_center_sky_pixels += 1
+					isolated_lower_center_sky_pixels += sample_weight
 					if isolated_lower_center_examples.size() < 8:
 						isolated_lower_center_examples.append(_pixel_summary(x, y, color))
 			if x >= terrain_band_left and x < terrain_band_right and y >= terrain_band_top and y < terrain_band_bottom:
-				terrain_band_sky_pixels += 1
+				terrain_band_sky_pixels += sample_weight
 				if terrain_band_examples.size() < 8:
 					terrain_band_examples.append(_pixel_summary(x, y, color))
 				if isolated:
-					isolated_terrain_band_sky_pixels += 1
+					isolated_terrain_band_sky_pixels += sample_weight
 					if isolated_terrain_band_examples.size() < 8:
 						isolated_terrain_band_examples.append(_pixel_summary(x, y, color))
 			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
-				crosshair_sky_pixels += 1
+				crosshair_sky_pixels += sample_weight
 				if crosshair_examples.size() < 8:
 					crosshair_examples.append(_pixel_summary(x, y, color))
 				if isolated:
-					isolated_crosshair_sky_pixels += 1
+					isolated_crosshair_sky_pixels += sample_weight
 					if isolated_crosshair_examples.size() < 8:
 						isolated_crosshair_examples.append(_pixel_summary(x, y, color))
 	return {
 		"width": width,
 		"height": height,
+		"stride": stride,
 		"whole_sky_pixels": whole_sky_pixels,
 		"center_sky_pixels": center_sky_pixels,
 		"lower_center_sky_pixels": lower_center_sky_pixels,
@@ -2299,6 +2335,9 @@ func _capture_human_visual() -> void:
 	if human_visual_capture_mode == "streaming_fly_gap_gate":
 		if not await _run_streaming_fly_gap_gate():
 			return
+	elif human_visual_capture_mode == "post_edit_streaming_fly_gap_gate":
+		if not await _run_post_edit_streaming_fly_gap_gate():
+			return
 	else:
 		if _capture_requires_interaction_inspection():
 			if not await _apply_interaction_inspection_edits():
@@ -2317,6 +2356,16 @@ func _capture_human_visual() -> void:
 		"viewer_radius_chunks": int(summary.get("viewer_radius_chunks", 0)),
 		"viewer_maximum_lod": int(summary.get("viewer_maximum_lod", 0)),
 		"player_viewer_update_distance": float(summary.get("player_viewer_update_distance", 0.0)),
+		"player_viewer_coalesce_while_streaming": bool(summary.get("player_viewer_coalesce_while_streaming", false)),
+		"player_viewer_coalesced_updates": int(summary.get("player_viewer_coalesced_updates", 0)),
+		"player_viewer_last_coalesce_reason": str(summary.get("player_viewer_last_coalesce_reason", "none")),
+		"player_predictive_viewer_enabled": bool(summary.get("player_predictive_viewer_enabled", false)),
+		"player_predictive_viewer_distance": float(summary.get("player_predictive_viewer_distance", 0.0)),
+		"player_predictive_viewer_updates": int(summary.get("player_predictive_viewer_updates", 0)),
+		"player_focus_viewer_enabled": bool(summary.get("player_focus_viewer_enabled", false)),
+		"player_focus_viewer_distance": float(summary.get("player_focus_viewer_distance", 0.0)),
+		"player_focus_viewer_updates": int(summary.get("player_focus_viewer_updates", 0)),
+		"runtime_viewer_capacity": int(summary.get("runtime_viewer_capacity", 0)),
 		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
 		"runtime_render_apply_budget": int(summary.get("runtime_render_apply_budget", 0)),
@@ -2326,10 +2375,17 @@ func _capture_human_visual() -> void:
 		"runtime_streaming_burst_render_apply_budget": int(summary.get("runtime_streaming_burst_render_apply_budget", 0)),
 		"runtime_streaming_burst_collision_apply_budget": int(summary.get("runtime_streaming_burst_collision_apply_budget", 0)),
 		"runtime_streaming_burst_frames": int(summary.get("runtime_streaming_burst_frames", 0)),
+		"runtime_edit_burst_render_apply_budget": int(summary.get("runtime_edit_burst_render_apply_budget", 0)),
+		"runtime_edit_burst_collision_apply_budget": int(summary.get("runtime_edit_burst_collision_apply_budget", 0)),
+		"runtime_edit_burst_frames": int(summary.get("runtime_edit_burst_frames", 0)),
 		"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
 		"runtime_collision_activation_distance": float(summary.get("runtime_collision_activation_distance", 0.0)),
 		"runtime_collision_deactivation_distance": float(summary.get("runtime_collision_deactivation_distance", 0.0)),
 		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+		"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
+		"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+		"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+		"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
 		"render_resources": int(summary.get("render_resources", 0)),
 		"collision_resources": int(summary.get("collision_resources", 0)),
 		"edit_submission_count": int(summary.get("edit_submission_count", 0)),
@@ -2354,6 +2410,7 @@ func _capture_human_visual() -> void:
 		"edit_persistence": _edit_persistence_summary(),
 		"edit_stability": _edit_stability_summary(),
 		"lod_movement": _lod_movement_summary(),
+		"multisite_lod": _multisite_lod_summary(),
 		"edit_during_load": _edit_during_load_summary(),
 		"manifold_stress": _manifold_stress_summary(),
 		"tunnel": _tunnel_summary(),
@@ -2362,6 +2419,8 @@ func _capture_human_visual() -> void:
 	}))
 	var watertightness_accepted := bool(last_watertightness_summary.get("ok", false))
 	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
+		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
+	if human_visual_capture_mode == "edit_multisite_lod_gate" and lod_movement_gap_only_probe:
 		watertightness_accepted = _is_lod_movement_probe_ready(last_watertightness_summary)
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		watertightness_accepted = _is_open_gap_free_probe(last_watertightness_summary)
@@ -2386,6 +2445,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
+		human_visual_capture_mode == "edit_multisite_lod_gate" or \
 		human_visual_capture_mode == "edit_tunnel_gate" or \
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
@@ -2400,6 +2460,7 @@ func _capture_requires_watertightness_probe() -> bool:
 		human_visual_capture_mode == "edit_persistence_reload_oracle" or \
 		human_visual_capture_mode == "edit_stability_gate" or \
 		human_visual_capture_mode == "edit_lod_movement_gate" or \
+		human_visual_capture_mode == "edit_multisite_lod_gate" or \
 		human_visual_capture_mode == "edit_during_load_oracle" or \
 		human_visual_capture_mode == "edit_manifold_stress_gate" or \
 		human_visual_capture_mode == "edit_tunnel_gate" or \
@@ -2417,6 +2478,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return false
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return await _run_edit_lod_movement_gate(terrain_world)
+	if human_visual_capture_mode == "edit_multisite_lod_gate":
+		return await _run_edit_multisite_lod_gate(terrain_world)
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		return await _run_edit_during_load_oracle(terrain_world)
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
@@ -4281,6 +4344,364 @@ func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
 	return true
 
 
+func _run_edit_multisite_lod_gate(terrain_world: Node) -> bool:
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	if backend == null:
+		_fail("multi-site LOD gate backend unavailable")
+		return false
+	var site_a_hint := _edit_lod_movement_gate_center()
+	var site_a := _resolve_multisite_lod_surface(site_a_hint)
+	if is_inf(site_a.x):
+		_fail("multi-site LOD gate could not resolve site A surface")
+		return false
+	var site_a_operations := _edit_multisite_lod_site_operations(site_a, 734591, 0)
+	if not await _submit_multisite_lod_operations(terrain_world, site_a_operations, "site A"):
+		return false
+	var site_b_hint := _edit_multisite_lod_second_site_hint()
+	player.global_position = site_b_hint + Vector3(-18.0, 44.0, -42.0)
+	player.velocity = Vector3.ZERO
+	if not bool(player.call("autonomous_look_at", site_b_hint)):
+		_fail("multi-site LOD gate could not aim at site B")
+		return false
+	if not bool(game_world.update_player_viewer(true)):
+		_fail("multi-site LOD gate viewer update failed at site B")
+		return false
+	if not await _wait_for_current_profile_settled("before multi-site LOD site B edits"):
+		return false
+	var site_b := _resolve_multisite_lod_surface(site_b_hint)
+	if is_inf(site_b.x):
+		_fail("multi-site LOD gate could not resolve site B surface")
+		return false
+	var site_b_operations := _edit_multisite_lod_site_operations(site_b, 184337, 1)
+	if not await _submit_multisite_lod_operations(terrain_world, site_b_operations, "site B"):
+		return false
+	edit_persistence_operations.clear()
+	edit_persistence_operations.append_array(site_a_operations)
+	edit_persistence_operations.append_array(site_b_operations)
+	interaction_inspection_operation_count = edit_persistence_operations.size()
+	var baseline_snapshot := await _collect_edit_persistence_snapshot(
+		terrain_world,
+		"multi-site LOD baseline"
+	)
+	if not bool(baseline_snapshot.get("ok", false)):
+		return false
+	var transition_summaries := []
+	var persistence_summaries := []
+	for site in [
+		{"label": "site_b", "center": site_b},
+		{"label": "site_a", "center": site_a},
+	]:
+		var site_label := str(site["label"])
+		var center: Vector3 = site["center"]
+		for step in _edit_multisite_lod_path(center):
+			var transition := await _exercise_multisite_lod_step(
+				backend,
+				site_label,
+				center,
+				step
+			)
+			transition_summaries.append(transition)
+			if not bool(transition.get("ok", false)):
+				last_multisite_lod_summary = {
+					"enabled": true,
+					"ok": false,
+					"error": "movement_step_failed",
+					"failed_step": transition,
+					"transition_summaries": transition_summaries,
+				}
+				_fail("multi-site LOD step failed: %s" % JSON.stringify(transition))
+				return false
+			var after_snapshot := await _collect_edit_persistence_snapshot(
+				terrain_world,
+				"multi-site LOD after %s %s" % [site_label, str(step.get("label", "step"))]
+			)
+			if not bool(after_snapshot.get("ok", false)):
+				return false
+			if not _compare_edit_persistence_snapshots(baseline_snapshot, after_snapshot):
+				last_multisite_lod_summary = {
+					"enabled": true,
+					"ok": false,
+					"error": "persistence_changed_after_multisite_lod",
+					"failed_site": site_label,
+					"failed_step": str(step.get("label", "step")),
+					"persistence": last_edit_persistence_summary,
+					"transition_summaries": transition_summaries,
+				}
+				return false
+			persistence_summaries.append({
+				"site": site_label,
+				"label": str(step.get("label", "step")),
+				"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+				"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+				"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+				"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+			})
+	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	last_multisite_lod_summary = {
+		"enabled": true,
+		"ok": true,
+		"profile": str(selected_profile),
+		"site_count": 2,
+		"operation_count": edit_persistence_operations.size(),
+		"site_a": _vector3_summary(site_a),
+		"site_b": _vector3_summary(site_b),
+		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
+		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
+		"material_mismatches": int(last_edit_persistence_summary.get("material_mismatches", -1)),
+		"max_abs_density_delta": float(last_edit_persistence_summary.get("max_abs_density_delta", -1.0)),
+		"retention_zones": int(runtime_summary.get("edit_lod_retention_zones", 0)),
+		"retention_active_viewers": int(runtime_summary.get("edit_lod_retention_active_viewers", 0)),
+		"retention_fallbacks": int(runtime_summary.get("edit_lod_retention_fallbacks", 0)),
+		"pending_chunk_retirements": int(runtime_summary.get("pending_chunk_retirements", 0)),
+		"pending_chunk_replacements": int(runtime_summary.get("pending_chunk_replacements", 0)),
+		"render_resources": int(runtime_summary.get("render_resources", 0)),
+		"collision_resources": int(runtime_summary.get("collision_resources", 0)),
+		"transition_summaries": transition_summaries,
+		"persistence_summaries": persistence_summaries,
+	}
+	if int(last_multisite_lod_summary.get("retention_fallbacks", 0)) != 0:
+		last_multisite_lod_summary["ok"] = false
+		last_multisite_lod_summary["error"] = "retention_fallback"
+		_fail("multi-site LOD retention fallback: %s" % JSON.stringify(last_multisite_lod_summary))
+		return false
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_applied = true
+	return true
+
+
+func _resolve_multisite_lod_surface(hint: Vector3) -> Vector3:
+	return _find_collision_surface_near([
+		hint,
+		hint + Vector3(16.0, 0.0, 0.0),
+		hint + Vector3(-16.0, 0.0, 0.0),
+		hint + Vector3(0.0, 0.0, 16.0),
+		hint + Vector3(0.0, 0.0, -16.0),
+	])
+
+
+func _submit_multisite_lod_operations(
+	terrain_world: Node,
+	operations: Array,
+	label: String
+) -> bool:
+	for index in range(operations.size()):
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		if not batch.add_operation(operations[index]):
+			_fail("failed to add multi-site LOD operation %s %d" % [label, index])
+			return false
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9301)):
+			_fail("multi-site LOD operation %s %d rejected: %s" % [
+				label,
+				index,
+				str(terrain_world.call("get_last_error")),
+			])
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("multi-site LOD operation %s %d did not commit" % [label, index])
+			return false
+		if index % 16 == 15:
+			if not await _wait_for_current_profile_settled("after multi-site LOD %s edit %d" % [label, index]):
+				return false
+		else:
+			for _frame in range(2):
+				await get_tree().process_frame
+	if not await _wait_for_current_profile_settled("after multi-site LOD %s edits" % label):
+		return false
+	return true
+
+
+func _edit_multisite_lod_site_operations(
+	center: Vector3,
+	seed: int,
+	site_index: int
+) -> Array:
+	var operations: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var horizontal_radius_limit := 22.0
+	var vertical_offset_min := -14.0
+	var vertical_offset_max := 1.5
+	if selected_profile == FLAT_PROFILE:
+		horizontal_radius_limit = 9.0
+		vertical_offset_min = -2.5
+		vertical_offset_max = 2.5
+	for index in range(48):
+		var angle := rng.randf_range(0.0, TAU)
+		var horizontal_radius := rng.randf_range(0.0, horizontal_radius_limit)
+		var offset := Vector3(
+			cos(angle) * horizontal_radius,
+			rng.randf_range(vertical_offset_min, vertical_offset_max),
+			sin(angle) * horizontal_radius
+		)
+		var pattern := index % 12
+		var mode := &"carve"
+		var material_id := 1
+		var radius := rng.randf_range(1.4, 3.4)
+		if selected_profile == FLAT_PROFILE:
+			radius = rng.randf_range(1.2, 2.1)
+		if pattern == 8:
+			mode = &"construct"
+			material_id = 3 + site_index
+			radius = rng.randf_range(1.7, 3.8)
+			if selected_profile == FLAT_PROFILE:
+				radius = rng.randf_range(1.4, 2.4)
+		elif pattern == 9:
+			mode = &"fill"
+			material_id = 5 + site_index
+			radius = rng.randf_range(1.6, 3.4)
+			if selected_profile == FLAT_PROFILE:
+				radius = rng.randf_range(1.4, 2.3)
+		elif pattern == 10:
+			mode = &"paint"
+			material_id = 7 + site_index
+			radius = rng.randf_range(1.8, 4.0)
+			if selected_profile == FLAT_PROFILE:
+				radius = rng.randf_range(1.6, 2.6)
+		operations.append(_edit_operation(
+			mode,
+			center + offset,
+			radius,
+			material_id,
+			1.0
+		))
+	return operations
+
+
+func _edit_multisite_lod_path(center: Vector3) -> Array:
+	var target := center + Vector3(0.0, -3.0, 0.0)
+	return [
+		{"label": "close", "position": center + Vector3(-12.0, 18.0, -36.0), "target": target},
+		{"label": "mid", "position": center + Vector3(-78.0, 62.0, -164.0), "target": target},
+		{"label": "far", "position": center + Vector3(-148.0, 96.0, -324.0), "target": target},
+	]
+
+
+func _exercise_multisite_lod_step(
+	backend: Node,
+	site_label: String,
+	center: Vector3,
+	step: Dictionary
+) -> Dictionary:
+	if player == null or game_world == null:
+		return {"ok": false, "site": site_label, "error": "player_or_game_world_unavailable"}
+	var label := str(step.get("label", "step"))
+	var position: Vector3 = step.get("position", player.global_position)
+	var target: Vector3 = step.get("target", center)
+	player.global_position = position
+	player.velocity = Vector3.ZERO
+	if not bool(player.call("autonomous_look_at", target)):
+		return {"ok": false, "site": site_label, "label": label, "error": "look_at_failed"}
+	if not bool(game_world.update_player_viewer(true)):
+		return {"ok": false, "site": site_label, "label": label, "error": "viewer_update_failed"}
+	var transient_probe_failures := []
+	var transient_frames := [1, 12]
+	var max_queued_render := 0
+	var max_queued_collision := 0
+	var max_pending_retirements := 0
+	var max_pending_replacements := 0
+	var max_render_fading := 0
+	var min_render_resources := 9223372036854775807
+	var min_collision_resources := 9223372036854775807
+	var max_scheduler_jobs := 0
+	for frame in range(30):
+		await get_tree().process_frame
+		var summary: Dictionary = game_world.get_game_world_summary()
+		max_queued_render = maxi(max_queued_render, int(summary.get("queued_render", 0)))
+		max_queued_collision = maxi(max_queued_collision, int(summary.get("queued_collision", 0)))
+		max_pending_retirements = maxi(max_pending_retirements, int(summary.get("pending_chunk_retirements", 0)))
+		max_pending_replacements = maxi(max_pending_replacements, int(summary.get("pending_chunk_replacements", 0)))
+		max_render_fading = maxi(max_render_fading, int(summary.get("render_fading_resources", 0)))
+		min_render_resources = mini(min_render_resources, int(summary.get("render_resources", 0)))
+		min_collision_resources = mini(min_collision_resources, int(summary.get("collision_resources", 0)))
+		max_scheduler_jobs = maxi(max_scheduler_jobs, int(summary.get("scheduler_queued_jobs", 0)))
+		if transient_frames.has(frame):
+			var transient_probe := WatertightnessProbe.collect(
+				backend,
+				"edit_multisite_lod_gate_%s_%s_frame_%d" % [site_label, label, frame],
+				center,
+				_edit_lod_movement_probe_radius()
+			)
+			if not _is_lod_movement_probe_ready(transient_probe):
+				transient_probe_failures.append({
+					"frame": frame,
+					"boundary_edges": int(transient_probe.get("boundary_edges", -1)),
+					"interior_boundary_edges": int(transient_probe.get("interior_boundary_edges", -1)),
+					"chunk_face_boundary_edges": int(transient_probe.get("chunk_face_boundary_edges", -1)),
+					"unknown_boundary_edges": int(transient_probe.get("unknown_boundary_edges", -1)),
+					"nonmanifold_edges": int(transient_probe.get("nonmanifold_edges", -1)),
+					"nonmanifold_interior_edges": int(transient_probe.get("nonmanifold_interior_edges", -1)),
+					"nonmanifold_unknown_edges": int(transient_probe.get("nonmanifold_unknown_edges", -1)),
+					"zero_area_interior_triangles": int(transient_probe.get("zero_area_interior_triangles", -1)),
+					"zero_area_unknown_triangles": int(transient_probe.get("zero_area_unknown_triangles", -1)),
+					"repeated_point_key_interior_triangles": int(transient_probe.get("repeated_point_key_interior_triangles", -1)),
+					"repeated_point_key_unknown_triangles": int(transient_probe.get("repeated_point_key_unknown_triangles", -1)),
+					"triangles_in_region": int(transient_probe.get("triangles_in_region", -1)),
+					"boundary_examples": transient_probe.get("boundary_examples", []),
+					"interior_boundary_examples": transient_probe.get("interior_boundary_examples", []),
+					"nonmanifold_examples": transient_probe.get("nonmanifold_examples", []),
+				})
+	var strict_settle_notes := []
+	if not await _wait_for_lod_movement_visual_ready(
+		backend,
+		"after multi-site LOD %s %s" % [site_label, label],
+		strict_settle_notes,
+		center,
+		_edit_lod_movement_probe_radius()
+	):
+		var timeout_summary: Dictionary = game_world.get_game_world_summary()
+		return {
+			"ok": false,
+			"site": site_label,
+			"label": label,
+			"error": "visual_streaming_not_ready",
+			"summary": timeout_summary,
+		}
+	var settled_probe := WatertightnessProbe.collect(
+		backend,
+		"edit_multisite_lod_gate_%s_%s_settled" % [site_label, label],
+		center,
+		_edit_lod_movement_probe_radius()
+	)
+	if not _is_lod_movement_probe_ready(settled_probe):
+		return {
+			"ok": false,
+			"site": site_label,
+			"label": label,
+			"error": "settled_watertightness_failure",
+			"settled_probe": settled_probe,
+		}
+	return {
+		"ok": true,
+		"site": site_label,
+		"label": label,
+		"max_queued_render": max_queued_render,
+		"max_queued_collision": max_queued_collision,
+		"max_pending_retirements": max_pending_retirements,
+		"max_pending_replacements": max_pending_replacements,
+		"max_render_fading_resources": max_render_fading,
+		"max_scheduler_queued_jobs": max_scheduler_jobs,
+		"min_render_resources": min_render_resources,
+		"min_collision_resources": min_collision_resources,
+		"strict_settle_notes": strict_settle_notes,
+		"transient_probe_failure_count": transient_probe_failures.size(),
+		"transient_probe_failures": transient_probe_failures,
+		"settled_boundary_edges": int(settled_probe.get("boundary_edges", -1)),
+		"settled_interior_boundary_edges": int(settled_probe.get("interior_boundary_edges", -1)),
+		"settled_chunk_face_boundary_edges": int(settled_probe.get("chunk_face_boundary_edges", -1)),
+		"settled_unknown_boundary_edges": int(settled_probe.get("unknown_boundary_edges", -1)),
+		"settled_nonmanifold_edges": int(settled_probe.get("nonmanifold_edges", -1)),
+		"settled_orientation_conflict_edges": int(settled_probe.get("orientation_conflict_edges", -1)),
+		"settled_zero_area_interior_triangles": int(settled_probe.get("zero_area_interior_triangles", -1)),
+		"settled_zero_area_unknown_triangles": int(settled_probe.get("zero_area_unknown_triangles", -1)),
+		"settled_repeated_point_key_interior_triangles": int(settled_probe.get("repeated_point_key_interior_triangles", -1)),
+		"settled_repeated_point_key_unknown_triangles": int(settled_probe.get("repeated_point_key_unknown_triangles", -1)),
+		"settled_zero_edge_triangles": int(settled_probe.get("zero_edge_triangles", -1)),
+		"settled_triangles_in_region": int(settled_probe.get("triangles_in_region", -1)),
+	}
+
+
 func _edit_lod_movement_gate_operations() -> Array:
 	var operations: Array = []
 	var seeds := [615197, 382091, 928371, 470039]
@@ -4445,7 +4866,24 @@ func _run_lod_movement_player_interactions(terrain_world: Node) -> Dictionary:
 	}
 
 
-func _run_streaming_fly_gap_gate() -> bool:
+func _run_post_edit_streaming_fly_gap_gate() -> bool:
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null:
+		_fail("post-edit streaming fly gap gate requires terrain world")
+		return false
+	var operations := _post_edit_streaming_fly_operations()
+	if operations.is_empty():
+		_fail("post-edit streaming fly gap gate produced no operations")
+		return false
+	if not await _submit_post_edit_streaming_fly_operations(terrain_world, operations):
+		return false
+	edit_persistence_operations = operations.duplicate()
+	interaction_inspection_operation_count = operations.size()
+	interaction_inspection_applied = true
+	return await _run_streaming_fly_gap_gate(true)
+
+
+func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 	if player == null or game_world == null:
 		_fail("streaming fly gap gate requires player and game world")
 		return false
@@ -4459,29 +4897,41 @@ func _run_streaming_fly_gap_gate() -> bool:
 		player.call("set_fly_mode_enabled", false)
 	camera.fov = 75.0
 	camera.far = 5000.0
-	var path := _streaming_fly_gap_path()
+	var path := _post_edit_streaming_fly_gap_path() if post_edit else _streaming_fly_gap_path()
 	if path.size() < 2:
 		_fail("streaming fly gap path is empty")
 		return false
 	await _set_capture_camera_pose_with_wait(
 		path[0].get("position", player.global_position),
 		path[0].get("target", _watertightness_probe_center()),
-		120
+		16 if post_edit else 120
 	)
-	if not await _wait_for_streaming_fly_visual_ready("before streaming fly gap gate", 240):
+	if not await _wait_for_streaming_fly_start_coverage_ready("before streaming fly gap gate", 240):
 		return false
 	var samples := []
 	var failures := []
 	var max_pending_retirements := 0
+	var max_pending_replacements := 0
 	var max_staged_render := 0
 	var max_queued_render := 0
 	var max_scheduler_jobs := 0
 	var min_render_resources := 9223372036854775807
+	var min_visual_ready_records := 9223372036854775807
+	var min_non_retiring_visual_ready_records := 9223372036854775807
+	var max_non_retiring_visual_deficit := 0
+	var max_pending_retirement_records_missing := 0
+	var max_render_fading_resources := 0
 	var sample_index := 0
+	var terrain_world_for_probe: Node = game_world.get_terrain_world() if game_world != null else null
+	var backend_for_probe: Node = null
+	if terrain_world_for_probe != null and terrain_world_for_probe.has_method("get_backend_terrain"):
+		backend_for_probe = terrain_world_for_probe.call("get_backend_terrain")
 	for segment_index in range(1, path.size()):
 		var previous: Dictionary = path[segment_index - 1]
 		var current: Dictionary = path[segment_index]
 		var frames := int(current.get("frames", 48))
+		var gap_sensitive := bool(current.get("gap_sensitive", true))
+		var gap_sensitive_start_frame := int(current.get("gap_sensitive_start_frame", 0))
 		for frame in range(frames + 1):
 			var t := 0.0 if frames <= 0 else float(frame) / float(frames)
 			var position: Vector3 = previous.get("position", player.global_position).lerp(
@@ -4505,6 +4955,10 @@ func _run_streaming_fly_gap_gate() -> bool:
 				max_pending_retirements,
 				int(summary.get("pending_chunk_retirements", 0))
 			)
+			max_pending_replacements = maxi(
+				max_pending_replacements,
+				int(summary.get("pending_chunk_replacements", 0))
+			)
 			max_staged_render = maxi(
 				max_staged_render,
 				int(summary.get("staged_render_resources", 0))
@@ -4518,18 +4972,81 @@ func _run_streaming_fly_gap_gate() -> bool:
 				min_render_resources,
 				int(summary.get("render_resources", 0))
 			)
-			if not _streaming_fly_should_sample_frame(frame, frames):
+			min_visual_ready_records = mini(
+				min_visual_ready_records,
+				int(summary.get("visual_ready_chunk_records", 0))
+			)
+			min_non_retiring_visual_ready_records = mini(
+				min_non_retiring_visual_ready_records,
+				int(summary.get(
+					"non_retiring_visual_ready_chunk_records",
+					summary.get("visual_ready_chunk_records", 0)
+				))
+			)
+			max_non_retiring_visual_deficit = maxi(
+				max_non_retiring_visual_deficit,
+				_streaming_fly_non_retiring_visual_deficit(summary)
+			)
+			max_pending_retirement_records_missing = maxi(
+				max_pending_retirement_records_missing,
+				int(summary.get("pending_retirement_records_missing", 0))
+			)
+			max_render_fading_resources = maxi(
+				max_render_fading_resources,
+				int(summary.get("render_fading_resources", 0))
+			)
+			if frame == 0 and segment_index > 1:
 				continue
+			if not _streaming_fly_should_sample_frame(frame, frames, post_edit):
+				continue
+			var sample_gap_sensitive := gap_sensitive and frame >= gap_sensitive_start_frame
 			var image := get_viewport().get_texture().get_image()
-			var sky := _screen_sky_pixel_summary(image)
-			var gap := _streaming_fly_sky_gap_detected(sky)
+			var sky := _screen_sky_pixel_summary(image, 4 if post_edit else 1)
+			var visual_gap := sample_gap_sensitive and _streaming_fly_sky_gap_detected(sky, post_edit)
+			var coverage_gap := sample_gap_sensitive and _streaming_fly_coverage_gap_detected(summary)
+			var geometry_probe := {}
+			var geometry_gap := false
+			var run_geometry_probe := sample_gap_sensitive and (
+				visual_gap or coverage_gap or _streaming_fly_should_probe_geometry_frame(frame, frames)
+			)
+			if run_geometry_probe:
+				var probe_center := _find_collision_surface_near([
+					target,
+					target + Vector3(16.0, 0.0, 0.0),
+					target + Vector3(-16.0, 0.0, 0.0),
+					target + Vector3(0.0, 0.0, 16.0),
+					target + Vector3(0.0, 0.0, -16.0),
+				])
+				if is_inf(probe_center.x):
+					geometry_gap = true
+					geometry_probe = {
+						"ok": false,
+						"error": "surface_unresolved",
+						"triangles_in_region": 0,
+						"center": _vector3_summary(target),
+						"radius": 48.0,
+					}
+				else:
+					geometry_probe = WatertightnessProbe.collect(
+						backend_for_probe,
+						"post_edit_streaming_fly_%02d" % sample_index,
+						probe_center,
+						48.0
+					)
+					geometry_gap = not _is_open_gap_free_probe(geometry_probe)
+			var gap := visual_gap or coverage_gap or geometry_gap
 			var label := "%02d_%s_f%03d" % [
 				sample_index,
 				str(current.get("label", "segment")),
 				frame,
 			]
 			var capture_path := _capture_variant_path("streaming_fly_" + label)
-			var image_error := image.save_png(capture_path)
+			var save_capture := gap or _streaming_fly_should_save_capture_frame(frame, frames)
+			var image_error := OK
+			if save_capture:
+				image_error = image.save_png(capture_path)
+			else:
+				capture_path = ""
 			var sample := {
 				"label": label,
 				"segment": str(current.get("label", "segment")),
@@ -4537,15 +5054,29 @@ func _run_streaming_fly_gap_gate() -> bool:
 				"position": _vector3_summary(position),
 				"target": _vector3_summary(target),
 				"gap_detected": gap,
+				"visual_gap_detected": visual_gap,
+				"coverage_gap_detected": coverage_gap,
+				"geometry_gap_detected": geometry_gap,
+				"gap_sensitive": sample_gap_sensitive,
 				"capture_path": capture_path,
-				"capture_saved": image_error == OK,
+				"capture_saved": save_capture and image_error == OK,
 				"sky": sky,
+				"geometry_probe": _open_gap_probe_digest(geometry_probe) if not geometry_probe.is_empty() else {},
 				"active_chunk_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
 				"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+				"non_retiring_chunk_records": int(summary.get("non_retiring_chunk_records", 0)),
+				"non_retiring_visual_ready_chunk_records": int(summary.get("non_retiring_visual_ready_chunk_records", 0)),
+				"non_retiring_fully_ready_chunk_records": int(summary.get("non_retiring_fully_ready_chunk_records", 0)),
+				"non_retiring_visual_deficit": _streaming_fly_non_retiring_visual_deficit(summary),
+				"pending_retirement_records": int(summary.get("pending_retirement_records", 0)),
+				"pending_retirement_records_missing": int(summary.get("pending_retirement_records_missing", 0)),
+				"staged_swap_coverage_retained": _streaming_fly_staged_swap_coverage_retained(summary),
 				"render_resources": int(summary.get("render_resources", 0)),
 				"queued_render": int(summary.get("queued_render", 0)),
 				"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+				"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
+				"render_fading_resources": int(summary.get("render_fading_resources", 0)),
 				"staged_render_resources": int(summary.get("staged_render_resources", 0)),
 				"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
 				"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
@@ -4570,22 +5101,83 @@ func _run_streaming_fly_gap_gate() -> bool:
 			samples.append(sample)
 			if gap or image_error != OK:
 				failures.append(sample)
+				last_streaming_fly_summary = {
+					"enabled": true,
+					"ok": false,
+					"profile": str(selected_profile),
+					"sample_count": samples.size(),
+					"failure_count": failures.size(),
+					"post_edit": post_edit,
+					"fail_fast": true,
+					"max_pending_chunk_retirements": max_pending_retirements,
+					"max_pending_chunk_replacements": max_pending_replacements,
+					"max_staged_render_resources": max_staged_render,
+					"max_queued_render": max_queued_render,
+					"max_scheduler_queued_jobs": max_scheduler_jobs,
+					"min_render_resources": min_render_resources,
+					"min_visual_ready_chunk_records": min_visual_ready_records,
+					"min_non_retiring_visual_ready_chunk_records": min_non_retiring_visual_ready_records,
+					"max_non_retiring_visual_deficit": max_non_retiring_visual_deficit,
+					"max_pending_retirement_records_missing": max_pending_retirement_records_missing,
+					"max_render_fading_resources": max_render_fading_resources,
+					"failure_examples": failures.slice(0, mini(4, failures.size())),
+					"samples": samples,
+					"implementation": "post_edit_streaming_fly_gap_gate_v5_fail_fast" if post_edit else "streaming_fly_gap_gate_v4_fail_fast",
+				}
+				_write_streaming_fly_summary_json(last_streaming_fly_summary)
+				if material_applicator != null:
+					material_applicator.call("apply_materials_now")
+				_fail(
+					"streaming fly gap gate first failure label=%s visual=%s coverage=%s geometry=%s capture=%s" %
+					[label, str(visual_gap), str(coverage_gap), str(geometry_gap), capture_path]
+				)
+				return false
 			sample_index += 1
 	var ok := failures.is_empty()
+	var final_settle_summary := {}
+	if ok:
+		ok = await _wait_for_streaming_fly_visual_ready(
+			"after streaming fly gap gate",
+			maxi(240, human_visual_capture_wait_frames)
+		)
+		final_settle_summary = game_world.get_game_world_summary() if game_world != null else {}
+		if material_applicator != null:
+			material_applicator.call("apply_materials_now")
 	last_streaming_fly_summary = {
 		"enabled": true,
 		"ok": ok,
 		"profile": str(selected_profile),
 		"sample_count": samples.size(),
 		"failure_count": failures.size(),
+		"post_edit": post_edit,
 		"max_pending_chunk_retirements": max_pending_retirements,
+		"max_pending_chunk_replacements": max_pending_replacements,
 		"max_staged_render_resources": max_staged_render,
 		"max_queued_render": max_queued_render,
 		"max_scheduler_queued_jobs": max_scheduler_jobs,
 		"min_render_resources": min_render_resources,
+		"min_visual_ready_chunk_records": min_visual_ready_records,
+		"min_non_retiring_visual_ready_chunk_records": min_non_retiring_visual_ready_records,
+		"max_non_retiring_visual_deficit": max_non_retiring_visual_deficit,
+		"max_pending_retirement_records_missing": max_pending_retirement_records_missing,
+		"max_render_fading_resources": max_render_fading_resources,
 		"failure_examples": failures.slice(0, mini(4, failures.size())),
+		"final_settle_summary": {
+			"active_chunk_records": int(final_settle_summary.get("active_chunk_records", 0)),
+			"visual_ready_chunk_records": int(final_settle_summary.get("visual_ready_chunk_records", 0)),
+			"fully_ready_chunk_records": int(final_settle_summary.get("fully_ready_chunk_records", 0)),
+			"render_resources": int(final_settle_summary.get("render_resources", 0)),
+			"collision_resources": int(final_settle_summary.get("collision_resources", 0)),
+			"queued_render": int(final_settle_summary.get("queued_render", 0)),
+			"queued_collision": int(final_settle_summary.get("queued_collision", 0)),
+			"pending_chunk_retirements": int(final_settle_summary.get("pending_chunk_retirements", 0)),
+			"pending_chunk_replacements": int(final_settle_summary.get("pending_chunk_replacements", 0)),
+			"staged_render_resources": int(final_settle_summary.get("staged_render_resources", 0)),
+			"scheduler_queued_jobs": int(final_settle_summary.get("scheduler_queued_jobs", 0)),
+			"scheduler_queued_completions": int(final_settle_summary.get("scheduler_queued_completions", 0)),
+		},
 		"samples": samples,
-		"implementation": "streaming_fly_gap_gate_v1",
+		"implementation": "post_edit_streaming_fly_gap_gate_v4" if post_edit else "streaming_fly_gap_gate_v3",
 	}
 	_write_streaming_fly_summary_json(last_streaming_fly_summary)
 	if material_applicator != null:
@@ -4596,9 +5188,87 @@ func _run_streaming_fly_gap_gate() -> bool:
 	return true
 
 
-func _streaming_fly_should_sample_frame(frame: int, frames: int) -> bool:
+func _streaming_fly_should_sample_frame(frame: int, frames: int, post_edit: bool = false) -> bool:
+	if post_edit:
+		return true
 	return frame == 0 or frame == 1 or frame == 3 or frame == 8 or \
 		frame == 16 or frame == 32 or frame == frames
+
+
+func _streaming_fly_should_probe_geometry_frame(frame: int, frames: int) -> bool:
+	return frame == 0 or frame == 8 or frame == 16 or frame == 32 or frame == frames
+
+
+func _streaming_fly_should_save_capture_frame(frame: int, frames: int) -> bool:
+	return frame == 0 or frame == 1 or frame == 3 or frame == 8 or \
+		frame == 16 or frame == 32 or frame == frames
+
+
+func _submit_post_edit_streaming_fly_operations(
+	terrain_world: Node,
+	operations: Array
+) -> bool:
+	var operation_index := 0
+	# This gate models one intentionally edited terrain feature before the
+	# streaming/fly pass. Submit it as one transaction so the runtime remeshes
+	# the final edited field instead of chasing many intermediate revisions.
+	var batch_size := maxi(1, operations.size())
+	while operation_index < operations.size():
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		var batch = EditBatch.new()
+		for _local_index in range(batch_size):
+			if operation_index >= operations.size():
+				break
+			if not batch.add_operation(operations[operation_index]):
+				_fail("failed to add post-edit streaming fly operation %d" % operation_index)
+				return false
+			operation_index += 1
+		if not bool(terrain_world.call("submit_edit_batch", batch, 9442)):
+			_fail("post-edit streaming fly batch rejected at operation %d: %s" % [
+				operation_index,
+				str(terrain_world.call("get_last_error")),
+			])
+			return false
+		if not await game_world.wait_for_world_revision(before_revision + 1):
+			_fail("post-edit streaming fly batch did not commit at operation %d" % operation_index)
+			return false
+		await get_tree().process_frame
+	return true
+
+
+func _post_edit_streaming_fly_operations() -> Array:
+	var operations: Array = []
+	var center := _edit_lod_movement_gate_center()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 913337 if selected_profile == COMPACT_PROFILE else 913338
+	var large_radius := 9.5
+	var random_radius_min := 3.0
+	var random_radius_max := 7.5
+	var horizontal_limit := 24.0
+	var depth_step := 3.5
+	if selected_profile == FLAT_PROFILE:
+		large_radius = 5.5
+		random_radius_min = 2.0
+		random_radius_max = 4.5
+		horizontal_limit = 12.0
+		depth_step = 1.5
+	for index in range(10):
+		var diagonal := Vector3(
+			float(index) * 1.8,
+			-float(index) * depth_step,
+			float(index) * 1.25
+		)
+		operations.append(_edit_operation(&"carve", center + diagonal, large_radius, 1, 1.0))
+	for index in range(56):
+		var angle := rng.randf_range(0.0, TAU)
+		var distance := rng.randf_range(0.0, horizontal_limit)
+		var depth := rng.randf_range(-32.0, 4.0)
+		if selected_profile == FLAT_PROFILE:
+			depth = rng.randf_range(-8.0, 3.0)
+		var offset := Vector3(cos(angle) * distance, depth, sin(angle) * distance)
+		var radius := rng.randf_range(random_radius_min, random_radius_max)
+		operations.append(_edit_operation(&"carve", center + offset, radius, 1, 1.0))
+	return operations
 
 
 func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> bool:
@@ -4613,12 +5283,89 @@ func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> 
 	return false
 
 
-func _streaming_fly_sky_gap_detected(sky: Dictionary) -> bool:
+func _wait_for_streaming_fly_start_coverage_ready(context: String, frame_limit: int) -> bool:
+	var last_summary := {}
+	for _frame in range(frame_limit):
+		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		last_summary = summary
+		if _is_streaming_fly_start_coverage_ready(summary):
+			return true
+		await get_tree().process_frame
+	_fail("streaming fly start coverage wait failed %s: %s" % [context, str(last_summary)])
+	return false
+
+
+func _is_streaming_fly_start_coverage_ready(summary: Dictionary) -> bool:
+	if not bool(summary.get("backend_running", summary.get("world_running", true))):
+		return false
+	if int(summary.get("queued_render", 0)) != 0:
+		return false
+	if int(summary.get("application_sink_failures", 0)) != 0:
+		return false
+	if int(summary.get("application_queue_rejections", 0)) != 0:
+		return false
+	return not _streaming_fly_coverage_gap_detected(summary)
+
+
+func _streaming_fly_sky_gap_detected(sky: Dictionary, post_edit: bool = false) -> bool:
+	if post_edit:
+		# In post-edit fly captures the camera intentionally sweeps near the
+		# horizon. Terrain-band sky there can be ordinary horizon sky, so treat
+		# only center/lower-center leaks as visual gap evidence and leave broad
+		# band sky for diagnostics.
+		return int(sky.get("lower_center_sky_pixels", 0)) > 256 or \
+			int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
+			int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4
 	return int(sky.get("crosshair_sky_pixels", 0)) > 0 or \
 		int(sky.get("lower_center_sky_pixels", 0)) > 16 or \
 		int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
 		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4 or \
 		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8
+
+
+func _streaming_fly_coverage_gap_detected(summary: Dictionary) -> bool:
+	var staged_swap_coverage_retained := _streaming_fly_staged_swap_coverage_retained(summary)
+	var expected_count := int(summary.get("expected_resource_count", 0))
+	if expected_count > 0:
+		if int(summary.get("render_resources", 0)) < expected_count:
+			return true
+		if int(summary.get("visual_ready_chunk_records", 0)) < expected_count and \
+				not staged_swap_coverage_retained:
+			return true
+	if int(summary.get("application_sink_failures", 0)) != 0:
+		return true
+	if int(summary.get("application_queue_rejections", 0)) != 0:
+		return true
+	if int(summary.get("pending_retirement_records_missing", 0)) != 0:
+		return true
+	if int(summary.get("render_fading_resources", 0)) != 0:
+		return true
+	if _streaming_fly_non_retiring_visual_deficit(summary) != 0 and \
+			not staged_swap_coverage_retained:
+		return true
+	return false
+
+
+func _streaming_fly_staged_swap_coverage_retained(summary: Dictionary) -> bool:
+	if int(summary.get("pending_retirement_records_missing", 0)) != 0:
+		return false
+	if int(summary.get("pending_retirement_records", 0)) <= 0:
+		return false
+	return int(summary.get("pending_chunk_retirements", 0)) > 0 or \
+		int(summary.get("pending_chunk_replacements", 0)) > 0 or \
+		int(summary.get("staged_render_resources", 0)) > 0
+
+
+func _streaming_fly_non_retiring_visual_deficit(summary: Dictionary) -> int:
+	var non_retiring := int(summary.get(
+		"non_retiring_chunk_records",
+		summary.get("active_chunk_records", 0)
+	))
+	var non_retiring_visual := int(summary.get(
+		"non_retiring_visual_ready_chunk_records",
+		summary.get("visual_ready_chunk_records", 0)
+	))
+	return maxi(0, non_retiring - non_retiring_visual)
 
 
 func _write_streaming_fly_summary_json(summary: Dictionary) -> void:
@@ -4651,6 +5398,30 @@ func _streaming_fly_gap_path() -> Array:
 	]
 
 
+func _post_edit_streaming_fly_gap_path() -> Array:
+	var center := _edit_lod_movement_gate_center()
+	if selected_profile == FLAT_PROFILE:
+		return [
+			{"label": "hole_exit_start", "position": center + Vector3(-10.0, 13.0, -22.0), "target": center + Vector3(4.0, -4.0, 4.0)},
+			{"label": "emerge_fast", "position": center + Vector3(68.0, 18.0, -54.0), "target": center + Vector3(112.0, -2.0, -78.0), "frames": 12, "gap_sensitive_start_frame": 5},
+			{"label": "surface_sweep_a", "position": center + Vector3(210.0, 22.0, -126.0), "target": center + Vector3(280.0, -3.0, -150.0), "frames": 24, "gap_sensitive_start_frame": 8},
+			{"label": "surface_sweep_b", "position": center + Vector3(326.0, 21.0, 72.0), "target": center + Vector3(380.0, -2.0, 96.0), "frames": 24},
+			{"label": "far_surface_sweep_a", "position": center + Vector3(470.0, 22.0, -240.0), "target": center + Vector3(540.0, -3.0, -270.0), "frames": 30, "gap_sensitive_start_frame": 4},
+			{"label": "far_surface_sweep_b", "position": center + Vector3(-360.0, 24.0, 300.0), "target": center + Vector3(-430.0, -3.0, 330.0), "frames": 36, "gap_sensitive_start_frame": 4},
+			{"label": "return_to_hole", "position": center + Vector3(-28.0, 16.0, -30.0), "target": center + Vector3(0.0, -6.0, 0.0), "frames": 20, "gap_sensitive": false},
+		]
+	return [
+		{"label": "hole_exit_start", "position": center + Vector3(-12.0, 18.0, -30.0), "target": center + Vector3(6.0, -12.0, 6.0)},
+		{"label": "emerge_fast", "position": center + Vector3(82.0, 24.0, -66.0), "target": center + Vector3(142.0, -4.0, -94.0), "frames": 12, "gap_sensitive_start_frame": 5},
+		{"label": "surface_sweep_a", "position": center + Vector3(260.0, 28.0, -145.0), "target": center + Vector3(340.0, 0.0, -170.0), "frames": 24, "gap_sensitive_start_frame": 8},
+		{"label": "surface_sweep_b", "position": center + Vector3(350.0, 24.0, 92.0), "target": center + Vector3(410.0, -6.0, 118.0), "frames": 24},
+		{"label": "far_surface_sweep_a", "position": center + Vector3(520.0, 30.0, -260.0), "target": center + Vector3(600.0, -10.0, -292.0), "frames": 30, "gap_sensitive_start_frame": 4},
+		{"label": "far_surface_sweep_b", "position": center + Vector3(-420.0, 32.0, 330.0), "target": center + Vector3(-500.0, -10.0, 360.0), "frames": 36, "gap_sensitive_start_frame": 4},
+		{"label": "surface_return", "position": center + Vector3(56.0, 22.0, 212.0), "target": center + Vector3(-4.0, -12.0, 8.0), "frames": 20},
+		{"label": "hole_revisit", "position": center + Vector3(-34.0, 18.0, -28.0), "target": center + Vector3(0.0, -16.0, 0.0), "frames": 20, "gap_sensitive": false},
+	]
+
+
 func _edit_lod_movement_path() -> Array:
 	var center := _edit_lod_movement_gate_center()
 	var target := center + Vector3(0.0, -4.0, 0.0)
@@ -4665,11 +5436,15 @@ func _edit_lod_movement_path() -> Array:
 func _wait_for_lod_movement_visual_ready(
 	backend: Node,
 	context: String,
-	strict_settle_notes: Array
+	strict_settle_notes: Array,
+	probe_center: Vector3 = Vector3(INF, INF, INF),
+	probe_radius: float = -1.0
 ) -> bool:
 	var last_summary := {}
 	var last_probe := {}
 	var frame_limit := maxi(120, human_visual_capture_wait_frames)
+	var center := _edit_lod_movement_gate_center() if is_inf(probe_center.x) else probe_center
+	var radius := _edit_lod_movement_probe_radius() if probe_radius < 0.0 else probe_radius
 	for frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
@@ -4680,8 +5455,8 @@ func _wait_for_lod_movement_visual_ready(
 			var probe := WatertightnessProbe.collect(
 				backend,
 				"edit_lod_movement_gate_visual_ready",
-				_edit_lod_movement_gate_center(),
-				_edit_lod_movement_probe_radius()
+				center,
+				radius
 			)
 			last_probe = {
 				"ok": bool(probe.get("ok", false)),
@@ -4753,6 +5528,8 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 	if int(summary.get("page_mesh_failures", 0)) != 0:
 		return false
 	if int(summary.get("pending_chunk_retirements", 0)) != 0:
+		return false
+	if int(summary.get("pending_chunk_replacements", 0)) != 0:
 		return false
 	if int(summary.get("render_fading_resources", 0)) != 0:
 		return false
@@ -4983,11 +5760,14 @@ func _is_open_gap_free_probe(probe: Dictionary) -> bool:
 		return true
 	var boundary_edges := int(probe.get("boundary_edges", -1))
 	var chunk_face_boundary_edges := int(probe.get("chunk_face_boundary_edges", 0))
+	# This predicate is intentionally limited to open-gap evidence. Orientation
+	# conflicts are still captured in probe diagnostics, but they are winding/
+	# normal-order problems, not proof that terrain is missing or that sky can
+	# leak through the mesh.
 	return int(probe.get("interior_boundary_edges", boundary_edges)) == 0 and \
 		int(probe.get("unknown_boundary_edges", 0)) == 0 and \
 		boundary_edges == chunk_face_boundary_edges and \
 		int(probe.get("nonmanifold_edges", -1)) == 0 and \
-		int(probe.get("orientation_conflict_edges", -1)) == 0 and \
 		int(probe.get("zero_area_unknown_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_interior_triangles", 0)) == 0 and \
 		int(probe.get("repeated_point_key_unknown_triangles", 0)) == 0 and \
@@ -5347,6 +6127,15 @@ func _lod_movement_summary() -> Dictionary:
 	return last_lod_movement_summary
 
 
+func _multisite_lod_summary() -> Dictionary:
+	if last_multisite_lod_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_multisite_lod_summary
+
+
 func _edit_during_load_summary() -> Dictionary:
 	if last_edit_during_load_summary.is_empty():
 		return {
@@ -5524,6 +6313,12 @@ func _edit_lod_movement_gate_center() -> Vector3:
 	return _watertightness_edit_center()
 
 
+func _edit_multisite_lod_second_site_hint() -> Vector3:
+	if selected_profile == FLAT_PROFILE:
+		return Vector3(1120.0, 12.0, 944.0)
+	return Vector3(860.0, 72.0, 1220.0)
+
+
 func _edit_during_load_oracle_center() -> Vector3:
 	if selected_profile == FLAT_PROFILE:
 		return Vector3(1040.0, 12.0, 1040.0)
@@ -5597,6 +6392,8 @@ func _tunnel_probe_radius() -> float:
 func _edit_reload_test_center() -> Vector3:
 	if human_visual_capture_mode == "edit_lod_movement_gate":
 		return _edit_lod_movement_gate_center()
+	if human_visual_capture_mode == "edit_multisite_lod_gate":
+		return _edit_lod_movement_gate_center()
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		return _edit_during_load_oracle_center()
 	if human_visual_capture_mode == "edit_manifold_stress_gate":
@@ -5613,6 +6410,8 @@ func _edit_reload_test_center() -> Vector3:
 
 func _watertightness_probe_center() -> Vector3:
 	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return _edit_lod_movement_gate_center()
+	if human_visual_capture_mode == "edit_multisite_lod_gate":
 		return _edit_lod_movement_gate_center()
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		return _edit_during_load_oracle_center()
@@ -5638,6 +6437,8 @@ func _watertightness_probe_radius() -> float:
 	if human_visual_capture_mode.begins_with("small_edit_"):
 		return 18.0
 	if human_visual_capture_mode == "edit_lod_movement_gate":
+		return _edit_lod_movement_probe_radius()
+	if human_visual_capture_mode == "edit_multisite_lod_gate":
 		return _edit_lod_movement_probe_radius()
 	if human_visual_capture_mode == "edit_during_load_oracle":
 		return 14.0 if selected_profile == FLAT_PROFILE else 56.0
@@ -5730,11 +6531,13 @@ func _apply_capture_camera_mode() -> void:
 			capture_position = capture_target + Vector3(-14.0, 21.0, -58.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_during_load_oracle", "edit_manifold_stress_gate", "edit_tunnel_gate", "edit_tunnel_crawl_gate", "edit_tunnel_transient_crawl_gate":
+		"watertight_many_small_near", "watertight_rapid_small_near", "watertight_rapid_small_reload_near", "edit_persistence_reload_oracle", "edit_stability_gate", "edit_lod_movement_gate", "edit_multisite_lod_gate", "edit_during_load_oracle", "edit_manifold_stress_gate", "edit_tunnel_gate", "edit_tunnel_crawl_gate", "edit_tunnel_transient_crawl_gate":
 			var target_center := _watertightness_edit_center()
 			if human_visual_capture_mode == "edit_stability_gate":
 				target_center = _edit_stability_gate_center()
 			elif human_visual_capture_mode == "edit_lod_movement_gate":
+				target_center = _edit_lod_movement_gate_center()
+			elif human_visual_capture_mode == "edit_multisite_lod_gate":
 				target_center = _edit_lod_movement_gate_center()
 			elif human_visual_capture_mode == "edit_during_load_oracle":
 				target_center = _edit_during_load_oracle_center()

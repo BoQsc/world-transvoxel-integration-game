@@ -32,6 +32,7 @@ signal edit_failed(error: String)
 @export var material_profile: Resource
 @export var auto_report_dependency_status: bool = false
 @export_range(0, 65536, 1) var runtime_active_chunk_capacity: int = 0
+@export_range(0, 1024, 1) var runtime_viewer_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_demand_capacity_per_viewer: int = 0
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
@@ -40,6 +41,7 @@ signal edit_failed(error: String)
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
 @export var runtime_shader_fade_parameter_enabled: bool = false
+@export var runtime_global_coarse_lod_coverage: bool = false
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 

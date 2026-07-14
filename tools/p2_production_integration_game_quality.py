@@ -47,11 +47,13 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_during_load_oracle",
     "edit_manifold_stress_gate",
     "edit_lod_movement_gate",
+    "edit_multisite_lod_gate",
     "edit_tunnel_gate",
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
     "edit_tunnel_upward_lod_gate",
     "streaming_fly_gap_gate",
+    "post_edit_streaming_fly_gap_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -201,7 +203,7 @@ def validate_visual_summary(
         raise RuntimeError(f"visual capture was not written: {capture_path}")
     checks = {
         "profile": expected_profile,
-        "viewer_radius_chunks": 8,
+        "viewer_radius_chunks": 10,
         "viewer_maximum_lod": 3,
         "runtime_lod_refinement_radius_chunks": 1,
         "runtime_render_apply_budget": 8,
@@ -279,7 +281,7 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe found zero-edge triangles: {watertightness!r}")
         if int(watertightness.get("triangles_in_region", 0)) <= 0:
             raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
-    if summary.get("mode") == "streaming_fly_gap_gate":
+    if summary.get("mode") in {"streaming_fly_gap_gate", "post_edit_streaming_fly_gap_gate"}:
         validate_streaming_fly_summary(summary)
 
 
@@ -322,6 +324,27 @@ def run_lod_movement_gate(
         extra_args=("--p2-lod-movement-gap-only-probe",),
     )
     validate_lod_movement_summary(summary, profile)
+    return capture
+
+
+def run_multisite_lod_gate(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    output_dir: pathlib.Path,
+    wait_frames: int,
+) -> pathlib.Path:
+    capture, summary = run_visual_capture_summary(
+        godot,
+        project,
+        "edit_multisite_lod_gate",
+        output_dir,
+        wait_frames,
+        profile=profile,
+        capture_stem=f"terrain_1_0_{profile}_edit_multisite_lod_gate",
+        extra_args=("--p2-lod-movement-gap-only-probe",),
+    )
+    validate_multisite_lod_summary(summary, profile)
     return capture
 
 
@@ -1146,6 +1169,79 @@ def validate_lod_movement_summary(
     )
 
 
+def validate_multisite_lod_summary(
+    summary: dict[str, object],
+    profile: str,
+) -> None:
+    if summary.get("profile") != profile:
+        raise RuntimeError(f"multi-site LOD profile mismatch: {summary!r}")
+    if summary.get("mode") != "edit_multisite_lod_gate":
+        raise RuntimeError(f"multi-site LOD mode mismatch: {summary!r}")
+    multi = summary.get("multisite_lod")
+    if not isinstance(multi, dict):
+        raise RuntimeError(f"multi-site LOD summary missing: {summary!r}")
+    if multi.get("enabled") is not True or multi.get("ok") is not True:
+        raise RuntimeError(f"multi-site LOD gate failed: {multi!r}")
+    if int(multi.get("site_count", 0)) != 2:
+        raise RuntimeError(f"multi-site LOD did not exercise two sites: {multi!r}")
+    if int(multi.get("operation_count", 0)) < 96:
+        raise RuntimeError(f"multi-site LOD edited too little: {multi!r}")
+    if int(multi.get("density_mismatches", -1)) != 0:
+        raise RuntimeError(f"multi-site LOD density mismatch: {multi!r}")
+    if int(multi.get("material_mismatches", -1)) != 0:
+        raise RuntimeError(f"multi-site LOD material mismatch: {multi!r}")
+    if float(multi.get("max_abs_density_delta", -1.0)) != 0.0:
+        raise RuntimeError(f"multi-site LOD density delta: {multi!r}")
+    if int(multi.get("retention_fallbacks", -1)) != 0:
+        raise RuntimeError(f"multi-site LOD retention fallback occurred: {multi!r}")
+    expected_sites = {"site_a", "site_b"}
+    observed_sites: set[str] = set()
+    transitions = multi.get("transition_summaries", [])
+    if not isinstance(transitions, list) or len(transitions) < 6:
+        raise RuntimeError(f"multi-site LOD transition coverage too small: {multi!r}")
+    for transition in transitions:
+        if not isinstance(transition, dict):
+            raise RuntimeError(f"multi-site LOD transition malformed: {multi!r}")
+        if transition.get("ok") is not True:
+            raise RuntimeError(f"multi-site LOD transition failed: {transition!r}")
+        observed_sites.add(str(transition.get("site", "")))
+        boundary_edges = int(transition.get("settled_boundary_edges", -1))
+        chunk_face_boundary_edges = int(transition.get("settled_chunk_face_boundary_edges", 0))
+        if int(transition.get("settled_interior_boundary_edges", boundary_edges)) != 0:
+            raise RuntimeError(f"multi-site LOD settled crack detected: {transition!r}")
+        if int(transition.get("settled_unknown_boundary_edges", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD settled unknown boundary detected: {transition!r}")
+        if boundary_edges != chunk_face_boundary_edges:
+            raise RuntimeError(f"multi-site LOD unexpected boundary detected: {transition!r}")
+        if int(transition.get("settled_nonmanifold_edges", -1)) != 0:
+            raise RuntimeError(f"multi-site LOD nonmanifold edges detected: {transition!r}")
+        if int(transition.get("settled_orientation_conflict_edges", -1)) != 0:
+            raise RuntimeError(f"multi-site LOD orientation conflicts detected: {transition!r}")
+        if int(transition.get("settled_zero_area_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD interior zero-area triangles detected: {transition!r}")
+        if int(transition.get("settled_zero_area_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD unknown zero-area triangles detected: {transition!r}")
+        if int(transition.get("settled_repeated_point_key_interior_triangles", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD interior repeated-point triangles detected: {transition!r}")
+        if int(transition.get("settled_repeated_point_key_unknown_triangles", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD unknown repeated-point triangles detected: {transition!r}")
+        if int(transition.get("settled_zero_edge_triangles", 0)) != 0:
+            raise RuntimeError(f"multi-site LOD zero-edge triangles detected: {transition!r}")
+        if int(transition.get("settled_triangles_in_region", 0)) <= 0:
+            raise RuntimeError(f"multi-site LOD sampled no triangles: {transition!r}")
+        if int(transition.get("transient_probe_failure_count", -1)) != 0:
+            raise RuntimeError(f"multi-site LOD transient probe failure: {transition!r}")
+    if observed_sites != expected_sites:
+        raise RuntimeError(
+            f"multi-site LOD sites expected {sorted(expected_sites)}, "
+            f"got {sorted(observed_sites)}: {multi!r}"
+        )
+    print(
+        "WT_MULTISITE_LOD_GATE_PROFILE_PASS profile=%s operations=%d transitions=%d"
+        % (profile, int(multi.get("operation_count", 0)), len(transitions))
+    )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--godot", help="Path to a Godot 4 executable.")
@@ -1208,6 +1304,28 @@ def main(argv: list[str]) -> int:
         "--lod-movement-output-dir",
         default=None,
         help="Directory for LOD movement gate PNG captures.",
+    )
+    parser.add_argument(
+        "--multisite-lod-gate",
+        action="store_true",
+        help=(
+            "Exercise edits at two far-apart sites and revisit both under LOD "
+            "movement to catch cross-site edit retention/replacement failures."
+        ),
+    )
+    parser.add_argument(
+        "--multisite-lod-profile",
+        action="append",
+        choices=LOD_MOVEMENT_GATE_PROFILES,
+        help=(
+            "Profile to use for --multisite-lod-gate. May be passed more than once. "
+            "Defaults to compact and flat profiles."
+        ),
+    )
+    parser.add_argument(
+        "--multisite-lod-output-dir",
+        default=None,
+        help="Directory for multi-site LOD gate PNG captures.",
     )
     parser.add_argument(
         "--edit-during-load-gate",
@@ -1419,6 +1537,31 @@ def main(argv: list[str]) -> int:
         ]
         print(
             "WT_PRODUCTION_INTEGRATION_GAME_LOD_MOVEMENT_GATE_PASS captures=%d dir=%s"
+            % (len(captures), output_dir)
+        )
+    if args.multisite_lod_gate:
+        multisite_lod_profiles = (
+            tuple(args.multisite_lod_profile)
+            if args.multisite_lod_profile
+            else LOD_MOVEMENT_GATE_PROFILES
+        )
+        output_dir = (
+            pathlib.Path(args.multisite_lod_output_dir).resolve()
+            if args.multisite_lod_output_dir
+            else default_capture_dir(project, "terrain_1_0_multisite_lod_gate")
+        )
+        captures = [
+            run_multisite_lod_gate(
+                godot,
+                project,
+                profile,
+                output_dir,
+                args.visual_wait_frames,
+            )
+            for profile in multisite_lod_profiles
+        ]
+        print(
+            "WT_PRODUCTION_INTEGRATION_GAME_MULTISITE_LOD_GATE_PASS captures=%d dir=%s"
             % (len(captures), output_dir)
         )
     if args.edit_during_load_gate:

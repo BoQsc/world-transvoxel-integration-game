@@ -9,11 +9,17 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export var human_input_enabled: bool = false
 @export var player_driven_viewer_enabled: bool = true
 @export var player_viewer_update_distance: float = 8.0
+@export var player_viewer_coalesce_while_streaming: bool = true
+@export var player_predictive_viewer_enabled: bool = false
+@export_range(0.0, 1000000.0, 0.01) var player_predictive_viewer_distance: float = 0.0
+@export var player_focus_viewer_enabled: bool = false
+@export_range(0.0, 1000000.0, 0.01) var player_focus_viewer_distance: float = 0.0
 @export var debug_overlay_enabled: bool = false
 @export var startup_requires_cold_idle: bool = true
 @export_range(0, 65536, 1) var startup_minimum_render_resources: int = 0
 @export_range(0, 65536, 1) var startup_minimum_collision_resources: int = 0
 @export_range(0, 65536, 1) var runtime_active_chunk_capacity: int = 0
+@export_range(0, 1024, 1) var runtime_viewer_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_demand_capacity_per_viewer: int = 0
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
@@ -22,9 +28,13 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
 @export var runtime_shader_fade_parameter_enabled: bool = false
+@export var runtime_global_coarse_lod_coverage: bool = false
 @export_range(0, 128, 1) var runtime_streaming_burst_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_streaming_burst_collision_apply_budget: int = 0
 @export_range(0, 600, 1) var runtime_streaming_burst_frames: int = 0
+@export_range(0, 128, 1) var runtime_edit_burst_render_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_edit_burst_collision_apply_budget: int = 0
+@export_range(0, 600, 1) var runtime_edit_burst_frames: int = 0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
@@ -40,8 +50,16 @@ var _reference_scene: Node
 var _player: Node
 var _viewer_revision := 1000
 var _player_viewer_id := 1
+var _player_predictive_viewer_id := 64
+var _player_focus_viewer_id := 65
 var _last_player_viewer_position := Vector3(INF, INF, INF)
+var _last_predictive_viewer_position := Vector3(INF, INF, INF)
+var _last_focus_viewer_position := Vector3(INF, INF, INF)
 var _accepted_player_viewer_updates := 0
+var _accepted_predictive_viewer_updates := 0
+var _accepted_focus_viewer_updates := 0
+var _coalesced_player_viewer_updates := 0
+var _last_player_viewer_coalesce_reason := "none"
 var _last_error := ""
 var _last_edit_summary := {}
 var _last_cold_idle_summary: Dictionary = {}
@@ -133,6 +151,13 @@ func update_player_viewer(force: bool = false) -> bool:
 	var position: Vector3 = _player.global_position
 	if not force and not _should_update_player_viewer(position):
 		return true
+	if not force and player_viewer_coalesce_while_streaming:
+		var coalesce_reason := _player_viewer_streaming_debt_reason()
+		if not coalesce_reason.is_empty():
+			_coalesced_player_viewer_updates += 1
+			_last_player_viewer_coalesce_reason = coalesce_reason
+			return true
+	var previous_position := _last_player_viewer_position
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
@@ -140,8 +165,40 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
+	if not _update_predictive_player_viewer(position, previous_position, force):
+		return false
+	if not _update_focus_player_viewer(force):
+		return false
 	_begin_streaming_burst()
 	return true
+
+
+func _player_viewer_streaming_debt_reason() -> String:
+	var terrain_world := get_terrain_world()
+	if terrain_world == null:
+		return ""
+	var metrics: Dictionary = terrain_world.call("get_runtime_metrics")
+	if int(metrics.get("pending_chunk_retirements", 0)) > 0:
+		return "pending_chunk_retirements"
+	if int(metrics.get("pending_chunk_replacements", 0)) > 0:
+		return "pending_chunk_replacements"
+	if int(metrics.get("staged_render_resources", 0)) > 0:
+		return "staged_render_resources"
+	if int(metrics.get("queued_render", 0)) > 0:
+		return "queued_render"
+	if int(metrics.get("scheduler_queued_completions", 0)) > 0:
+		return "scheduler_queued_completions"
+	if int(metrics.get("scheduler_queued_jobs", 0)) > 0:
+		return "scheduler_queued_jobs"
+	if int(metrics.get("scheduler_sampling_records", 0)) > 0:
+		return "scheduler_sampling_records"
+	if int(metrics.get("scheduler_meshing_records", 0)) > 0:
+		return "scheduler_meshing_records"
+	var non_retiring_records := int(metrics.get("non_retiring_chunk_records", 0))
+	var non_retiring_visual_ready := int(metrics.get("non_retiring_visual_ready_chunk_records", 0))
+	if non_retiring_visual_ready < non_retiring_records:
+		return "visual_ready_deficit"
+	return ""
 
 
 func submit_sphere_edit(
@@ -310,19 +367,33 @@ func get_game_world_summary() -> Dictionary:
 		"player_human_input_enabled": _player != null and bool(_player.get("human_input_enabled")),
 		"player_driven_viewer_enabled": player_driven_viewer_enabled,
 		"player_viewer_update_distance": player_viewer_update_distance,
+		"player_viewer_coalesce_while_streaming": player_viewer_coalesce_while_streaming,
 		"player_viewer_updates": _accepted_player_viewer_updates,
+		"player_viewer_coalesced_updates": _coalesced_player_viewer_updates,
+		"player_viewer_last_coalesce_reason": _last_player_viewer_coalesce_reason,
+		"player_predictive_viewer_enabled": player_predictive_viewer_enabled,
+		"player_predictive_viewer_distance": player_predictive_viewer_distance,
+		"player_predictive_viewer_updates": _accepted_predictive_viewer_updates,
+		"player_focus_viewer_enabled": player_focus_viewer_enabled,
+		"player_focus_viewer_distance": player_focus_viewer_distance,
+		"player_focus_viewer_updates": _accepted_focus_viewer_updates,
 		"viewer_positions": _viewer_positions.size(),
 		"viewer_radius_chunks": _viewer_radius_chunks,
 		"viewer_maximum_lod": _viewer_maximum_lod,
+		"runtime_viewer_capacity": runtime_viewer_capacity,
 		"runtime_demand_capacity_per_viewer": runtime_demand_capacity_per_viewer,
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
 		"runtime_render_transition_frames": runtime_render_transition_frames,
 		"runtime_shader_fade_parameter_enabled": runtime_shader_fade_parameter_enabled,
+		"runtime_global_coarse_lod_coverage": runtime_global_coarse_lod_coverage,
 		"runtime_streaming_burst_render_apply_budget": runtime_streaming_burst_render_apply_budget,
 		"runtime_streaming_burst_collision_apply_budget": runtime_streaming_burst_collision_apply_budget,
 		"runtime_streaming_burst_frames": runtime_streaming_burst_frames,
+		"runtime_edit_burst_render_apply_budget": runtime_edit_burst_render_apply_budget,
+		"runtime_edit_burst_collision_apply_budget": runtime_edit_burst_collision_apply_budget,
+		"runtime_edit_burst_frames": runtime_edit_burst_frames,
 		"streaming_burst_frames_remaining": _streaming_burst_frames_remaining,
 		"runtime_collision_activation_distance": runtime_collision_activation_distance,
 		"runtime_collision_deactivation_distance": runtime_collision_deactivation_distance,
@@ -330,11 +401,26 @@ func get_game_world_summary() -> Dictionary:
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
 		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
+		"non_retiring_chunk_records": int(metrics.get("non_retiring_chunk_records", 0)),
+		"non_retiring_visual_ready_chunk_records": int(metrics.get("non_retiring_visual_ready_chunk_records", 0)),
+		"non_retiring_fully_ready_chunk_records": int(metrics.get("non_retiring_fully_ready_chunk_records", 0)),
+		"pending_retirement_records": int(metrics.get("pending_retirement_records", 0)),
+		"pending_retirement_records_missing": int(metrics.get("pending_retirement_records_missing", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
 		"collision_resources": int(metrics.get("collision_resources", 0)),
 		"queued_render": int(metrics.get("queued_render", 0)),
 		"queued_collision": int(metrics.get("queued_collision", 0)),
+		"application_submitted_render": int(metrics.get("application_submitted_render", 0)),
+		"application_applied_render": int(metrics.get("application_applied_render", 0)),
+		"application_stale_render": int(metrics.get("application_stale_render", 0)),
+		"application_submitted_collision": int(metrics.get("application_submitted_collision", 0)),
+		"application_applied_collision": int(metrics.get("application_applied_collision", 0)),
+		"application_stale_collision": int(metrics.get("application_stale_collision", 0)),
+		"application_unrequired_collision": int(metrics.get("application_unrequired_collision", 0)),
+		"application_sink_failures": int(metrics.get("application_sink_failures", 0)),
+		"application_queue_rejections": int(metrics.get("application_queue_rejections", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
+		"pending_chunk_replacements": int(metrics.get("pending_chunk_replacements", 0)),
 		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
 		"staged_render_resources": int(metrics.get("staged_render_resources", 0)),
 		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
@@ -372,6 +458,7 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"queued_render": int(metrics.get("queued_render", 0)),
 		"queued_collision": int(metrics.get("queued_collision", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
+		"pending_chunk_replacements": int(metrics.get("pending_chunk_replacements", 0)),
 		"render_fading_resources": int(metrics.get("render_fading_resources", 0)),
 		"staged_render_resources": int(metrics.get("staged_render_resources", 0)),
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
@@ -418,6 +505,8 @@ func _is_streaming_settled(
 		return false
 	if int(summary.get("pending_chunk_retirements", 0)) != 0:
 		return false
+	if int(summary.get("pending_chunk_replacements", 0)) != 0:
+		return false
 	if int(summary.get("render_fading_resources", 0)) != 0:
 		return false
 	if int(summary.get("staged_render_resources", 0)) != 0:
@@ -448,6 +537,7 @@ func _apply_profiles() -> void:
 	terrain_world.generation_profile = _generation_profile
 	terrain_world.storage_profile = _storage_profile
 	terrain_world.runtime_active_chunk_capacity = runtime_active_chunk_capacity
+	terrain_world.runtime_viewer_capacity = runtime_viewer_capacity
 	terrain_world.runtime_demand_capacity_per_viewer = runtime_demand_capacity_per_viewer
 	terrain_world.runtime_render_entry_capacity = runtime_render_entry_capacity
 	terrain_world.runtime_collision_entry_capacity = runtime_collision_entry_capacity
@@ -456,6 +546,7 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
 	terrain_world.runtime_render_transition_frames = runtime_render_transition_frames
 	terrain_world.runtime_shader_fade_parameter_enabled = runtime_shader_fade_parameter_enabled
+	terrain_world.runtime_global_coarse_lod_coverage = runtime_global_coarse_lod_coverage
 	terrain_world.runtime_collision_activation_distance = runtime_collision_activation_distance
 	terrain_world.runtime_collision_deactivation_distance = runtime_collision_deactivation_distance
 
@@ -473,6 +564,23 @@ func _begin_streaming_burst() -> void:
 	):
 		return
 	_streaming_burst_frames_remaining = runtime_streaming_burst_frames
+
+
+func _begin_edit_burst() -> void:
+	var frames := runtime_edit_burst_frames
+	var render_budget := runtime_edit_burst_render_apply_budget
+	var collision_budget := runtime_edit_burst_collision_apply_budget
+	if frames <= 0:
+		_begin_streaming_burst()
+		return
+	if render_budget <= runtime_render_apply_budget and collision_budget <= runtime_collision_apply_budget:
+		return
+	if not _apply_live_apply_budgets(
+		maxi(runtime_render_apply_budget, render_budget),
+		maxi(runtime_collision_apply_budget, collision_budget)
+	):
+		return
+	_streaming_burst_frames_remaining = maxi(_streaming_burst_frames_remaining, frames)
 
 
 func _apply_live_apply_budgets(render_budget: int, collision_budget: int) -> bool:
@@ -509,6 +617,7 @@ func _on_terrain_edit_committed(world_revision: int) -> void:
 	_edit_commit_count += 1
 	_last_edit_committed_revision = world_revision
 	_last_edit_failure_error = "ok"
+	_begin_edit_burst()
 
 
 func _on_terrain_edit_failed(error: String) -> void:
@@ -547,6 +656,73 @@ func _should_update_player_viewer(position: Vector3) -> bool:
 	var delta := Vector2(
 		position.x - _last_player_viewer_position.x,
 		position.z - _last_player_viewer_position.z
+	)
+	return delta.length() >= player_viewer_update_distance
+
+
+func _update_predictive_player_viewer(
+	position: Vector3,
+	previous_position: Vector3,
+	force: bool
+) -> bool:
+	if not player_predictive_viewer_enabled or player_predictive_viewer_distance <= 0.0:
+		return true
+	var movement := Vector3.ZERO
+	if not is_inf(previous_position.x):
+		movement = position - previous_position
+	var direction := Vector3.ZERO
+	if movement.length_squared() > 0.0001:
+		direction = movement.normalized()
+	var predicted_position := position
+	if direction.length_squared() > 0.0:
+		predicted_position += direction * player_predictive_viewer_distance
+	if not force and not _should_update_predictive_player_viewer(predicted_position):
+		return true
+	_viewer_revision += 1
+	if not bool(_reference_scene.call(
+		"update_reference_viewer", _player_predictive_viewer_id, _viewer_revision, predicted_position, _viewer_radius_chunks, _viewer_maximum_lod
+	)):
+		return _fail("predictive player viewer update failed: %s" % _terrain_world_error())
+	_last_predictive_viewer_position = predicted_position
+	_accepted_predictive_viewer_updates += 1
+	return true
+
+
+func _should_update_predictive_player_viewer(position: Vector3) -> bool:
+	if is_inf(_last_predictive_viewer_position.x):
+		return true
+	var delta := Vector2(
+		position.x - _last_predictive_viewer_position.x,
+		position.z - _last_predictive_viewer_position.z
+	)
+	return delta.length() >= player_viewer_update_distance
+
+
+func _update_focus_player_viewer(force: bool) -> bool:
+	if not player_focus_viewer_enabled or player_focus_viewer_distance <= 0.0:
+		return true
+	var camera := _player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return true
+	var focus_position := camera.global_position + (-camera.global_transform.basis.z * player_focus_viewer_distance)
+	if not force and not _should_update_focus_player_viewer(focus_position):
+		return true
+	_viewer_revision += 1
+	if not bool(_reference_scene.call(
+		"update_reference_viewer", _player_focus_viewer_id, _viewer_revision, focus_position, _viewer_radius_chunks, _viewer_maximum_lod
+	)):
+		return _fail("focus player viewer update failed: %s" % _terrain_world_error())
+	_last_focus_viewer_position = focus_position
+	_accepted_focus_viewer_updates += 1
+	return true
+
+
+func _should_update_focus_player_viewer(position: Vector3) -> bool:
+	if is_inf(_last_focus_viewer_position.x):
+		return true
+	var delta := Vector2(
+		position.x - _last_focus_viewer_position.x,
+		position.z - _last_focus_viewer_position.z
 	)
 	return delta.length() >= player_viewer_update_distance
 
