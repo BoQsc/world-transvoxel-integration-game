@@ -23,6 +23,8 @@ var game_world: Node
 var player: CharacterBody3D
 var telemetry_label: Label
 var launch_command_label: Label
+var test_context_label: Label
+var controls_hint_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
 var loading_overlay: CanvasLayer
@@ -30,6 +32,8 @@ var loading_label: Label
 var material_applicator: Node
 var selected_profile: StringName = DEFAULT_HUMAN_PROFILE
 var human_launch_command_line := ""
+var human_test_context_line := ""
+var human_controls_hint_line := ""
 var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
@@ -97,6 +101,8 @@ func _ready() -> void:
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
 	human_launch_command_line = _human_launch_command_text(args)
+	human_test_context_line = _human_test_context_text()
+	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights"
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
 	else:
@@ -421,6 +427,8 @@ func _build_hud() -> void:
 	crosshair.visible = autonomous
 	canvas.add_child(crosshair)
 	if not autonomous:
+		_build_human_test_context_label(canvas)
+		_build_human_controls_hint_label(canvas)
 		_build_human_launch_command_label(canvas)
 	_build_loading_overlay()
 	if not autonomous:
@@ -450,12 +458,48 @@ func _build_human_launch_command_label(canvas: CanvasLayer) -> void:
 	launch_command_label.clip_text = true
 	launch_command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	launch_command_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	launch_command_label.add_theme_font_size_override("font_size", 12)
-	launch_command_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.72))
-	launch_command_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
-	launch_command_label.add_theme_constant_override("shadow_offset_x", 1)
-	launch_command_label.add_theme_constant_override("shadow_offset_y", 1)
+	_style_human_static_label(launch_command_label)
 	canvas.add_child(launch_command_label)
+
+
+func _build_human_test_context_label(canvas: CanvasLayer) -> void:
+	test_context_label = Label.new()
+	test_context_label.name = "TestContextLabel"
+	test_context_label.text = human_test_context_line
+	test_context_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	test_context_label.offset_left = 8.0
+	test_context_label.offset_top = 8.0
+	test_context_label.offset_right = 900.0
+	test_context_label.offset_bottom = 30.0
+	test_context_label.clip_text = true
+	test_context_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	test_context_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_style_human_static_label(test_context_label)
+	canvas.add_child(test_context_label)
+
+
+func _build_human_controls_hint_label(canvas: CanvasLayer) -> void:
+	controls_hint_label = Label.new()
+	controls_hint_label.name = "ControlsHintLabel"
+	controls_hint_label.text = human_controls_hint_line
+	controls_hint_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	controls_hint_label.offset_left = -980.0
+	controls_hint_label.offset_top = 8.0
+	controls_hint_label.offset_right = -8.0
+	controls_hint_label.offset_bottom = 30.0
+	controls_hint_label.clip_text = true
+	controls_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	controls_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_style_human_static_label(controls_hint_label)
+	canvas.add_child(controls_hint_label)
+
+
+func _style_human_static_label(label: Label) -> void:
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.72))
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
 
 
 func _build_loading_overlay() -> void:
@@ -2296,6 +2340,22 @@ func _human_launch_command_text(user_args: Array) -> String:
 	if not displayed_args.is_empty():
 		command = "%s -- %s" % [command, " ".join(displayed_args)]
 	return "launch: %s" % command
+
+
+func _human_test_context_text() -> String:
+	var test_name := "human_playtest"
+	if not human_visual_capture_path.is_empty():
+		test_name = "visual_capture:%s" % human_visual_capture_mode
+	elif not human_playtest_preset.is_empty():
+		test_name = "human_playtest:%s" % human_playtest_preset
+	var storage_mode := "preserve"
+	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty():
+		storage_mode = "fresh"
+	return "test: %s | profile: %s | storage: %s" % [
+		test_name,
+		str(selected_profile),
+		storage_mode,
+	]
 
 
 func _quote_command_arg(value: String) -> String:
