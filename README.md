@@ -10,6 +10,10 @@ tunnel/upward-LOD edit persistence coverage, and compact-profile streaming/fly
 visual-stability coverage. Human acceptance is still the final confirmation
 step; visible terrain artifacts during play must be marked with `~`, then `M`.
 
+The terrain standard is explicitly volumetric, not heightmap-only. The
+authoritative density/material boundary is documented in
+[STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md](STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md).
+
 ## Critical edited-terrain LOD boundary
 
 This integration game inherits the core World Transvoxel edited-terrain LOD
@@ -179,6 +183,9 @@ Use `WtTerrainGenerationProfile` and `WtTerrainStorageProfile` resources when
 building your own game setup.
 
 ## Terrain editing
+
+Terrain edits operate on the volumetric density/material contract documented in
+[STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md](STANDARD_VOLUMETRIC_TERRAIN_CONTRACT.md).
 
 The current standard edit brush is documented in
 [STANDARD_EDIT_BRUSH_CONTRACT.md](STANDARD_EDIT_BRUSH_CONTRACT.md). The

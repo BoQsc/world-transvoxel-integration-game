@@ -226,6 +226,8 @@ func _run_autonomous_proof() -> void:
 	if terrain_world == null:
 		_fail("terrain world missing")
 		return
+	if not _verify_standard_volume_contract(terrain_world):
+		return
 	await get_tree().physics_frame
 	var spawn_summary := _playable_spawn_summary()
 	if not _verify_playable_spawn(spawn_summary):
@@ -699,6 +701,57 @@ func _update_telemetry() -> void:
 
 func _verify_scene_contract() -> bool:
 	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 2 and telemetry_label != null and 			player.has_method("submit_edit_input")
+
+
+func _verify_standard_volume_contract(terrain_world: Node) -> bool:
+	if terrain_world == null or not terrain_world.has_method("get_profile_summaries"):
+		_fail("terrain world does not expose profile summaries for volume contract")
+		return false
+	var summaries_value = terrain_world.call("get_profile_summaries")
+	if not (summaries_value is Dictionary):
+		_fail("terrain profile summaries are not a dictionary: %s" % str(summaries_value))
+		return false
+	var summaries: Dictionary = summaries_value
+	var terrain_value = summaries.get("terrain", {})
+	var generation_value = summaries.get("generation", {})
+	if not (terrain_value is Dictionary) or not (generation_value is Dictionary):
+		_fail("terrain/generation summaries missing from volume contract: %s" % str(summaries))
+		return false
+	var terrain: Dictionary = terrain_value
+	var generation: Dictionary = generation_value
+	var horizontal_cells := int(terrain.get("horizontal_cells", 0))
+	var vertical_cells := int(terrain.get("vertical_cells", 0))
+	if horizontal_cells < 2048:
+		_fail("standard terrain horizontal volume is below 2K reference: %s" % str(terrain))
+		return false
+	if vertical_cells < 64:
+		_fail("standard terrain vertical volume is below reference depth: %s" % str(terrain))
+		return false
+	if not bool(terrain.get("plus_y_is_up", false)):
+		_fail("standard terrain volume must use plus-Y-up semantics: %s" % str(terrain))
+		return false
+	if not bool(terrain.get("finite_closed_boundary", false)):
+		_fail("standard reference terrain must expose finite closed boundary semantics: %s" % str(terrain))
+		return false
+	if not bool(generation.get("supports_underground_volume", false)):
+		_fail("standard generation profile lost underground volume support: %s" % str(generation))
+		return false
+	if str(generation.get("underground_model", "")) != "density_volume_vertical_strata_v1":
+		_fail("standard underground model mismatch: %s" % str(generation))
+		return false
+	if str(generation.get("underground_depth_bands", "")).is_empty():
+		_fail("standard underground depth/material bands are missing: %s" % str(generation))
+		return false
+	print(
+		"WT_STANDARD_VOLUME_CONTRACT_PASS profile=%s horizontal_cells=%d vertical_cells=%d source_mode=%s" %
+		[
+			str(selected_profile),
+			horizontal_cells,
+			vertical_cells,
+			str(generation.get("source_mode", "")),
+		]
+	)
+	return true
 
 
 func _verify_standard_edit_metadata(expected_mode: StringName) -> bool:
