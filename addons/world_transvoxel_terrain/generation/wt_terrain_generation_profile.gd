@@ -11,16 +11,20 @@ enum SourceMode {
 const UNDERGROUND_MODEL := "density_volume_vertical_strata_v1"
 const MATERIAL_STRATA_MODEL := "standard_density_depth_material_strata_v1"
 const MATERIAL_PALETTE_VERSION := "world_transvoxel_material_palette_v1"
-const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 7]
-const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 7]
-const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 7, 4]
+const SURFACE_BIOME_MODEL := "deterministic_macro_surface_biomes_v1"
+const UNDERGROUND_PATCH_MODEL := "deterministic_deep_ore_patches_v1"
+const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 5, 7, 8]
+const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 5]
+const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 7, 4, 8]
 const UNDERGROUND_DEPTH_BANDS := "deep>=8:1,mid>=3:7,shallow>=1:4"
 const STANDARD_MATERIAL_MEANINGS := {
 	1: "deep_stone",
-	2: "lowland_surface",
-	3: "dry_surface_soil",
+	2: "grass_surface_biome",
+	3: "gravel_surface_biome",
 	4: "shallow_surface_sand_or_player_fill",
-	7: "mid_depth_rock_or_high_surface_rock",
+	5: "snow_surface_biome",
+	7: "mid_depth_rock",
+	8: "deep_ore_patch",
 }
 
 @export var source_mode: SourceMode = SourceMode.DETERMINISTIC_REFERENCE
@@ -45,6 +49,8 @@ func get_contract_summary() -> Dictionary:
 		"underground_model": UNDERGROUND_MODEL,
 		"material_strata_model": MATERIAL_STRATA_MODEL,
 		"material_palette_version": MATERIAL_PALETTE_VERSION,
+		"surface_biome_model": SURFACE_BIOME_MODEL,
+		"underground_patch_model": UNDERGROUND_PATCH_MODEL,
 		"standard_material_ids": STANDARD_MATERIAL_IDS,
 		"surface_material_ids": SURFACE_MATERIAL_IDS,
 		"underground_strata_material_ids": UNDERGROUND_STRATA_MATERIAL_IDS,

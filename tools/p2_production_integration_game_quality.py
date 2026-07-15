@@ -40,6 +40,10 @@ TUNNEL_VISUAL_CENTER_MARGIN_RATIO = 0.20
 TUNNEL_VISUAL_WHOLE_IMAGE_SKY_TOLERANCE = 16
 DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown", "watertight_boundary_near")
 VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
+    "biome_overview",
+    "biome_surface",
+    "biome_snow_ridge",
+    "ore_patch_exposure",
     "small_edit_near",
     "small_edit_mid",
     "small_edit_far",
@@ -217,6 +221,7 @@ def validate_visual_summary(
         "runtime_collision_deactivation_distance": 256.0,
         "edit_failure_count": 0,
         "native_render_material_override": True,
+        "surface_material_blend_weights_active": True,
         "clean_material_variation_enabled": False,
         "clean_roughness": 1.0,
         "clean_specular": 0.0,
@@ -1575,6 +1580,7 @@ def main(argv: list[str]) -> int:
     print("WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=%d" % len(profiles))
     if args.visual_smoke:
         modes = tuple(args.visual_mode) if args.visual_mode else DEFAULT_VISUAL_MODES
+        visual_profile = profiles[0] if len(profiles) == 1 else VISUAL_CAPTURE_PROFILE
         output_dir = pathlib.Path(args.visual_output_dir).resolve() if args.visual_output_dir else (
             default_capture_dir(project, "terrain_1_0_visual_smoke")
         )
@@ -1585,6 +1591,7 @@ def main(argv: list[str]) -> int:
                 mode,
                 output_dir,
                 args.visual_wait_frames,
+                profile=visual_profile,
             )
             for mode in modes
         ]

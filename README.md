@@ -146,11 +146,14 @@ as mipmaps to actually reach the runtime `.ctex` texture.
   render material override, so newly streamed chunks do not flash with the
   engine default material;
 - standard material palette `world_transvoxel_material_palette_v1`, with
-  authoritative shallow/mid/deep depth bands `4/7/1` exposed through terrain
-  generation profiles and checked by autonomous sample queries;
-- normal human play uses the sand texture at
-  `res://assets/terrain_textures/coast_sand_01_diff_1k.jpg` and keeps
-  material-ID tinting off by default;
+  authoritative grass/sand/gravel/snow surface biome IDs, underground
+  stone/rock/ore IDs, and shallow/mid/deep depth bands `4/7/1` exposed through
+  terrain generation profiles and checked by autonomous sample queries;
+- normal human play keeps material-ID tinting off by default. The current
+  production material path uses deterministic placeholder texture-array layers
+  plus native surface biome blend weights for grass, sand, gravel, and snow;
+  real biome textures can replace those layers without changing terrain
+  authority;
 - spawn floor raycast sanity before automated handoff;
 - terrain interaction proof requires a real camera raycast hit against terrain
   collision, accepted edit submission, backend `edit_committed`, and zero

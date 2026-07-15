@@ -22,7 +22,8 @@ const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/hum
 const HUMAN_MATERIAL_MODE_SAND_TRIPLANAR := "sand_triplanar"
 const HUMAN_MATERIAL_MODE_FLAT_CLEAN := "flat_clean"
 const HUMAN_MATERIAL_MODE_MATERIAL_TINT := "material_tint"
-const HUMAN_MATERIAL_MODE_PRODUCTION := "production_atlas"
+const HUMAN_MATERIAL_MODE_PRODUCTION := "production_texture_array"
+const HUMAN_MATERIAL_MODE_LEGACY_PRODUCTION_ATLAS := "production_atlas"
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -289,7 +290,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d surface_material_blend_weights_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -304,6 +305,7 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("edit_failure_count", 0)),
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
+		1 if bool(presentation.get("surface_material_blend_weights_active", false)) else 0,
 		1 if bool(presentation.get("native_render_material_override", false)) else 0,
 	])
 	await get_tree().process_frame
@@ -679,7 +681,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	var generation = GenerationProfile.new()
 	generation.profile_id = profile_id
 	generation.seed = 19019
-	generation.source_revision = 190019
+	generation.source_revision = 190020
 	generation.world_chunk_count_x = 128
 	generation.world_chunk_count_y = 8
 	generation.world_chunk_origin_y = 0
@@ -687,7 +689,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
 	if profile_id == FLAT_PROFILE:
 		generation.seed = 101
-		generation.source_revision = 101
+		generation.source_revision = 102
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 8
 		generation.world_chunk_origin_y = 0
@@ -695,7 +697,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 		generation.source_mode = GenerationProfile.SourceMode.FLAT
 	elif profile_id == DEEP_PROFILE:
 		generation.seed = 19020
-		generation.source_revision = 190256
+		generation.source_revision = 190257
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -849,10 +851,26 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 	if str(generation.get("underground_depth_bands", "")) != "deep>=8:1,mid>=3:7,shallow>=1:4":
 		_fail("standard material depth bands mismatch: %s" % str(generation))
 		return false
+	if str(generation.get("surface_biome_model", "")) != "deterministic_macro_surface_biomes_v1":
+		_fail("standard surface biome model mismatch: %s" % str(generation))
+		return false
+	if str(generation.get("underground_patch_model", "")) != "deterministic_deep_ore_patches_v1":
+		_fail("standard underground patch model mismatch: %s" % str(generation))
+		return false
 	var standard_ids := Array(generation.get("standard_material_ids", []))
-	for material_id in [1, 2, 3, 4, 7]:
+	for material_id in [1, 2, 3, 4, 5, 7, 8]:
 		if not standard_ids.has(material_id):
 			_fail("standard material ID missing from profile: id=%d summary=%s" % [material_id, str(generation)])
+			return false
+	var surface_ids := Array(generation.get("surface_material_ids", []))
+	for material_id in [2, 3, 4, 5]:
+		if not surface_ids.has(material_id):
+			_fail("standard surface biome material ID missing: id=%d summary=%s" % [material_id, str(generation)])
+			return false
+	var underground_ids := Array(generation.get("underground_strata_material_ids", []))
+	for material_id in [1, 4, 7, 8]:
+		if not underground_ids.has(material_id):
+			_fail("standard underground material ID missing: id=%d summary=%s" % [material_id, str(generation)])
 			return false
 	var center := Vector3i(
 		int(round(edit_point.x)),
@@ -879,6 +897,39 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 			"minimum_solid_depth": 8.0,
 		},
 	]
+	if selected_profile != FLAT_PROFILE:
+		probes.append_array([
+			{
+				"label": "surface_grass",
+				"point": Vector3i(128, 13, 192),
+				"expected_material": 2,
+				"minimum_solid_depth": 0.2,
+			},
+			{
+				"label": "surface_gravel",
+				"point": Vector3i(128, 12, 992),
+				"expected_material": 3,
+				"minimum_solid_depth": 0.2,
+			},
+			{
+				"label": "surface_sand",
+				"point": Vector3i(128, 9, 1088),
+				"expected_material": 4,
+				"minimum_solid_depth": 0.2,
+			},
+			{
+				"label": "surface_snow",
+				"point": Vector3i(704, 31, 640),
+				"expected_material": 5,
+				"minimum_solid_depth": 0.2,
+			},
+			{
+				"label": "ore_patch",
+				"point": Vector3i(976, 22, 960),
+				"expected_material": 8,
+				"minimum_solid_depth": 12.0,
+			},
+		])
 	var points: Array = []
 	for probe in probes:
 		points.append(probe["point"])
@@ -935,6 +986,15 @@ func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
 				material,
 			])
 			return false
+		if probe.has("minimum_solid_depth") and -density < float(probe["minimum_solid_depth"]):
+			_fail("material strata sample is too shallow: label=%s point=%s minimum_depth=%.3f density=%.6f material=%d" % [
+				label,
+				key,
+				float(probe["minimum_solid_depth"]),
+				density,
+				material,
+			])
+			return false
 		if material != expected_material:
 			_fail("material strata sample material mismatch: label=%s point=%s expected=%d got=%d observed=%s" % [
 				label,
@@ -944,10 +1004,13 @@ func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
 				JSON.stringify(observed),
 			])
 			return false
+	var proof_labels := observed.keys()
+	proof_labels.sort()
 	print(
-		"WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=%s palette=world_transvoxel_material_palette_v1 shallow=4 mid=7 deep=1 samples=%s" %
+		"WT_STANDARD_MATERIAL_STRATA_CONTRACT_PASS profile=%s palette=world_transvoxel_material_palette_v1 material_ids=1,2,3,4,5,7,8 sample_proofs=%s samples=%s" %
 		[
 			str(selected_profile),
+			",".join(proof_labels),
 			JSON.stringify(observed),
 		]
 	)
@@ -1119,22 +1182,24 @@ func handle_human_command(command: StringName) -> bool:
 
 func _human_material_modes() -> Array:
 	return [
+		HUMAN_MATERIAL_MODE_PRODUCTION,
 		HUMAN_MATERIAL_MODE_SAND_TRIPLANAR,
 		HUMAN_MATERIAL_MODE_FLAT_CLEAN,
 		HUMAN_MATERIAL_MODE_MATERIAL_TINT,
-		HUMAN_MATERIAL_MODE_PRODUCTION,
 	]
 
 
 func _human_material_mode_name() -> String:
 	var modes := _human_material_modes()
 	if modes.is_empty():
-		return HUMAN_MATERIAL_MODE_SAND_TRIPLANAR
+		return HUMAN_MATERIAL_MODE_PRODUCTION
 	return str(modes[clampi(human_material_mode_index, 0, modes.size() - 1)])
 
 
 func _set_human_material_mode_by_name(mode: String) -> bool:
 	var requested := mode.strip_edges()
+	if requested == HUMAN_MATERIAL_MODE_LEGACY_PRODUCTION_ATLAS:
+		requested = HUMAN_MATERIAL_MODE_PRODUCTION
 	var modes := _human_material_modes()
 	for index in range(modes.size()):
 		if str(modes[index]) == requested:
@@ -2721,6 +2786,8 @@ func _presentation_summary() -> Dictionary:
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
+		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
+		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
 		"visual_mode": str(material_summary.get("visual_mode", "")),
@@ -2743,6 +2810,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if str(summary.get("quality_implementation", "")) != "terrain_material_texture_pipeline_v1":
 		_fail("terrain material implementation mismatch: %s" % str(summary))
+		return false
+	if not bool(summary.get("surface_material_blend_weights_active", false)):
+		_fail("surface biome blend weights inactive: %s" % str(summary))
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
@@ -3058,6 +3128,8 @@ func _capture_human_visual() -> void:
 		),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
+		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
+		"surface_material_blend_channel": str(presentation.get("surface_material_blend_channel", "")),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(presentation.get("clean_roughness", 0.0)),
@@ -3098,6 +3170,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_upward_lod_gate" or \
+		human_visual_capture_mode == "ore_patch_exposure" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -7110,6 +7183,9 @@ func _interaction_inspection_operations() -> Array:
 		operations.append(_edit_operation(&"carve", center + Vector3(0.0, 0.0, 2.4), 1.8, 1, 1.0))
 		operations.append(_edit_operation(&"carve", center + Vector3(2.4, 0.0, 2.4), 1.8, 1, 1.0))
 		return operations
+	if human_visual_capture_mode == "ore_patch_exposure":
+		operations.append(_edit_operation(&"carve", Vector3(1076.0, 48.0, 1010.0), 6.0, 1, 1.0))
+		return operations
 	if selected_profile == FLAT_PROFILE:
 		operations.append(_edit_operation(&"carve", Vector3(1010, 8, 1010), 18.0, 1, 1.0))
 		operations.append(_edit_operation(&"construct", Vector3(1058, 10, 1018), 14.0, 4, 1.0))
@@ -7371,6 +7447,26 @@ func _apply_capture_camera_mode() -> void:
 		"aerial":
 			capture_position = Vector3(1120.0, 250.0, 760.0)
 			capture_target = Vector3(1160.0, 78.0, 1020.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"biome_overview":
+			capture_position = Vector3(1024.0, 520.0, 580.0)
+			capture_target = Vector3(1024.0, 78.0, 1120.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"biome_surface":
+			capture_position = Vector3(920.0, 170.0, 790.0)
+			capture_target = Vector3(1120.0, 48.0, 1120.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"biome_snow_ridge":
+			capture_position = Vector3(1120.0, 210.0, 820.0)
+			capture_target = Vector3(1190.0, 86.0, 1040.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"ore_patch_exposure":
+			capture_position = Vector3(1076.0, 48.0, 1010.0)
+			capture_target = Vector3(1082.0, 49.0, 1010.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"high_oblique":

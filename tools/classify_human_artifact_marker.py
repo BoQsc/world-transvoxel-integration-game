@@ -25,7 +25,7 @@ DEFAULT_MODES = (
     "sand_triplanar",
     "flat_clean",
     "material_tint",
-    "production_atlas",
+    "production_texture_array",
 )
 PASS_MARKER = "WT_HUMAN_ARTIFACT_MATERIAL_CLASSIFICATION_PASS"
 

@@ -2,6 +2,10 @@
 
 Status: current Terrain 1.0 material boundary.
 
+The broader material/biome rules live in
+`MATERIAL_AND_BIOME_STANDARD.md`. This file defines the lower-level
+authoritative material strata contract.
+
 This project treats material as authoritative voxel sample data, not as a
 shader-only presentation choice. Render UVs, textures, tints, screenshots, and
 debug overlays are derived from the material samples.
@@ -14,10 +18,12 @@ The current standard material palette is
 | ID | Meaning |
 | --- | --- |
 | 1 | Deep stone / stable deep underground material |
-| 2 | Lowland surface material |
-| 3 | Dry surface soil material |
+| 2 | Grass surface biome material |
+| 3 | Gravel surface biome material |
 | 4 | Shallow surface sand / default player-placed fill material |
-| 7 | Mid-depth rock / high exposed rock material |
+| 5 | Snow surface biome material |
+| 7 | Mid-depth rock material |
+| 8 | Deep underground ore patch material |
 
 These IDs are intentionally documented as IDs, not just colors. Games may bind
 different textures to the IDs, but the terrain authority and edit journals must
@@ -39,7 +45,8 @@ the current minimum standard:
 - solid samples at least 3 blocks below the surface use material `7`;
 - solid samples at least 8 blocks below the surface use material `1`;
 - near-surface and above-surface samples may carry surface material IDs
-  `2`, `3`, `4`, or `7` so the mesher can derive the visible surface palette.
+  `2`, `3`, `4`, `5`, or `7` so the mesher can derive the visible surface palette.
+- deep underground samples may carry material `8` for deterministic ore patches.
 
 The flat baseline uses the same material rules as the mountainous profile. It is
 not a separate heightmap-only material path.
@@ -53,8 +60,11 @@ not a separate heightmap-only material path.
   material IDs for the standard profiles.
 - Edits mutate density and material together. A construct/place edit using
   material `4` is player fill, not a separate hidden terrain layer.
-- Rendering may use texture atlases, triplanar mapping, or clean human-playtest
+- Rendering may use texture arrays, triplanar mapping, or clean human-playtest
   materials, but rendering must not become authoritative terrain state.
+- Native render payloads may expose derived surface biome blend weights for
+  visual smoothing. Those weights must be deterministic derivatives of
+  authoritative material IDs; they must not replace the stored material field.
 - Human playtest may expose material IDs through an explicit diagnostic view,
   but raw material-ID tinting must not be the default presentation because it
   can create contour-like bands across normal terrain surfaces. Production

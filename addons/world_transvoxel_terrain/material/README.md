@@ -35,7 +35,7 @@ is not the default human playtest or production validation material.
 Production terrain textures must use world-space triplanar projection on native
 Transvoxel terrain.
 
-Do not use `XZ`-only atlas mapping for production terrain. It smears or stretches
+Do not use `XZ`-only UV mapping for production terrain. It smears or stretches
 textures on steep dug walls, tunnel corners, and vertical excavation surfaces.
 The human artifact marker `20260715T012849_001_human` in the integration game
 captured this failure mode: local topology probes were open-gap-free, while the
@@ -44,7 +44,7 @@ visible issue was a melted vertical texture streak on a dug surface.
 Material V1 must preserve this distinction:
 
 - flat color / material-ID views isolate geometry and brush defects;
-- textured production views validate mapping, mipmaps, atlas sampling, and
+- textured production views validate mapping, mipmaps, texture-array sampling, and
   triplanar behavior;
 - if an artifact is visible only in textured mode, treat it first as material
   mapping until geometry probes prove otherwise.
@@ -56,14 +56,32 @@ meshing. A texture-only artifact is not evidence of nonmanifold terrain.
 
 ## Human material modes
 
-Normal human playtest uses the textured `sand_triplanar` view by default. Raw
-material-ID tinting is intentionally not the default because it can turn normal
-surface strata into contour-like visual bands across the whole terrain.
+Normal human playtest uses the textured production/triplanar material path by
+default. Raw material-ID tinting is intentionally not the default because it can
+turn normal surface strata into contour-like visual bands across the whole
+terrain.
 
 Use `material_tint` only as a diagnostic material-ID view. It is expected to
 look less natural, but should make material mistakes obvious. Future production
 material work should bind distinct material textures or controlled blends rather
 than globally tinting one sand texture across every surface.
+
+The current production placeholder texture array has deterministic layers for
+stone, grass, gravel, sand, snow, rock, and ore. These layers are intentionally
+simple test textures. They prove the material/biome pipeline and should be
+replaced by real authored textures without changing the authoritative material
+IDs.
+
+Surface biome blending is carried by native vertex colors generated from
+authoritative material IDs:
+
+- red = grass;
+- green = gravel;
+- blue = sand;
+- alpha = snow.
+
+`UV2.x` remains the primary material ID. Vertex-color blending is therefore a
+derived render channel, not a second terrain authority.
 
 Every visible terrain triangle has some material ID, including the outdoor
 surface. "Underground material" is therefore not a separate hidden terrain; it

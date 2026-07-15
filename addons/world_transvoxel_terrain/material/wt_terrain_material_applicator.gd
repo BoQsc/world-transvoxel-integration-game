@@ -7,8 +7,8 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_pipeline_v1"
-const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_atlas"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_surface_blend_pipeline_v1"
+const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_texture_array"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -44,6 +44,8 @@ var _summary := {
 	"auto_apply_count": 0,
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
+	"surface_material_blend_channel": "vertex_color_rgba_material_2_3_4_5",
+	"surface_material_blend_weights_active": false,
 	"quality_implementation": QUALITY_IMPLEMENTATION,
 	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
 	"implementation": "terrain_addon_material_applicator",
@@ -106,6 +108,8 @@ func apply_materials_now() -> Dictionary:
 		"auto_apply_signature": _auto_apply_signature,
 		"deterministic_texture": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
+		"surface_material_blend_channel": "vertex_color_rgba_material_2_3_4_5",
+		"surface_material_blend_weights_active": production_active,
 		"material_instance_id": material.get_instance_id(),
 		"quality_implementation": QUALITY_IMPLEMENTATION,
 		"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
@@ -119,7 +123,7 @@ func apply_materials_now() -> Dictionary:
 		"production_texture_resolution": production_resolution,
 		"production_texture_budget_bytes": int(profile.get("production_texture_budget_bytes", 0)),
 		"checker_fallback_enabled": true,
-		"visible_texture_target": "production_atlas_with_checker_fallback",
+		"visible_texture_target": "production_texture_array_with_checker_fallback",
 		"mapping_policy": str(profile.get("mapping_policy", "")),
 		"blending_policy": str(profile.get("blending_policy", "")),
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
@@ -167,9 +171,9 @@ func _build_material(resolution: int) -> ShaderMaterial:
 	shader_material.shader = TERRAIN_SHADER
 	shader_material.set_shader_parameter("checker_texture", _checker_texture(resolution))
 	var production_resolution := _production_texture_resolution(_material_profile_summary())
-	shader_material.set_shader_parameter("terrain_albedo_atlas", _production_atlas(production_resolution, &"albedo"))
-	shader_material.set_shader_parameter("terrain_normal_atlas", _production_atlas(production_resolution, &"normal"))
-	shader_material.set_shader_parameter("terrain_roughness_atlas", _production_atlas(production_resolution, &"roughness_orm"))
+	shader_material.set_shader_parameter("terrain_albedo_array", _production_texture_array(production_resolution, &"albedo"))
+	shader_material.set_shader_parameter("terrain_normal_array", _production_texture_array(production_resolution, &"normal"))
+	shader_material.set_shader_parameter("terrain_roughness_array", _production_texture_array(production_resolution, &"roughness_orm"))
 	_apply_visual_mode(shader_material)
 	return shader_material
 
@@ -285,27 +289,85 @@ func _texture_bytes(resolution: int) -> int:
 func _production_texture_resolution(profile: Dictionary) -> int:
 	return int(clamp(int(profile.get("standard_texture_resolution", 64)), 16, 512))
 
-func _production_atlas(resolution: int, slot: StringName) -> Texture2D:
-	var image := Image.create(resolution * 4, resolution, false, Image.FORMAT_RGBA8)
+func _production_texture_array(resolution: int, slot: StringName) -> Texture2DArray:
+	const TILE_COUNT := 8
 	var base := [
-		Color(0.40, 0.62, 0.22, 1.0),
-		Color(0.42, 0.43, 0.42, 1.0),
-		Color(0.63, 0.53, 0.36, 1.0),
-		Color(0.30, 0.30, 0.32, 1.0),
+		Color(0.30, 0.31, 0.32, 1.0), # 1 deep stone
+		Color(0.34, 0.58, 0.23, 1.0), # 2 grass
+		Color(0.43, 0.42, 0.39, 1.0), # 3 gravel
+		Color(0.64, 0.53, 0.35, 1.0), # 4 sand / player fill
+		Color(0.82, 0.84, 0.82, 1.0), # 5 snow
+		Color(0.37, 0.37, 0.36, 1.0), # 7 mid rock
+		Color(0.66, 0.39, 0.16, 1.0), # 8 ore patch
+		Color(0.48, 0.31, 0.22, 1.0), # reserved fallback
 	]
-	for y in range(resolution):
-		for x in range(resolution * 4):
-			var tile := int(x / resolution)
-			var c: Color = base[tile]
-			if slot == &"normal":
-				c = Color(0.5, 0.5, 1.0, 1.0)
-			elif slot == &"roughness_orm":
-				c = Color(0.0, 0.76 + float(tile) * 0.04, 1.0, 1.0)
-			else:
-				var grain := 0.90 + 0.10 * float(((x * 13 + y * 7 + tile * 19) % 11)) / 10.0
-				c = Color(c.r * grain, c.g * grain, c.b * grain, 1.0)
-			image.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(image)
+	var images: Array[Image] = []
+	for tile in range(TILE_COUNT):
+		var image := Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
+		for y in range(resolution):
+			for x in range(resolution):
+				var c: Color = base[tile]
+				if slot == &"normal":
+					c = _production_normal_texel(tile, x, y)
+				elif slot == &"roughness_orm":
+					c = _production_roughness_texel(tile)
+				else:
+					c = _production_albedo_texel(c, tile, x, y)
+				image.set_pixel(x, y, c)
+		image.generate_mipmaps(slot == &"normal")
+		images.append(image)
+	var texture_array := Texture2DArray.new()
+	var error := texture_array.create_from_images(images)
+	if error != OK:
+		push_error("failed to create production texture array: %s" % str(error))
+	return texture_array
+
+func _production_albedo_texel(base: Color, tile: int, x: int, y: int) -> Color:
+	var coarse := _production_noise(tile, int(x / 4), int(y / 4), 1)
+	var fine := _production_noise(tile, x, y, 2)
+	var accent := _production_noise(tile, int(x / 2), int(y / 2), 3)
+	var scale := 0.90 + 0.16 * coarse + 0.06 * fine
+	if tile == 1:
+		scale *= 0.92 + 0.18 * accent
+	elif tile == 2:
+		scale *= 0.88 + 0.20 * coarse
+	elif tile == 4:
+		scale *= 0.96 + 0.05 * fine
+	elif tile == 6:
+		scale *= 0.78 + 0.22 * fine
+		if accent > 0.74:
+			base = Color(0.84, 0.56, 0.22, 1.0)
+	return Color(
+		clamp(base.r * scale, 0.0, 1.0),
+		clamp(base.g * scale, 0.0, 1.0),
+		clamp(base.b * scale, 0.0, 1.0),
+		1.0
+	)
+
+func _production_normal_texel(tile: int, x: int, y: int) -> Color:
+	var strength := 0.018
+	if tile == 2 or tile == 5:
+		strength = 0.026
+	elif tile == 6:
+		strength = 0.032
+	var bump := (_production_noise(tile, x, y, 4) - 0.5) * strength
+	return Color(0.5 + bump, 0.5 - bump, 1.0, 1.0)
+
+
+func _production_noise(tile: int, x: int, y: int, salt: int) -> float:
+	var n := posmod(x * 157 + y * 311 + tile * 911 + salt * 619, 10007)
+	n = posmod(n * n * 73 + n * 19 + 97, 10009)
+	return float(n) / 10008.0
+
+func _production_roughness_texel(tile: int) -> Color:
+	var roughness := 0.82
+	if tile == 1:
+		roughness = 0.95
+	elif tile == 4:
+		roughness = 0.74
+	elif tile == 6:
+		roughness = 0.58
+	return Color(0.0, roughness, 1.0, 1.0)
 
 func _terrain_world() -> Node:
 	var reference := get_node_or_null(reference_scene_path)
