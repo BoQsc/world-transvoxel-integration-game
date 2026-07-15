@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Launch the integration game's current human terrain playtest.
+
+This is the single entrypoint for manual terrain inspection. It intentionally
+does not run validation gates or visual-capture automation.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+
+
+WINDOWS_STEAM_GODOT = pathlib.Path(
+    r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
+)
+
+
+def repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1]
+
+
+def find_godot(explicit: str | None) -> pathlib.Path:
+    if explicit:
+        candidate = pathlib.Path(explicit)
+        if candidate.exists():
+            return candidate
+        raise FileNotFoundError(f"Godot executable does not exist: {candidate}")
+
+    env_value = os.environ.get("GODOT4_BIN") or os.environ.get("GODOT_BIN")
+    if env_value:
+        candidate = pathlib.Path(env_value)
+        if candidate.exists():
+            return candidate
+
+    if WINDOWS_STEAM_GODOT.exists():
+        return WINDOWS_STEAM_GODOT
+
+    for name in ("godot4", "godot"):
+        found = shutil.which(name)
+        if found:
+            return pathlib.Path(found)
+
+    raise FileNotFoundError(
+        "Godot 4 executable not found. Pass --godot or set GODOT4_BIN."
+    )
+
+
+def build_command(args: argparse.Namespace) -> list[str]:
+    godot = find_godot(args.godot)
+    project = pathlib.Path(args.project).resolve()
+    if not (project / "project.godot").is_file():
+        raise FileNotFoundError(f"project.godot not found under {project}")
+
+    command = [
+        str(godot),
+        "--path",
+        str(project),
+        "--",
+        "--p2-profile",
+        args.profile,
+        "--human-material-mode",
+        args.material,
+    ]
+    if args.windowed:
+        command.append("--human-windowed")
+    if args.preserve_storage:
+        command.append("--human-preserve-storage")
+    if args.lighting_preset is not None:
+        command.extend(["--human-lighting-preset", str(args.lighting_preset)])
+    if args.preset:
+        command.extend(["--human-playtest-preset", args.preset])
+    return command
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description="Launch the current World Transvoxel human playtest."
+    )
+    parser.add_argument("--godot", help="Path to a Godot 4 executable.")
+    parser.add_argument(
+        "--project",
+        default=str(repo_root()),
+        help="Path to the integration game project directory.",
+    )
+    parser.add_argument(
+        "--profile",
+        default="g20_deep_2k_256_on_demand",
+        help="Terrain profile to launch.",
+    )
+    parser.add_argument(
+        "--material",
+        default="production_texture_array",
+        help="Human material mode to use.",
+    )
+    parser.add_argument(
+        "--windowed",
+        action="store_true",
+        help="Run windowed. Default is the project's fullscreen human-test behavior.",
+    )
+    parser.add_argument(
+        "--preserve-storage",
+        action="store_true",
+        help="Reuse existing human-playtest storage instead of starting fresh.",
+    )
+    parser.add_argument(
+        "--lighting-preset",
+        type=int,
+        help="Optional human lighting preset index.",
+    )
+    parser.add_argument(
+        "--preset",
+        help="Optional human playtest preset, for example 'tunnel'.",
+    )
+    parser.add_argument(
+        "--print-only",
+        action="store_true",
+        help="Print the command without launching Godot.",
+    )
+    args = parser.parse_args(argv)
+
+    command = build_command(args)
+    print(" ".join(command), flush=True)
+    if args.print_only:
+        return 0
+    return subprocess.call(command, cwd=pathlib.Path(args.project).resolve())
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
