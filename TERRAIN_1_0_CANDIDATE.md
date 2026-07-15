@@ -477,6 +477,18 @@ Marker JSON separates hard topology/render problems from quality warnings:
 near-thin triangles or similar quality signals that may explain lighting or
 texture interpolation artifacts.
 
+For a captured marker, use the material classifier to replay the same pose under
+all diagnostic material modes:
+
+```console
+python tools/classify_human_artifact_marker.py --marker .godot/world_transvoxel_captures/human_artifact_marks/<marker>.json --profile g20_deep_2k_256_on_demand
+```
+
+The classifier writes a JSON report under
+`.godot/world_transvoxel_captures/human_artifact_classifications/` and prints
+`WT_HUMAN_ARTIFACT_MATERIAL_CLASSIFICATION_PASS` only when every replay mode has
+zero hard topology/render problems.
+
 Every new human-marked artifact path must either be explained as an intentional
 profile/budget tradeoff or promoted into an automated targeted gate before the
 same profile can be treated as accepted. This is especially important for edited

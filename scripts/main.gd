@@ -50,6 +50,7 @@ var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
 var human_artifact_inspect_marker_path := ""
 var initial_human_material_mode := ""
+var human_windowed := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var lod_movement_direct_only := false
@@ -101,6 +102,7 @@ func _ready() -> void:
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
 	human_artifact_inspect_marker_path = _arg_value(args, "--human-artifact-inspect-marker", "")
 	initial_human_material_mode = _arg_value(args, "--human-material-mode", "")
+	human_windowed = args.has("--human-windowed")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
@@ -119,7 +121,7 @@ func _ready() -> void:
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
 	else:
-		if human_visual_capture_path.is_empty():
+		if human_visual_capture_path.is_empty() and not human_windowed:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
 			_clear_human_storage()
@@ -1245,8 +1247,13 @@ func _load_human_artifact_marker_json(path: String) -> Dictionary:
 	var file := FileAccess.open(absolute_path, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
+	var text := file.get_as_text()
 	file.close()
+	# Older marker captures serialized Godot INF as 1e99999 in probe fields.
+	# Godot can parse the marker after warnings, but replay tooling should stay
+	# clean and deterministic. Treat these as the existing "not sampled" sentinel.
+	text = text.replace("1e99999", "-1.0")
+	var parsed = JSON.parse_string(text)
 	return parsed if parsed is Dictionary else {}
 
 
@@ -4899,8 +4906,8 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"lod0_interior_boundary_edges": int(probe.get("lod0_interior_boundary_edges", -1)),
 		"lod0_chunk_face_boundary_edges": int(probe.get("lod0_chunk_face_boundary_edges", -1)),
 		"lod0_orientation_conflict_edges": int(probe.get("lod0_orientation_conflict_edges", -1)),
-		"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
-		"minimum_edge_length_squared": float(probe.get("minimum_edge_length_squared", -1.0)),
+		"minimum_area_squared": _finite_marker_float(probe.get("minimum_area_squared", -1.0), -1.0),
+		"minimum_edge_length_squared": _finite_marker_float(probe.get("minimum_edge_length_squared", -1.0), -1.0),
 		"boundary_examples": probe.get("boundary_examples", []),
 		"interior_boundary_examples": probe.get("interior_boundary_examples", []),
 		"nonmanifold_examples": probe.get("nonmanifold_examples", []),
@@ -4908,6 +4915,13 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"zero_area_examples": probe.get("zero_area_examples", []),
 		"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
 	}
+
+
+func _finite_marker_float(value, fallback: float) -> float:
+	var resolved := float(value)
+	if is_nan(resolved) or is_inf(resolved):
+		return fallback
+	return resolved
 
 
 func _run_edit_lod_movement_gate(terrain_world: Node) -> bool:
