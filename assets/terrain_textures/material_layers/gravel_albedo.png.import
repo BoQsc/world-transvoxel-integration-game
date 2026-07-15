@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://i1oidswef2bx"
-path="res://.godot/imported/gravel_albedo.jpg-18b203da770aab74b72b192bff5b1be5.ctex"
+uid="uid://rvr862uyypgu"
+path="res://.godot/imported/gravel_albedo.png-3d393fac022ceeedf7aaf67200a4bc27.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/terrain_textures/material_layers/gravel_albedo.jpg"
-dest_files=["res://.godot/imported/gravel_albedo.jpg-18b203da770aab74b72b192bff5b1be5.ctex"]
+source_file="res://assets/terrain_textures/material_layers/gravel_albedo.png"
+dest_files=["res://.godot/imported/gravel_albedo.png-3d393fac022ceeedf7aaf67200a4bc27.ctex"]
 
 [params]
 
