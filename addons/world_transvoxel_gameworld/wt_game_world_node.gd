@@ -663,11 +663,7 @@ func _wait_for_world_state(expected: String) -> bool:
 func _should_update_player_viewer(position: Vector3) -> bool:
 	if is_inf(_last_player_viewer_position.x):
 		return true
-	var delta := Vector2(
-		position.x - _last_player_viewer_position.x,
-		position.z - _last_player_viewer_position.z
-	)
-	return delta.length() >= player_viewer_update_distance
+	return position.distance_to(_last_player_viewer_position) >= player_viewer_update_distance
 
 
 func _update_predictive_player_viewer(
@@ -701,11 +697,7 @@ func _update_predictive_player_viewer(
 func _should_update_predictive_player_viewer(position: Vector3) -> bool:
 	if is_inf(_last_predictive_viewer_position.x):
 		return true
-	var delta := Vector2(
-		position.x - _last_predictive_viewer_position.x,
-		position.z - _last_predictive_viewer_position.z
-	)
-	return delta.length() >= player_viewer_update_distance
+	return position.distance_to(_last_predictive_viewer_position) >= player_viewer_update_distance
 
 
 func _update_focus_player_viewer(force: bool) -> bool:
@@ -730,11 +722,7 @@ func _update_focus_player_viewer(force: bool) -> bool:
 func _should_update_focus_player_viewer(position: Vector3) -> bool:
 	if is_inf(_last_focus_viewer_position.x):
 		return true
-	var delta := Vector2(
-		position.x - _last_focus_viewer_position.x,
-		position.z - _last_focus_viewer_position.z
-	)
-	return delta.length() >= player_viewer_update_distance
+	return position.distance_to(_last_focus_viewer_position) >= player_viewer_update_distance
 
 
 func _operation_mode(mode_name: StringName) -> int:
