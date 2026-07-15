@@ -5,13 +5,13 @@ uniform sampler2D checker_texture : source_color, filter_linear_mipmap, repeat_e
 uniform sampler2DArray terrain_albedo_array : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2DArray terrain_normal_array : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2DArray terrain_roughness_array : filter_linear_mipmap, repeat_enable;
-uniform vec4 material_1_color : source_color = vec4(0.22, 0.24, 0.27, 1.0);
-uniform vec4 material_2_color : source_color = vec4(0.54, 0.76, 0.34, 1.0);
-uniform vec4 material_3_color : source_color = vec4(0.42, 0.41, 0.38, 1.0);
-uniform vec4 material_4_color : source_color = vec4(0.52, 0.44, 0.32, 1.0);
-uniform vec4 material_5_color : source_color = vec4(0.84, 0.86, 0.84, 1.0);
-uniform vec4 material_7_color : source_color = vec4(0.42, 0.43, 0.42, 1.0);
-uniform vec4 material_8_color : source_color = vec4(0.65, 0.42, 0.18, 1.0);
+uniform vec4 material_1_color : source_color = vec4(0.24, 0.25, 0.24, 1.0);
+uniform vec4 material_2_color : source_color = vec4(0.28, 0.39, 0.20, 1.0);
+uniform vec4 material_3_color : source_color = vec4(0.36, 0.35, 0.33, 1.0);
+uniform vec4 material_4_color : source_color = vec4(0.56, 0.49, 0.35, 1.0);
+uniform vec4 material_5_color : source_color = vec4(0.68, 0.70, 0.66, 1.0);
+uniform vec4 material_7_color : source_color = vec4(0.31, 0.32, 0.31, 1.0);
+uniform vec4 material_8_color : source_color = vec4(0.48, 0.29, 0.13, 1.0);
 uniform bool clean_visual_enabled = false;
 uniform bool clean_texture_enabled = false;
 uniform sampler2D clean_albedo_texture : source_color, repeat_enable;
@@ -29,10 +29,12 @@ const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
+varying flat float material_id_flat;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	material_id_flat = UV2.x;
 }
 
 float material_layer(float material_id) {
@@ -171,7 +173,7 @@ vec3 material_clean_tint(float material_id) {
 void fragment() {
 	NORMAL = normalize(NORMAL);
 	if (clean_visual_enabled) {
-		float material_id = UV2.x;
+		float material_id = material_id_flat;
 		vec3 clean_color = clean_albedo_color.rgb;
 		if (clean_texture_enabled) {
 			clean_color = clamp(clean_texture_color(world_position, normalize(world_normal)) * clean_albedo_color.rgb * 1.15, vec3(0.0), vec3(1.0));
@@ -184,7 +186,7 @@ void fragment() {
 		SPECULAR = clamp(clean_specular, 0.0, 1.0);
 		ROUGHNESS = clamp(clean_roughness, 0.0, 1.0);
 	} else {
-		float material_id = UV2.x;
+		float material_id = material_id_flat;
 		vec4 base = material_1_color;
 		if (material_id > 1.5 && material_id < 2.5) {
 			base = material_2_color;
@@ -200,20 +202,10 @@ void fragment() {
 			base = material_8_color;
 		}
 		vec3 surface_normal = normalize(world_normal);
-		vec3 texel = production_checker_color(world_position, surface_normal);
 		vec4 albedo_texel = production_albedo_color(material_id, world_position, surface_normal);
-		vec3 normal_texel = production_normal_color(material_id, world_position, surface_normal) * 2.0 - vec3(1.0);
 		float roughness_texel = production_roughness_value(material_id, world_position, surface_normal);
-		vec4 surface_weights = normalized_surface_weights(COLOR);
-		float surface_blend = surface_weight_sum(COLOR);
-		if (surface_blend > 0.0001) {
-			base.rgb = mix(base.rgb, production_surface_base_tint(surface_weights), surface_blend);
-			albedo_texel = mix(albedo_texel, production_surface_albedo_color(surface_weights, world_position, surface_normal), surface_blend);
-			normal_texel = mix(normal_texel, production_surface_normal_color(surface_weights, world_position, surface_normal) * 2.0 - vec3(1.0), surface_blend);
-			roughness_texel = mix(roughness_texel, production_surface_roughness_value(surface_weights, world_position, surface_normal), surface_blend);
-		}
-		ALBEDO = mix(base.rgb * texel, albedo_texel.rgb, 0.72);
-		NORMAL_MAP = normalize(normal_texel);
+		ALBEDO = albedo_texel.rgb;
+		SPECULAR = 0.0;
 		ROUGHNESS = clamp(roughness_texel, 0.45, 0.98);
 	}
 }

@@ -7,3 +7,4 @@
 *.gd.uid
 __pycache__/
 *.pyc
+assets/terrain_textures/material_layers/*.url

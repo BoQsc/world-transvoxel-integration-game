@@ -7,8 +7,10 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_surface_blend_pipeline_v1"
-const VISIBLE_SHADER_MODE := "native_override_world_triplanar_clean_or_uv2_texture_array"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_primary_material_pipeline_v2"
+const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
+const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
+const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -44,8 +46,10 @@ var _summary := {
 	"auto_apply_count": 0,
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
-	"surface_material_blend_channel": "vertex_color_rgba_material_2_3_4_5",
+	"primary_material_texture_active": false,
+	"surface_material_blend_channel": "disabled_discrete_vertex_color_was_blocky",
 	"surface_material_blend_weights_active": false,
+	"authored_albedo_layers": [],
 	"quality_implementation": QUALITY_IMPLEMENTATION,
 	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
 	"implementation": "terrain_addon_material_applicator",
@@ -90,6 +94,7 @@ func apply_materials_now() -> Dictionary:
 	var resolved_texture_resolution := _material_texture_resolution
 	var production_resolution := _production_texture_resolution(profile)
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
+	var authored_layers := _authored_albedo_layers()
 	_summary = {
 		"applied": native_override_set or int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -108,8 +113,11 @@ func apply_materials_now() -> Dictionary:
 		"auto_apply_signature": _auto_apply_signature,
 		"deterministic_texture": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
-		"surface_material_blend_channel": "vertex_color_rgba_material_2_3_4_5",
-		"surface_material_blend_weights_active": production_active,
+		"primary_material_texture_active": production_active,
+		"surface_material_blend_channel": "disabled_discrete_vertex_color_was_blocky",
+		"surface_material_blend_weights_active": false,
+		"authored_albedo_layers": authored_layers,
+		"authored_albedo_layer_count": authored_layers.size(),
 		"material_instance_id": material.get_instance_id(),
 		"quality_implementation": QUALITY_IMPLEMENTATION,
 		"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
@@ -122,8 +130,8 @@ func apply_materials_now() -> Dictionary:
 		"standard_texture_resolution": production_resolution,
 		"production_texture_resolution": production_resolution,
 		"production_texture_budget_bytes": int(profile.get("production_texture_budget_bytes", 0)),
-		"checker_fallback_enabled": true,
-		"visible_texture_target": "production_texture_array_with_checker_fallback",
+		"checker_fallback_enabled": false,
+		"visible_texture_target": "production_texture_array_authored_albedo_or_procedural_fallback",
 		"mapping_policy": str(profile.get("mapping_policy", "")),
 		"blending_policy": str(profile.get("blending_policy", "")),
 		"texture_import_policy": str(profile.get("texture_import_policy", "")),
@@ -287,33 +295,37 @@ func _texture_bytes(resolution: int) -> int:
 	return resolution * resolution * CHECKER_TEXTURE_BYTES_PER_PIXEL
 
 func _production_texture_resolution(profile: Dictionary) -> int:
-	return int(clamp(int(profile.get("standard_texture_resolution", 64)), 16, 512))
+	return int(clamp(int(profile.get("standard_texture_resolution", DEFAULT_PRODUCTION_TEXTURE_RESOLUTION)), 16, 1024))
 
 func _production_texture_array(resolution: int, slot: StringName) -> Texture2DArray:
 	const TILE_COUNT := 8
 	var base := [
-		Color(0.30, 0.31, 0.32, 1.0), # 1 deep stone
-		Color(0.34, 0.58, 0.23, 1.0), # 2 grass
-		Color(0.43, 0.42, 0.39, 1.0), # 3 gravel
-		Color(0.64, 0.53, 0.35, 1.0), # 4 sand / player fill
-		Color(0.82, 0.84, 0.82, 1.0), # 5 snow
-		Color(0.37, 0.37, 0.36, 1.0), # 7 mid rock
-		Color(0.66, 0.39, 0.16, 1.0), # 8 ore patch
-		Color(0.48, 0.31, 0.22, 1.0), # reserved fallback
+		Color(0.24, 0.25, 0.24, 1.0), # 1 deep stone
+		Color(0.28, 0.39, 0.20, 1.0), # 2 grass
+		Color(0.36, 0.35, 0.33, 1.0), # 3 gravel
+		Color(0.56, 0.49, 0.35, 1.0), # 4 sand / player fill
+		Color(0.68, 0.70, 0.66, 1.0), # 5 snow
+		Color(0.31, 0.32, 0.31, 1.0), # 7 mid rock
+		Color(0.48, 0.29, 0.13, 1.0), # 8 ore patch
+		Color(0.37, 0.29, 0.23, 1.0), # reserved fallback
 	]
 	var images: Array[Image] = []
 	for tile in range(TILE_COUNT):
-		var image := Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
-		for y in range(resolution):
-			for x in range(resolution):
-				var c: Color = base[tile]
-				if slot == &"normal":
-					c = _production_normal_texel(tile, x, y)
-				elif slot == &"roughness_orm":
-					c = _production_roughness_texel(tile)
-				else:
-					c = _production_albedo_texel(c, tile, x, y)
-				image.set_pixel(x, y, c)
+		var image: Image = null
+		if slot == &"albedo":
+			image = _authored_albedo_image(tile, resolution)
+		if image == null:
+			image = Image.create(resolution, resolution, false, Image.FORMAT_RGBA8)
+			for y in range(resolution):
+				for x in range(resolution):
+					var c: Color = base[tile]
+					if slot == &"normal":
+						c = _production_normal_texel(tile, x, y)
+					elif slot == &"roughness_orm":
+						c = _production_roughness_texel(tile)
+					else:
+						c = _production_albedo_texel(c, tile, x, y)
+					image.set_pixel(x, y, c)
 		image.generate_mipmaps(slot == &"normal")
 		images.append(image)
 	var texture_array := Texture2DArray.new()
@@ -321,6 +333,83 @@ func _production_texture_array(resolution: int, slot: StringName) -> Texture2DAr
 	if error != OK:
 		push_error("failed to create production texture array: %s" % str(error))
 	return texture_array
+
+func _authored_albedo_layers() -> Array:
+	var layers := []
+	for tile in range(8):
+		var path := _first_existing_authored_albedo_path(tile)
+		if not path.is_empty():
+			layers.append(_material_layer_name(tile))
+	return layers
+
+func _authored_albedo_image(tile: int, resolution: int) -> Image:
+	var path := _first_existing_authored_albedo_path(tile)
+	if path.is_empty():
+		return null
+	var texture := ResourceLoader.load(path) as Texture2D
+	if texture == null:
+		push_warning("authored terrain texture failed to load: %s" % path)
+		return null
+	var image := texture.get_image()
+	if image == null:
+		push_warning("authored terrain texture has no image: %s" % path)
+		return null
+	image = image.duplicate()
+	image.convert(Image.FORMAT_RGBA8)
+	if image.get_width() != resolution or image.get_height() != resolution:
+		image.resize(resolution, resolution, Image.INTERPOLATE_LANCZOS)
+	return image
+
+func _first_existing_authored_albedo_path(tile: int) -> String:
+	for path in _authored_albedo_candidates(tile):
+		if ResourceLoader.exists(path) or FileAccess.file_exists(path):
+			return path
+	return ""
+
+func _authored_albedo_candidates(tile: int) -> Array[String]:
+	var names: Array[String] = []
+	match tile:
+		0:
+			names = ["deep_stone_albedo", "stone_albedo", "stone_diff", "rock_albedo"]
+		1:
+			names = ["grass_albedo", "grass_diff"]
+		2:
+			names = ["gravel_albedo", "gravel_diff"]
+		3:
+			names = ["sand_albedo", "sand_diff", "coast_sand_01_diff_1k"]
+		4:
+			names = ["snow_albedo", "snow_diff"]
+		5:
+			names = ["mid_rock_albedo", "rock_albedo", "rock_diff"]
+		6:
+			names = ["ore_patch_albedo", "ore_albedo", "ore_diff"]
+		_:
+			names = ["fallback_albedo"]
+	var candidates: Array[String] = []
+	for name in names:
+		for extension in [".png", ".jpg", ".jpeg", ".webp"]:
+			candidates.append("%s/%s%s" % [AUTHORED_TEXTURE_ROOT, name, extension])
+			candidates.append("res://assets/terrain_textures/%s%s" % [name, extension])
+	return candidates
+
+func _material_layer_name(tile: int) -> String:
+	match tile:
+		0:
+			return "deep_stone"
+		1:
+			return "grass"
+		2:
+			return "gravel"
+		3:
+			return "sand"
+		4:
+			return "snow"
+		5:
+			return "mid_rock"
+		6:
+			return "ore_patch"
+		_:
+			return "fallback"
 
 func _production_albedo_texel(base: Color, tile: int, x: int, y: int) -> Color:
 	var coarse := _production_noise(tile, int(x / 4), int(y / 4), 1)

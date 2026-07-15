@@ -116,6 +116,8 @@ func _ready() -> void:
 	playtest_profile_id = selected_profile
 	if not initial_human_material_mode.is_empty():
 		_set_human_material_mode_by_name(initial_human_material_mode)
+	elif not autonomous and human_visual_capture_path.is_empty():
+		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_SAND_TRIPLANAR)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
 	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights | Tilde+T material"
@@ -290,7 +292,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d surface_material_blend_weights_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d primary_material_texture_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -305,7 +307,7 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("edit_failure_count", 0)),
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
-		1 if bool(presentation.get("surface_material_blend_weights_active", false)) else 0,
+		1 if bool(presentation.get("primary_material_texture_active", false)) else 0,
 		1 if bool(presentation.get("native_render_material_override", false)) else 0,
 	])
 	await get_tree().process_frame
@@ -2786,6 +2788,7 @@ func _presentation_summary() -> Dictionary:
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
+		"primary_material_texture_active": bool(material_summary.get("primary_material_texture_active", false)),
 		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
 		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
@@ -2811,8 +2814,8 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if str(summary.get("quality_implementation", "")) != "terrain_material_texture_pipeline_v1":
 		_fail("terrain material implementation mismatch: %s" % str(summary))
 		return false
-	if not bool(summary.get("surface_material_blend_weights_active", false)):
-		_fail("surface biome blend weights inactive: %s" % str(summary))
+	if not bool(summary.get("primary_material_texture_active", false)):
+		_fail("primary material texture mapping inactive: %s" % str(summary))
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
@@ -3129,6 +3132,7 @@ func _capture_human_visual() -> void:
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
+		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
 		"surface_material_blend_channel": str(presentation.get("surface_material_blend_channel", "")),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
