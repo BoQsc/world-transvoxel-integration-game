@@ -55,6 +55,13 @@ not a separate heightmap-only material path.
   material `4` is player fill, not a separate hidden terrain layer.
 - Rendering may use texture atlases, triplanar mapping, or clean human-playtest
   materials, but rendering must not become authoritative terrain state.
+- Human playtest may expose material IDs through an explicit diagnostic view,
+  but raw material-ID tinting must not be the default presentation because it
+  can create contour-like bands across normal terrain surfaces. Production
+  material work should use distinct material textures or controlled blends.
+- Material and biome presentation must be LOD-stable. Moving the camera or
+  switching chunk LODs must not make visible material regions appear, disappear,
+  or change shape except as a controlled texture-detail reduction.
 - Do not add duplicate terrain skins, double-sided materials, or full-map
   fallback layers to hide material or topology problems.
 

@@ -1164,9 +1164,13 @@ func _apply_human_material_mode_to_applicator() -> void:
 			material_applicator.visual_mode = &"clean"
 			material_applicator.clean_albedo_texture_path = ""
 			material_applicator.clean_material_variation_enabled = true
-			material_applicator.clean_material_variation_strength = 0.45
+			material_applicator.clean_material_variation_strength = 1.0
 		HUMAN_MATERIAL_MODE_PRODUCTION:
 			material_applicator.visual_mode = &"production"
+			material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
+			material_applicator.clean_material_variation_enabled = false
+		HUMAN_MATERIAL_MODE_SAND_TRIPLANAR:
+			material_applicator.visual_mode = &"clean"
 			material_applicator.clean_albedo_texture_path = HUMAN_CLEAN_TERRAIN_ALBEDO
 			material_applicator.clean_material_variation_enabled = false
 		_:

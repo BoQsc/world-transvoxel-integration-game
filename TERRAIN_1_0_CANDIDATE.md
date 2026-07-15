@@ -31,7 +31,7 @@ latest terrain/runtime source change:
 | Future server compatibility | Terrain authority remains compatible with future multiplayer/dedicated servers. | P2 proof prints `WT_STANDARD_MULTIPLAYER_SERVER_CONTRACT_PASS` for all standard profiles. |
 | No presentation fallback | Native single-sided Transvoxel chunks only for terrain correctness. No full-map layer, duplicate terrain skin, or double-sided material used to hide holes. | Visual/topology gates below must pass without presentation fallback. |
 | Player interaction | Player/camera/crosshair, raycast edit path, committed edit revision, storage journal, and no edit failures. | P2 proof fields: `player=1`, `camera=1`, `crosshair=1`, `interaction_raycast=1`, `storage_journal=1`, `edit_failures=0`. |
-| Materials | Human terrain material uses native render material override, mipmapped imported texture cache, and world-space triplanar production texture mapping so dug vertical walls do not smear from `XZ`-only UV projection. | P2 proof fields: `material=1`, `production_texture_active=1`, `native_render_material_override=1`; import gate passes; human marker `20260715T012849_001_human` is the regression sample for vertical texture stretch. |
+| Materials | Human terrain material uses native render material override, mipmapped imported texture cache, and world-space triplanar production texture mapping so dug vertical walls do not smear from `XZ`-only UV projection. Material-ID tinting is diagnostic only; it must not become the default because it produces contour-like bands across normal terrain. | P2 proof fields: `material=1`, `production_texture_active=1`, `native_render_material_override=1`; import gate passes; human marker `20260715T012849_001_human` is the regression sample for vertical texture stretch; material-marker classifier includes `sand_triplanar`, `flat_clean`, `material_tint`, and `production_atlas`. |
 | Startup visibility | Human play must not expose partially loaded terrain after the loading cover disappears. | Startup visual readiness and P2 proof pass; human-visible unloaded rectangular patches after readiness are release blockers. |
 | Streaming/fly continuity | Moving/flying compact terrain must not expose centered/lower terrain sky holes or clustered terrain-band pinholes. | Streaming fly gap gate passes. |
 | Edited terrain LOD | Recent player edits must persist through close/mid/far/return movement without harsh restoration, lost edits, or incomplete retained edited regions under the standard profile budgets. | LOD movement and multi-site LOD gates pass with `edited_exact_region` summary and zero retention fallback. |
@@ -467,9 +467,9 @@ saves:
 
 Use `~`, then `T` to cycle material views when a report looks like melted,
 stretched, or streaked texture rather than a sky leak. The standard diagnostic
-order is textured triplanar, flat clean color, material-ID tint, and production
-atlas. If the artifact disappears in flat color, classify it as material/texture
-presentation until a geometry probe proves otherwise.
+order is texture-only sand triplanar, flat clean color, material-ID tint, and
+production atlas. If the artifact disappears in flat color, classify it as
+material/texture presentation until a geometry probe proves otherwise.
 
 Marker JSON separates hard topology/render problems from quality warnings:
 `problematic_*` means open-gap/topology evidence that can block release;

@@ -53,3 +53,26 @@ Human artifact analysis must keep material classes separate. When a marked point
 is open-gap-free but still looks melted or streaked, inspect the same pose in
 flat color, material-tint, and textured triplanar modes before changing
 meshing. A texture-only artifact is not evidence of nonmanifold terrain.
+
+## Human material modes
+
+Normal human playtest uses the textured `sand_triplanar` view by default. Raw
+material-ID tinting is intentionally not the default because it can turn normal
+surface strata into contour-like visual bands across the whole terrain.
+
+Use `material_tint` only as a diagnostic material-ID view. It is expected to
+look less natural, but should make material mistakes obvious. Future production
+material work should bind distinct material textures or controlled blends rather
+than globally tinting one sand texture across every surface.
+
+Every visible terrain triangle has some material ID, including the outdoor
+surface. "Underground material" is therefore not a separate hidden terrain; it
+is the same material field becoming visible after digging. Surface biomes and
+underground strata may use different classifiers, but they must feed one
+coherent material presentation path.
+
+LOD must not expose raw material classification. Coarser meshes may reduce
+texture detail, but they must not make material islands or strata bands change
+shape while the viewer moves. Production biome/material rendering should use
+stable material weights, controlled blends, or separately authored texture
+layers instead of directly coloring every triangle by its nearest material ID.

@@ -100,14 +100,17 @@ float production_roughness_value(float material_id, vec3 world_pos, vec3 normal)
 }
 
 vec3 material_clean_tint(float material_id) {
+	if (material_id > 0.5 && material_id < 1.5) {
+		return vec3(0.40, 0.42, 0.43);
+	}
 	if (material_id > 1.5 && material_id < 2.5) {
-		return vec3(0.62, 0.64, 0.48);
+		return vec3(0.48, 0.60, 0.38);
 	} else if (material_id > 2.5 && material_id < 3.5) {
-		return vec3(0.64, 0.57, 0.43);
+		return vec3(0.52, 0.42, 0.30);
 	} else if (material_id > 3.5 && material_id < 4.5) {
-		return vec3(0.76, 0.68, 0.50);
+		return vec3(0.78, 0.68, 0.50);
 	} else if (material_id > 6.5 && material_id < 7.5) {
-		return vec3(0.55, 0.53, 0.48);
+		return vec3(0.52, 0.52, 0.49);
 	}
 	return vec3(0.52, 0.48, 0.40);
 }
