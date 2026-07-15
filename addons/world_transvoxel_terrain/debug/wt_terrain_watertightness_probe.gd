@@ -6,6 +6,7 @@ class_name WtTerrainWatertightnessProbe
 const CHUNK_CELLS_PER_AXIS := 16
 const POINT_KEY_SCALE := 1024
 const CHUNK_FACE_TOLERANCE_KEYS := 2
+const THIN_TRIANGLE_WARNING_AREA_SQUARED := 0.00000025
 
 static var _active_point_key_scale := POINT_KEY_SCALE
 static var _active_chunk_face_tolerance_keys := CHUNK_FACE_TOLERANCE_KEYS
@@ -42,6 +43,8 @@ static func collect(backend: Node, mode: String, center: Vector3, radius: float)
 		"zero_area_interior_triangles": 0,
 		"zero_area_unknown_triangles": 0,
 		"zero_edge_triangles": 0,
+		"thin_triangle_warning_triangles": 0,
+		"thin_triangle_warning_examples": [],
 		"repeated_point_key_triangles": 0,
 		"repeated_point_key_chunk_face_triangles": 0,
 		"repeated_point_key_interior_triangles": 0,
@@ -279,6 +282,23 @@ static func _accumulate_triangle(
 		float(stats.get("minimum_edge_length_squared", INF)),
 		min_edge_squared
 	)
+	if area_squared > 0.0 and area_squared < THIN_TRIANGLE_WARNING_AREA_SQUARED:
+		stats["thin_triangle_warning_triangles"] = int(stats.get("thin_triangle_warning_triangles", 0)) + 1
+		var thin_examples: Array = stats.get("thin_triangle_warning_examples", [])
+		if thin_examples.size() < 8:
+			thin_examples.append({
+				"owner": owner,
+				"lod": lod,
+				"area_squared": area_squared,
+				"minimum_edge_length_squared": min_edge_squared,
+				"a": _vector_summary(a),
+				"b": _vector_summary(b),
+				"c": _vector_summary(c),
+				"a_key": _point_key(a),
+				"b_key": _point_key(b),
+				"c_key": _point_key(c),
+			})
+			stats["thin_triangle_warning_examples"] = thin_examples
 	var repeated_key := _point_key(a) == _point_key(b) or _point_key(b) == _point_key(c) or _point_key(c) == _point_key(a)
 	if repeated_key:
 		stats["repeated_point_key_triangles"] = int(stats.get("repeated_point_key_triangles", 0)) + 1

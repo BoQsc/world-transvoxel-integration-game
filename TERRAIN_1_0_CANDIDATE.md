@@ -489,6 +489,15 @@ The classifier writes a JSON report under
 `WT_HUMAN_ARTIFACT_MATERIAL_CLASSIFICATION_PASS` only when every replay mode has
 zero hard topology/render problems.
 
+To promote the same marker into a carved-surface mesh-quality gate, add
+`--fail-on-mesh-quality-warning`. That mode still separates the result from
+watertightness, but it fails when an open-gap-free edited surface contains
+near-zero/sliver triangle warnings:
+
+```console
+python tools/classify_human_artifact_marker.py --marker .godot/world_transvoxel_captures/human_artifact_marks/<marker>.json --profile g20_deep_2k_256_on_demand --fail-on-mesh-quality-warning
+```
+
 Every new human-marked artifact path must either be explained as an intentional
 profile/budget tradeoff or promoted into an automated targeted gate before the
 same profile can be treated as accepted. This is especially important for edited

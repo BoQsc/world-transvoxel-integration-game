@@ -4893,6 +4893,7 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", -1)),
 		"zero_area_unknown_triangles": int(probe.get("zero_area_unknown_triangles", -1)),
 		"zero_edge_triangles": int(probe.get("zero_edge_triangles", -1)),
+		"thin_triangle_warning_triangles": int(probe.get("thin_triangle_warning_triangles", -1)),
 		"repeated_point_key_triangles": int(probe.get("repeated_point_key_triangles", -1)),
 		"repeated_point_key_interior_triangles": int(probe.get("repeated_point_key_interior_triangles", -1)),
 		"repeated_point_key_unknown_triangles": int(probe.get("repeated_point_key_unknown_triangles", -1)),
@@ -4913,7 +4914,9 @@ func _open_gap_probe_digest(probe: Dictionary) -> Dictionary:
 		"nonmanifold_examples": probe.get("nonmanifold_examples", []),
 		"orientation_conflict_examples": probe.get("orientation_conflict_examples", []),
 		"zero_area_examples": probe.get("zero_area_examples", []),
+		"thin_triangle_warning_examples": probe.get("thin_triangle_warning_examples", []),
 		"repeated_point_key_examples": probe.get("repeated_point_key_examples", []),
+		"normal_agreement_positive_examples": probe.get("normal_agreement_positive_examples", []),
 	}
 
 
