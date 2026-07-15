@@ -7,6 +7,9 @@ extends CharacterBody3D
 @export var interaction_distance: float = 96.0
 @export var fly_speed: float = 32.0
 @export var fly_fast_multiplier: float = 4.0
+@export var render_mesh_fallback_target_enabled: bool = true
+@export var render_mesh_fallback_max_instances: int = 1024
+@export var render_mesh_fallback_max_triangles: int = 250000
 
 var game_world: Node
 var human_command_target: Node
@@ -214,39 +217,50 @@ func _interaction_target() -> Dictionary:
 	if camera == null:
 		return {
 			"ray_hit": false,
+			"render_mesh_hit": false,
+			"target_source": "none",
 			"reason": "camera_missing",
 			"position": edit_point,
 			"collider": "",
 		}
 	var origin := camera.global_position
-	var end := origin + (-camera.global_transform.basis.z * interaction_distance)
+	var direction := -camera.global_transform.basis.z
+	var end := origin + (direction * interaction_distance)
 	var query := PhysicsRayQueryParameters3D.create(origin, end)
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
+	if not hit.is_empty():
+		var collider = hit.get("collider", null)
+		var collider_name := ""
+		if collider is Node:
+			collider_name = str((collider as Node).name)
 		return {
-			"ray_hit": false,
-			"reason": "raycast_miss",
-			"position": end,
-			"collider": "",
+			"ray_hit": true,
+			"render_mesh_hit": false,
+			"target_source": "physics_collision",
+			"reason": "raycast_hit",
+			"position": hit["position"],
+			"collider": collider_name,
 		}
-	var collider = hit.get("collider", null)
-	var collider_name := ""
-	if collider is Node:
-		collider_name = str((collider as Node).name)
+	var fallback := _render_mesh_interaction_target(origin, direction.normalized(), interaction_distance)
+	if bool(fallback.get("render_mesh_hit", false)):
+		return fallback
 	return {
-		"ray_hit": true,
-		"reason": "raycast_hit",
-		"position": hit["position"],
-		"collider": collider_name,
+		"ray_hit": false,
+		"render_mesh_hit": false,
+		"target_source": "none",
+		"reason": str(fallback.get("reason", "raycast_miss")),
+		"position": end,
+		"collider": "",
 	}
 
 
 func _submit_interaction(mode_name: StringName) -> bool:
 	var target := _interaction_target()
-	if not bool(target.get("ray_hit", false)):
+	var has_target := bool(target.get("ray_hit", false)) or bool(target.get("render_mesh_hit", false))
+	if not has_target:
 		_record_interaction(
 			mode_name,
 			false,
@@ -256,10 +270,241 @@ func _submit_interaction(mode_name: StringName) -> bool:
 		)
 		return false
 	var position: Vector3 = target["position"]
-	var accepted := submit_edit_input(mode_name, position, true)
-	_last_interaction_summary["reason"] = "raycast_hit" if accepted else "edit_rejected_after_raycast"
+	var accepted := submit_edit_input(mode_name, position, bool(target.get("ray_hit", false)))
+	_last_interaction_summary["reason"] = str(target.get("reason", "target_hit")) if accepted else "edit_rejected_after_target"
 	_last_interaction_summary["collider"] = str(target.get("collider", ""))
+	_last_interaction_summary["target_source"] = str(target.get("target_source", "unknown"))
+	_last_interaction_summary["render_mesh_hit"] = bool(target.get("render_mesh_hit", false))
+	if target.has("fallback_instances_scanned"):
+		_last_interaction_summary["fallback_instances_scanned"] = int(target["fallback_instances_scanned"])
+	if target.has("fallback_triangles_scanned"):
+		_last_interaction_summary["fallback_triangles_scanned"] = int(target["fallback_triangles_scanned"])
 	return accepted
+
+
+func _render_mesh_interaction_target(origin: Vector3, direction: Vector3, max_distance: float) -> Dictionary:
+	if not render_mesh_fallback_target_enabled:
+		return {
+			"ray_hit": false,
+			"render_mesh_hit": false,
+			"target_source": "none",
+			"reason": "raycast_miss_render_mesh_fallback_disabled",
+			"position": origin + direction * max_distance,
+			"collider": "",
+		}
+	var backend := _terrain_backend_node()
+	if backend == null:
+		return {
+			"ray_hit": false,
+			"render_mesh_hit": false,
+			"target_source": "none",
+			"reason": "raycast_miss_backend_render_node_missing",
+			"position": origin + direction * max_distance,
+			"collider": "",
+		}
+	var report := {
+		"hit": false,
+		"distance": max_distance,
+		"position": origin + direction * max_distance,
+		"normal": Vector3.ZERO,
+		"mesh_name": "",
+		"instances_scanned": 0,
+		"triangles_scanned": 0,
+		"limited": false,
+	}
+	_collect_render_mesh_hit(backend, origin, direction, max_distance, report)
+	if bool(report["hit"]):
+		return {
+			"ray_hit": false,
+			"render_mesh_hit": true,
+			"target_source": "render_mesh_fallback",
+			"reason": "render_mesh_fallback_hit",
+			"position": report["position"],
+			"collider": str(report["mesh_name"]),
+			"fallback_instances_scanned": int(report["instances_scanned"]),
+			"fallback_triangles_scanned": int(report["triangles_scanned"]),
+		}
+	var reason := "raycast_miss_render_mesh_miss"
+	if bool(report["limited"]):
+		reason = "raycast_miss_render_mesh_scan_limited"
+	return {
+		"ray_hit": false,
+		"render_mesh_hit": false,
+		"target_source": "none",
+		"reason": reason,
+		"position": origin + direction * max_distance,
+		"collider": "",
+		"fallback_instances_scanned": int(report["instances_scanned"]),
+		"fallback_triangles_scanned": int(report["triangles_scanned"]),
+	}
+
+
+func _terrain_backend_node() -> Node:
+	if game_world == null:
+		return null
+	if game_world.has_method("get_terrain_world"):
+		var terrain_world = game_world.call("get_terrain_world")
+		if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
+			return terrain_world.call("get_backend_terrain")
+	if game_world.has_method("get_reference_scene"):
+		var reference_scene = game_world.call("get_reference_scene")
+		if reference_scene != null and reference_scene.has_method("get_terrain_world"):
+			var terrain_world = reference_scene.call("get_terrain_world")
+			if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
+				return terrain_world.call("get_backend_terrain")
+	return null
+
+
+func _collect_render_mesh_hit(node: Node, origin: Vector3, direction: Vector3, max_distance: float, report: Dictionary) -> void:
+	if bool(report.get("limited", false)):
+		return
+	if node is MeshInstance3D:
+		if int(report["instances_scanned"]) >= render_mesh_fallback_max_instances:
+			report["limited"] = true
+			return
+		report["instances_scanned"] = int(report["instances_scanned"]) + 1
+		_accumulate_render_mesh_hit(node as MeshInstance3D, origin, direction, max_distance, report)
+	for child in node.get_children():
+		if bool(report.get("limited", false)):
+			return
+		if child is Node:
+			_collect_render_mesh_hit(child, origin, direction, max_distance, report)
+
+
+func _accumulate_render_mesh_hit(instance: MeshInstance3D, origin: Vector3, direction: Vector3, max_distance: float, report: Dictionary) -> void:
+	var mesh := instance.mesh
+	if mesh == null or not (mesh is ArrayMesh):
+		return
+	var array_mesh := mesh as ArrayMesh
+	var world_aabb: AABB = instance.global_transform * array_mesh.get_aabb()
+	if not _ray_intersects_aabb(origin, direction, world_aabb.grow(0.25), max_distance):
+		return
+	for surface_index in range(array_mesh.get_surface_count()):
+		var arrays: Array = array_mesh.surface_get_arrays(surface_index)
+		if arrays.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		if vertices.is_empty():
+			continue
+		if arrays.size() > Mesh.ARRAY_INDEX and not (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).is_empty():
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			var index := 0
+			while index + 2 < indices.size():
+				if int(report["triangles_scanned"]) >= render_mesh_fallback_max_triangles:
+					report["limited"] = true
+					return
+				_accumulate_render_triangle(
+					instance,
+					vertices[int(indices[index])],
+					vertices[int(indices[index + 1])],
+					vertices[int(indices[index + 2])],
+					origin,
+					direction,
+					report
+				)
+				report["triangles_scanned"] = int(report["triangles_scanned"]) + 1
+				index += 3
+		else:
+			var index := 0
+			while index + 2 < vertices.size():
+				if int(report["triangles_scanned"]) >= render_mesh_fallback_max_triangles:
+					report["limited"] = true
+					return
+				_accumulate_render_triangle(
+					instance,
+					vertices[index],
+					vertices[index + 1],
+					vertices[index + 2],
+					origin,
+					direction,
+					report
+				)
+				report["triangles_scanned"] = int(report["triangles_scanned"]) + 1
+				index += 3
+
+
+func _accumulate_render_triangle(
+	instance: MeshInstance3D,
+	local_a: Vector3,
+	local_b: Vector3,
+	local_c: Vector3,
+	origin: Vector3,
+	direction: Vector3,
+	report: Dictionary
+) -> void:
+	var a := instance.global_transform * local_a
+	var b := instance.global_transform * local_b
+	var c := instance.global_transform * local_c
+	var hit := _ray_triangle_intersection(origin, direction, a, b, c, float(report["distance"]))
+	if hit.is_empty():
+		return
+	report["hit"] = true
+	report["distance"] = float(hit["distance"])
+	report["position"] = hit["position"]
+	report["normal"] = hit["normal"]
+	report["mesh_name"] = str(instance.name)
+
+
+func _ray_triangle_intersection(
+	origin: Vector3,
+	direction: Vector3,
+	a: Vector3,
+	b: Vector3,
+	c: Vector3,
+	max_distance: float
+) -> Dictionary:
+	var edge1 := b - a
+	var edge2 := c - a
+	var h := direction.cross(edge2)
+	var determinant := edge1.dot(h)
+	if absf(determinant) < 0.000001:
+		return {}
+	var inverse_determinant := 1.0 / determinant
+	var s := origin - a
+	var u := inverse_determinant * s.dot(h)
+	if u < 0.0 or u > 1.0:
+		return {}
+	var q := s.cross(edge1)
+	var v := inverse_determinant * direction.dot(q)
+	if v < 0.0 or u + v > 1.0:
+		return {}
+	var distance := inverse_determinant * edge2.dot(q)
+	if distance <= 0.0001 or distance > max_distance:
+		return {}
+	var normal := edge1.cross(edge2)
+	if normal.length_squared() > 0.000001:
+		normal = normal.normalized()
+	return {
+		"distance": distance,
+		"position": origin + direction * distance,
+		"normal": normal,
+	}
+
+
+func _ray_intersects_aabb(origin: Vector3, direction: Vector3, aabb: AABB, max_distance: float) -> bool:
+	var t_min := 0.0
+	var t_max := max_distance
+	for axis in range(3):
+		var origin_component := origin[axis]
+		var direction_component := direction[axis]
+		var minimum := aabb.position[axis]
+		var maximum := minimum + aabb.size[axis]
+		if absf(direction_component) < 0.000001:
+			if origin_component < minimum or origin_component > maximum:
+				return false
+			continue
+		var inverse := 1.0 / direction_component
+		var near := (minimum - origin_component) * inverse
+		var far := (maximum - origin_component) * inverse
+		if near > far:
+			var swap := near
+			near = far
+			far = swap
+		t_min = maxf(t_min, near)
+		t_max = minf(t_max, far)
+		if t_min > t_max:
+			return false
+	return true
 
 
 func _record_interaction(

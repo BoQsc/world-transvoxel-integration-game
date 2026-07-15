@@ -42,6 +42,32 @@ ordered edit sequence, authoritative density/material samples must match after:
 The default edit brush must not rely on visual mesh triangles. Authoritative
 behavior is defined by voxel/SDF samples and edit journal order.
 
+## Runtime responsiveness rule
+
+Player edits are foreground gameplay operations. They must not silently
+disappear behind terrain streaming, collision generation, sample queries,
+snapshot work, or LOD replacement work.
+
+The standard runtime must satisfy these rules before claiming production-ready
+interactive terrain:
+
+- a click must either submit an edit or record a concrete rejection reason;
+- physics collision raycasts may be used as the first targeting path, but
+  collision-only targeting is not sufficient because collision can lag behind
+  visible terrain after fast viewer movement;
+- when collision misses but visible terrain exists under the cursor, the runtime
+  must provide a bounded fallback target path or an explicit unavailable reason;
+- accepted edits must receive higher priority than background sample/snapshot
+  operations;
+- accepted edits must start the edit apply burst immediately, not only after the
+  commit signal;
+- UI or marker diagnostics must expose the last target source, acceptance state,
+  and failure reason.
+
+GPU acceleration may improve throughput later, but it is not allowed to be the
+only answer to lost edit submissions. Queue priority, fallback targeting, and
+explicit failure reporting are CPU/runtime correctness requirements.
+
 ## Non-goals for this milestone
 
 This contract does not implement collapse, shaft stability, debris simulation,

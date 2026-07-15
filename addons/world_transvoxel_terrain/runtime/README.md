@@ -38,3 +38,20 @@ Generation, meshing, streaming, edit application, and storage stay in the
 lifecycle/profile/request wrappers, but it must not implement density volume
 loops, mesh construction loops, page generation loops, source-file streaming
 loops, or image/pixel terrain loops.
+
+## Interactive edit responsiveness
+
+Human/gameplay edits are foreground operations. Runtime code must not depend on
+collision-only targeting because collision can be temporarily behind visible
+terrain after fast viewer movement. The accepted standard path is:
+
+1. try physics collision for the exact interactive target;
+2. if collision misses, use a bounded visible-terrain target fallback or report a
+   concrete reason;
+3. submit the authoritative edit through the normal edit batch/journal path;
+4. give accepted edits immediate apply-budget priority;
+5. expose accepted/rejected/queued/applied state in summaries.
+
+This fallback target may inspect rendered mesh only to choose the player's
+intended point. It does not make rendered triangles authoritative. The committed
+edit remains defined by the voxel/SDF edit transaction and backend journal.

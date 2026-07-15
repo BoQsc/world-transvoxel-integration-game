@@ -243,6 +243,7 @@ func submit_sphere_edit(
 	var accepted := bool(terrain_world.call("submit_edit_batch", batch, 56056))
 	if accepted:
 		_edit_accept_count += 1
+		_begin_edit_burst()
 	_last_edit_summary = {
 		"accepted": accepted,
 		"submission_index": _edit_submission_count,
