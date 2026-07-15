@@ -15,15 +15,15 @@ const SURFACE_BIOME_MODEL := "deterministic_macro_surface_biomes_v1"
 const UNDERGROUND_PATCH_MODEL := "deterministic_deep_ore_patches_v1"
 const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 5, 7, 8]
 const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 5]
-const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 7, 4, 8]
-const UNDERGROUND_DEPTH_BANDS := "deep>=8:1,mid>=3:7,shallow>=1:4"
+const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 8]
+const UNDERGROUND_DEPTH_BANDS := "surface_cover<8:2|3|4|5,deep>=8:1,ore>=12:8"
 const STANDARD_MATERIAL_MEANINGS := {
 	1: "deep_stone",
 	2: "grass_surface_biome",
 	3: "gravel_surface_biome",
 	4: "shallow_surface_sand_or_player_fill",
 	5: "snow_surface_biome",
-	7: "mid_depth_rock",
+	7: "reserved_mid_depth_rock",
 	8: "deep_ore_patch",
 }
 

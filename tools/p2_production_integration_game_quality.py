@@ -222,7 +222,7 @@ def validate_visual_summary(
         "edit_failure_count": 0,
         "native_render_material_override": True,
         "primary_material_texture_active": True,
-        "surface_material_blend_weights_active": False,
+        "surface_material_blend_weights_active": True,
         "clean_material_variation_enabled": False,
         "clean_roughness": 1.0,
         "clean_specular": 0.0,

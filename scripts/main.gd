@@ -850,7 +850,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 	if str(generation.get("material_palette_version", "")) != "world_transvoxel_material_palette_v1":
 		_fail("standard material palette version mismatch: %s" % str(generation))
 		return false
-	if str(generation.get("underground_depth_bands", "")) != "deep>=8:1,mid>=3:7,shallow>=1:4":
+	if str(generation.get("underground_depth_bands", "")) != "surface_cover<8:2|3|4|5,deep>=8:1,ore>=12:8":
 		_fail("standard material depth bands mismatch: %s" % str(generation))
 		return false
 	if str(generation.get("surface_biome_model", "")) != "deterministic_macro_surface_biomes_v1":
@@ -870,7 +870,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 			_fail("standard surface biome material ID missing: id=%d summary=%s" % [material_id, str(generation)])
 			return false
 	var underground_ids := Array(generation.get("underground_strata_material_ids", []))
-	for material_id in [1, 4, 7, 8]:
+	for material_id in [1, 8]:
 		if not underground_ids.has(material_id):
 			_fail("standard underground material ID missing: id=%d summary=%s" % [material_id, str(generation)])
 			return false
@@ -881,15 +881,15 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 	)
 	var probes: Array = [
 		{
-			"label": "shallow",
+			"label": "surface_cover_shallow",
 			"point": Vector3i(center.x, center.y - 1, center.z),
-			"expected_material": 4,
+			"expected_materials": [2, 3, 4, 5],
 			"minimum_solid_depth": 1.0,
 		},
 		{
-			"label": "mid",
+			"label": "surface_cover_mid",
 			"point": Vector3i(center.x, center.y - 3, center.z),
-			"expected_material": 7,
+			"expected_materials": [2, 3, 4, 5],
 			"minimum_solid_depth": 3.0,
 		},
 		{
@@ -973,7 +973,8 @@ func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
 		var sample = by_point[key]
 		var density := float(sample.call("get_density"))
 		var material := int(sample.call("get_material"))
-		var expected_material := int(probe["expected_material"])
+		var expected_material := int(probe.get("expected_material", -1))
+		var expected_materials := Array(probe.get("expected_materials", []))
 		var label := str(probe["label"])
 		observed[label] = {
 			"point": key,
@@ -997,7 +998,17 @@ func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
 				material,
 			])
 			return false
-		if material != expected_material:
+		if expected_materials.size() > 0:
+			if not expected_materials.has(material):
+				_fail("material strata sample material mismatch: label=%s point=%s expected_one_of=%s got=%d observed=%s" % [
+					label,
+					key,
+					str(expected_materials),
+					material,
+					JSON.stringify(observed),
+				])
+				return false
+		elif material != expected_material:
 			_fail("material strata sample material mismatch: label=%s point=%s expected=%d got=%d observed=%s" % [
 				label,
 				key,

@@ -7,7 +7,7 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_worldspace_surface_biome_pipeline_v3"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_worldspace_surface_biome_pipeline_v4"
 const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
 const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
@@ -47,7 +47,7 @@ var _summary := {
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 	"primary_material_texture_active": false,
-	"surface_material_blend_channel": "disabled_discrete_vertex_color_was_blocky",
+	"surface_material_blend_channel": "vertex_color_surface_coverage_boundary_blend",
 	"surface_material_blend_weights_active": false,
 	"surface_biome_worldspace_blend_active": false,
 	"authored_albedo_layers": [],
@@ -117,8 +117,8 @@ func apply_materials_now() -> Dictionary:
 		"deterministic_texture": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 		"primary_material_texture_active": production_active,
-		"surface_material_blend_channel": "disabled_discrete_vertex_color_was_blocky",
-		"surface_material_blend_weights_active": false,
+		"surface_material_blend_channel": "vertex_color_surface_coverage_boundary_blend",
+		"surface_material_blend_weights_active": surface_biome_worldspace_active,
 		"surface_biome_worldspace_blend_active": surface_biome_worldspace_active,
 		"surface_biome_worldspace_blend_model": "deterministic_macro_surface_biomes_v1_worldspace_smooth_weights",
 		"surface_biome_seed": int(generation.get("seed", 1)),

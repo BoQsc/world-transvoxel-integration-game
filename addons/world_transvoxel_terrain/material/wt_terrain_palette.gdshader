@@ -34,11 +34,13 @@ const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying flat float material_id_flat;
+varying vec4 surface_material_weights;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	material_id_flat = UV2.x;
+	surface_material_weights = COLOR;
 }
 
 float material_layer(float material_id) {
@@ -250,27 +252,30 @@ void fragment() {
 		ROUGHNESS = clamp(clean_roughness, 0.0, 1.0);
 	} else {
 		float material_id = material_id_flat;
-		vec4 base = material_1_color;
-		if (material_id > 1.5 && material_id < 2.5) {
-			base = material_2_color;
-		} else if (material_id > 2.5 && material_id < 3.5) {
-			base = material_3_color;
-		} else if (material_id > 3.5 && material_id < 4.5) {
-			base = material_4_color;
-		} else if (material_id > 4.5 && material_id < 5.5) {
-			base = material_5_color;
-		} else if (material_id > 6.5 && material_id < 7.5) {
-			base = material_7_color;
-		} else if (material_id > 7.5 && material_id < 8.5) {
-			base = material_8_color;
-		}
 		vec3 surface_normal = normalize(world_normal);
-		vec4 albedo_texel = production_albedo_color(material_id, world_position, surface_normal);
-		float roughness_texel = production_roughness_value(material_id, world_position, surface_normal);
-		if (surface_biome_worldspace_blend_enabled && is_surface_biome_material(material_id)) {
-			vec4 surface_weights = surface_biome_worldspace_weights(world_position);
-			albedo_texel = production_worldspace_surface_albedo_color(surface_weights, world_position, surface_normal);
-			roughness_texel = production_worldspace_surface_roughness_value(surface_weights, world_position, surface_normal);
+		float surface_coverage = surface_weight_sum(surface_material_weights);
+		float base_material_id = material_id;
+		if (is_surface_biome_material(material_id) && surface_coverage < 0.999) {
+			base_material_id = 1.0;
+		}
+		vec4 albedo_texel = production_albedo_color(base_material_id, world_position, surface_normal);
+		float roughness_texel = production_roughness_value(base_material_id, world_position, surface_normal);
+		if (surface_coverage > 0.001) {
+			vec4 surface_weights = normalized_surface_weights(surface_material_weights);
+			if (surface_biome_worldspace_blend_enabled) {
+				surface_weights = surface_biome_worldspace_weights(world_position);
+			}
+			float coverage = clamp(surface_coverage, 0.0, 1.0);
+			albedo_texel = mix(
+				albedo_texel,
+				production_surface_albedo_color(surface_weights, world_position, surface_normal),
+				coverage
+			);
+			roughness_texel = mix(
+				roughness_texel,
+				production_surface_roughness_value(surface_weights, world_position, surface_normal),
+				coverage
+			);
 		}
 		ALBEDO = albedo_texel.rgb;
 		SPECULAR = 0.0;
