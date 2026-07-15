@@ -2789,6 +2789,7 @@ func _presentation_summary() -> Dictionary:
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"primary_material_texture_active": bool(material_summary.get("primary_material_texture_active", false)),
+		"surface_biome_worldspace_blend_active": bool(material_summary.get("surface_biome_worldspace_blend_active", false)),
 		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
 		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
@@ -2816,6 +2817,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if not bool(summary.get("primary_material_texture_active", false)):
 		_fail("primary material texture mapping inactive: %s" % str(summary))
+		return false
+	if selected_profile != FLAT_PROFILE and not bool(summary.get("surface_biome_worldspace_blend_active", false)):
+		_fail("world-space surface biome blend inactive: %s" % str(summary))
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
@@ -3133,6 +3137,7 @@ func _capture_human_visual() -> void:
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
 		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
+		"surface_biome_worldspace_blend_active": bool(presentation.get("surface_biome_worldspace_blend_active", false)),
 		"surface_material_blend_channel": str(presentation.get("surface_material_blend_channel", "")),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),

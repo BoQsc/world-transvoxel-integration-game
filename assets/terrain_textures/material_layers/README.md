@@ -21,11 +21,18 @@ visible and testable.
 | 7 | `rock_albedo` or `mid_rock_albedo` | mid-depth rock | medium gray |
 | 8 | `ore_albedo` or `ore_patch_albedo` | ore patch proof material | brown/orange |
 
-The concentric colored bands seen while digging are therefore material strata
-being exposed by the cut, not a debug overlay. If they look too diagnostic,
-replace the placeholders with authored textures here. If the same hard rings
-remain visually wrong after real textures, the material classifier/strata policy
-needs adjustment rather than hiding the colors.
+Surface biome IDs `2`, `3`, `4`, and `5` are rendered through a world-space
+smooth biome blend in production material mode. That is intentional: a hard
+per-vertex surface material ID can move when terrain LOD changes, so visible
+surface biome borders must be derived from stable world coordinates instead of
+from one endpoint chosen by the mesh extractor.
+
+Underground IDs `1`, `7`, and `8` remain direct material layers. The concentric
+bands seen while digging are therefore material strata being exposed by the cut,
+not a debug overlay. If they look too diagnostic, replace the placeholders with
+authored textures here. If the same hard rings remain visually wrong after real
+textures, the material classifier/strata policy needs adjustment rather than
+hiding the colors.
 
 ## Current expected files
 

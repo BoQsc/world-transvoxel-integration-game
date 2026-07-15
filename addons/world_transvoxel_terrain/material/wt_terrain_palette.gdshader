@@ -23,6 +23,10 @@ uniform bool clean_material_variation_enabled = false;
 uniform float clean_material_variation_strength = 0.08;
 uniform float clean_roughness = 1.0;
 uniform float clean_specular = 0.0;
+uniform bool surface_biome_worldspace_blend_enabled = true;
+uniform float surface_biome_seed_phase = 0.0001;
+uniform float surface_biome_height_blend_width = 6.0;
+uniform float surface_biome_noise_blend_width = 0.28;
 
 const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
 const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
@@ -92,6 +96,58 @@ vec4 production_albedo_color(float material_id, vec3 world_pos, vec3 normal) {
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
 }
 
+bool is_surface_biome_material(float material_id) {
+	return material_id > 1.5 && material_id < 5.5;
+}
+
+float deterministic_macro_biome(vec3 world_pos) {
+	return sin(world_pos.x * 0.0042 + surface_biome_seed_phase * 1.5) +
+		cos(world_pos.z * 0.0037 - surface_biome_seed_phase * 0.8) +
+		0.55 * sin((world_pos.x - world_pos.z) * 0.0021 + surface_biome_seed_phase);
+}
+
+float deterministic_dry_biome(vec3 world_pos) {
+	return sin((world_pos.x + world_pos.z) * 0.0051 - surface_biome_seed_phase * 0.4) +
+		0.42 * cos(world_pos.x * 0.0063 + surface_biome_seed_phase);
+}
+
+vec4 surface_biome_worldspace_weights(vec3 world_pos) {
+	float height_width = max(surface_biome_height_blend_width, 0.001);
+	float noise_width = max(surface_biome_noise_blend_width, 0.001);
+	float macro = deterministic_macro_biome(world_pos);
+	float dry = deterministic_dry_biome(world_pos);
+
+	float low_sand = 1.0 - smoothstep(10.0 - height_width, 10.0 + height_width, world_pos.y);
+	float dry_sand = smoothstep(0.85 - noise_width, 0.85 + noise_width, dry);
+	float sand = max(low_sand, dry_sand);
+
+	float high_snow = smoothstep(40.0 - height_width, 40.0 + height_width, world_pos.y);
+	float macro_snow = smoothstep(30.0 - height_width, 30.0 + height_width, world_pos.y) *
+		smoothstep(0.35 - noise_width, 0.35 + noise_width, macro);
+	float snow = max(high_snow, macro_snow);
+
+	float high_gravel = smoothstep(22.0 - height_width, 22.0 + height_width, world_pos.y);
+	float macro_gravel = 1.0 - smoothstep(-0.70 - noise_width, -0.70 + noise_width, macro);
+	float gravel = max(high_gravel, macro_gravel);
+
+	// Keep priority soft instead of binary. This prevents LOD-dependent material
+	// samples from moving visible biome borders, while still preserving broad
+	// sand/grass/gravel/snow regions.
+	gravel *= 1.0 - snow * 0.65;
+	sand *= 1.0 - snow * 0.75;
+	float grass = max(0.12, (1.0 - snow) * (1.0 - sand * 0.75) * (1.0 - gravel * 0.55));
+	vec4 weights = max(vec4(grass, gravel, sand, snow), vec4(0.0));
+	float total = max(weights.x + weights.y + weights.z + weights.w, 0.0001);
+	return weights / total;
+}
+
+vec4 production_worldspace_surface_albedo_color(vec4 weights, vec3 world_pos, vec3 normal) {
+	return production_albedo_color(2.0, world_pos, normal) * weights.x +
+		production_albedo_color(3.0, world_pos, normal) * weights.y +
+		production_albedo_color(4.0, world_pos, normal) * weights.z +
+		production_albedo_color(5.0, world_pos, normal) * weights.w;
+}
+
 vec3 production_normal_color(float material_id, vec3 world_pos, vec3 normal) {
 	vec3 weights = triplanar_weights(normal, PRODUCTION_TRIPLANAR_BLEND_SHARPNESS);
 	vec3 x_projection = texture(terrain_normal_array, material_array_uv(material_id, world_pos.zy)).rgb;
@@ -106,6 +162,13 @@ float production_roughness_value(float material_id, vec3 world_pos, vec3 normal)
 	float y_projection = texture(terrain_roughness_array, material_array_uv(material_id, world_pos.xz)).g;
 	float z_projection = texture(terrain_roughness_array, material_array_uv(material_id, world_pos.xy)).g;
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+float production_worldspace_surface_roughness_value(vec4 weights, vec3 world_pos, vec3 normal) {
+	return production_roughness_value(2.0, world_pos, normal) * weights.x +
+		production_roughness_value(3.0, world_pos, normal) * weights.y +
+		production_roughness_value(4.0, world_pos, normal) * weights.z +
+		production_roughness_value(5.0, world_pos, normal) * weights.w;
 }
 
 vec4 normalized_surface_weights(vec4 weights) {
@@ -204,6 +267,11 @@ void fragment() {
 		vec3 surface_normal = normalize(world_normal);
 		vec4 albedo_texel = production_albedo_color(material_id, world_position, surface_normal);
 		float roughness_texel = production_roughness_value(material_id, world_position, surface_normal);
+		if (surface_biome_worldspace_blend_enabled && is_surface_biome_material(material_id)) {
+			vec4 surface_weights = surface_biome_worldspace_weights(world_position);
+			albedo_texel = production_worldspace_surface_albedo_color(surface_weights, world_position, surface_normal);
+			roughness_texel = production_worldspace_surface_roughness_value(surface_weights, world_position, surface_normal);
+		}
 		ALBEDO = albedo_texel.rgb;
 		SPECULAR = 0.0;
 		ROUGHNESS = clamp(roughness_texel, 0.45, 0.98);

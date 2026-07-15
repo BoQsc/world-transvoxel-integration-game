@@ -233,6 +233,11 @@ def validate_visual_summary(
                 f"visual capture field {key} expected {expected!r}, "
                 f"got {summary.get(key)!r}: {summary!r}"
             )
+    if expected_profile != "flat_baseline" and summary.get("surface_biome_worldspace_blend_active") is not True:
+        raise RuntimeError(
+            "visual capture expected world-space surface biome blend to be active "
+            f"for profile {expected_profile}: {summary!r}"
+        )
     mode = str(summary.get("mode", ""))
     minimums = {
         "runtime_demand_capacity_per_viewer": 8192,
