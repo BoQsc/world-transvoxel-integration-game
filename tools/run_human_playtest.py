@@ -13,6 +13,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+from typing import Any
 
 
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -22,6 +23,29 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
 
 def repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[1]
+
+
+def marker_root(project: pathlib.Path) -> pathlib.Path:
+    return project / ".godot" / "world_transvoxel_captures" / "human_artifact_marks"
+
+
+def load_json(path: pathlib.Path) -> dict[str, Any] | None:
+    try:
+        import json
+
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def latest_human_marker(project: pathlib.Path) -> pathlib.Path:
+    root = marker_root(project)
+    candidates = sorted(root.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        data = load_json(path)
+        if data and data.get("source") == "human":
+            return path
+    raise FileNotFoundError(f"no human marker JSON files found under {root}")
 
 
 def find_godot(explicit: str | None) -> pathlib.Path:
@@ -55,6 +79,15 @@ def build_command(args: argparse.Namespace) -> list[str]:
     project = pathlib.Path(args.project).resolve()
     if not (project / "project.godot").is_file():
         raise FileNotFoundError(f"project.godot not found under {project}")
+    if args.inspect_marker and args.inspect_latest_marker:
+        raise ValueError("use either --inspect-marker or --inspect-latest-marker, not both")
+    inspect_marker: pathlib.Path | None = None
+    if args.inspect_marker:
+        inspect_marker = pathlib.Path(args.inspect_marker).resolve()
+        if not inspect_marker.is_file():
+            raise FileNotFoundError(f"marker JSON does not exist: {inspect_marker}")
+    elif args.inspect_latest_marker:
+        inspect_marker = latest_human_marker(project)
 
     command = [
         str(godot),
@@ -74,6 +107,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--human-lighting-preset", str(args.lighting_preset)])
     if args.preset:
         command.extend(["--human-playtest-preset", args.preset])
+    if inspect_marker is not None:
+        command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
     return command
 
 
@@ -115,6 +150,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--preset",
         help="Optional human playtest preset, for example 'tunnel'.",
+    )
+    parser.add_argument(
+        "--inspect-marker",
+        help="Launch at an exact marker JSON produced by Tilde+M.",
+    )
+    parser.add_argument(
+        "--inspect-latest-marker",
+        action="store_true",
+        help="Launch at the latest human marker JSON produced by Tilde+M.",
     )
     parser.add_argument(
         "--print-only",

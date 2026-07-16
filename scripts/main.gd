@@ -55,6 +55,8 @@ var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
 var human_artifact_inspect_marker_path := ""
+var human_artifact_marker_sequence_file_path := ""
+var human_artifact_marker_sequence_wait_frames := 180
 var initial_human_material_mode := ""
 var human_windowed := false
 var runtime_render_apply_budget_override := -1
@@ -80,6 +82,7 @@ var local_terrain_lights_enabled := false
 var human_material_mode_index := 0
 var human_artifact_marker_busy := false
 var human_artifact_mark_index := 0
+var last_human_artifact_mark_summary := {}
 var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
@@ -111,6 +114,8 @@ func _ready() -> void:
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
 	human_artifact_inspect_marker_path = _arg_value(args, "--human-artifact-inspect-marker", "")
+	human_artifact_marker_sequence_file_path = _arg_value(args, "--human-artifact-marker-sequence-file", "")
+	human_artifact_marker_sequence_wait_frames = int(_arg_value(args, "--human-artifact-marker-sequence-wait-frames", "180"))
 	initial_human_material_mode = _arg_value(args, "--human-material-mode", "")
 	human_windowed = args.has("--human-windowed")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
@@ -137,7 +142,7 @@ func _ready() -> void:
 	else:
 		if human_visual_capture_path.is_empty() and not human_windowed:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
+		if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty() and human_artifact_marker_sequence_file_path.is_empty():
 			_clear_human_storage()
 	_configure_game_lighting()
 	_build_hud()
@@ -303,6 +308,9 @@ func _start_profile() -> void:
 			return
 		_set_human_loading_visible(false)
 	_update_telemetry()
+	if not human_artifact_marker_sequence_file_path.is_empty():
+		call_deferred("_run_human_artifact_marker_sequence")
+		return
 	if not human_artifact_replay_marker_path.is_empty():
 		call_deferred("_run_human_artifact_replay_marker")
 		return
@@ -1566,6 +1574,70 @@ func _run_human_artifact_inspect_marker() -> bool:
 	return true
 
 
+func _run_human_artifact_marker_sequence() -> void:
+	var sequence := _load_human_artifact_marker_sequence(human_artifact_marker_sequence_file_path)
+	if sequence.is_empty():
+		push_error("WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_LOAD_FAIL path=%s" % human_artifact_marker_sequence_file_path)
+		get_tree().quit(1)
+		return
+	var markers: Array = sequence.get("markers", [])
+	if markers.is_empty():
+		push_error("WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_EMPTY path=%s" % human_artifact_marker_sequence_file_path)
+		get_tree().quit(1)
+		return
+	var wait_frames := int(sequence.get("wait_frames", human_artifact_marker_sequence_wait_frames))
+	var result_steps := []
+	for index in range(markers.size()):
+		var marker_path := _human_artifact_sequence_marker_path(markers[index])
+		var marker := _load_human_artifact_marker_json(marker_path)
+		if marker.is_empty():
+			push_error("WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_MARKER_LOAD_FAIL index=%d path=%s" % [index, marker_path])
+			get_tree().quit(1)
+			return
+		await _apply_human_artifact_marker_pose(marker)
+		if game_world != null and game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", true)
+		await get_tree().physics_frame
+		_update_telemetry()
+		var immediate_ok := await _capture_human_artifact_mark(_human_artifact_sequence_capture_source(index, "immediate"))
+		var immediate_summary := last_human_artifact_mark_summary.duplicate(true)
+		for _frame in range(maxi(wait_frames, 0)):
+			await get_tree().physics_frame
+		_update_telemetry()
+		var settled_ok := await _capture_human_artifact_mark(_human_artifact_sequence_capture_source(index, "settled"))
+		var settled_summary := last_human_artifact_mark_summary.duplicate(true)
+		result_steps.append({
+			"index": index,
+			"source_marker_path": marker_path,
+			"source_marker_id": str(marker.get("marker_id", "")),
+			"immediate_ok": immediate_ok,
+			"settled_ok": settled_ok,
+			"immediate": _human_artifact_marker_sequence_capture_digest(immediate_summary),
+			"settled": _human_artifact_marker_sequence_capture_digest(settled_summary),
+		})
+		if not immediate_ok or not settled_ok:
+			push_error("WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_CAPTURE_FAIL index=%d path=%s" % [index, marker_path])
+			get_tree().quit(1)
+			return
+	var result := {
+		"sequence_file": human_artifact_marker_sequence_file_path,
+		"profile": str(selected_profile),
+		"material_mode": _human_material_mode_name(),
+		"wait_frames": wait_frames,
+		"step_count": result_steps.size(),
+		"steps": result_steps,
+	}
+	var output_path := _write_human_artifact_marker_sequence_result(result)
+	print("WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_PASS ", JSON.stringify({
+		"sequence_file": human_artifact_marker_sequence_file_path,
+		"profile": str(selected_profile),
+		"material_mode": _human_material_mode_name(),
+		"step_count": result_steps.size(),
+		"result_path": output_path,
+	}))
+	get_tree().quit(0)
+
+
 func _load_human_artifact_marker_json(path: String) -> Dictionary:
 	var absolute_path := path
 	if not absolute_path.is_absolute_path():
@@ -1581,6 +1653,77 @@ func _load_human_artifact_marker_json(path: String) -> Dictionary:
 	text = text.replace("1e99999", "-1.0")
 	var parsed = JSON.parse_string(text)
 	return parsed if parsed is Dictionary else {}
+
+
+func _load_human_artifact_marker_sequence(path: String) -> Dictionary:
+	var absolute_path := path
+	if not absolute_path.is_absolute_path():
+		absolute_path = ProjectSettings.globalize_path(path)
+	var file := FileAccess.open(absolute_path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is Array:
+		return {"markers": parsed}
+	if parsed is Dictionary:
+		return parsed
+	return {}
+
+
+func _human_artifact_sequence_marker_path(value) -> String:
+	if value is Dictionary:
+		return str(value.get("path", value.get("marker_path", "")))
+	return str(value)
+
+
+func _human_artifact_sequence_capture_source(index: int, phase: String) -> String:
+	return "sequence_%03d_%s" % [index, phase]
+
+
+func _human_artifact_marker_sequence_capture_digest(summary: Dictionary) -> Dictionary:
+	var screen: Dictionary = summary.get("screen_sky_pixels", {})
+	var runtime: Dictionary = summary.get("runtime", {})
+	var presentation: Dictionary = summary.get("presentation", {})
+	return {
+		"marker_id": str(summary.get("marker_id", "")),
+		"json_path": str(summary.get("json_path", "")),
+		"screenshot_path": str(summary.get("screenshot_path", "")),
+		"screenshot_error": int(summary.get("screenshot_error", ERR_UNAVAILABLE)),
+		"center_sky_pixels": int(screen.get("center_sky_pixels", 0)),
+		"crosshair_sky_pixels": int(screen.get("crosshair_sky_pixels", 0)),
+		"isolated_center_sky_pixels": int(screen.get("isolated_center_sky_pixels", 0)),
+		"isolated_crosshair_sky_pixels": int(screen.get("isolated_crosshair_sky_pixels", 0)),
+		"whole_sky_pixels": int(screen.get("whole_sky_pixels", 0)),
+		"problematic_probe_count": int(summary.get("problematic_probe_count", 0)),
+		"problematic_precise_probe_count": int(summary.get("problematic_precise_probe_count", 0)),
+		"mesh_quality_warning_precise_probe_count": int(summary.get("mesh_quality_warning_precise_probe_count", 0)),
+		"queued_render": int(runtime.get("queued_render", 0)),
+		"queued_collision": int(runtime.get("queued_collision", 0)),
+		"pending_chunk_retirements": int(runtime.get("pending_chunk_retirements", 0)),
+		"render_fading_resources": int(runtime.get("render_fading_resources", 0)),
+		"active_chunk_records": int(runtime.get("active_chunk_records", 0)),
+		"fully_ready_chunk_records": int(runtime.get("fully_ready_chunk_records", 0)),
+		"visual_mode": str(presentation.get("visual_mode", "")),
+		"human_material_mode": str(presentation.get("human_material_mode", "")),
+	}
+
+
+func _write_human_artifact_marker_sequence_result(result: Dictionary) -> String:
+	var root := ProjectSettings.globalize_path(HUMAN_ARTIFACT_CAPTURE_ROOT).path_join("sequences")
+	DirAccess.make_dir_recursive_absolute(root)
+	var stamp := Time.get_datetime_string_from_system(false)
+	stamp = stamp.replace("-", "")
+	stamp = stamp.replace(":", "")
+	stamp = stamp.replace(" ", "_")
+	var output_path := root.path_join("%s_sequence_result.json" % stamp)
+	var file := FileAccess.open(output_path, FileAccess.WRITE)
+	if file == null:
+		push_error("failed to write human artifact marker sequence result: %s" % output_path)
+		return ""
+	file.store_string(JSON.stringify(result))
+	file.close()
+	return output_path
 
 
 func _apply_human_artifact_marker_pose(marker: Dictionary) -> void:
@@ -1680,6 +1823,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"mesh_quality_warning_precise_probes": mesh_quality_warning_precise_probes,
 		"precise_probes": precise_probes,
 	}
+	last_human_artifact_mark_summary = summary.duplicate(true)
 	var file := FileAccess.open(json_path, FileAccess.WRITE)
 	var file_ok := file != null
 	if file_ok:
@@ -3166,12 +3310,14 @@ func _human_test_context_text() -> String:
 	var test_name := "human_playtest"
 	if not human_visual_capture_path.is_empty():
 		test_name = "visual_capture:%s" % human_visual_capture_mode
+	elif not human_artifact_marker_sequence_file_path.is_empty():
+		test_name = "human_marker_sequence"
 	elif not human_artifact_inspect_marker_path.is_empty():
 		test_name = "human_marker_inspect"
 	elif not human_playtest_preset.is_empty():
 		test_name = "human_playtest:%s" % human_playtest_preset
 	var storage_mode := "preserve"
-	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty():
+	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty() and human_artifact_marker_sequence_file_path.is_empty():
 		storage_mode = "fresh"
 	return "test: %s | profile: %s | storage: %s | material: %s" % [
 		test_name,
