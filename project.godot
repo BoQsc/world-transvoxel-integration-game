@@ -4,6 +4,7 @@ config_version=5
 
 config/name="World Transvoxel Production Integration Game"
 run/main_scene="res://scenes/main.tscn"
+run/max_fps=60
 config/features=PackedStringArray("4.6", "Forward Plus")
 
 [display]
