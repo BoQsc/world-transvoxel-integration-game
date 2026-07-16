@@ -98,6 +98,20 @@ The current deep standard proof profile is `g20_deep_2k_256_on_demand`:
 - current role: standard deeper-underground proof and stress profile, not the
   default player terrain style.
 
+The rolling-hills cave inspection profile is
+`g21_rolling_hills_cave_2k_256_on_demand`:
+
+- horizontal coverage: `2048 x 2048` cells;
+- vertical coverage: `256` cells;
+- vertical origin: `-128` cells (`world_chunk_origin_y=-8`);
+- native procedural preset: `rolling_hills_cave`;
+- terrain role: map-shape inspection profile with gentler rolling terrain and
+  a real density-volume cave/chamber;
+- current proof boundary: autonomous sample checks verify material strata,
+  cave air, surrounding cave solid, and normal rolling-hill solid; the full
+  post-edit Terrain 1.0 production gameplay proof is not yet passed for this
+  profile because post-edit streaming settle can remain pending.
+
 Before claiming a deeper world, the implementation must prove:
 
 - increased vertical page/chunk coverage;
@@ -112,7 +126,8 @@ Before claiming a deeper world, the implementation must prove:
 These are valid future systems, but not part of the current Terrain 1.0
 volumetric standard:
 
-- natural cave generation;
+- general/production natural cave generation beyond the bounded g21 inspection
+  preset;
 - ore veins;
 - collapse/stability simulation;
 - octahedron-specific mining;

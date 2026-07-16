@@ -4,6 +4,7 @@ const MARKER := "WT_PRODUCTION_GAME_P2_PASS"
 const ADDON_ID := "world_transvoxel_gameworld"
 const COMPACT_PROFILE := &"g19_compact_2k_on_demand"
 const DEEP_PROFILE := &"g20_deep_2k_256_on_demand"
+const ROLLING_HILLS_CAVE_PROFILE := &"g21_rolling_hills_cave_2k_256_on_demand"
 const FLAT_PROFILE := &"flat_baseline"
 const DEFAULT_HUMAN_PROFILE := FLAT_PROFILE
 const DEFAULT_AUTONOMOUS_PROFILE := COMPACT_PROFILE
@@ -339,6 +340,8 @@ func _run_autonomous_proof() -> void:
 		return
 	if not await _verify_standard_material_strata_contract(terrain_world):
 		return
+	if selected_profile == ROLLING_HILLS_CAVE_PROFILE and not await _verify_rolling_hills_cave_contract(terrain_world):
+		return
 	if not _verify_standard_multiplayer_server_contract(terrain_world):
 		return
 	await get_tree().physics_frame
@@ -434,12 +437,18 @@ func _run_interaction_raycast_proof(terrain_world: Node) -> bool:
 	if not await _wait_for_current_profile_settled("before interaction raycast proof"):
 		return false
 	await get_tree().physics_frame
-	var target := _find_collision_surface_near([
+	var target := Vector3(INF, INF, INF)
+	var target_probes := [
 		approximate_target,
 		edit_point + Vector3(24.0, 0.0, 0.0),
 		edit_point + Vector3(0.0, 0.0, 24.0),
 		edit_point + Vector3(-24.0, 0.0, 0.0),
-	])
+	]
+	for _attempt in range(30):
+		target = _find_collision_surface_near(target_probes)
+		if not is_inf(target.x):
+			break
+		await get_tree().physics_frame
 	if is_inf(target.x):
 		var no_surface_summary: Dictionary = game_world.get_game_world_summary()
 		_fail("interaction proof could not find nearby terrain collision surface: %s" % str(no_surface_summary))
@@ -562,6 +571,7 @@ func _build_hud() -> void:
 	profile_selector.add_item("flat_baseline")
 	profile_selector.add_item("g19_compact_2k_on_demand")
 	profile_selector.add_item("g20_deep_2k_256_on_demand")
+	profile_selector.add_item("g21_rolling_hills_cave_2k_256_on_demand")
 	canvas.add_child(profile_selector)
 
 
@@ -683,6 +693,10 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 	return p
 
 
+func _is_deep_vertical_profile(profile_id: StringName) -> bool:
+	return profile_id == DEEP_PROFILE or profile_id == ROLLING_HILLS_CAVE_PROFILE
+
+
 func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == FLAT_PROFILE:
 		return {
@@ -735,14 +749,14 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"player_focus_viewer_enabled": false,
 		"player_focus_viewer_distance": 0.0,
 		"startup_requires_cold_idle": false,
-		"startup_world_state_timeout_frames": 2400 if profile_id == DEEP_PROFILE else 900,
+		"startup_world_state_timeout_frames": 2400 if _is_deep_vertical_profile(profile_id) else 900,
 		"startup_minimum_render_resources": 32,
 		"startup_minimum_collision_resources": 32,
-		"runtime_active_chunk_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
+		"runtime_active_chunk_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
 		"runtime_viewer_capacity": 2,
-		"runtime_demand_capacity_per_viewer": 16000 if profile_id == DEEP_PROFILE else 10000,
-		"runtime_render_entry_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
-		"runtime_collision_entry_capacity": 8192 if profile_id == DEEP_PROFILE else 4096,
+		"runtime_demand_capacity_per_viewer": 16000 if _is_deep_vertical_profile(profile_id) else 10000,
+		"runtime_render_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
+		"runtime_collision_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
 		"runtime_lod_refinement_radius_chunks": 1,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
@@ -762,6 +776,14 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 	if profile_id == DEEP_PROFILE:
 		settings["start"] = Vector3(1184, 146, 1008)
 		settings["viewers"] = [Vector3(1024, 146, 1024)]
+	elif profile_id == ROLLING_HILLS_CAVE_PROFILE:
+		if autonomous:
+			settings["start"] = Vector3(1536, 58, 512)
+			settings["viewers"] = [Vector3(1536, 58, 512)]
+		else:
+			settings["start"] = Vector3(900, 58, 1030)
+			settings["viewers"] = [Vector3(900, 58, 1030)]
+		settings["edit_point"] = Vector3(1536, 27, 512)
 	return settings
 
 
@@ -769,6 +791,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	var generation = GenerationProfile.new()
 	generation.profile_id = profile_id
 	generation.seed = 19019
+	generation.procedural_preset_id = &"mountain_reference"
 	generation.source_revision = 190020
 	generation.world_chunk_count_x = 128
 	generation.world_chunk_count_y = 8
@@ -786,6 +809,15 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	elif profile_id == DEEP_PROFILE:
 		generation.seed = 19020
 		generation.source_revision = 190257
+		generation.world_chunk_count_x = 128
+		generation.world_chunk_count_y = 16
+		generation.world_chunk_origin_y = -8
+		generation.world_chunk_count_z = 128
+		generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
+	elif profile_id == ROLLING_HILLS_CAVE_PROFILE:
+		generation.seed = 19021
+		generation.procedural_preset_id = &"rolling_hills_cave"
+		generation.source_revision = 190321
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -846,7 +878,7 @@ func _update_telemetry() -> void:
 
 
 func _verify_scene_contract() -> bool:
-	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 3 and telemetry_label != null and 			player.has_method("submit_edit_input")
+	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 4 and telemetry_label != null and 			player.has_method("submit_edit_input")
 
 
 func _verify_standard_volume_contract(terrain_world: Node) -> bool:
@@ -876,7 +908,7 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 	if vertical_cells < 128:
 		_fail("standard terrain vertical volume is below reference depth: %s" % str(terrain))
 		return false
-	if selected_profile == DEEP_PROFILE and vertical_cells < 256:
+	if _is_deep_vertical_profile(selected_profile) and vertical_cells < 256:
 		_fail("deep terrain vertical volume is below deep-underground reference: %s" % str(terrain))
 		return false
 	if generation_vertical_cells != vertical_cells:
@@ -885,7 +917,7 @@ func _verify_standard_volume_contract(terrain_world: Node) -> bool:
 	if generation_vertical_origin_cell != vertical_origin_cell:
 		_fail("terrain/generation vertical origins disagree: terrain=%s generation=%s" % [str(terrain), str(generation)])
 		return false
-	if selected_profile == DEEP_PROFILE and vertical_origin_cell != -128:
+	if _is_deep_vertical_profile(selected_profile) and vertical_origin_cell != -128:
 		_fail("deep terrain vertical origin must be -128 cells: %s" % str(terrain))
 		return false
 	if not bool(terrain.get("plus_y_is_up", false)):
@@ -985,7 +1017,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 			"minimum_solid_depth": 8.0,
 		},
 	]
-	if selected_profile != FLAT_PROFILE:
+	if selected_profile != FLAT_PROFILE and selected_profile != ROLLING_HILLS_CAVE_PROFILE:
 		probes.append_array([
 			{
 				"label": "surface_grass",
@@ -1018,6 +1050,13 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 				"minimum_solid_depth": 12.0,
 			},
 		])
+	elif selected_profile == ROLLING_HILLS_CAVE_PROFILE:
+		probes.append({
+			"label": "cave_shell_deep_material",
+			"point": Vector3i(1024, -96, 1024),
+			"expected_materials": [1, 8],
+			"minimum_solid_depth": 12.0,
+		})
 	var points: Array = []
 	for probe in probes:
 		points.append(probe["point"])
@@ -1113,6 +1152,125 @@ func _verify_material_strata_samples(probes: Array, samples: Array) -> bool:
 			JSON.stringify(observed),
 		]
 	)
+	return true
+
+
+func _verify_rolling_hills_cave_contract(terrain_world: Node) -> bool:
+	var summaries_value = terrain_world.call("get_profile_summaries")
+	if not (summaries_value is Dictionary):
+		_fail("rolling-hills cave summaries are not a dictionary: %s" % str(summaries_value))
+		return false
+	var summaries: Dictionary = summaries_value
+	var generation_value = summaries.get("generation", {})
+	if not (generation_value is Dictionary):
+		_fail("rolling-hills cave generation summary missing: %s" % str(summaries))
+		return false
+	var generation: Dictionary = generation_value
+	if str(generation.get("procedural_preset_id", "")) != "rolling_hills_cave":
+		_fail("rolling-hills cave profile did not select native cave preset: %s" % str(generation))
+		return false
+	var probes: Array = [
+		{
+			"label": "entrance_air",
+			"point": Vector3i(900, 15, 1030),
+			"expected_air": true,
+			"minimum_abs_density": 1.0,
+		},
+		{
+			"label": "main_chamber_air",
+			"point": Vector3i(1024, -20, 1024),
+			"expected_air": true,
+			"minimum_abs_density": 1.0,
+		},
+		{
+			"label": "below_main_chamber_solid",
+			"point": Vector3i(1024, -96, 1024),
+			"expected_air": false,
+			"minimum_abs_density": 8.0,
+		},
+		{
+			"label": "rolling_hill_surface_solid",
+			"point": Vector3i(1536, 26, 512),
+			"expected_air": false,
+			"minimum_abs_density": 0.5,
+		},
+	]
+	var points: Array = []
+	for probe in probes:
+		points.append(probe["point"])
+	_ensure_authoritative_sample_connections(terrain_world)
+	var request_id := int(terrain_world.call("request_authoritative_samples", points, 0))
+	if request_id <= 0:
+		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "unknown"
+		_fail("rolling-hills cave authoritative sample query rejected: %s" % error)
+		return false
+	for _frame in range(240):
+		if authoritative_sample_failures.has(request_id):
+			var failure_error := str(authoritative_sample_failures[request_id])
+			authoritative_sample_failures.erase(request_id)
+			_fail("rolling-hills cave authoritative sample query failed: %s" % failure_error)
+			return false
+		if authoritative_sample_batches.has(request_id):
+			var samples: Array = authoritative_sample_batches[request_id]
+			authoritative_sample_batches.erase(request_id)
+			return _verify_rolling_hills_cave_samples(probes, samples)
+		await get_tree().process_frame
+	_fail("rolling-hills cave authoritative sample query timed out request=%d" % request_id)
+	return false
+
+
+func _verify_rolling_hills_cave_samples(probes: Array, samples: Array) -> bool:
+	var by_point := {}
+	for sample in samples:
+		if sample == null:
+			continue
+		var point: Vector3i = sample.call("get_grid_point")
+		by_point[_grid_point_key(point)] = sample
+	var observed := {}
+	for probe in probes:
+		var point: Vector3i = probe["point"]
+		var key := _grid_point_key(point)
+		if not by_point.has(key):
+			_fail("rolling-hills cave sample missing for point=%s samples=%d" % [key, samples.size()])
+			return false
+		var sample = by_point[key]
+		var density := float(sample.call("get_density"))
+		var material := int(sample.call("get_material"))
+		var expected_air := bool(probe["expected_air"])
+		var label := str(probe["label"])
+		observed[label] = {
+			"point": key,
+			"density": density,
+			"material": material,
+		}
+		if expected_air and density <= 0.0:
+			_fail("rolling-hills cave sample is not air: label=%s point=%s density=%.6f material=%d" % [
+				label,
+				key,
+				density,
+				material,
+			])
+			return false
+		if not expected_air and density >= 0.0:
+			_fail("rolling-hills cave sample is not solid: label=%s point=%s density=%.6f material=%d" % [
+				label,
+				key,
+				density,
+				material,
+			])
+			return false
+		if absf(density) < float(probe["minimum_abs_density"]):
+			_fail("rolling-hills cave sample is too close to surface: label=%s point=%s density=%.6f observed=%s" % [
+				label,
+				key,
+				density,
+				JSON.stringify(observed),
+			])
+			return false
+	print("WT_ROLLING_HILLS_CAVE_CONTRACT_PASS profile=%s samples=%s" % [
+		str(selected_profile),
+		JSON.stringify(observed),
+	])
 	return true
 
 

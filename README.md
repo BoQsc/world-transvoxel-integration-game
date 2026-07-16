@@ -197,6 +197,15 @@ tunnels, material strata queries, and deep edit persistence without switching
 to a different terrain type. It is a stress/proof profile, not the default
 terrain style.
 
+The rolling-hills cave inspection profile is
+`g21_rolling_hills_cave_2k_256_on_demand`. It uses the native
+`rolling_hills_cave` procedural preset with the same 2048 by 2048 horizontal
+coverage and 256 vertical cells as g20, but replaces the mountain stress shape
+with gentler rolling hills and a real density-volume cave/chamber. Its current
+role is map-shape and cave-volume inspection. It is not yet a Terrain 1.0
+release gate because the full post-edit production gameplay proof still fails
+on g21 post-edit streaming settle.
+
 The flat baseline profile remains available for proof automation:
 
 ```gdscript

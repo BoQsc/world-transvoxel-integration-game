@@ -20,7 +20,8 @@ import godot_import_assets
 
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 DEEP_PROFILE = "g20_deep_2k_256_on_demand"
-PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE,)
+ROLLING_HILLS_CAVE_PROFILE = "g21_rolling_hills_cave_2k_256_on_demand"
+PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE)
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
 LOD_MOVEMENT_GATE_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 TUNNEL_VISUAL_SKY_FREE_LABELS = {

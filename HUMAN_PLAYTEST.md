@@ -18,6 +18,8 @@ Expected baseline:
 - addon stack: `world_transvoxel` + `world_transvoxel_terrain` + `world_transvoxel_gameworld`
 - default profile: `flat_baseline`
 - mountainous inspection profile: `g19_compact_2k_on_demand`
+- deep underground inspection profile: `g20_deep_2k_256_on_demand`
+- rolling-hills cave inspection profile: `g21_rolling_hills_cave_2k_256_on_demand`
 - mountain map: 2048 by 2048 blocks
 - mountain runtime LOD: `viewer_maximum_lod=3`, `viewer_radius_chunks=8`, near-detail refinement radius 1
 - player-driven viewer updates use a 4 m movement threshold in the current
@@ -42,6 +44,15 @@ Expected baseline:
 - terrain is viewer-streamed: chunks are generated/loaded/meshed around the active player/camera and unloaded outside the active coverage. This is expected for the large-world runtime; edits persist through the journal/storage path instead of requiring the entire 2048×2048 map to stay rendered at once.
 - player starts above the current higher-relief terrain and is snapped to the collision floor before input is enabled
 - mouse-look, WASD movement, jump, fly inspection, terrain edit input, and lighting controls are present
+
+`g21_rolling_hills_cave_2k_256_on_demand` is an inspection/playtest profile,
+not the Terrain 1.0 release gate. It uses a native procedural preset
+(`rolling_hills_cave`) with a 2048 by 2048 horizontal map, 256 vertical cells,
+rolling hills, and a real density-volume cave/chamber. Current autonomous
+sample proof verifies the profile fields, material strata, cave air, and
+surrounding cave solid. The full production P2 gameplay proof still does not
+pass for g21 because post-edit streaming settle can remain pending after edits;
+do not claim g21 as release-qualified until that is resolved.
 
 Controls:
 
@@ -138,6 +149,12 @@ To launch the mountainous inspection profile directly from a terminal:
 
 ```console
 "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand
+```
+
+To launch the rolling-hills cave inspection profile:
+
+```console
+python tools/run_human_playtest.py --profile g21_rolling_hills_cave_2k_256_on_demand --material production_texture_array
 ```
 
 Automated near/far deformation captures:

@@ -43,6 +43,27 @@ static func start_backend_world(
 			"error": "",
 		}
 	if source_mode == "DETERMINISTIC_REFERENCE":
+		var procedural_preset_id := _procedural_preset_id(generation_profile)
+		if backend_terrain.has_method("start_procedural_world_preset_with_vertical_origin"):
+			return {
+				"started": bool(backend_terrain.call(
+					"start_procedural_world_preset_with_vertical_origin",
+					chunk_count_x,
+					chunk_count_y,
+					chunk_origin_y,
+					chunk_count_z,
+					int(generation_profile.get("seed")),
+					int(generation_profile.get("source_revision")),
+					procedural_preset_id,
+					object_root
+				)),
+				"error": "",
+			}
+		if procedural_preset_id != "mountain_reference":
+			return {
+				"started": false,
+				"error": "backend terrain cannot start procedural preset: %s" % procedural_preset_id,
+			}
 		if backend_terrain.has_method("start_procedural_world_with_vertical_origin"):
 			return {
 				"started": bool(backend_terrain.call(
@@ -95,6 +116,15 @@ static func _source_mode_name(generation_profile: Resource) -> String:
 	if source_mode == 2:
 		return "BAKED_WORLD"
 	return ""
+
+
+static func _procedural_preset_id(generation_profile: Resource) -> String:
+	if generation_profile == null:
+		return "mountain_reference"
+	if not _resource_has_property(generation_profile, "procedural_preset_id"):
+		return "mountain_reference"
+	var preset_id := str(generation_profile.get("procedural_preset_id"))
+	return preset_id if not preset_id.is_empty() else "mountain_reference"
 
 
 static func _resource_has_property(resource: Resource, property_name: String) -> bool:

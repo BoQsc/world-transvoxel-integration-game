@@ -29,6 +29,7 @@ const STANDARD_MATERIAL_MEANINGS := {
 
 @export var source_mode: SourceMode = SourceMode.DETERMINISTIC_REFERENCE
 @export var seed: int = 1
+@export var procedural_preset_id: StringName = &"mountain_reference"
 @export var default_solid_material: int = 1
 @export var supports_underground_volume: bool = true
 @export var profile_id: StringName = &"deterministic_reference"
@@ -44,6 +45,7 @@ func get_contract_summary() -> Dictionary:
 		"profile_id": str(profile_id),
 		"source_mode": SourceMode.keys()[source_mode],
 		"seed": seed,
+		"procedural_preset_id": str(procedural_preset_id),
 		"default_solid_material": default_solid_material,
 		"supports_underground_volume": supports_underground_volume,
 		"underground_model": UNDERGROUND_MODEL,

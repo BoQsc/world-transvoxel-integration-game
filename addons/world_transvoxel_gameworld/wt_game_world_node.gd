@@ -280,7 +280,7 @@ func wait_for_minimum_resources(render_count: int, collision_count: int) -> bool
 	var terrain_world := get_terrain_world()
 	if terrain_world == null:
 		return false
-	for _frame in range(900):
+	for _frame in range(startup_world_state_timeout_frames):
 		var summary: Dictionary = terrain_world.call("get_cold_idle_summary")
 		_last_cold_idle_summary = summary
 		if bool(summary.get("world_running", false)) and \
@@ -302,7 +302,7 @@ func wait_for_streaming_settled(
 	var terrain_world := get_terrain_world()
 	if terrain_world == null:
 		return false
-	for _frame in range(900):
+	for _frame in range(startup_world_state_timeout_frames):
 		var metrics: Dictionary = terrain_world.call("get_runtime_metrics")
 		var summary := _streaming_settled_summary(metrics)
 		_last_cold_idle_summary = summary
