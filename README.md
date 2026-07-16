@@ -197,11 +197,17 @@ tunnels, material strata queries, and deep edit persistence without switching
 to a different terrain type. It is a stress/proof profile, not the default
 terrain style.
 
-For normal manual inspection, double-click
-`Launch Latest Human Playtest.cmd` from the repository root. It calls
-`tools/run_human_playtest.py --latest`, currently launching
-`g20_deep_2k_256_on_demand` with the `production_texture_array` material mode.
-Keep this shortcut pointed at the current trusted human playtest so manual
+For normal manual inspection, use the one-click launchers from the repository
+root:
+
+- `Launch Deep Human Playtest.cmd` launches `g20_deep_2k_256_on_demand` with
+  `production_texture_array`.
+- `Launch Cave Human Playtest.cmd` launches
+  `g21_rolling_hills_cave_2k_256_on_demand` with `production_texture_array`.
+- `Launch Latest Human Playtest.cmd` remains a compatibility shortcut for the
+  current default trusted playtest.
+
+Keep these shortcuts pointed at the current trusted human playtests so manual
 testing does not drift to stale profile commands.
 
 The rolling-hills cave inspection profile is
