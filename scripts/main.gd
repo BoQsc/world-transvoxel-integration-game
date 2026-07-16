@@ -24,6 +24,8 @@ const HUMAN_MATERIAL_MODE_FLAT_CLEAN := "flat_clean"
 const HUMAN_MATERIAL_MODE_MATERIAL_TINT := "material_tint"
 const HUMAN_MATERIAL_MODE_PRODUCTION := "production_texture_array"
 const HUMAN_MATERIAL_MODE_LEGACY_PRODUCTION_ATLAS := "production_atlas"
+const FOREGROUND_MAX_FPS := 60
+const BACKGROUND_MAX_FPS := 15
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -92,6 +94,7 @@ var authoritative_sample_failures := {}
 
 
 func _ready() -> void:
+	_apply_window_focus_frame_policy(true)
 	var args := Array(OS.get_cmdline_user_args())
 	autonomous = args.has("--p2-autonomous")
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
@@ -131,6 +134,17 @@ func _ready() -> void:
 	_configure_game_lighting()
 	_build_hud()
 	call_deferred("_start_profile")
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		_apply_window_focus_frame_policy(true)
+	elif what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_apply_window_focus_frame_policy(false)
+
+
+func _apply_window_focus_frame_policy(has_focus: bool) -> void:
+	Engine.max_fps = FOREGROUND_MAX_FPS if has_focus else BACKGROUND_MAX_FPS
 
 
 func _start_profile() -> void:
