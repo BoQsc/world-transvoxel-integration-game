@@ -208,11 +208,12 @@ def validate_visual_summary(
 ) -> None:
     if not capture_path.is_file() or capture_path.stat().st_size < 10_000:
         raise RuntimeError(f"visual capture was not written: {capture_path}")
+    expected_refinement_radius = 2 if expected_profile == ROLLING_HILLS_CAVE_PROFILE else 1
     checks = {
         "profile": expected_profile,
         "viewer_radius_chunks": 10,
         "viewer_maximum_lod": 3,
-        "runtime_lod_refinement_radius_chunks": 1,
+        "runtime_lod_refinement_radius_chunks": expected_refinement_radius,
         "runtime_render_apply_budget": 8,
         "runtime_collision_apply_budget": 8,
         "runtime_streaming_burst_render_apply_budget": 128,

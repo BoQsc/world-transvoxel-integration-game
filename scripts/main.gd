@@ -247,11 +247,13 @@ func _start_profile() -> void:
 	game_world.human_input_enabled = false
 	game_world.player_viewer_update_distance = float(settings.get("player_viewer_update_distance", 8.0))
 	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
+	var focus_viewer_enabled := bool(settings.get("player_focus_viewer_enabled", false))
 	if autonomous and human_visual_capture_path.is_empty():
 		predictive_viewer_enabled = false
+		focus_viewer_enabled = false
 	game_world.player_predictive_viewer_enabled = predictive_viewer_enabled
 	game_world.player_predictive_viewer_distance = float(settings.get("player_predictive_viewer_distance", 0.0))
-	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
+	game_world.player_focus_viewer_enabled = focus_viewer_enabled
 	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_world_state_timeout_frames = int(settings.get("startup_world_state_timeout_frames", 900))
@@ -792,6 +794,10 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			settings["start"] = Vector3(900, 58, 1030)
 			settings["viewers"] = [Vector3(900, 58, 1030)]
 		settings["edit_point"] = Vector3(1536, 27, 512)
+		settings["player_focus_viewer_enabled"] = true
+		settings["player_focus_viewer_distance"] = 96.0
+		settings["runtime_viewer_capacity"] = 3
+		settings["runtime_lod_refinement_radius_chunks"] = 2
 	return settings
 
 
