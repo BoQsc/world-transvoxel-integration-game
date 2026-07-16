@@ -121,8 +121,9 @@ as mipmaps to actually reach the runtime `.ctex` texture.
 
 - first-person player with `FirstPersonCamera`;
 - fullscreen normal play by default;
-- foreground runtime is capped to 60 FPS, and the main scene throttles to 15 FPS
-  while the Godot window is unfocused/backgrounded;
+- active runtime is capped to 60 FPS, focused idle human play throttles to 30
+  FPS, and the main scene throttles to 15 FPS while the Godot window is
+  unfocused/backgrounded;
 - crosshair UI only; telemetry and profile selector are hidden during normal
   human play;
 - mouse-look, WASD movement, jump, and terrain edit input path;

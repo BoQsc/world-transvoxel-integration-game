@@ -20,9 +20,10 @@ res://scenes/main.tscn
 ```
 
 Normal human play should show fullscreen terrain with only the crosshair by
-default. The project-wide Godot foreground frame cap is 60 FPS, and the main
-scene throttles unfocused/background execution to 15 FPS. Debug telemetry should
-only appear in autonomous proof paths.
+default. The project-wide Godot active frame cap is 60 FPS. Focused but idle
+human play throttles to 30 FPS after roughly 1.2 seconds with no player input,
+movement, or queued terrain work. Unfocused/background execution throttles to 15
+FPS. Debug telemetry should only appear in autonomous proof paths.
 
 ## Required addons
 

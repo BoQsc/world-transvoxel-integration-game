@@ -25,7 +25,9 @@ const HUMAN_MATERIAL_MODE_MATERIAL_TINT := "material_tint"
 const HUMAN_MATERIAL_MODE_PRODUCTION := "production_texture_array"
 const HUMAN_MATERIAL_MODE_LEGACY_PRODUCTION_ATLAS := "production_atlas"
 const FOREGROUND_MAX_FPS := 60
+const IDLE_MAX_FPS := 30
 const BACKGROUND_MAX_FPS := 15
+const IDLE_FRAME_POLICY_DELAY_MSEC := 1200
 
 var playtest_profile_id: StringName = DEFAULT_HUMAN_PROFILE
 var game_world: Node
@@ -91,10 +93,13 @@ var last_streaming_fly_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
+var window_has_focus := true
+var last_human_activity_msec := 0
+var active_frame_cap := -1
+var frame_policy_update_counter := 0
 
 
 func _ready() -> void:
-	_apply_window_focus_frame_policy(true)
 	var args := Array(OS.get_cmdline_user_args())
 	autonomous = args.has("--p2-autonomous")
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
@@ -124,6 +129,8 @@ func _ready() -> void:
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
 	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights | Tilde+T material"
+	_record_human_activity()
+	_update_frame_rate_policy(true)
 	if autonomous:
 		_clear_autonomous_profile_outputs(selected_profile)
 	else:
@@ -138,13 +145,77 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
-		_apply_window_focus_frame_policy(true)
+		window_has_focus = true
+		_record_human_activity()
+		_update_frame_rate_policy(true)
 	elif what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		_apply_window_focus_frame_policy(false)
+		window_has_focus = false
+		_update_frame_rate_policy(true)
 
 
-func _apply_window_focus_frame_policy(has_focus: bool) -> void:
-	Engine.max_fps = FOREGROUND_MAX_FPS if has_focus else BACKGROUND_MAX_FPS
+func _input(event: InputEvent) -> void:
+	if _is_human_activity_event(event):
+		_record_human_activity()
+		_update_frame_rate_policy(true)
+
+
+func _is_human_activity_event(event: InputEvent) -> bool:
+	if autonomous or not human_visual_capture_path.is_empty():
+		return false
+	if event is InputEventMouseMotion:
+		return true
+	if event is InputEventMouseButton:
+		return event.pressed
+	if event is InputEventKey:
+		return event.pressed
+	return false
+
+
+func _record_human_activity() -> void:
+	last_human_activity_msec = Time.get_ticks_msec()
+
+
+func _update_frame_rate_policy(force: bool = false) -> void:
+	if not force:
+		frame_policy_update_counter += 1
+		if frame_policy_update_counter < 10:
+			return
+	frame_policy_update_counter = 0
+	var target_cap := _target_frame_cap()
+	if active_frame_cap == target_cap:
+		return
+	active_frame_cap = target_cap
+	Engine.max_fps = target_cap
+
+
+func _target_frame_cap() -> int:
+	if not window_has_focus:
+		return BACKGROUND_MAX_FPS
+	if autonomous or not human_visual_capture_path.is_empty():
+		return FOREGROUND_MAX_FPS
+	if _human_play_is_active():
+		return FOREGROUND_MAX_FPS
+	return IDLE_MAX_FPS
+
+
+func _human_play_is_active() -> bool:
+	if Time.get_ticks_msec() - last_human_activity_msec < IDLE_FRAME_POLICY_DELAY_MSEC:
+		return true
+	if player != null and player.velocity.length_squared() > 0.01:
+		return true
+	if game_world == null or not game_world.has_method("get_game_world_summary"):
+		return true
+	var summary: Dictionary = game_world.get_game_world_summary()
+	for key in [
+		"queued_render",
+		"queued_collision",
+		"pending_chunk_retirements",
+		"render_fading_resources",
+		"streaming_burst_frames_remaining",
+	]:
+		if int(summary.get(key, 0)) != 0:
+			return true
+	return false
 
 
 func _start_profile() -> void:
@@ -254,6 +325,7 @@ func _start_profile() -> void:
 
 func _process(_delta: float) -> void:
 	_update_terrain_inspection_lights()
+	_update_frame_rate_policy()
 
 
 func _run_autonomous_proof() -> void:
