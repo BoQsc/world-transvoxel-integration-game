@@ -134,7 +134,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_SAND_TRIPLANAR)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+L lights | Tilde+T material"
+	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -1439,6 +1439,9 @@ func handle_human_command(command: StringName) -> bool:
 		&"mark_artifact":
 			call_deferred("_run_human_artifact_mark_from_input")
 			return true
+		&"mark_path_point":
+			call_deferred("_run_human_artifact_path_point_from_input")
+			return true
 		&"cycle_material_mode":
 			_cycle_human_material_mode()
 			return true
@@ -1527,6 +1530,10 @@ func _cycle_human_material_mode() -> void:
 
 func _run_human_artifact_mark_from_input() -> void:
 	await _capture_human_artifact_mark("human")
+
+
+func _run_human_artifact_path_point_from_input() -> void:
+	await _capture_human_artifact_mark("path_point")
 
 
 func _run_human_artifact_marker_smoke() -> void:

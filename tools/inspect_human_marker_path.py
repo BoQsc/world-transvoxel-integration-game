@@ -3,7 +3,7 @@
 
 Human workflow:
 1. Launch the playtest.
-2. Press Tilde+M at each exact point that shows a terrain/LOD/material issue.
+2. Press Tilde+P at each exact point that shows a terrain/LOD/material issue.
 3. Run this script. It replays those marked camera/player poses in order and
    captures each point twice: immediately after movement, then after a settle wait.
 
@@ -28,6 +28,7 @@ import run_human_playtest
 DEFAULT_PROFILE = "g21_rolling_hills_cave_2k_256_on_demand"
 DEFAULT_MATERIAL = "production_texture_array"
 PASS_MARKER = "WT_HUMAN_ARTIFACT_MARKER_SEQUENCE_PASS"
+PATH_POINT_SOURCE = "path_point"
 
 
 def repo_root() -> pathlib.Path:
@@ -49,13 +50,13 @@ def load_json(path: pathlib.Path) -> dict[str, Any] | None:
         return None
 
 
-def human_markers(project: pathlib.Path) -> list[pathlib.Path]:
+def path_point_markers(project: pathlib.Path) -> list[pathlib.Path]:
     root = marker_root(project)
     candidates = sorted(root.glob("*.json"), key=lambda path: path.stat().st_mtime)
     result: list[pathlib.Path] = []
     for path in candidates:
         data = load_json(path)
-        if data and data.get("source") == "human":
+        if data and data.get("source") == PATH_POINT_SOURCE:
             result.append(path)
     return result
 
@@ -67,9 +68,12 @@ def selected_markers(project: pathlib.Path, marker_args: list[str], latest: int)
         if missing:
             raise FileNotFoundError(f"marker JSON does not exist: {missing[0]}")
         return markers
-    markers = human_markers(project)
+    markers = path_point_markers(project)
     if not markers:
-        raise FileNotFoundError(f"no human marker JSON files found under {marker_root(project)}")
+        raise FileNotFoundError(
+            f"no path-point marker JSON files found under {marker_root(project)}; "
+            "launch the playtest and press Tilde+P at each test position"
+        )
     count = max(1, latest)
     return markers[-count:]
 
@@ -172,7 +176,7 @@ def run_sequence(args: argparse.Namespace, command: list[str]) -> pathlib.Path |
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="Replay exact Tilde+M human marker positions as a focused inspection path."
+        description="Replay exact Tilde+P path-point marker positions as a focused inspection path."
     )
     parser.add_argument("--godot", help="Path to a Godot 4 executable.")
     parser.add_argument(

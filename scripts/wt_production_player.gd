@@ -183,6 +183,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			human_command_armed = false
 			_forward_human_command(&"mark_artifact")
 			return
+		if human_command_armed and (event.keycode == KEY_P or event.physical_keycode == KEY_P):
+			human_command_armed = false
+			_forward_human_command(&"mark_path_point")
+			return
 		if human_command_armed and (event.keycode == KEY_T or event.physical_keycode == KEY_T):
 			human_command_armed = false
 			_forward_human_command(&"cycle_material_mode")

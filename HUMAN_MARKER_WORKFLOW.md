@@ -8,9 +8,12 @@ The marker workflow is intentionally narrow:
 
 1. Launch the normal human playtest.
 2. Move to the exact point where the issue is visible.
-3. Press `Tilde+M`.
+3. Press `Tilde+P` to add that position to the ordered replay path.
 4. Repeat at nearby useful points, for example close, mid, far, and return.
 5. Replay those exact points with `tools/inspect_human_marker_path.py`.
+
+`Tilde+M` remains the ordinary one-off artifact mark/report command. Use
+`Tilde+P` when building a multi-position test path.
 
 The marker replay captures each point twice:
 
