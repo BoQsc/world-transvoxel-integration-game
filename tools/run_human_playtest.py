@@ -19,6 +19,8 @@ from typing import Any
 WINDOWS_STEAM_GODOT = pathlib.Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
 )
+LATEST_HUMAN_PROFILE = "g20_deep_2k_256_on_demand"
+LATEST_HUMAN_MATERIAL = "production_texture_array"
 
 
 def repo_root() -> pathlib.Path:
@@ -116,6 +118,14 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Launch the current World Transvoxel human playtest."
     )
+    parser.add_argument(
+        "--latest",
+        action="store_true",
+        help=(
+            "Launch the current standard human playtest preset. "
+            f"Currently profile={LATEST_HUMAN_PROFILE}, material={LATEST_HUMAN_MATERIAL}."
+        ),
+    )
     parser.add_argument("--godot", help="Path to a Godot 4 executable.")
     parser.add_argument(
         "--project",
@@ -124,12 +134,12 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--profile",
-        default="g20_deep_2k_256_on_demand",
+        default=LATEST_HUMAN_PROFILE,
         help="Terrain profile to launch.",
     )
     parser.add_argument(
         "--material",
-        default="production_texture_array",
+        default=LATEST_HUMAN_MATERIAL,
         help="Human material mode to use.",
     )
     parser.add_argument(
@@ -166,6 +176,9 @@ def main(argv: list[str]) -> int:
         help="Print the command without launching Godot.",
     )
     args = parser.parse_args(argv)
+    if args.latest:
+        args.profile = LATEST_HUMAN_PROFILE
+        args.material = LATEST_HUMAN_MATERIAL
 
     command = build_command(args)
     print(" ".join(command), flush=True)
