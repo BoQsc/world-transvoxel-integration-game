@@ -94,3 +94,9 @@ texture detail, but they must not make material islands or strata bands change
 shape while the viewer moves. Production biome/material rendering should use
 stable material weights, controlled blends, or separately authored texture
 layers instead of directly coloring every triangle by its nearest material ID.
+
+Underground ore follows the same rule. The current procedural source stores ore
+as authoritative material ID `8`, but visible production ore is blended from a
+world-space function in the terrain shader. This prevents sparse ore patches
+from becoming large blocky LOD polygons around cave entrances. The shader blend
+does not change storage, mining, or authoritative sample-query material IDs.

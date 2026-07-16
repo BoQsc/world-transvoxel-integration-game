@@ -77,6 +77,13 @@ move biome/material regions. Any future material blending or biome masks must
 be generated from stable world-space rules and must be downsampled
 deterministically.
 
+Raw per-vertex material IDs are not acceptable as the final visible
+presentation for sparse underground patches such as ore. The authoritative
+volume may store ore as material ID `8`, but the production material must
+derive a stable world-space/blended ore presentation so coarse LOD meshes do
+not expose blocky per-triangle ore islands at cave entrances. This is a render
+presentation rule only: material ID `8` remains the stored/gameplay authority.
+
 ## Human test expectation
 
 The current human playtest should show at least four surface biomes:
