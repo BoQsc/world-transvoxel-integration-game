@@ -31,6 +31,10 @@ Expected baseline:
   terrain gaps, edit artifacts, or LOD/streaming holes must be fixed in the
   terrain path.
 - fullscreen by default
+- active play is capped to 60 FPS, focused idle play throttles to 30 FPS, and
+  background/unfocused execution throttles to 15 FPS. See
+  `GODOT_RUNTIME_POWER_POLICY.md`; this policy should be copied into future
+  Godot terrain/gameworld projects.
 - crosshair only by default; no debug telemetry UI unless running autonomous proof
 - sand-textured clean terrain presentation using `assets/terrain_textures/coast_sand_01_diff_1k.jpg`
 - the sand texture import is mipmapped for distance viewing, and the clean human material is intentionally rough/non-specular so terrain does not produce shiny lighting streaks

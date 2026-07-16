@@ -102,6 +102,8 @@ C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integratio
 ## Godot asset import gate
 
 Full Godot setup rules are in [GODOT_SETUP.md](GODOT_SETUP.md).
+Portable frame/power policy notes for this and future Godot terrain projects are
+in [GODOT_RUNTIME_POWER_POLICY.md](GODOT_RUNTIME_POWER_POLICY.md).
 
 Godot runtime assets are not fully defined by the tracked source texture alone.
 Texture import settings live in tracked `*.import` files, while Godot consumes
