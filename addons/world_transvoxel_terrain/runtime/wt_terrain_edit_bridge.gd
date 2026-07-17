@@ -4,8 +4,11 @@ class_name WtTerrainEditBridge
 
 const BACKEND_EDIT_METHODS := [
 	"carve_sdf_sphere",
+	"carve_smooth_sdf_sphere",
 	"construct_sdf_sphere",
+	"construct_smooth_sdf_sphere",
 	"construct_material_sdf_sphere",
+	"construct_material_smooth_sdf_sphere",
 	"set_density_sphere",
 	"set_density_box",
 	"paint_material_sphere",
@@ -174,12 +177,24 @@ func _apply_sdf_sphere(
 	method_name: String,
 	strength: float
 ) -> int:
-	var ok := bool(transaction.call(
-		method_name,
-		operation.get("center"),
-		float(operation.get("radius")),
-		strength
-	))
+	var smooth_radius := float(operation.get("smooth_radius"))
+	var ok := false
+	if smooth_radius > 0.0:
+		var smooth_method_name := method_name.replace("_sdf_sphere", "_smooth_sdf_sphere")
+		ok = bool(transaction.call(
+			smooth_method_name,
+			operation.get("center"),
+			float(operation.get("radius")),
+			strength,
+			smooth_radius
+		))
+	else:
+		ok = bool(transaction.call(
+			method_name,
+			operation.get("center"),
+			float(operation.get("radius")),
+			strength
+		))
 	if not ok:
 		_last_error = _transaction_error(transaction)
 		return 0
@@ -191,13 +206,25 @@ func _apply_sdf_material_sphere(
 	operation: Resource,
 	strength: float
 ) -> int:
-	var ok := bool(transaction.call(
-		"construct_material_sdf_sphere",
-		operation.get("center"),
-		float(operation.get("radius")),
-		strength,
-		int(operation.get("material_id"))
-	))
+	var smooth_radius := float(operation.get("smooth_radius"))
+	var ok := false
+	if smooth_radius > 0.0:
+		ok = bool(transaction.call(
+			"construct_material_smooth_sdf_sphere",
+			operation.get("center"),
+			float(operation.get("radius")),
+			strength,
+			int(operation.get("material_id")),
+			smooth_radius
+		))
+	else:
+		ok = bool(transaction.call(
+			"construct_material_sdf_sphere",
+			operation.get("center"),
+			float(operation.get("radius")),
+			strength,
+			int(operation.get("material_id"))
+		))
 	if not ok:
 		_last_error = _transaction_error(transaction)
 		return 0

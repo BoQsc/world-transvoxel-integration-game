@@ -3503,6 +3503,9 @@ func _apply_human_static_water_basin() -> bool:
 	carve.brush_shape = EditOperation.BrushShape.SPHERE
 	carve.center = cavity_center
 	carve.radius = 22.0
+	# Blend the cavity and foundation distance fields over several LOD0 cells so
+	# their opening is a real rounded lip instead of a lattice-aliased CSG crease.
+	carve.smooth_radius = 3.0
 	carve.strength = 1.0
 	carve.density_value = 1.0
 	var water = EditOperation.new()
