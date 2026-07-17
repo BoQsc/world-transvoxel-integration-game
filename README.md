@@ -425,3 +425,9 @@ settlement, then capture the result:
 
 "C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --path C:\Users\Windows10_new\Documents\github_repositories\world-transvoxel-integration-game -- --p2-profile g19_compact_2k_on_demand --human-lighting-preset 3 --human-visual-capture .godot/world_transvoxel_captures/interaction/edit_far.png --human-visual-capture-mode edit_far --human-visual-capture-wait-frames 180
 ```
+
+## License
+
+Project-owned files are available under the Zero-Clause BSD license (`0BSD`).
+See [LICENSE](LICENSE) and [LICENSE_SCOPE.md](LICENSE_SCOPE.md). Bundled MIT and
+CC0 material retains its existing license and attribution notices.
