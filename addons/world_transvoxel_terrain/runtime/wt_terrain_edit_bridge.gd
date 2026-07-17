@@ -5,6 +5,7 @@ class_name WtTerrainEditBridge
 const BACKEND_EDIT_METHODS := [
 	"carve_sdf_sphere",
 	"construct_sdf_sphere",
+	"construct_material_sdf_sphere",
 	"set_density_sphere",
 	"set_density_box",
 	"paint_material_sphere",
@@ -103,12 +104,12 @@ func _apply_operation(transaction: Object, operation: Resource) -> int:
 		&"construct", &"fill":
 			var density_count := 0
 			if shape == &"sphere":
-				density_count = _apply_sdf_sphere(
+				density_count = _apply_sdf_material_sphere(
 					transaction,
 					operation,
-					"construct_sdf_sphere",
 					_positive_density(operation)
 				)
+				return density_count
 			else:
 				density_count = _apply_density(
 					transaction, shape, operation, "set", -_positive_density(operation)
@@ -174,6 +175,24 @@ func _apply_sdf_sphere(
 		operation.get("center"),
 		float(operation.get("radius")),
 		strength
+	))
+	if not ok:
+		_last_error = _transaction_error(transaction)
+		return 0
+	return 1
+
+
+func _apply_sdf_material_sphere(
+	transaction: Object,
+	operation: Resource,
+	strength: float
+) -> int:
+	var ok := bool(transaction.call(
+		"construct_material_sdf_sphere",
+		operation.get("center"),
+		float(operation.get("radius")),
+		strength,
+		int(operation.get("material_id"))
 	))
 	if not ok:
 		_last_error = _transaction_error(transaction)

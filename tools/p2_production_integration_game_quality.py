@@ -236,10 +236,15 @@ def validate_visual_summary(
                 f"visual capture field {key} expected {expected!r}, "
                 f"got {summary.get(key)!r}: {summary!r}"
             )
-    if expected_profile != "flat_baseline" and summary.get("surface_biome_worldspace_blend_active") is not True:
+    if summary.get("surface_biome_worldspace_blend_active") is not False:
         raise RuntimeError(
-            "visual capture expected world-space surface biome blend to be active "
-            f"for profile {expected_profile}: {summary!r}"
+            "visual capture must not replace authoritative material IDs with "
+            f"world-space biome classification: {summary!r}"
+        )
+    if summary.get("surface_material_blend_channel") != "vertex_color_authoritative_surface_material_weights":
+        raise RuntimeError(
+            "visual capture authoritative surface material blend channel mismatch: "
+            f"{summary!r}"
         )
     mode = str(summary.get("mode", ""))
     minimums = {

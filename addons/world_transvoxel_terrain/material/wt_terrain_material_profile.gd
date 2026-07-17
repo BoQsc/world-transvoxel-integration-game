@@ -6,7 +6,7 @@ const TEXTURE_FORMAT := "RGBA8"
 const TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const IMPLEMENTATION := "terrain_material_profile_contract_v1"
-const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_worldspace_surface_biome_pipeline_v4"
+const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_ids_pipeline_v5"
 const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 
 @export var profile_id: StringName = &"debug_checker_palette"
@@ -27,7 +27,7 @@ const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 	&"ore_patch",
 ]
 @export var mapping_policy: StringName = &"world_space_triplanar_ready"
-@export var blending_policy: StringName = &"worldspace_surface_biome_with_vertex_color_surface_coverage_boundary_blend"
+@export var blending_policy: StringName = &"categorical_authoritative_ids_with_vertex_color_surface_boundary_blend"
 @export var texture_import_policy: StringName = &"mipmapped_vram_compressed_normal_aware"
 
 

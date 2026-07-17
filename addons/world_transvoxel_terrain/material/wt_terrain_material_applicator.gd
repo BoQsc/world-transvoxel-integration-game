@@ -7,7 +7,7 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_worldspace_surface_biome_pipeline_v4"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_ids_pipeline_v5"
 const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
 const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
@@ -47,7 +47,7 @@ var _summary := {
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 	"primary_material_texture_active": false,
-	"surface_material_blend_channel": "vertex_color_surface_coverage_boundary_blend",
+	"surface_material_blend_channel": "vertex_color_authoritative_surface_material_weights",
 	"surface_material_blend_weights_active": false,
 	"surface_biome_worldspace_blend_active": false,
 	"authored_albedo_layers": [],
@@ -97,7 +97,6 @@ func apply_materials_now() -> Dictionary:
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	var authored_layers := _authored_albedo_layers()
 	var generation := _generation_profile_summary()
-	var surface_biome_worldspace_active := production_active and str(generation.get("surface_biome_model", "")) == "deterministic_macro_surface_biomes_v1"
 	_summary = {
 		"applied": native_override_set or int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -117,10 +116,10 @@ func apply_materials_now() -> Dictionary:
 		"deterministic_texture": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 		"primary_material_texture_active": production_active,
-		"surface_material_blend_channel": "vertex_color_surface_coverage_boundary_blend",
-		"surface_material_blend_weights_active": surface_biome_worldspace_active,
-		"surface_biome_worldspace_blend_active": surface_biome_worldspace_active,
-		"surface_biome_worldspace_blend_model": "deterministic_macro_surface_biomes_v1_worldspace_smooth_weights",
+		"surface_material_blend_channel": "vertex_color_authoritative_surface_material_weights",
+		"surface_material_blend_weights_active": production_active,
+		"surface_biome_worldspace_blend_active": false,
+		"surface_biome_worldspace_blend_model": "disabled_authoritative_material_ids",
 		"surface_biome_seed": int(generation.get("seed", 1)),
 		"authored_albedo_layers": authored_layers,
 		"authored_albedo_layer_count": authored_layers.size(),
@@ -188,7 +187,6 @@ func _build_material(resolution: int) -> ShaderMaterial:
 	shader_material.set_shader_parameter("terrain_albedo_array", _production_texture_array(production_resolution, &"albedo"))
 	shader_material.set_shader_parameter("terrain_normal_array", _production_texture_array(production_resolution, &"normal"))
 	shader_material.set_shader_parameter("terrain_roughness_array", _production_texture_array(production_resolution, &"roughness_orm"))
-	_apply_surface_biome_parameters(shader_material)
 	_apply_visual_mode(shader_material)
 	return shader_material
 
@@ -206,17 +204,6 @@ func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_texture_enabled", texture != null)
 	if texture != null:
 		shader_material.set_shader_parameter("clean_albedo_texture", texture)
-
-func _apply_surface_biome_parameters(shader_material: ShaderMaterial) -> void:
-	var generation := _generation_profile_summary()
-	var seed := int(generation.get("seed", 1))
-	var source_mode := str(generation.get("source_mode", ""))
-	var surface_model := str(generation.get("surface_biome_model", ""))
-	var enabled := source_mode == "DETERMINISTIC_REFERENCE" and surface_model == "deterministic_macro_surface_biomes_v1"
-	shader_material.set_shader_parameter("surface_biome_worldspace_blend_enabled", enabled)
-	shader_material.set_shader_parameter("surface_biome_seed_phase", float(seed % 100000) * 0.0001)
-	shader_material.set_shader_parameter("surface_biome_height_blend_width", 6.0)
-	shader_material.set_shader_parameter("surface_biome_noise_blend_width", 0.28)
 
 func _load_clean_albedo_texture() -> Texture2D:
 	if clean_albedo_texture_path.is_empty():

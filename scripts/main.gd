@@ -134,7 +134,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T material"
+	human_controls_hint_line = "controls: LMB dig | RMB place selected | MMB paint selected | 1-7 select material | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -335,6 +335,8 @@ func _start_profile() -> void:
 func _process(_delta: float) -> void:
 	_update_terrain_inspection_lights()
 	_update_frame_rate_policy()
+	if not autonomous:
+		_update_human_dynamic_labels()
 
 
 func _run_autonomous_proof() -> void:
@@ -374,6 +376,8 @@ func _run_autonomous_proof() -> void:
 	if not await _wait_for_current_profile_settled("after edit"):
 		return
 	if not _verify_standard_edit_metadata(&"carve"):
+		return
+	if not await _verify_player_material_selection_contract(terrain_world):
 		return
 	if not await _run_repeated_edit_health_proof(terrain_world):
 		return
@@ -1349,6 +1353,93 @@ func _verify_standard_multiplayer_server_contract(terrain_world: Node) -> bool:
 			world_revision,
 		]
 	)
+	return true
+
+
+func _verify_player_material_selection_contract(terrain_world: Node) -> bool:
+	if not player.has_method("set_selected_material_id") or not player.has_method("get_selected_material_summary"):
+		_fail("player does not expose material selection")
+		return false
+	if not bool(player.call("set_selected_material_id", 8)):
+		_fail("player rejected standard ore material selection")
+		return false
+	var selected: Dictionary = player.call("get_selected_material_summary")
+	if int(selected.get("material_id", -1)) != 8:
+		_fail("player material selection did not switch to ore: %s" % JSON.stringify(selected))
+		return false
+	var construct_center := edit_point + Vector3(8.0, 8.0, 0.0)
+	var construct_point := Vector3i(
+		int(round(construct_center.x)),
+		int(round(construct_center.y)),
+		int(round(construct_center.z))
+	)
+	var before_sample := await _query_authoritative_sample_summary(
+		terrain_world, construct_point, "before selected-material construct"
+	)
+	if not bool(before_sample.get("ok", false)):
+		return false
+	if float(before_sample.get("density", 0.0)) <= 0.0:
+		_fail("selected-material construct proof point is not initially air: %s" % JSON.stringify(before_sample))
+		return false
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	if not bool(player.call("submit_edit_input", &"construct", construct_center)):
+		_fail("player material selection construct was rejected")
+		return false
+	if not await game_world.wait_for_world_revision(before_revision + 1):
+		_fail("player material selection construct did not commit")
+		return false
+	if not await _wait_for_current_profile_settled("after material selection construct"):
+		return false
+	var edit_summary: Dictionary = game_world.call("get_last_edit_summary")
+	if int(edit_summary.get("material_id", -1)) != 8:
+		_fail("selected material was not submitted through game world: %s" % JSON.stringify(edit_summary))
+		return false
+	var terrain_summary_value = edit_summary.get("terrain_summary", {})
+	if not (terrain_summary_value is Dictionary):
+		_fail("selected material edit missing terrain summary: %s" % JSON.stringify(edit_summary))
+		return false
+	var terrain_summary: Dictionary = terrain_summary_value
+	if int(terrain_summary.get("backend_command_count", -1)) != 1 or \
+		int(terrain_summary.get("transaction_command_count", -1)) != 1:
+		_fail("selected material construct was not one atomic backend command: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operations_value = terrain_summary.get("operation_summaries", [])
+	if not (operations_value is Array):
+		_fail("selected material edit missing operation summaries: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operations: Array = operations_value
+	if operations.is_empty():
+		_fail("selected material edit operation summaries are empty: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operation_value = operations[0]
+	if not (operation_value is Dictionary):
+		_fail("selected material edit operation summary is not a dictionary: %s" % JSON.stringify(terrain_summary))
+		return false
+	var operation: Dictionary = operation_value
+	if str(operation.get("operation", "")) != "construct" or int(operation.get("material_id", -1)) != 8:
+		_fail("selected material construct metadata mismatch: %s" % JSON.stringify(operation))
+		return false
+	var after_sample := await _query_authoritative_sample_summary(
+		terrain_world, construct_point, "after selected-material construct"
+	)
+	if not bool(after_sample.get("ok", false)):
+		return false
+	if float(after_sample.get("density", 0.0)) >= 0.0 or int(after_sample.get("material", -1)) != 8:
+		_fail("selected material construct did not author density and material together: before=%s after=%s" % [
+			JSON.stringify(before_sample),
+			JSON.stringify(after_sample),
+		])
+		return false
+	print("WT_MATERIAL_PLACEMENT_CONTRACT_PASS profile=%s commands=1 selected_material=8 point=%s before_density=%.6f after_density=%.6f after_material=%d" % [
+		str(selected_profile),
+		str(after_sample.get("point", "")),
+		float(before_sample.get("density", 0.0)),
+		float(after_sample.get("density", 0.0)),
+		int(after_sample.get("material", -1)),
+	])
+	if not bool(player.call("set_selected_material_id", 4)):
+		_fail("player rejected restoring default sand material selection")
+		return false
 	return true
 
 
@@ -3224,8 +3315,12 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if not bool(summary.get("primary_material_texture_active", false)):
 		_fail("primary material texture mapping inactive: %s" % str(summary))
 		return false
-	if selected_profile != FLAT_PROFILE and not bool(summary.get("surface_biome_worldspace_blend_active", false)):
-		_fail("world-space surface biome blend inactive: %s" % str(summary))
+	if bool(summary.get("surface_biome_worldspace_blend_active", false)):
+		_fail("shader is replacing authoritative material IDs with world-space biome classification: %s" % str(summary))
+		return false
+	if not bool(summary.get("surface_material_blend_weights_active", false)) or \
+		str(summary.get("surface_material_blend_channel", "")) != "vertex_color_authoritative_surface_material_weights":
+		_fail("authoritative surface material blend channel inactive: %s" % str(summary))
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
@@ -3329,12 +3424,32 @@ func _human_test_context_text() -> String:
 	var storage_mode := "preserve"
 	if not human_preserve_storage and human_artifact_replay_marker_path.is_empty() and human_artifact_inspect_marker_path.is_empty() and human_artifact_marker_sequence_file_path.is_empty():
 		storage_mode = "fresh"
-	return "test: %s | profile: %s | storage: %s | material: %s" % [
+	return "test: %s | profile: %s | storage: %s | material: %s | place: %s" % [
 		test_name,
 		str(selected_profile),
 		storage_mode,
 		_human_material_mode_name(),
+		_human_selected_place_material_text(),
 	]
+
+
+func _human_selected_place_material_text() -> String:
+	if player != null and player.has_method("get_selected_material_summary"):
+		var summary: Dictionary = player.call("get_selected_material_summary")
+		return "%s(%d)" % [
+			str(summary.get("material_name", "unknown")),
+			int(summary.get("material_id", 0)),
+		]
+	return "sand(4)"
+
+
+func _update_human_dynamic_labels() -> void:
+	if test_context_label == null:
+		return
+	var next_line := _human_test_context_text()
+	if test_context_label.text != next_line:
+		human_test_context_line = next_line
+		test_context_label.text = human_test_context_line
 
 
 func _quote_command_arg(value: String) -> String:
@@ -7531,6 +7646,42 @@ func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:
 	var failed_callable := Callable(self, "_on_authoritative_samples_failed")
 	if not terrain_world.is_connected("authoritative_samples_failed", failed_callable):
 		terrain_world.connect("authoritative_samples_failed", failed_callable)
+
+
+func _query_authoritative_sample_summary(
+	terrain_world: Node,
+	point: Vector3i,
+	context: String
+) -> Dictionary:
+	_ensure_authoritative_sample_connections(terrain_world)
+	var request_id := int(terrain_world.call("request_authoritative_samples", [point], 0))
+	if request_id <= 0:
+		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "unknown"
+		_fail("authoritative sample query rejected %s: %s" % [context, error])
+		return {"ok": false, "error": error}
+	for _frame in range(240):
+		if authoritative_sample_failures.has(request_id):
+			var failure_error := str(authoritative_sample_failures[request_id])
+			authoritative_sample_failures.erase(request_id)
+			_fail("authoritative sample query failed %s: %s" % [context, failure_error])
+			return {"ok": false, "error": failure_error}
+		if authoritative_sample_batches.has(request_id):
+			var samples: Array = authoritative_sample_batches[request_id]
+			authoritative_sample_batches.erase(request_id)
+			if samples.size() != 1 or samples[0] == null:
+				_fail("authoritative sample query returned invalid batch %s: count=%d" % [context, samples.size()])
+				return {"ok": false, "error": "invalid_batch"}
+			var sample = samples[0]
+			return {
+				"ok": true,
+				"point": _grid_point_key(sample.call("get_grid_point")),
+				"density": float(sample.call("get_density")),
+				"material": int(sample.call("get_material")),
+				"world_revision": int(sample.call("get_world_revision")),
+			}
+		await get_tree().process_frame
+	_fail("authoritative sample query timed out %s request=%d" % [context, request_id])
+	return {"ok": false, "error": "query_timeout"}
 
 
 func _on_authoritative_samples_ready(request_id: int, samples: Array) -> void:

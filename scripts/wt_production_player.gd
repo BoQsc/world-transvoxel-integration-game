@@ -1,5 +1,16 @@
 extends CharacterBody3D
 
+const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8]
+const PLACE_MATERIAL_NAMES := [
+	"deep_stone",
+	"grass",
+	"gravel",
+	"sand",
+	"snow",
+	"mid_rock",
+	"ore_patch",
+]
+
 @export var human_input_enabled: bool = true
 @export var move_speed: float = 8.0
 @export var edit_radius: float = 1.8
@@ -22,12 +33,15 @@ var _walk_collision_mask := 0
 var _walk_motion_mode := CharacterBody3D.MOTION_MODE_GROUNDED
 var _walk_collision_state_saved := false
 var _interaction_attempt_count := 0
+var selected_place_material_index := 3
 var _last_interaction_summary := {
 	"attempt": 0,
 	"mode": "",
 	"ray_hit": false,
 	"accepted": false,
 	"reason": "not_attempted",
+	"selected_material_id": 4,
+	"selected_material_name": "sand",
 }
 
 
@@ -54,6 +68,30 @@ func is_fly_mode_enabled() -> bool:
 
 func get_last_interaction_summary() -> Dictionary:
 	return _last_interaction_summary.duplicate(true)
+
+
+func get_selected_material_summary() -> Dictionary:
+	return {
+		"slot": selected_place_material_index + 1,
+		"slot_count": PLACE_MATERIAL_IDS.size(),
+		"material_id": _selected_place_material_id(),
+		"material_name": _selected_place_material_name(),
+	}
+
+
+func set_selected_material_slot(slot: int) -> bool:
+	if slot < 1 or slot > PLACE_MATERIAL_IDS.size():
+		return false
+	_set_selected_place_material_index(slot - 1)
+	return true
+
+
+func set_selected_material_id(material_id: int) -> bool:
+	var index := PLACE_MATERIAL_IDS.find(material_id)
+	if index < 0:
+		return false
+	_set_selected_place_material_index(index)
+	return true
 
 
 func get_interaction_target_summary() -> Dictionary:
@@ -90,7 +128,7 @@ func submit_edit_input(mode_name: StringName, center: Vector3, ray_hit: bool = f
 	if game_world == null or not game_world.has_method("submit_sphere_edit"):
 		_record_interaction(mode_name, ray_hit, false, "game_world_unavailable", center)
 		return false
-	var material_id := -1 if mode_name == &"carve" else 4
+	var material_id := -1 if mode_name == &"carve" else _selected_place_material_id()
 	var accepted := bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
 	_record_interaction(mode_name, ray_hit, accepted, "raycast_hit" if ray_hit and accepted else ("direct_center" if accepted else "edit_rejected"), center)
 	if game_world.has_method("get_last_edit_summary"):
@@ -191,6 +229,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			human_command_armed = false
 			_forward_human_command(&"cycle_material_mode")
 			return
+		var material_slot := _material_slot_from_key(event)
+		if material_slot >= 0:
+			human_command_armed = false
+			_set_selected_place_material_index(material_slot)
+			return
 		human_command_armed = false
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
@@ -207,6 +250,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_submit_interaction(&"carve")
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			_submit_interaction(&"construct")
+		elif event.button_index == MOUSE_BUTTON_MIDDLE:
+			_submit_interaction(&"paint")
 
 
 func _interaction_point() -> Vector3:
@@ -526,6 +571,8 @@ func _record_interaction(
 		"accepted": accepted,
 		"reason": reason,
 		"position": position,
+		"selected_material_id": _selected_place_material_id(),
+		"selected_material_name": _selected_place_material_name(),
 	}
 
 
@@ -554,6 +601,42 @@ func _forward_human_command(command: StringName) -> bool:
 	if human_command_target == null or not human_command_target.has_method("handle_human_command"):
 		return false
 	return bool(human_command_target.call("handle_human_command", command))
+
+
+func _selected_place_material_id() -> int:
+	return int(PLACE_MATERIAL_IDS[clampi(selected_place_material_index, 0, PLACE_MATERIAL_IDS.size() - 1)])
+
+
+func _selected_place_material_name() -> String:
+	return str(PLACE_MATERIAL_NAMES[clampi(selected_place_material_index, 0, PLACE_MATERIAL_NAMES.size() - 1)])
+
+
+func _set_selected_place_material_index(slot_index: int) -> void:
+	selected_place_material_index = clampi(slot_index, 0, PLACE_MATERIAL_IDS.size() - 1)
+	print("human_place_material=%d:%s" % [_selected_place_material_id(), _selected_place_material_name()])
+
+
+func _material_slot_from_key(event: InputEventKey) -> int:
+	var code := event.keycode
+	if code == KEY_NONE:
+		code = event.physical_keycode
+	match code:
+		KEY_1, KEY_KP_1:
+			return 0
+		KEY_2, KEY_KP_2:
+			return 1
+		KEY_3, KEY_KP_3:
+			return 2
+		KEY_4, KEY_KP_4:
+			return 3
+		KEY_5, KEY_KP_5:
+			return 4
+		KEY_6, KEY_KP_6:
+			return 5
+		KEY_7, KEY_KP_7:
+			return 6
+		_:
+			return -1
 
 
 func _is_human_command_prefix(event: InputEventKey) -> bool:

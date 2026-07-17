@@ -89,14 +89,14 @@ is the same material field becoming visible after digging. Surface biomes and
 underground strata may use different classifiers, but they must feed one
 coherent material presentation path.
 
-LOD must not expose raw material classification. Coarser meshes may reduce
-texture detail, but they must not make material islands or strata bands change
-shape while the viewer moves. Production biome/material rendering should use
-stable material weights, controlled blends, or separately authored texture
-layers instead of directly coloring every triangle by its nearest material ID.
+The production shader consumes those authoritative vertex-derived IDs and
+weights directly. It must not reclassify the material from world position;
+doing so would make paint and construction metadata disagree with what the
+player sees. Coarser meshes may reduce texture detail, but material ownership
+continues to come from the solid endpoint of each isosurface edge.
 
-Underground ore follows the same rule. The current procedural source stores ore
-as authoritative material ID `8`, but visible production ore is blended from a
-world-space function in the terrain shader. This prevents sparse ore patches
-from becoming large blocky LOD polygons around cave entrances. The shader blend
-does not change storage, mining, or authoritative sample-query material IDs.
+Underground ore follows the same rule. The procedural source stores ore as
+authoritative material ID `8`, and the shader renders ID `8` as ore. Smooth
+multi-material falloff is a later data-model feature (for example, stored
+indices plus weights); it must not be simulated by replacing categorical
+authority in the shader.
