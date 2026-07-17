@@ -119,6 +119,15 @@ These are local generated outputs and should not be treated as source:
 - `build/`
 - `artifacts/`
 
+The portable launch subset under `.godot/` is tracked: `.gdignore`,
+`extension_list.cfg`, `global_script_class_cache.cfg`, `uid_cache.bin`, and the
+`imported/` resource cache. The extension registry loads the native
+`world_transvoxel` GDExtension before game scripts start, while the imported
+artifacts make their tracked source-resource settings immediately usable. This
+allows a clean clone to launch without first opening the editor or running an
+import pass. Editor state, logs, shader caches, and validation captures remain
+local generated outputs.
+
 Validation capture images are useful proof artifacts, but they should not be
 written into normal `res://build` paths. Default automated captures go under:
 

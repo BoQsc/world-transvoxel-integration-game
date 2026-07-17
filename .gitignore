@@ -1,4 +1,12 @@
-/.godot/
+# Most Godot cache is local. Keep only the portable launch/import subset so a
+# clean clone can load the native backend and imported assets immediately.
+/.godot/*
+!/.godot/.gdignore
+!/.godot/extension_list.cfg
+!/.godot/global_script_class_cache.cfg
+!/.godot/uid_cache.bin
+!/.godot/imported/
+!/.godot/imported/**
 /artifacts/
 /build/
 /CURRENT_PLAYTEST_FRESHNESS.json
