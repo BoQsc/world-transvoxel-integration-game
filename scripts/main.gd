@@ -3485,12 +3485,16 @@ func _apply_human_static_water_basin() -> bool:
 		_fail("static water basin terrain world unavailable")
 		return false
 	var basin_center := player.global_position + Vector3(28.0, 8.0, 0.0)
-	var cavity_center := basin_center + Vector3(0.0, 11.0, 0.0)
+	# Keep the carved and constructed surfaces far enough from tangency that the
+	# remaining rim has representable topology at every retained terrain LOD.
+	# Radius 22 at offset 19 preserves the original cavity floor while giving
+	# the rim a wide intersection angle and enough wall around the bounded fill.
+	var cavity_center := basin_center + Vector3(0.0, 19.0, 0.0)
 	var foundation = EditOperation.new()
 	foundation.mode = EditOperation.Mode.CONSTRUCT
 	foundation.brush_shape = EditOperation.BrushShape.SPHERE
 	foundation.center = basin_center
-	foundation.radius = 24.0
+	foundation.radius = 28.0
 	foundation.material_id = 1
 	foundation.strength = 1.0
 	foundation.density_value = 1.0
@@ -3498,14 +3502,15 @@ func _apply_human_static_water_basin() -> bool:
 	carve.mode = EditOperation.Mode.CARVE
 	carve.brush_shape = EditOperation.BrushShape.SPHERE
 	carve.center = cavity_center
-	carve.radius = 14.0
+	carve.radius = 22.0
 	carve.strength = 1.0
 	carve.density_value = 1.0
 	var water = EditOperation.new()
 	water.mode = EditOperation.Mode.PLACE_VOLUME
 	water.brush_shape = EditOperation.BrushShape.BOX
-	water.center = cavity_center + Vector3(0.0, -5.0, 0.0)
-	water.box_extents = Vector3(14.0, 7.0, 14.0)
+	# The fill level belongs to the basin, independently of cavity placement.
+	water.center = basin_center + Vector3(0.0, 2.0, 0.0)
+	water.box_extents = Vector3(18.0, 4.0, 18.0)
 	water.material_id = STATIC_WATER_MATERIAL_ID
 	water.density_value = 1.0
 	var batch = EditBatch.new()
@@ -3522,7 +3527,7 @@ func _apply_human_static_water_basin() -> bool:
 	player.call("set_fly_mode_enabled", true)
 	await _set_capture_camera_pose(
 		basin_center + Vector3(-22.0, 42.0, 28.0),
-		cavity_center + Vector3(0.0, -1.0, 0.0)
+		basin_center + Vector3(0.0, 7.0, 0.0)
 	)
 	if not await _wait_for_current_profile_settled("static water basin"):
 		return false
