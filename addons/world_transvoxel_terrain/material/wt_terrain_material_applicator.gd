@@ -3,6 +3,7 @@ extends Node
 class_name WtTerrainMaterialApplicator
 
 const TERRAIN_SHADER := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_palette.gdshader")
+const WATER_SHADER := preload("res://addons/world_transvoxel_terrain/material/wt_static_water.gdshader")
 const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
@@ -32,6 +33,7 @@ var _summary := {
 	"materialized_instances": 0,
 	"reapplied_instances": 0,
 	"native_render_material_override": false,
+	"native_water_material_override": false,
 	"texture_resolution": 0,
 	"texture_format": CHECKER_TEXTURE_FORMAT,
 	"texture_bytes": 0,
@@ -56,6 +58,7 @@ var _summary := {
 	"implementation": "terrain_addon_material_applicator",
 }
 var _material: ShaderMaterial
+var _water_material: ShaderMaterial
 var _material_texture_resolution := 0
 var _texture_checksum := 0
 var _auto_apply_signature := ""
@@ -90,7 +93,15 @@ func apply_materials_now() -> Dictionary:
 	var material := _material_instance()
 	_apply_visual_mode(material)
 	var native_override_set := _set_native_material_override(backend, material)
-	var result := _apply_to_meshes(backend, material)
+	var water_override_set := _set_native_water_material_override(
+		backend,
+		_water_material_instance()
+	)
+	var result := {"checked": 0, "updated": 0}
+	if not native_override_set:
+		result = _apply_to_meshes(backend, material)
+	else:
+		result["checked"] = _count_meshes(backend)
 	var profile := _material_profile_summary()
 	var resolved_texture_resolution := _material_texture_resolution
 	var production_resolution := _production_texture_resolution(profile)
@@ -102,6 +113,9 @@ func apply_materials_now() -> Dictionary:
 		"materialized_instances": int(result.get("checked", 0)),
 		"reapplied_instances": int(result.get("updated", 0)),
 		"native_render_material_override": native_override_set,
+		"native_water_material_override": water_override_set,
+		"water_material_id": 9,
+		"water_surface_pipeline": "material_id_volume_secondary_transvoxel_surface",
 		"texture_resolution": resolved_texture_resolution,
 		"texture_format": CHECKER_TEXTURE_FORMAT,
 		"texture_bytes": _texture_bytes(resolved_texture_resolution),
@@ -168,6 +182,9 @@ func _repair_missing_materials_if_needed() -> void:
 	_audit_frame_count = 0
 	if _runtime_signature().is_empty():
 		return
+	var backend := _backend_terrain()
+	if backend != null and backend.has_method("set_render_material_override"):
+		return
 	if _material != null and _has_unmaterialized_meshes(_backend_terrain(), _material):
 		_auto_apply_count += 1
 		apply_materials_now()
@@ -178,6 +195,13 @@ func _material_instance() -> ShaderMaterial:
 		_material = _build_material(resolution)
 		_material_texture_resolution = resolution
 	return _material
+
+func _water_material_instance() -> ShaderMaterial:
+	if _water_material == null:
+		_water_material = ShaderMaterial.new()
+		_water_material.shader = WATER_SHADER
+		_water_material.render_priority = 1
+	return _water_material
 
 func _build_material(resolution: int) -> ShaderMaterial:
 	var shader_material := ShaderMaterial.new()
@@ -229,10 +253,27 @@ func _apply_to_meshes(node: Node, material: Material) -> Dictionary:
 	_apply_to_meshes_recursive(node, material, result)
 	return result
 
+func _count_meshes(node: Node) -> int:
+	if node == null:
+		return 0
+	var count := 0
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		count += 1
+	for child in node.get_children():
+		if child is Node:
+			count += _count_meshes(child)
+	return count
+
 func _set_native_material_override(node: Node, material: Material) -> bool:
 	if node == null or not node.has_method("set_render_material_override"):
 		return false
 	node.call("set_render_material_override", material)
+	return true
+
+func _set_native_water_material_override(node: Node, material: Material) -> bool:
+	if node == null or not node.has_method("set_water_material_override"):
+		return false
+	node.call("set_water_material_override", material)
 	return true
 
 func _apply_to_meshes_recursive(node: Node, material: Material, result: Dictionary) -> void:

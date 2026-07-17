@@ -10,6 +10,8 @@ const BACKEND_EDIT_METHODS := [
 	"set_density_box",
 	"paint_material_sphere",
 	"paint_material_box",
+	"place_material_volume_sphere",
+	"place_material_volume_box",
 ]
 
 var _last_error: String = "ok"
@@ -120,6 +122,8 @@ func _apply_operation(transaction: Object, operation: Resource) -> int:
 			return density_count + paint_count if paint_count > 0 else 0
 		&"paint":
 			return _apply_paint(transaction, shape, operation)
+		&"place_volume":
+			return _apply_volume_material(transaction, shape, operation)
 		&"restore_to_base":
 			var restore_count := _apply_density(
 				transaction, shape, operation, "set", float(operation.get("density_value"))
@@ -214,6 +218,29 @@ func _apply_paint(transaction: Object, shape: StringName, operation: Resource) -
 		var bounds: AABB = operation.call("estimate_affected_aabb")
 		ok = bool(transaction.call(
 			"paint_material_box",
+			bounds.position,
+			bounds.position + bounds.size,
+			material_id
+		))
+	if not ok:
+		_last_error = _transaction_error(transaction)
+		return 0
+	return 1
+
+func _apply_volume_material(transaction: Object, shape: StringName, operation: Resource) -> int:
+	var material_id := int(operation.get("material_id"))
+	var ok := false
+	if shape == &"sphere":
+		ok = bool(transaction.call(
+			"place_material_volume_sphere",
+			operation.get("center"),
+			float(operation.get("radius")),
+			material_id
+		))
+	else:
+		var bounds: AABB = operation.call("estimate_affected_aabb")
+		ok = bool(transaction.call(
+			"place_material_volume_box",
 			bounds.position,
 			bounds.position + bounds.size,
 			material_id

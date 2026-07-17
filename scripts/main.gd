@@ -6,6 +6,7 @@ const COMPACT_PROFILE := &"g19_compact_2k_on_demand"
 const DEEP_PROFILE := &"g20_deep_2k_256_on_demand"
 const ROLLING_HILLS_CAVE_PROFILE := &"g21_rolling_hills_cave_2k_256_on_demand"
 const FLAT_PROFILE := &"flat_baseline"
+const STATIC_WATER_MATERIAL_ID := 9
 const DEFAULT_HUMAN_PROFILE := FLAT_PROFILE
 const DEFAULT_AUTONOMOUS_PROFILE := COMPACT_PROFILE
 const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
@@ -3290,6 +3291,7 @@ func _presentation_summary() -> Dictionary:
 		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
 		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
+		"native_water_material_override": bool(material_summary.get("native_water_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
 		"visual_mode": str(material_summary.get("visual_mode", "")),
 		"human_material_mode": _human_material_mode_name(),
@@ -3324,6 +3326,9 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
+		return false
+	if not bool(summary.get("native_water_material_override", false)):
+		_fail("water material is not installed through native render override: %s" % str(summary))
 		return false
 	return true
 
@@ -3464,9 +3469,71 @@ func _apply_human_playtest_preset() -> bool:
 	match human_playtest_preset:
 		"edit_tunnel_gate", "tunnel_gate", "descending_tunnel":
 			return await _apply_human_tunnel_playtest()
+		"static_water_basin", "water_basin":
+			return await _apply_human_static_water_basin()
 		_:
 			_fail("unknown human playtest preset: %s" % human_playtest_preset)
 			return false
+
+
+func _apply_human_static_water_basin() -> bool:
+	if player == null or game_world == null:
+		_fail("static water basin requires player and game world")
+		return false
+	var terrain_world: Node = game_world.get_terrain_world()
+	if terrain_world == null:
+		_fail("static water basin terrain world unavailable")
+		return false
+	var basin_center := player.global_position + Vector3(28.0, 8.0, 0.0)
+	var cavity_center := basin_center + Vector3(0.0, 11.0, 0.0)
+	var foundation = EditOperation.new()
+	foundation.mode = EditOperation.Mode.CONSTRUCT
+	foundation.brush_shape = EditOperation.BrushShape.SPHERE
+	foundation.center = basin_center
+	foundation.radius = 24.0
+	foundation.material_id = 1
+	foundation.strength = 1.0
+	foundation.density_value = 1.0
+	var carve = EditOperation.new()
+	carve.mode = EditOperation.Mode.CARVE
+	carve.brush_shape = EditOperation.BrushShape.SPHERE
+	carve.center = cavity_center
+	carve.radius = 14.0
+	carve.strength = 1.0
+	carve.density_value = 1.0
+	var water = EditOperation.new()
+	water.mode = EditOperation.Mode.PLACE_VOLUME
+	water.brush_shape = EditOperation.BrushShape.BOX
+	water.center = cavity_center + Vector3(0.0, -5.0, 0.0)
+	water.box_extents = Vector3(14.0, 7.0, 14.0)
+	water.material_id = STATIC_WATER_MATERIAL_ID
+	water.density_value = 1.0
+	var batch = EditBatch.new()
+	if not batch.add_operation(foundation) or not batch.add_operation(carve) or not batch.add_operation(water):
+		_fail("static water basin operations are invalid")
+		return false
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	if not bool(terrain_world.call("submit_edit_batch", batch, 9909)):
+		_fail("static water basin edit rejected: %s" % str(terrain_world.call("get_last_error")))
+		return false
+	if not await game_world.wait_for_world_revision(before_revision + 1):
+		_fail("static water basin edit did not commit")
+		return false
+	player.call("set_fly_mode_enabled", true)
+	await _set_capture_camera_pose(
+		basin_center + Vector3(-22.0, 42.0, 28.0),
+		cavity_center + Vector3(0.0, -1.0, 0.0)
+	)
+	if not await _wait_for_current_profile_settled("static water basin"):
+		return false
+	if material_applicator != null:
+		var material_summary: Dictionary = material_applicator.call("apply_materials_now")
+		if not bool(material_summary.get("native_water_material_override", false)):
+			_fail("static water material override is not active: %s" % str(material_summary))
+			return false
+	interaction_inspection_applied = true
+	interaction_inspection_operation_count = 3
+	return true
 
 
 func _apply_human_tunnel_playtest() -> bool:
@@ -3661,6 +3728,7 @@ func _capture_human_visual() -> void:
 		),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
+		"native_water_material_override": bool(presentation.get("native_water_material_override", false)),
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
 		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(presentation.get("surface_biome_worldspace_blend_active", false)),
@@ -8004,6 +8072,10 @@ func _apply_capture_camera_mode() -> void:
 	if camera == null:
 		return
 	camera.far = 5000.0
+	if human_visual_capture_mode == "static_water_basin":
+		camera.current = true
+		camera.make_current()
+		return
 	var capture_position := player.global_position
 	var capture_target := Vector3(1032.0, 8.0, 1032.0)
 	match human_visual_capture_mode:

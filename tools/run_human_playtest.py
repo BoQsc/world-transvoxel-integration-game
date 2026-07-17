@@ -159,7 +159,7 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--preset",
-        help="Optional human playtest preset, for example 'tunnel'.",
+        help="Optional human playtest preset, for example 'tunnel' or 'static_water_basin'.",
     )
     parser.add_argument(
         "--inspect-marker",

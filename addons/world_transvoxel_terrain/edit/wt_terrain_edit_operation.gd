@@ -2,7 +2,7 @@
 extends Resource
 class_name WtTerrainEditOperation
 
-enum Mode { CARVE, CONSTRUCT, FILL, PAINT, RESTORE_TO_BASE }
+enum Mode { CARVE, CONSTRUCT, FILL, PAINT, RESTORE_TO_BASE, PLACE_VOLUME }
 enum BrushShape { SPHERE, BOX, CAPSULE, PLANE }
 
 @export var mode: Mode = Mode.CARVE
@@ -29,6 +29,8 @@ func get_mode_name() -> StringName:
 			return &"paint"
 		Mode.RESTORE_TO_BASE:
 			return &"restore_to_base"
+		Mode.PLACE_VOLUME:
+			return &"place_volume"
 		_:
 			return &"unknown"
 
@@ -48,7 +50,7 @@ func get_brush_shape_name() -> StringName:
 
 
 func requires_material() -> bool:
-	return mode == Mode.CONSTRUCT or mode == Mode.FILL or mode == Mode.PAINT
+	return mode == Mode.CONSTRUCT or mode == Mode.FILL or mode == Mode.PAINT or mode == Mode.PLACE_VOLUME
 
 
 func is_restore_to_base() -> bool:
@@ -73,7 +75,7 @@ func get_validation_error() -> String:
 	if mode != Mode.RESTORE_TO_BASE and density_value == 0.0:
 		return "non-restore edit operation density_value must not be zero"
 	if requires_material() and material_id <= 0:
-		return "construct, fill, and paint operations require a positive material_id"
+		return "construct, fill, paint, and volume placement operations require a positive material_id"
 	if brush_shape == BrushShape.BOX or brush_shape == BrushShape.CAPSULE:
 		if box_extents.x <= 0.0 or box_extents.y <= 0.0 or box_extents.z <= 0.0:
 			return "box and capsule operations require positive box_extents"
