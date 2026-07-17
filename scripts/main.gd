@@ -3288,6 +3288,7 @@ func _presentation_summary() -> Dictionary:
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"primary_material_texture_active": bool(material_summary.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(material_summary.get("surface_biome_worldspace_blend_active", false)),
+		"underground_ore_worldspace_blend_active": bool(material_summary.get("underground_ore_worldspace_blend_active", false)),
 		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
 		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
@@ -3319,6 +3320,10 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		return false
 	if bool(summary.get("surface_biome_worldspace_blend_active", false)):
 		_fail("shader is replacing authoritative material IDs with world-space biome classification: %s" % str(summary))
+		return false
+	var procedural_ore_expected := selected_profile != FLAT_PROFILE
+	if bool(summary.get("underground_ore_worldspace_blend_active", false)) != procedural_ore_expected:
+		_fail("LOD-stable procedural ore presentation activation mismatch: expected=%s summary=%s" % [str(procedural_ore_expected), str(summary)])
 		return false
 	if not bool(summary.get("surface_material_blend_weights_active", false)) or \
 		str(summary.get("surface_material_blend_channel", "")) != "vertex_color_authoritative_surface_material_weights":
@@ -3740,6 +3745,7 @@ func _capture_human_visual() -> void:
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
 		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(presentation.get("surface_biome_worldspace_blend_active", false)),
+		"underground_ore_worldspace_blend_active": bool(presentation.get("underground_ore_worldspace_blend_active", false)),
 		"surface_material_blend_channel": str(presentation.get("surface_material_blend_channel", "")),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
@@ -3781,7 +3787,6 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_upward_lod_gate" or \
-		human_visual_capture_mode == "ore_patch_exposure" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -8112,9 +8117,12 @@ func _apply_capture_camera_mode() -> void:
 			capture_target = Vector3(1190.0, 86.0, 1040.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"ore_patch_exposure":
-			capture_position = Vector3(1076.0, 48.0, 1010.0)
-			capture_target = Vector3(1082.0, 49.0, 1010.0)
+		"ore_patch_exposure", "ore_patch_exposure_far":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(1029.0, 5.0, 1070.0) if \
+				human_visual_capture_mode == "ore_patch_exposure" else \
+				Vector3(1029.0, 5.0, 1000.0)
+			capture_target = Vector3(1029.0, 5.0, 1122.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"high_oblique":

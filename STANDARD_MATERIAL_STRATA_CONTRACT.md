@@ -60,6 +60,9 @@ not a separate heightmap-only material path.
   material IDs for the standard profiles.
 - Edits mutate density and material together. A construct/place edit using
   material `4` is player fill, not a separate hidden terrain layer.
+- Material-changing edits persist `material_authored=true`. Meshing propagates
+  that provenance from the same solid isosurface endpoint as the material ID,
+  and render meshes expose it as `UV2.y`.
 - Rendering may use texture arrays, triplanar mapping, or clean human-playtest
   materials, but rendering must not become authoritative terrain state.
 - Native render payloads may expose derived surface biome blend weights for
@@ -72,6 +75,9 @@ not a separate heightmap-only material path.
 - Material and biome presentation must be LOD-stable. Moving the camera or
   switching chunk LODs must not make visible material regions appear, disappear,
   or change shape except as a controlled texture-detail reduction.
+- A declared procedural classifier may provide a matching continuous
+  world-space presentation only for unedited base-source material. Authored
+  material must render directly and must not be overridden by that classifier.
 - Do not add duplicate terrain skins, double-sided materials, or full-map
   fallback layers to hide material or topology problems.
 

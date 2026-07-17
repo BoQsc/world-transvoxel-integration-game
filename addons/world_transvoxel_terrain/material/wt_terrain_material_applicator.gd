@@ -8,7 +8,7 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_ids_pipeline_v5"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v6"
 const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
 const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
@@ -52,6 +52,7 @@ var _summary := {
 	"surface_material_blend_channel": "vertex_color_authoritative_surface_material_weights",
 	"surface_material_blend_weights_active": false,
 	"surface_biome_worldspace_blend_active": false,
+	"underground_ore_worldspace_blend_active": false,
 	"authored_albedo_layers": [],
 	"quality_implementation": QUALITY_IMPLEMENTATION,
 	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
@@ -91,6 +92,7 @@ func apply_materials_now() -> Dictionary:
 		_summary["applied"] = false
 		return get_material_summary()
 	var material := _material_instance()
+	_apply_procedural_material_parameters(material)
 	_apply_visual_mode(material)
 	var native_override_set := _set_native_material_override(backend, material)
 	var water_override_set := _set_native_water_material_override(
@@ -108,6 +110,7 @@ func apply_materials_now() -> Dictionary:
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	var authored_layers := _authored_albedo_layers()
 	var generation := _generation_profile_summary()
+	var procedural_ore_active := production_active and _procedural_ore_blend_enabled(generation)
 	_summary = {
 		"applied": native_override_set or int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -134,6 +137,8 @@ func apply_materials_now() -> Dictionary:
 		"surface_material_blend_weights_active": production_active,
 		"surface_biome_worldspace_blend_active": false,
 		"surface_biome_worldspace_blend_model": "disabled_authoritative_material_ids",
+		"underground_ore_worldspace_blend_active": procedural_ore_active,
+		"underground_ore_worldspace_blend_model": "deterministic_deep_ore_patches_v1_authored_provenance_guarded",
 		"surface_biome_seed": int(generation.get("seed", 1)),
 		"authored_albedo_layers": authored_layers,
 		"authored_albedo_layer_count": authored_layers.size(),
@@ -211,8 +216,21 @@ func _build_material(resolution: int) -> ShaderMaterial:
 	shader_material.set_shader_parameter("terrain_albedo_array", _production_texture_array(production_resolution, &"albedo"))
 	shader_material.set_shader_parameter("terrain_normal_array", _production_texture_array(production_resolution, &"normal"))
 	shader_material.set_shader_parameter("terrain_roughness_array", _production_texture_array(production_resolution, &"roughness_orm"))
+	_apply_procedural_material_parameters(shader_material)
 	_apply_visual_mode(shader_material)
 	return shader_material
+
+func _apply_procedural_material_parameters(shader_material: ShaderMaterial) -> void:
+	var generation := _generation_profile_summary()
+	var enabled := _procedural_ore_blend_enabled(generation)
+	var seed := int(generation.get("seed", 1))
+	shader_material.set_shader_parameter("procedural_ore_worldspace_blend_enabled", enabled)
+	shader_material.set_shader_parameter("procedural_seed_phase", float(seed % 100000) * 0.0001)
+	shader_material.set_shader_parameter("procedural_ore_blend_width", 0.12)
+
+func _procedural_ore_blend_enabled(generation: Dictionary) -> bool:
+	return str(generation.get("source_mode", "")) == "DETERMINISTIC_REFERENCE" and \
+		str(generation.get("underground_patch_model", "")) == "deterministic_deep_ore_patches_v1"
 
 func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_visual_enabled", visual_mode == &"clean")

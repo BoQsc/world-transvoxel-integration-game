@@ -23,6 +23,9 @@ uniform bool clean_material_variation_enabled = false;
 uniform float clean_material_variation_strength = 0.08;
 uniform float clean_roughness = 1.0;
 uniform float clean_specular = 0.0;
+uniform bool procedural_ore_worldspace_blend_enabled = false;
+uniform float procedural_seed_phase = 0.0001;
+uniform float procedural_ore_blend_width = 0.12;
 
 const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
 const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
@@ -30,12 +33,14 @@ const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying flat float material_id_flat;
+varying flat float material_authored_flat;
 varying vec4 surface_material_weights;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	material_id_flat = UV2.x;
+	material_authored_flat = UV2.y;
 	surface_material_weights = COLOR;
 }
 
@@ -92,6 +97,37 @@ vec4 production_albedo_color(float material_id, vec3 world_pos, vec3 normal) {
 	vec4 y_projection = texture(terrain_albedo_array, material_array_uv(material_id, world_pos.xz));
 	vec4 z_projection = texture(terrain_albedo_array, material_array_uv(material_id, world_pos.xy));
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
+}
+
+bool is_procedural_ore_host_material(float material_id) {
+	return (material_id > 0.5 && material_id < 1.5) ||
+		(material_id > 7.5 && material_id < 8.5);
+}
+
+float deterministic_procedural_wave(vec3 world_pos, float phase) {
+	return sin(world_pos.x * 0.031 + phase * 1.73) * 0.47 +
+		cos(world_pos.z * 0.027 - phase * 1.19) * 0.38 +
+		sin((world_pos.x + world_pos.z) * 0.014 + world_pos.y * 0.041 + phase) * 0.29;
+}
+
+float procedural_ore_worldspace_weight(vec3 world_pos) {
+	float vein = sin(world_pos.x * 0.073 + procedural_seed_phase) *
+		cos(world_pos.y * 0.097 - procedural_seed_phase * 0.7) *
+		sin(world_pos.z * 0.061 + procedural_seed_phase * 1.3);
+	float pocket = deterministic_procedural_wave(
+		world_pos, procedural_seed_phase * 0.37
+	);
+	float vein_weight = smoothstep(
+		0.48 - procedural_ore_blend_width,
+		0.48 + procedural_ore_blend_width,
+		vein
+	);
+	float pocket_weight = smoothstep(
+		0.08 - procedural_ore_blend_width,
+		0.08 + procedural_ore_blend_width,
+		pocket
+	);
+	return clamp(vein_weight * pocket_weight, 0.0, 1.0);
 }
 
 vec3 production_normal_color(float material_id, vec3 world_pos, vec3 normal) {
@@ -198,8 +234,31 @@ void fragment() {
 		float material_id = material_id_flat;
 		vec3 surface_normal = normalize(world_normal);
 		float surface_coverage = surface_weight_sum(surface_material_weights);
-		vec4 albedo_texel = production_albedo_color(material_id, world_position, surface_normal);
-		float roughness_texel = production_roughness_value(material_id, world_position, surface_normal);
+		bool procedural_ore_surface =
+			procedural_ore_worldspace_blend_enabled &&
+			material_authored_flat < 0.5 &&
+			surface_coverage <= 0.001 &&
+			is_procedural_ore_host_material(material_id);
+		float base_material_id = procedural_ore_surface ? 1.0 : material_id;
+		vec4 albedo_texel = production_albedo_color(
+			base_material_id, world_position, surface_normal
+		);
+		float roughness_texel = production_roughness_value(
+			base_material_id, world_position, surface_normal
+		);
+		if (procedural_ore_surface) {
+			float ore_weight = procedural_ore_worldspace_weight(world_position);
+			albedo_texel = mix(
+				albedo_texel,
+				production_albedo_color(8.0, world_position, surface_normal),
+				ore_weight
+			);
+			roughness_texel = mix(
+				roughness_texel,
+				production_roughness_value(8.0, world_position, surface_normal),
+				ore_weight
+			);
+		}
 		if (surface_coverage > 0.001) {
 			vec4 surface_weights = normalized_surface_weights(surface_material_weights);
 			float coverage = clamp(surface_coverage, 0.0, 1.0);

@@ -45,6 +45,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "biome_surface",
     "biome_snow_ridge",
     "ore_patch_exposure",
+    "ore_patch_exposure_far",
     "small_edit_near",
     "small_edit_mid",
     "small_edit_far",
@@ -236,6 +237,17 @@ def validate_visual_summary(
                 f"visual capture field {key} expected {expected!r}, "
                 f"got {summary.get(key)!r}: {summary!r}"
             )
+    procedural_ore_expected = expected_profile != "flat_baseline"
+    if (
+        summary.get("underground_ore_worldspace_blend_active")
+        is not procedural_ore_expected
+    ):
+        raise RuntimeError(
+            "visual capture field underground_ore_worldspace_blend_active "
+            f"expected {procedural_ore_expected!r}, got "
+            f"{summary.get('underground_ore_worldspace_blend_active')!r}: "
+            f"{summary!r}"
+        )
     if summary.get("surface_biome_worldspace_blend_active") is not False:
         raise RuntimeError(
             "visual capture must not replace authoritative material IDs with "

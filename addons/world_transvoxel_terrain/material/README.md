@@ -80,8 +80,15 @@ authoritative material IDs:
 - blue = sand;
 - alpha = snow.
 
-`UV2.x` remains the primary material ID. Vertex-color blending is therefore a
-derived render channel, not a second terrain authority.
+`UV2.x` remains the primary material ID. `UV2.y` carries material-authoring
+provenance: `1` means an edit explicitly selected the material and `0` means the
+base source still owns it. Vertex-color blending and the provenance flag are
+derived render channels, not second terrain authorities.
+
+Legacy pages that predate this channel are treated conservatively as authored.
+This keeps their categorical material visible instead of guessing that an old
+compacted edit was procedural. Rebake the base and replay edits into schema 1.2
+to recover source/edit provenance and the LOD-stable procedural presentation.
 
 Every visible terrain triangle has some material ID, including the outdoor
 surface. "Underground material" is therefore not a separate hidden terrain; it
@@ -89,14 +96,19 @@ is the same material field becoming visible after digging. Surface biomes and
 underground strata may use different classifiers, but they must feed one
 coherent material presentation path.
 
-The production shader consumes those authoritative vertex-derived IDs and
-weights directly. It must not reclassify the material from world position;
-doing so would make paint and construction metadata disagree with what the
-player sees. Coarser meshes may reduce texture detail, but material ownership
-continues to come from the solid endpoint of each isosurface edge.
+The production shader consumes those authoritative vertex-derived IDs,
+weights, and provenance. Authored material is always rendered categorically,
+so painting stone suppresses procedural ore and placing ore remains ore. For a
+known deterministic base-source model, unedited source material may use the
+same world-space classifier as the source to derive continuous presentation.
+This is restricted to an exact declared model; arbitrary generators are never
+reclassified by this shader. Material ownership still comes from the solid
+endpoint of each isosurface edge.
 
-Underground ore follows the same rule. The procedural source stores ore as
-authoritative material ID `8`, and the shader renders ID `8` as ore. Smooth
-multi-material falloff is a later data-model feature (for example, stored
-indices plus weights); it must not be simulated by replacing categorical
-authority in the shader.
+Underground ore uses that restricted path for
+`deterministic_deep_ore_patches_v1`. The stored IDs remain authoritative for
+queries and gameplay, while the matching continuous world-space function
+presents their boundary independently of mesh LOD. This prevents sparse ore
+from turning into per-triangle islands when coarse sampling changes. A future
+general multi-material system should store explicit indices plus weights, but
+must preserve the same edit-authority rule.

@@ -84,6 +84,14 @@ derive a stable world-space/blended ore presentation so coarse LOD meshes do
 not expose blocky per-triangle ore islands at cave entrances. This is a render
 presentation rule only: material ID `8` remains the stored/gameplay authority.
 
+That derivation must be provenance-aware. Base-source samples carry
+`material_authored=false`; paint, construct, fill, and material-volume edits
+set it to `true`, persist it with the page, and propagate it to `UV2.y` from the
+same solid isosurface endpoint as `UV2.x`. A shader may evaluate the exact
+declared procedural classifier only when the flag is false. When it is true,
+the selected material ID is rendered directly. This preserves LOD-stable base
+ore without allowing a presentation rule to override authored stone or ore.
+
 ## Human test expectation
 
 The current human playtest should show at least four surface biomes:
