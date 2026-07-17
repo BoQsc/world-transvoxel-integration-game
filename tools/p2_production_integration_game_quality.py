@@ -212,7 +212,9 @@ def validate_visual_summary(
         "profile": expected_profile,
         "viewer_radius_chunks": 10,
         "viewer_maximum_lod": 3,
-        "runtime_lod_refinement_radius_chunks": 1,
+        "runtime_lod_refinement_radius_chunks": (
+            1 if expected_profile == "flat_baseline" else 3
+        ),
         "runtime_render_apply_budget": 8,
         "runtime_collision_apply_budget": 8,
         "runtime_streaming_burst_render_apply_budget": 128,

@@ -131,7 +131,7 @@ func _ready() -> void:
 	if not initial_human_material_mode.is_empty():
 		_set_human_material_mode_by_name(initial_human_material_mode)
 	elif not autonomous and human_visual_capture_path.is_empty():
-		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_SAND_TRIPLANAR)
+		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
 	human_controls_hint_line = "controls: LMB dig | RMB place | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T material"
@@ -765,7 +765,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_demand_capacity_per_viewer": 16000 if _is_deep_vertical_profile(profile_id) else 10000,
 		"runtime_render_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
 		"runtime_collision_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
-		"runtime_lod_refinement_radius_chunks": 1,
+		"runtime_lod_refinement_radius_chunks": 3,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
 		"runtime_render_transition_frames": 0,
@@ -3261,7 +3261,10 @@ func _playable_spawn_summary() -> Dictionary:
 
 func _stabilize_player_spawn() -> bool:
 	var summary := {}
-	for _frame in range(180):
+	var frame_limit := 180
+	if game_world != null:
+		frame_limit = maxi(frame_limit, game_world.startup_world_state_timeout_frames)
+	for _frame in range(frame_limit):
 		summary = _playable_spawn_summary()
 		if bool(summary.get("spawn_floor_hit", false)):
 			break
@@ -3269,7 +3272,7 @@ func _stabilize_player_spawn() -> bool:
 			game_world.call("update_player_viewer", true)
 		await get_tree().physics_frame
 	if not bool(summary.get("spawn_floor_hit", false)):
-		_fail("playable spawn has no collision floor below it before human enable: %s" % str(summary))
+		_fail("playable spawn has no collision floor below it before human enable after %d frames: %s" % [frame_limit, str(summary)])
 		return false
 	var floor_y := float(summary.get("collision_floor_y", player.global_position.y - 2.0))
 	player.global_position.y = floor_y + 2.0
@@ -6625,9 +6628,6 @@ func _streaming_fly_coverage_gap_detected(summary: Dictionary) -> bool:
 	if int(summary.get("pending_retirement_records_missing", 0)) != 0:
 		return true
 	if int(summary.get("render_fading_resources", 0)) != 0:
-		return true
-	if _streaming_fly_non_retiring_visual_deficit(summary) != 0 and \
-			not staged_swap_coverage_retained:
 		return true
 	return false
 

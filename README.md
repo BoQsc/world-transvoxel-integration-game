@@ -176,10 +176,11 @@ The mountainous inspection profile is `g19_compact_2k_on_demand`, a
 deterministic compact 2K map with 128 by 128 chunks, 2048 by 2048 block
 coverage, and `viewer_maximum_lod=3`. The profile uses `radius_chunks=8` for
 full native coarse coverage across the 2K map and
-`runtime_lod_refinement_radius_chunks=1` so near detail does not force the
-entire visible world to refine. It is intentionally a stress profile: it is not
-the default terrain style, and it exists to inspect Transvoxel seams, lighting,
-materials, and edit replacement behavior on tall, sharper terrain.
+`runtime_lod_refinement_radius_chunks=3`, keeping the first coarse boundary at
+least 48 cells from the viewer while leaving the rest of the visible world
+mixed-LOD. It is intentionally a stress profile: it is not the default terrain
+style, and it exists to inspect Transvoxel seams, lighting, materials, and edit
+replacement behavior on tall, sharper terrain.
 
 Important compact-profile visual boundary: native Transvoxel terrain is the
 authoritative path. Normal human play, visual smoke, and terrain-correctness
