@@ -45,6 +45,8 @@ DEFAULT_VISUAL_MODES = ("ground", "high_oblique", "topdown", "watertight_boundar
 VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "biome_overview",
     "biome_surface",
+    "water_lake_near",
+    "water_lake_far",
     "biome_snow_ridge",
     "road_network",
     "road_edge_near",
@@ -295,10 +297,14 @@ def validate_visual_summary(
         raise RuntimeError(f"visual capture was not written: {capture_path}")
     checks = {
         "profile": expected_profile,
-        "viewer_radius_chunks": 10,
+        "viewer_radius_chunks": 8 if expected_profile == FOUR_BIOME_WORLD_PROFILE else 10,
         "viewer_maximum_lod": 3,
         "runtime_lod_refinement_radius_chunks": (
-            1 if expected_profile == "flat_baseline" else 3
+            1
+            if expected_profile == "flat_baseline"
+            else 2
+            if expected_profile == FOUR_BIOME_WORLD_PROFILE
+            else 3
         ),
         "runtime_render_apply_budget": 8,
         "runtime_collision_apply_budget": 8,

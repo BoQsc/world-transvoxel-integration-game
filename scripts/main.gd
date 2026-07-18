@@ -8316,6 +8316,18 @@ func _apply_capture_camera_mode() -> void:
 			capture_target = Vector3(1120.0, 48.0, 1120.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
+		"water_lake_near":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(650.0, 78.0, 455.0)
+			capture_target = Vector3(650.0, 23.5, 700.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"water_lake_far":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(650.0, 220.0, 30.0)
+			capture_target = Vector3(650.0, 23.5, 700.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
 		"biome_snow_ridge":
 			capture_position = Vector3(1120.0, 210.0, 820.0)
 			capture_target = Vector3(1190.0, 86.0, 1040.0)
