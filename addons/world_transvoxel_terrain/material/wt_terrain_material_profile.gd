@@ -6,7 +6,7 @@ const TEXTURE_FORMAT := "RGBA8"
 const TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const IMPLEMENTATION := "terrain_material_profile_contract_v1"
-const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v7"
+const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_explicit_weight_layers_pipeline_v9"
 const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 
 @export var profile_id: StringName = &"debug_checker_palette"

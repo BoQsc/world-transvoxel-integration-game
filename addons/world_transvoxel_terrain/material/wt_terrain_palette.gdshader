@@ -27,6 +27,13 @@ uniform float clean_specular = 0.0;
 uniform bool procedural_ore_worldspace_blend_enabled = false;
 uniform float procedural_seed_phase = 0.0001;
 uniform float procedural_ore_blend_width = 0.12;
+uniform bool procedural_rolling_exterior_surface_enabled = false;
+uniform float procedural_surface_cover_full_depth = 1.25;
+uniform float procedural_surface_cover_fade_depth = 2.75;
+uniform float procedural_surface_cover_normal_start = -0.10;
+uniform float procedural_surface_cover_normal_end = 0.30;
+uniform float procedural_surface_biome_height_blend_width = 2.0;
+uniform float procedural_surface_biome_noise_blend_width = 0.14;
 uniform bool procedural_road_worldspace_blend_enabled = false;
 uniform vec2 procedural_road_grade_0 = vec2(34.0, 39.0);
 uniform vec2 procedural_road_grade_1 = vec2(39.0, 40.0);
@@ -41,16 +48,18 @@ const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
 
 varying vec3 world_position;
 varying vec3 world_normal;
-varying flat float material_id_flat;
-varying flat float material_authored_flat;
-varying vec4 surface_material_weights;
+varying vec4 generated_material_weights_low;
+varying vec4 generated_material_weights_high;
+varying vec4 authored_material_weights_low;
+varying vec4 authored_material_weights_high;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-	material_id_flat = UV2.x;
-	material_authored_flat = UV2.y;
-	surface_material_weights = COLOR;
+	generated_material_weights_low = CUSTOM0;
+	generated_material_weights_high = CUSTOM1;
+	authored_material_weights_low = CUSTOM2;
+	authored_material_weights_high = CUSTOM3;
 }
 
 float material_layer(float material_id) {
@@ -108,11 +117,6 @@ vec4 production_albedo_color(float material_id, vec3 world_pos, vec3 normal) {
 	vec4 y_projection = texture(terrain_albedo_array, material_array_uv(material_id, world_pos.xz));
 	vec4 z_projection = texture(terrain_albedo_array, material_array_uv(material_id, world_pos.xy));
 	return x_projection * weights.x + y_projection * weights.y + z_projection * weights.z;
-}
-
-bool is_procedural_ore_host_material(float material_id) {
-	return (material_id > 0.5 && material_id < 1.5) ||
-		(material_id > 7.5 && material_id < 8.5);
 }
 
 float deterministic_procedural_wave(vec3 world_pos, float phase) {
@@ -227,28 +231,71 @@ float procedural_rolling_hills_height(vec2 point) {
 	return 26.0 + broad + rolling + central_mound + shallow_valley + local;
 }
 
-float procedural_road_underlay_material_id(vec3 world_pos, vec4 road) {
+float procedural_surface_height(vec3 world_pos, vec4 road) {
 	float base_surface = procedural_rolling_hills_height(world_pos.xz);
+	if (!procedural_road_worldspace_blend_enabled) {
+		return base_surface;
+	}
 	float road_grade = road.z > 0.0 ? road.y / road.z : base_surface;
-	float surface = mix(base_surface, road_grade, road.w);
+	return mix(base_surface, road_grade, road.w);
+}
+
+float procedural_exterior_surface_coverage(
+	vec3 world_pos,
+	vec3 surface_normal,
+	vec4 road
+) {
+	float surface = procedural_surface_height(world_pos, road);
+	float distance_from_source_surface = abs(surface - world_pos.y);
+	float depth_coverage = 1.0 - smoothstep(
+		max(procedural_surface_cover_full_depth, 0.0),
+		max(procedural_surface_cover_fade_depth,
+			procedural_surface_cover_full_depth + 0.001),
+		distance_from_source_surface
+	);
+	float orientation_coverage = smoothstep(
+		procedural_surface_cover_normal_start,
+		max(procedural_surface_cover_normal_end,
+			procedural_surface_cover_normal_start + 0.001),
+		surface_normal.y
+	);
+	return clamp(depth_coverage * orientation_coverage, 0.0, 1.0);
+}
+
+vec4 procedural_surface_biome_weights(vec3 world_pos, vec4 road) {
+	float surface = procedural_surface_height(world_pos, road);
 	float phase = procedural_seed_phase;
-	float macro_biome =
+	float macro =
 		sin(world_pos.x * 0.0042 + phase * 1.5) +
 		cos(world_pos.z * 0.0037 - phase * 0.8) +
 		0.55 * sin((world_pos.x - world_pos.z) * 0.0021 + phase);
-	float dry_biome =
+	float dry =
 		sin((world_pos.x + world_pos.z) * 0.0051 - phase * 0.4) +
 		0.42 * cos(world_pos.x * 0.0063 + phase);
-	if (surface > 40.0 || (surface > 30.0 && macro_biome > 0.35)) {
-		return 5.0;
-	}
-	if (surface < 10.0 || dry_biome > 0.85) {
-		return 4.0;
-	}
-	if (surface > 22.0 || macro_biome < -0.70) {
-		return 3.0;
-	}
-	return 2.0;
+	float height_width = max(procedural_surface_biome_height_blend_width, 0.001);
+	float noise_width = max(procedural_surface_biome_noise_blend_width, 0.001);
+	float sand = max(
+		1.0 - smoothstep(10.0 - height_width, 10.0 + height_width, surface),
+		smoothstep(0.85 - noise_width, 0.85 + noise_width, dry)
+	);
+	float snow = max(
+		smoothstep(40.0 - height_width, 40.0 + height_width, surface),
+		smoothstep(30.0 - height_width, 30.0 + height_width, surface) *
+			smoothstep(0.35 - noise_width, 0.35 + noise_width, macro)
+	);
+	float gravel = max(
+		smoothstep(22.0 - height_width, 22.0 + height_width, surface),
+		1.0 - smoothstep(-0.70 - noise_width, -0.70 + noise_width, macro)
+	);
+	gravel *= 1.0 - snow * 0.65;
+	sand *= 1.0 - snow * 0.75;
+	float grass = max(
+		0.12,
+		(1.0 - snow) * (1.0 - sand * 0.75) * (1.0 - gravel * 0.55)
+	);
+	vec4 weights = max(vec4(grass, gravel, sand, snow), vec4(0.0));
+	float total = max(weights.x + weights.y + weights.z + weights.w, 0.0001);
+	return weights / total;
 }
 
 float procedural_road_worldspace_weight(vec3 world_pos, vec4 road) {
@@ -323,6 +370,61 @@ float production_surface_roughness_value(vec4 weights, vec3 world_pos, vec3 norm
 		production_roughness_value(5.0, world_pos, normal) * weights.w;
 }
 
+float material_weight_sum(vec4 low_weights, vec4 high_weights) {
+	vec4 safe_low = max(low_weights, vec4(0.0));
+	vec4 safe_high = max(high_weights, vec4(0.0));
+	return safe_low.x + safe_low.y + safe_low.z + safe_low.w +
+		safe_high.x + safe_high.y + safe_high.z + safe_high.w;
+}
+
+vec4 production_material_albedo_from_weights(
+	vec4 low_weights,
+	vec4 high_weights,
+	vec3 world_pos,
+	vec3 surface_normal
+) {
+	vec4 safe_low = max(low_weights, vec4(0.0));
+	vec4 safe_high = max(high_weights, vec4(0.0));
+	float total = material_weight_sum(safe_low, safe_high);
+	if (total <= 0.0001) {
+		return production_albedo_color(1.0, world_pos, surface_normal);
+	}
+	vec4 albedo = vec4(0.0);
+	if (safe_low.x > 0.0001) albedo += production_albedo_color(1.0, world_pos, surface_normal) * safe_low.x;
+	if (safe_low.y > 0.0001) albedo += production_albedo_color(2.0, world_pos, surface_normal) * safe_low.y;
+	if (safe_low.z > 0.0001) albedo += production_albedo_color(3.0, world_pos, surface_normal) * safe_low.z;
+	if (safe_low.w > 0.0001) albedo += production_albedo_color(4.0, world_pos, surface_normal) * safe_low.w;
+	if (safe_high.x > 0.0001) albedo += production_albedo_color(5.0, world_pos, surface_normal) * safe_high.x;
+	if (safe_high.y > 0.0001) albedo += production_albedo_color(7.0, world_pos, surface_normal) * safe_high.y;
+	if (safe_high.z > 0.0001) albedo += production_albedo_color(8.0, world_pos, surface_normal) * safe_high.z;
+	if (safe_high.w > 0.0001) albedo += production_albedo_color(10.0, world_pos, surface_normal) * safe_high.w;
+	return albedo / total;
+}
+
+float production_material_roughness_from_weights(
+	vec4 low_weights,
+	vec4 high_weights,
+	vec3 world_pos,
+	vec3 surface_normal
+) {
+	vec4 safe_low = max(low_weights, vec4(0.0));
+	vec4 safe_high = max(high_weights, vec4(0.0));
+	float total = material_weight_sum(safe_low, safe_high);
+	if (total <= 0.0001) {
+		return production_roughness_value(1.0, world_pos, surface_normal);
+	}
+	float roughness = 0.0;
+	if (safe_low.x > 0.0001) roughness += production_roughness_value(1.0, world_pos, surface_normal) * safe_low.x;
+	if (safe_low.y > 0.0001) roughness += production_roughness_value(2.0, world_pos, surface_normal) * safe_low.y;
+	if (safe_low.z > 0.0001) roughness += production_roughness_value(3.0, world_pos, surface_normal) * safe_low.z;
+	if (safe_low.w > 0.0001) roughness += production_roughness_value(4.0, world_pos, surface_normal) * safe_low.w;
+	if (safe_high.x > 0.0001) roughness += production_roughness_value(5.0, world_pos, surface_normal) * safe_high.x;
+	if (safe_high.y > 0.0001) roughness += production_roughness_value(7.0, world_pos, surface_normal) * safe_high.y;
+	if (safe_high.z > 0.0001) roughness += production_roughness_value(8.0, world_pos, surface_normal) * safe_high.z;
+	if (safe_high.w > 0.0001) roughness += production_roughness_value(10.0, world_pos, surface_normal) * safe_high.w;
+	return roughness / total;
+}
+
 vec3 material_clean_tint(float material_id) {
 	if (material_id > 0.5 && material_id < 1.5) {
 		return vec3(0.40, 0.42, 0.43);
@@ -345,92 +447,163 @@ vec3 material_clean_tint(float material_id) {
 	return vec3(0.52, 0.48, 0.40);
 }
 
+vec3 material_clean_tint_from_weights(vec4 low_weights, vec4 high_weights) {
+	vec4 safe_low = max(low_weights, vec4(0.0));
+	vec4 safe_high = max(high_weights, vec4(0.0));
+	float total = material_weight_sum(safe_low, safe_high);
+	if (total <= 0.0001) {
+		return material_clean_tint(1.0);
+	}
+	vec3 tint =
+		material_clean_tint(1.0) * safe_low.x +
+		material_clean_tint(2.0) * safe_low.y +
+		material_clean_tint(3.0) * safe_low.z +
+		material_clean_tint(4.0) * safe_low.w +
+		material_clean_tint(5.0) * safe_high.x +
+		material_clean_tint(7.0) * safe_high.y +
+		material_clean_tint(8.0) * safe_high.z +
+		material_clean_tint(10.0) * safe_high.w;
+	return tint / total;
+}
+
 void fragment() {
 	NORMAL = normalize(NORMAL);
+	vec4 generated_low = max(generated_material_weights_low, vec4(0.0));
+	vec4 generated_high = max(generated_material_weights_high, vec4(0.0));
+	vec4 authored_low = max(authored_material_weights_low, vec4(0.0));
+	vec4 authored_high = max(authored_material_weights_high, vec4(0.0));
+	vec4 total_low = generated_low + authored_low;
+	vec4 total_high = generated_high + authored_high;
 	if (clean_visual_enabled) {
-		float material_id = material_id_flat;
 		vec3 clean_color = clean_albedo_color.rgb;
 		if (clean_texture_enabled) {
 			clean_color = clamp(clean_texture_color(world_position, normalize(world_normal)) * clean_albedo_color.rgb * 1.15, vec3(0.0), vec3(1.0));
 		}
 		if (clean_material_variation_enabled) {
-			clean_color = mix(clean_color, material_clean_tint(material_id), clamp(clean_material_variation_strength, 0.0, 1.0));
+			clean_color = mix(
+				clean_color,
+				material_clean_tint_from_weights(total_low, total_high),
+				clamp(clean_material_variation_strength, 0.0, 1.0)
+			);
 		}
 		ALBEDO = clean_color;
 		METALLIC = 0.0;
 		SPECULAR = clamp(clean_specular, 0.0, 1.0);
 		ROUGHNESS = clamp(clean_roughness, 0.0, 1.0);
 	} else {
-		float material_id = material_id_flat;
 		vec3 surface_normal = normalize(world_normal);
-		float surface_coverage = surface_weight_sum(surface_material_weights);
-		bool procedural_ore_surface =
-			procedural_ore_worldspace_blend_enabled &&
-			material_authored_flat < 0.5 &&
-			surface_coverage <= 0.001 &&
-			is_procedural_ore_host_material(material_id);
-		bool procedural_road_surface =
-			procedural_road_worldspace_blend_enabled &&
-			material_authored_flat < 0.5;
+		float generated_coverage = material_weight_sum(generated_low, generated_high);
+		float authored_coverage = material_weight_sum(authored_low, authored_high);
+		float total_coverage = max(generated_coverage + authored_coverage, 0.0001);
 		vec4 road = vec4(1.0e20, 0.0, 0.0, 0.0);
-		if (procedural_road_surface) {
+		if (procedural_road_worldspace_blend_enabled) {
 			road = procedural_road_field(world_position.xz);
 		}
-		bool procedural_asphalt_sample =
-			procedural_road_surface &&
-			material_id > 9.5 && material_id < 10.5;
-		float base_material_id = procedural_ore_surface ? 1.0 : material_id;
-		if (procedural_asphalt_sample) {
-			base_material_id = procedural_road_underlay_material_id(world_position, road);
+		float exterior_coverage = procedural_rolling_exterior_surface_enabled ?
+			procedural_exterior_surface_coverage(
+				world_position, surface_normal, road
+			) : 1.0;
+
+		vec4 generated_base_low = vec4(generated_low.x, 0.0, 0.0, 0.0);
+		vec4 generated_base_high = vec4(0.0, generated_high.y, 0.0, 0.0);
+		if (!procedural_ore_worldspace_blend_enabled) {
+			generated_base_high.z = generated_high.z;
 		}
-		vec4 albedo_texel = production_albedo_color(
-			base_material_id, world_position, surface_normal
+		if (!procedural_road_worldspace_blend_enabled) {
+			generated_base_high.w = generated_high.w;
+		}
+		vec4 generated_albedo = production_material_albedo_from_weights(
+			generated_base_low,
+			generated_base_high,
+			world_position,
+			surface_normal
 		);
-		float roughness_texel = production_roughness_value(
-			base_material_id, world_position, surface_normal
+		float generated_roughness = production_material_roughness_from_weights(
+			generated_base_low,
+			generated_base_high,
+			world_position,
+			surface_normal
 		);
-		if (procedural_ore_surface) {
-			float ore_weight = procedural_ore_worldspace_weight(world_position);
-			albedo_texel = mix(
-				albedo_texel,
+
+		if (procedural_ore_worldspace_blend_enabled && generated_coverage > 0.0001) {
+			float ore_host_coverage = clamp(
+				(generated_low.x + generated_high.z) / generated_coverage,
+				0.0,
+				1.0
+			);
+			float ore_weight = procedural_ore_worldspace_weight(world_position) *
+				ore_host_coverage;
+			generated_albedo = mix(
+				generated_albedo,
 				production_albedo_color(8.0, world_position, surface_normal),
 				ore_weight
 			);
-			roughness_texel = mix(
-				roughness_texel,
+			generated_roughness = mix(
+				generated_roughness,
 				production_roughness_value(8.0, world_position, surface_normal),
 				ore_weight
 			);
 		}
+
+		vec4 surface_weights = vec4(
+			generated_low.y,
+			generated_low.z,
+			generated_low.w,
+			generated_high.x
+		);
+		float surface_coverage = surface_weight_sum(surface_weights);
+		if (procedural_rolling_exterior_surface_enabled) {
+			surface_weights = procedural_surface_biome_weights(world_position, road);
+			surface_coverage = generated_coverage * exterior_coverage;
+		}
 		if (surface_coverage > 0.001) {
-			vec4 surface_weights = normalized_surface_weights(surface_material_weights);
+			surface_weights = normalized_surface_weights(surface_weights);
 			float coverage = clamp(surface_coverage, 0.0, 1.0);
-			albedo_texel = mix(
-				albedo_texel,
+			generated_albedo = mix(
+				generated_albedo,
 				production_surface_albedo_color(surface_weights, world_position, surface_normal),
 				coverage
 			);
-			roughness_texel = mix(
-				roughness_texel,
+			generated_roughness = mix(
+				generated_roughness,
 				production_surface_roughness_value(surface_weights, world_position, surface_normal),
 				coverage
 			);
 		}
-		if (procedural_road_surface) {
-			float road_weight = procedural_road_worldspace_weight(world_position, road);
+		if (procedural_road_worldspace_blend_enabled) {
+			float road_weight = procedural_road_worldspace_weight(world_position, road) *
+				generated_coverage * exterior_coverage;
 			if (road_weight > 0.001) {
-				albedo_texel = mix(
-					albedo_texel,
+				generated_albedo = mix(
+					generated_albedo,
 					production_albedo_color(10.0, world_position, surface_normal),
 					road_weight
 				);
-				roughness_texel = mix(
-					roughness_texel,
+				generated_roughness = mix(
+					generated_roughness,
 					production_roughness_value(10.0, world_position, surface_normal),
 					road_weight
 				);
 			}
 		}
+
+		vec4 authored_albedo = production_material_albedo_from_weights(
+			authored_low,
+			authored_high,
+			world_position,
+			surface_normal
+		);
+		float authored_roughness = production_material_roughness_from_weights(
+			authored_low,
+			authored_high,
+			world_position,
+			surface_normal
+		);
+		float authored_mix = clamp(authored_coverage / total_coverage, 0.0, 1.0);
+		vec4 albedo_texel = mix(generated_albedo, authored_albedo, authored_mix);
+		float roughness_texel = mix(
+			generated_roughness, authored_roughness, authored_mix
+		);
 		ALBEDO = albedo_texel.rgb;
 		SPECULAR = 0.0;
 		ROUGHNESS = clamp(roughness_texel, 0.45, 0.98);

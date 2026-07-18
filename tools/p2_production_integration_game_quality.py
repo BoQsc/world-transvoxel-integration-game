@@ -49,6 +49,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "road_edge_near",
     "cave_entrance_road",
     "cave_entrance_near",
+    "cave_material_boundary_near",
     "ore_patch_exposure",
     "ore_patch_exposure_far",
     "small_edit_near",
@@ -73,10 +74,87 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
 )
 DEFAULT_CAPTURE_ROOT_NAME = "world_transvoxel_captures"
+MATERIAL_SHADER_RELATIVE_PATH = pathlib.Path(
+    "addons/world_transvoxel_terrain/material/wt_terrain_palette.gdshader"
+)
+RENDER_SINK_RELATIVE_PATH = pathlib.Path(
+    "addons/world_transvoxel/src/render/wt_godot_render_sink.cpp"
+)
 
 
 def repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[1]
+
+
+def verify_material_boundary_shader_contract(project: pathlib.Path) -> None:
+    shader_path = project / MATERIAL_SHADER_RELATIVE_PATH
+    render_sink_path = project / RENDER_SINK_RELATIVE_PATH
+    shader_source = shader_path.read_text(encoding="utf-8")
+    render_sink_source = render_sink_path.read_text(encoding="utf-8")
+    required_shader_fragments = (
+        "generated_material_weights_low = CUSTOM0;",
+        "generated_material_weights_high = CUSTOM1;",
+        "authored_material_weights_low = CUSTOM2;",
+        "authored_material_weights_high = CUSTOM3;",
+        "float material_weight_sum(",
+        "vec4 production_material_albedo_from_weights(",
+        "float production_material_roughness_from_weights(",
+        "uniform bool procedural_rolling_exterior_surface_enabled = false;",
+        "float procedural_exterior_surface_coverage(",
+        "vec4 procedural_surface_biome_weights(",
+        "float authored_mix = clamp(authored_coverage / total_coverage",
+        "generated_coverage * exterior_coverage;",
+    )
+    missing_shader = [
+        fragment
+        for fragment in required_shader_fragments
+        if fragment not in shader_source
+    ]
+    if missing_shader:
+        raise RuntimeError(
+            "material boundary shader contract is incomplete: "
+            f"missing={missing_shader!r} path={shader_path}"
+        )
+    forbidden_shader_fragments = (
+        "varying flat float material_id_flat;",
+        "varying flat float material_authored_flat;",
+        "procedural_road_underlay_material_id(",
+        "float production_base_material_id(",
+    )
+    present_forbidden = [
+        fragment
+        for fragment in forbidden_shader_fragments
+        if fragment in shader_source
+    ]
+    if present_forbidden:
+        raise RuntimeError(
+            "material boundary shader still contains triangle-categorical "
+            f"selection: present={present_forbidden!r} path={shader_path}"
+        )
+    required_sink_fragments = (
+        "material_weight_slot(std::uint16_t material)",
+        "godot::PackedByteArray generated_material_weights_low;",
+        "godot::PackedByteArray authored_material_weights_high;",
+        "arrays[godot::Mesh::ARRAY_CUSTOM0] = generated_material_weights_low;",
+        "arrays[godot::Mesh::ARRAY_CUSTOM1] = generated_material_weights_high;",
+        "arrays[godot::Mesh::ARRAY_CUSTOM2] = authored_material_weights_low;",
+        "arrays[godot::Mesh::ARRAY_CUSTOM3] = authored_material_weights_high;",
+    )
+    missing_sink = [
+        fragment
+        for fragment in required_sink_fragments
+        if fragment not in render_sink_source
+    ]
+    if missing_sink:
+        raise RuntimeError(
+            "render sink explicit material-weight payload is incomplete: "
+            f"missing={missing_sink!r} path={render_sink_path}"
+        )
+    print(
+        "WT_MATERIAL_BOUNDARY_SHADER_CONTRACT_PASS "
+        "model=generated_authored_eight_weight_layers_v1 "
+        "flat_triangle_selection=0 exterior_surface=1 ore=1 road=1 authored=1"
+    )
 
 
 def default_capture_dir(project: pathlib.Path, gate_name: str) -> pathlib.Path:
@@ -264,14 +342,41 @@ def validate_visual_summary(
             f"{summary.get('surface_road_worldspace_blend_active')!r}: "
             f"{summary!r}"
         )
-    if summary.get("surface_biome_worldspace_blend_active") is not False:
+    surface_depth_expected = expected_profile in (
+        ROLLING_HILLS_CAVE_PROFILE,
+        ROAD_PROFILE,
+    )
+    if (
+        summary.get("surface_biome_worldspace_blend_active")
+        is not surface_depth_expected
+    ):
         raise RuntimeError(
-            "visual capture must not replace authoritative material IDs with "
-            f"world-space biome classification: {summary!r}"
+            "visual capture generated exterior biome weighting expected "
+            f"{surface_depth_expected!r}: {summary!r}"
         )
-    if summary.get("surface_material_blend_channel") != "vertex_color_authoritative_surface_material_weights":
+    if (
+        summary.get("surface_depth_worldspace_blend_active")
+        is not surface_depth_expected
+    ):
         raise RuntimeError(
-            "visual capture authoritative surface material blend channel mismatch: "
+            "visual capture generated surface-depth presentation expected "
+            f"{surface_depth_expected!r}, got "
+            f"{summary.get('surface_depth_worldspace_blend_active')!r}: "
+            f"{summary!r}"
+        )
+    if summary.get("surface_material_blend_channel") != "custom_rgba8_generated_and_authored_material_weights":
+        raise RuntimeError(
+            "visual capture explicit material-weight channel mismatch: "
+            f"{summary!r}"
+        )
+    if summary.get("material_weight_payload_model") != "eight_material_generated_authored_rgba8_unorm_v1":
+        raise RuntimeError(
+            "visual capture explicit material-weight model mismatch: "
+            f"{summary!r}"
+        )
+    if summary.get("material_weight_payload_flat_varyings") is not False:
+        raise RuntimeError(
+            "visual capture reintroduced flat material varyings: "
             f"{summary!r}"
         )
     mode = str(summary.get("mode", ""))
@@ -1613,6 +1718,7 @@ def main(argv: list[str]) -> int:
 
     godot = find_godot(args.godot)
     project = pathlib.Path(args.project).resolve()
+    verify_material_boundary_shader_contract(project)
     godot_import_assets.run_godot_import(godot, project)
     godot_import_assets.verify_imports(project)
     print("WT_GODOT_IMPORT_ASSETS_PASS required_imports=%d" % len(godot_import_assets.REQUIRED_TEXTURE_IMPORTS))

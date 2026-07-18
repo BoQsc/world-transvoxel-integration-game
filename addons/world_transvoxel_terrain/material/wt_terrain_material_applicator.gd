@@ -8,7 +8,7 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v7"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_explicit_weight_layers_pipeline_v9"
 const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
 const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
@@ -57,9 +57,12 @@ var _summary := {
 	"deterministic_texture": true,
 	"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 	"primary_material_texture_active": false,
-	"surface_material_blend_channel": "vertex_color_authoritative_surface_material_weights",
+	"surface_material_blend_channel": "custom_rgba8_generated_and_authored_material_weights",
 	"surface_material_blend_weights_active": false,
+	"material_weight_payload_model": "eight_material_generated_authored_rgba8_unorm_v1",
+	"material_weight_payload_flat_varyings": false,
 	"surface_biome_worldspace_blend_active": false,
+	"surface_depth_worldspace_blend_active": false,
 	"underground_ore_worldspace_blend_active": false,
 	"surface_road_worldspace_blend_active": false,
 	"authored_albedo_layers": [],
@@ -119,6 +122,7 @@ func apply_materials_now() -> Dictionary:
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	var authored_layers := _authored_albedo_layers()
 	var generation := _generation_profile_summary()
+	var exterior_surface_active := production_active and _procedural_rolling_exterior_surface_enabled(generation)
 	var procedural_ore_active := production_active and _procedural_ore_blend_enabled(generation)
 	var procedural_road_active := production_active and _procedural_road_blend_enabled(generation)
 	_summary = {
@@ -143,14 +147,18 @@ func apply_materials_now() -> Dictionary:
 		"deterministic_texture": true,
 		"small_texture_budget_bytes": MAX_STANDARD_TEXTURE_BYTES,
 		"primary_material_texture_active": production_active,
-		"surface_material_blend_channel": "vertex_color_authoritative_surface_material_weights",
+		"surface_material_blend_channel": "custom_rgba8_generated_and_authored_material_weights",
 		"surface_material_blend_weights_active": production_active,
-		"surface_biome_worldspace_blend_active": false,
-		"surface_biome_worldspace_blend_model": "disabled_authoritative_material_ids",
+		"material_weight_payload_model": "eight_material_generated_authored_rgba8_unorm_v1",
+		"material_weight_payload_flat_varyings": false,
+		"surface_biome_worldspace_blend_active": exterior_surface_active,
+		"surface_biome_worldspace_blend_model": "rolling_hills_exterior_surface_biome_weights_v2" if exterior_surface_active else "vertex_material_weights",
+		"surface_depth_worldspace_blend_active": exterior_surface_active,
+		"surface_depth_worldspace_blend_model": "rolling_hills_exterior_surface_distance_orientation_v2" if exterior_surface_active else "none",
 		"underground_ore_worldspace_blend_active": procedural_ore_active,
-		"underground_ore_worldspace_blend_model": "deterministic_deep_ore_patches_v1_authored_provenance_guarded",
+		"underground_ore_worldspace_blend_model": "deterministic_deep_ore_patches_v1_generated_weight_guarded",
 		"surface_road_worldspace_blend_active": procedural_road_active,
-		"surface_road_worldspace_blend_model": "deterministic_shallow_asphalt_corridors_v1_authored_provenance_guarded",
+		"surface_road_worldspace_blend_model": "deterministic_shallow_asphalt_corridors_v1_exterior_generated_weight_guarded",
 		"surface_biome_seed": int(generation.get("seed", 1)),
 		"authored_albedo_layers": authored_layers,
 		"authored_albedo_layer_count": authored_layers.size(),
@@ -240,6 +248,16 @@ func _apply_procedural_material_parameters(shader_material: ShaderMaterial) -> v
 	shader_material.set_shader_parameter("procedural_seed_phase", float(seed % 100000) * 0.0001)
 	shader_material.set_shader_parameter("procedural_ore_blend_width", 0.12)
 	shader_material.set_shader_parameter(
+		"procedural_rolling_exterior_surface_enabled",
+		_procedural_rolling_exterior_surface_enabled(generation)
+	)
+	shader_material.set_shader_parameter("procedural_surface_cover_full_depth", 1.25)
+	shader_material.set_shader_parameter("procedural_surface_cover_fade_depth", 2.75)
+	shader_material.set_shader_parameter("procedural_surface_cover_normal_start", -0.10)
+	shader_material.set_shader_parameter("procedural_surface_cover_normal_end", 0.30)
+	shader_material.set_shader_parameter("procedural_surface_biome_height_blend_width", 2.0)
+	shader_material.set_shader_parameter("procedural_surface_biome_noise_blend_width", 0.14)
+	shader_material.set_shader_parameter(
 		"procedural_world_size_xz",
 		Vector2(
 			maxf(16.0, float(int(generation.get("world_chunk_count_x", 128)) * 16)),
@@ -268,6 +286,17 @@ func _procedural_road_blend_enabled(generation: Dictionary) -> bool:
 	return str(generation.get("source_mode", "")) == "DETERMINISTIC_REFERENCE" and \
 		str(generation.get("procedural_preset_id", "")) == "rolling_hills_cave_roads" and \
 		str(generation.get("road_network_model", "")) == "deterministic_shallow_asphalt_corridors_v1"
+
+
+func _procedural_rolling_exterior_surface_enabled(generation: Dictionary) -> bool:
+	if str(generation.get("source_mode", "")) != "DETERMINISTIC_REFERENCE":
+		return false
+	if str(generation.get("surface_biome_model", "")) != "deterministic_macro_surface_biomes_v1":
+		return false
+	return str(generation.get("procedural_preset_id", "")) in [
+		"rolling_hills_cave",
+		"rolling_hills_cave_roads",
+	]
 
 
 func _procedural_rolling_hills_height(point: Vector2, generation: Dictionary) -> float:

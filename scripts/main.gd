@@ -3386,10 +3386,13 @@ func _presentation_summary() -> Dictionary:
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"primary_material_texture_active": bool(material_summary.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(material_summary.get("surface_biome_worldspace_blend_active", false)),
+		"surface_depth_worldspace_blend_active": bool(material_summary.get("surface_depth_worldspace_blend_active", false)),
 		"underground_ore_worldspace_blend_active": bool(material_summary.get("underground_ore_worldspace_blend_active", false)),
 		"surface_road_worldspace_blend_active": bool(material_summary.get("surface_road_worldspace_blend_active", false)),
 		"surface_material_blend_weights_active": bool(material_summary.get("surface_material_blend_weights_active", false)),
 		"surface_material_blend_channel": str(material_summary.get("surface_material_blend_channel", "")),
+		"material_weight_payload_model": str(material_summary.get("material_weight_payload_model", "")),
+		"material_weight_payload_flat_varyings": bool(material_summary.get("material_weight_payload_flat_varyings", true)),
 		"native_render_material_override": bool(material_summary.get("native_render_material_override", false)),
 		"native_water_material_override": bool(material_summary.get("native_water_material_override", false)),
 		"quality_implementation": str(material_summary.get("quality_implementation", "")),
@@ -3417,8 +3420,12 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if not bool(summary.get("primary_material_texture_active", false)):
 		_fail("primary material texture mapping inactive: %s" % str(summary))
 		return false
-	if bool(summary.get("surface_biome_worldspace_blend_active", false)):
-		_fail("shader is replacing authoritative material IDs with world-space biome classification: %s" % str(summary))
+	var surface_depth_expected := selected_profile in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE]
+	if bool(summary.get("surface_biome_worldspace_blend_active", false)) != surface_depth_expected:
+		_fail("generated exterior biome weighting activation mismatch: expected=%s summary=%s" % [str(surface_depth_expected), str(summary)])
+		return false
+	if bool(summary.get("surface_depth_worldspace_blend_active", false)) != surface_depth_expected:
+		_fail("continuous generated surface-depth presentation activation mismatch: expected=%s summary=%s" % [str(surface_depth_expected), str(summary)])
 		return false
 	var procedural_ore_expected := selected_profile != FLAT_PROFILE
 	if bool(summary.get("underground_ore_worldspace_blend_active", false)) != procedural_ore_expected:
@@ -3429,8 +3436,10 @@ func _verify_presentation(summary: Dictionary) -> bool:
 		_fail("LOD-stable volumetric road presentation activation mismatch: expected=%s summary=%s" % [str(procedural_road_expected), str(summary)])
 		return false
 	if not bool(summary.get("surface_material_blend_weights_active", false)) or \
-		str(summary.get("surface_material_blend_channel", "")) != "vertex_color_authoritative_surface_material_weights":
-		_fail("authoritative surface material blend channel inactive: %s" % str(summary))
+		str(summary.get("surface_material_blend_channel", "")) != "custom_rgba8_generated_and_authored_material_weights" or \
+		str(summary.get("material_weight_payload_model", "")) != "eight_material_generated_authored_rgba8_unorm_v1" or \
+		bool(summary.get("material_weight_payload_flat_varyings", true)):
+		_fail("explicit generated/authored material weight channel inactive: %s" % str(summary))
 		return false
 	if not bool(summary.get("native_render_material_override", false)):
 		_fail("terrain material is not installed through native render override: %s" % str(summary))
@@ -3848,9 +3857,12 @@ func _capture_human_visual() -> void:
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
 		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(presentation.get("surface_biome_worldspace_blend_active", false)),
+		"surface_depth_worldspace_blend_active": bool(presentation.get("surface_depth_worldspace_blend_active", false)),
 		"underground_ore_worldspace_blend_active": bool(presentation.get("underground_ore_worldspace_blend_active", false)),
 		"surface_road_worldspace_blend_active": bool(presentation.get("surface_road_worldspace_blend_active", false)),
 		"surface_material_blend_channel": str(presentation.get("surface_material_blend_channel", "")),
+		"material_weight_payload_model": str(presentation.get("material_weight_payload_model", "")),
+		"material_weight_payload_flat_varyings": bool(presentation.get("material_weight_payload_flat_varyings", true)),
 		"clean_material_variation_enabled": bool(presentation.get("clean_material_variation_enabled", false)),
 		"clean_material_variation_strength": float(presentation.get("clean_material_variation_strength", 0.0)),
 		"clean_roughness": float(presentation.get("clean_roughness", 0.0)),
@@ -8243,6 +8255,12 @@ func _apply_capture_camera_mode() -> void:
 			player.call("set_fly_mode_enabled", true)
 			capture_position = Vector3(900.0, 52.0, 870.0)
 			capture_target = Vector3(900.0, 29.0, 975.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"cave_material_boundary_near":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(900.0, 20.0, 1005.0)
+			capture_target = Vector3(925.0, 31.0, 980.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"ore_patch_exposure", "ore_patch_exposure_far":

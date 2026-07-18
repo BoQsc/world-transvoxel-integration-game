@@ -57,8 +57,11 @@ The production placeholder material path uses:
 - a deterministic `Texture2DArray` material layer set with slots for stone,
   grass, gravel, sand, snow, rock, ore, and asphalt;
 - mipmaps on generated placeholder material textures;
-- native vertex-color surface biome blend weights derived from authoritative
-  material IDs (`R=grass`, `G=gravel`, `B=sand`, `A=snow`);
+- four native `RGBA8_UNORM` custom vertex channels containing explicit weights
+  for all eight solid materials, split into generated and authored ownership;
+- continuous generated exterior-surface coverage derived from the exact
+  declared source surface and surface orientation, so categorical source IDs
+  cannot spill into cave walls, ceilings, or excavations;
 - one native material override path, not duplicate skins or hidden fallback
   terrain.
 
@@ -88,20 +91,32 @@ presentation rule only: material ID `8` remains the stored/gameplay authority.
 
 That derivation must be provenance-aware. Base-source samples carry
 `material_authored=false`; paint, construct, fill, and material-volume edits
-set it to `true`, persist it with the page, and propagate it to `UV2.y` from the
-same solid isosurface endpoint as `UV2.x`. A shader may evaluate the exact
-declared procedural classifier only when the flag is false. When it is true,
-the selected material ID is rendered directly. This preserves LOD-stable base
-ore without allowing a presentation rule to override authored stone or ore.
+set it to `true` and persist it with the page. The render sink converts the
+material and provenance selected from the same solid isosurface endpoint into
+separate generated and authored weight groups. A shader may evaluate the exact
+declared procedural classifier only over generated coverage. Authored weights
+are composited last and render the selected materials directly. This preserves
+LOD-stable base ore without allowing a presentation rule to override authored
+stone, ore, asphalt, or surface material.
 
 The same rule applies to procedural roads. The road preset modifies the
 authoritative density field with continuous, world-space graded corridors and
 stores asphalt ID `10` only in the shallow top layer. Its matching shader
-classifier first reconstructs the exact procedural underlay and then reapplies
-asphalt through the continuous road field while `material_authored=false`.
-This prevents a coarse material-10 vertex from turning a whole triangle into
-an asphalt protrusion. Painting or constructing any material remains
-authoritative and suppresses this procedural reconstruction at that surface.
+classifier reconstructs the exact source surface and reapplies asphalt through
+the continuous road field only over generated exterior coverage. This prevents
+a coarse material-10 vertex from turning a whole triangle into an asphalt
+protrusion or painting a road under a cave ceiling. Painting or constructing
+any material remains authoritative and bypasses this procedural presentation.
+
+Generated surface, procedural ore, procedural road, and authored material are
+one composed shader decision. Adding one presentation classifier must not
+replace the other base-material rules. The integration quality proof enforces
+the `generated_authored_eight_weight_layers_v1` payload before launching
+Godot. Declared rolling-hills sources reconstruct their exact surface height
+and smoothly retire generated surface coverage away from the exterior. The
+orientation term rejects ceilings and strongly inward-facing surfaces. Neither
+rule mutates or replaces stored material IDs, and authored material bypasses
+all generated classifiers.
 
 ## Human test expectation
 
