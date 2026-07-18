@@ -20,6 +20,26 @@ const REFERENCE_ROAD_SEGMENTS := [
 	Vector4(720.0, 820.0, 760.0, 900.0),
 	Vector4(900.0, 960.0, 1040.0, 940.0),
 ]
+const EXPANSIVE_ROAD_SEGMENTS := [
+	Vector4(360.0, 360.0, 820.0, 420.0),
+	Vector4(820.0, 420.0, 1020.0, 360.0),
+	Vector4(1020.0, 360.0, 1640.0, 380.0),
+	Vector4(1640.0, 380.0, 1700.0, 900.0),
+	Vector4(1700.0, 900.0, 1600.0, 1600.0),
+	Vector4(1600.0, 1600.0, 1020.0, 1700.0),
+	Vector4(1020.0, 1700.0, 400.0, 1600.0),
+	Vector4(400.0, 1600.0, 300.0, 1100.0),
+	Vector4(300.0, 1100.0, 400.0, 850.0),
+	Vector4(400.0, 850.0, 360.0, 360.0),
+	Vector4(400.0, 850.0, 760.0, 1040.0),
+	Vector4(760.0, 1040.0, 1024.0, 1024.0),
+	Vector4(1024.0, 1024.0, 1280.0, 1000.0),
+	Vector4(1280.0, 1000.0, 1700.0, 900.0),
+	Vector4(1024.0, 1024.0, 1020.0, 1700.0),
+	Vector4(1024.0, 1024.0, 1020.0, 360.0),
+	Vector4(760.0, 1040.0, 1020.0, 1700.0),
+	Vector4(1280.0, 1000.0, 1600.0, 1600.0),
+]
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -122,6 +142,7 @@ func apply_materials_now() -> Dictionary:
 	var production_active := bool(profile.get("production_texture_pipeline", false)) and production_resolution >= 64
 	var authored_layers := _authored_albedo_layers()
 	var generation := _generation_profile_summary()
+	var four_biome_world := str(generation.get("procedural_preset_id", "")) == "four_biomes_lakes_caves_roads"
 	var exterior_surface_active := production_active and _procedural_rolling_exterior_surface_enabled(generation)
 	var procedural_ore_active := production_active and _procedural_ore_blend_enabled(generation)
 	var procedural_road_active := production_active and _procedural_road_blend_enabled(generation)
@@ -152,13 +173,13 @@ func apply_materials_now() -> Dictionary:
 		"material_weight_payload_model": "eight_material_generated_authored_rgba8_unorm_v1",
 		"material_weight_payload_flat_varyings": false,
 		"surface_biome_worldspace_blend_active": exterior_surface_active,
-		"surface_biome_worldspace_blend_model": "rolling_hills_exterior_surface_biome_weights_v2" if exterior_surface_active else "vertex_material_weights",
+		"surface_biome_worldspace_blend_model": ("categorical_four_region_exterior_surface_weights_v1" if four_biome_world else "rolling_hills_exterior_surface_biome_weights_v2") if exterior_surface_active else "vertex_material_weights",
 		"surface_depth_worldspace_blend_active": exterior_surface_active,
-		"surface_depth_worldspace_blend_model": "rolling_hills_exterior_surface_distance_orientation_v2" if exterior_surface_active else "none",
+		"surface_depth_worldspace_blend_model": ("four_biome_exterior_surface_distance_orientation_v1" if four_biome_world else "rolling_hills_exterior_surface_distance_orientation_v2") if exterior_surface_active else "none",
 		"underground_ore_worldspace_blend_active": procedural_ore_active,
 		"underground_ore_worldspace_blend_model": "deterministic_deep_ore_patches_v1_generated_weight_guarded",
 		"surface_road_worldspace_blend_active": procedural_road_active,
-		"surface_road_worldspace_blend_model": "deterministic_shallow_asphalt_corridors_v1_exterior_generated_weight_guarded",
+		"surface_road_worldspace_blend_model": "deterministic_long_connected_asphalt_network_v1_exterior_generated_weight_guarded" if four_biome_world else "deterministic_shallow_asphalt_corridors_v1_exterior_generated_weight_guarded",
 		"surface_biome_seed": int(generation.get("seed", 1)),
 		"authored_albedo_layers": authored_layers,
 		"authored_albedo_layer_count": authored_layers.size(),
@@ -244,9 +265,13 @@ func _apply_procedural_material_parameters(shader_material: ShaderMaterial) -> v
 	var generation := _generation_profile_summary()
 	var enabled := _procedural_ore_blend_enabled(generation)
 	var seed := int(generation.get("seed", 1))
+	var four_biome_world := str(generation.get("procedural_preset_id", "")) == "four_biomes_lakes_caves_roads"
 	shader_material.set_shader_parameter("procedural_ore_worldspace_blend_enabled", enabled)
 	shader_material.set_shader_parameter("procedural_seed_phase", float(seed % 100000) * 0.0001)
 	shader_material.set_shader_parameter("procedural_ore_blend_width", 0.12)
+	shader_material.set_shader_parameter("procedural_four_biome_world_enabled", four_biome_world)
+	shader_material.set_shader_parameter("procedural_road_half_width", 8.0 if four_biome_world else 6.0)
+	shader_material.set_shader_parameter("procedural_road_shoulder_width", 8.0 if four_biome_world else 5.0)
 	shader_material.set_shader_parameter(
 		"procedural_rolling_exterior_surface_enabled",
 		_procedural_rolling_exterior_surface_enabled(generation)
@@ -268,13 +293,14 @@ func _apply_procedural_material_parameters(shader_material: ShaderMaterial) -> v
 		"procedural_road_worldspace_blend_enabled",
 		_procedural_road_blend_enabled(generation)
 	)
-	for index in range(REFERENCE_ROAD_SEGMENTS.size()):
-		var segment: Vector4 = REFERENCE_ROAD_SEGMENTS[index]
+	var road_segments: Array = EXPANSIVE_ROAD_SEGMENTS if four_biome_world else REFERENCE_ROAD_SEGMENTS
+	for index in range(road_segments.size()):
+		var segment: Vector4 = road_segments[index]
 		shader_material.set_shader_parameter(
 			"procedural_road_grade_%d" % index,
 			Vector2(
-				_procedural_rolling_hills_height(Vector2(segment.x, segment.y), generation),
-				_procedural_rolling_hills_height(Vector2(segment.z, segment.w), generation)
+				_procedural_source_height(Vector2(segment.x, segment.y), generation),
+				_procedural_source_height(Vector2(segment.z, segment.w), generation)
 			)
 		)
 
@@ -283,20 +309,33 @@ func _procedural_ore_blend_enabled(generation: Dictionary) -> bool:
 		str(generation.get("underground_patch_model", "")) == "deterministic_deep_ore_patches_v1"
 
 func _procedural_road_blend_enabled(generation: Dictionary) -> bool:
-	return str(generation.get("source_mode", "")) == "DETERMINISTIC_REFERENCE" and \
-		str(generation.get("procedural_preset_id", "")) == "rolling_hills_cave_roads" and \
-		str(generation.get("road_network_model", "")) == "deterministic_shallow_asphalt_corridors_v1"
+	if str(generation.get("source_mode", "")) != "DETERMINISTIC_REFERENCE":
+		return false
+	var preset := str(generation.get("procedural_preset_id", ""))
+	var model := str(generation.get("road_network_model", ""))
+	return (preset == "rolling_hills_cave_roads" and model == "deterministic_shallow_asphalt_corridors_v1") or \
+		(preset == "four_biomes_lakes_caves_roads" and model == "deterministic_long_connected_asphalt_network_v1")
 
 
 func _procedural_rolling_exterior_surface_enabled(generation: Dictionary) -> bool:
 	if str(generation.get("source_mode", "")) != "DETERMINISTIC_REFERENCE":
 		return false
-	if str(generation.get("surface_biome_model", "")) != "deterministic_macro_surface_biomes_v1":
+	if str(generation.get("surface_biome_model", "")) not in [
+		"deterministic_macro_surface_biomes_v1",
+		"deterministic_four_region_surface_biomes_v1",
+	]:
 		return false
 	return str(generation.get("procedural_preset_id", "")) in [
 		"rolling_hills_cave",
 		"rolling_hills_cave_roads",
+		"four_biomes_lakes_caves_roads",
 	]
+
+
+func _procedural_source_height(point: Vector2, generation: Dictionary) -> float:
+	if str(generation.get("procedural_preset_id", "")) == "four_biomes_lakes_caves_roads":
+		return _procedural_four_biome_height(point, generation)
+	return _procedural_rolling_hills_height(point, generation)
 
 
 func _procedural_rolling_hills_height(point: Vector2, generation: Dictionary) -> float:
@@ -325,6 +364,65 @@ func _procedural_rolling_hills_height(point: Vector2, generation: Dictionary) ->
 		1.2 * sin(point.x * 0.018 - phase * 0.5) + \
 		0.9 * cos(point.y * 0.016 + phase * 0.9)
 	return 26.0 + broad + rolling + central_mound + shallow_valley + local
+
+
+func _procedural_gaussian_feature(
+	point: Vector2,
+	center: Vector2,
+	radius: Vector2,
+	amplitude: float
+) -> float:
+	var delta := (point - center) / radius
+	var distance_squared := delta.length_squared()
+	if distance_squared >= 16.0:
+		return 0.0
+	return amplitude * exp(-distance_squared)
+
+
+func _procedural_lake_depression_feature(
+	point: Vector2,
+	center: Vector2,
+	radius: Vector2,
+	depth: float
+) -> float:
+	var q := ((point - center) / radius).length()
+	if q >= 1.0:
+		return 0.0
+	var t: float = clampf((q - 0.15) / 0.85, 0.0, 1.0)
+	var smooth := t * t * (3.0 - 2.0 * t)
+	return depth * (1.0 - smooth)
+
+
+func _procedural_four_biome_height(point: Vector2, generation: Dictionary) -> float:
+	var phase := float(int(generation.get("seed", 1)) % 100000) * 0.0001
+	var broad := \
+		8.0 * sin(point.x * 0.0031 + phase * 1.4) + \
+		6.5 * cos(point.y * 0.0027 - phase * 0.9) + \
+		4.5 * sin((point.x + point.y) * 0.0017 + phase * 0.6)
+	var rolling := \
+		5.0 * sin((point.x - point.y) * 0.0073 + phase) * \
+			cos((point.x + point.y) * 0.0058 - phase * 0.4)
+	var detail := \
+		2.2 * sin(point.x * 0.021 + phase * 0.7) * \
+			cos(point.y * 0.019 - phase) + \
+		1.4 * sin((point.x + 2.0 * point.y) * 0.034 + phase * 0.2) + \
+		0.8 * cos((2.0 * point.x - point.y) * 0.047)
+	var features := \
+		_procedural_gaussian_feature(point, Vector2(1540.0, 1500.0), Vector2(230.0, 210.0), 38.0) + \
+		_procedural_gaussian_feature(point, Vector2(1760.0, 1320.0), Vector2(170.0, 200.0), 28.0) + \
+		_procedural_gaussian_feature(point, Vector2(1280.0, 1730.0), Vector2(190.0, 150.0), 26.0) + \
+		_procedural_gaussian_feature(point, Vector2(470.0, 1510.0), Vector2(250.0, 230.0), 22.0) + \
+		_procedural_gaussian_feature(point, Vector2(700.0, 1700.0), Vector2(210.0, 180.0), 12.0) + \
+		_procedural_gaussian_feature(point, Vector2(350.0, 360.0), Vector2(280.0, 230.0), 8.0) + \
+		_procedural_gaussian_feature(point, Vector2(800.0, 300.0), Vector2(240.0, 200.0), 5.0)
+	var lake_depression := maxf(
+		_procedural_lake_depression_feature(point, Vector2(650.0, 700.0), Vector2(230.0, 170.0), 34.0),
+		maxf(
+			_procedural_lake_depression_feature(point, Vector2(1400.0, 700.0), Vector2(240.0, 170.0), 36.0),
+			_procedural_lake_depression_feature(point, Vector2(650.0, 1370.0), Vector2(220.0, 160.0), 38.0)
+		)
+	)
+	return 34.0 + broad + rolling + detail + features - lake_depression
 
 func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_visual_enabled", visual_mode == &"clean")

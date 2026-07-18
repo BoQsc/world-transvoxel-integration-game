@@ -28,6 +28,14 @@ the native procedural source as continuous graded density corridors. They are
 not replayed edit stamps, and the existing `rolling_hills_cave` preset remains
 unchanged.
 
+The isolated `four_biomes_lakes_caves_roads` preset is the g23 world-composition
+playtest. Its native source owns four categorical surface regions without
+cross-region material mixing, three material-ID `9` lake volumes, three compact
+surface-connected caves, detailed rolling terrain and snow mountains, and one
+connected 18-segment asphalt graph. The production shader mirrors the same
+world-coordinate height, region, and road fields solely for LOD-stable visual
+weights; native density and material samples remain authoritative.
+
 Vertical volume shape is part of generation ownership. Profiles expose
 `world_chunk_count_y` and `world_chunk_origin_y`; downstream runtime bridges
 must forward those values to native procedural startup when available. The

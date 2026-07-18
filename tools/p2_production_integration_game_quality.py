@@ -22,7 +22,8 @@ DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 DEEP_PROFILE = "g20_deep_2k_256_on_demand"
 ROLLING_HILLS_CAVE_PROFILE = "g21_rolling_hills_cave_2k_256_on_demand"
 ROAD_PROFILE = "g22_rolling_hills_cave_roads_2k_256_on_demand"
-PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE)
+FOUR_BIOME_WORLD_PROFILE = "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
+PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE)
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
 LOD_MOVEMENT_GATE_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 TUNNEL_VISUAL_SKY_FREE_LABELS = {
@@ -331,7 +332,7 @@ def validate_visual_summary(
             f"{summary.get('underground_ore_worldspace_blend_active')!r}: "
             f"{summary!r}"
         )
-    procedural_road_expected = expected_profile == ROAD_PROFILE
+    procedural_road_expected = expected_profile in (ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE)
     if (
         summary.get("surface_road_worldspace_blend_active")
         is not procedural_road_expected
@@ -345,6 +346,7 @@ def validate_visual_summary(
     surface_depth_expected = expected_profile in (
         ROLLING_HILLS_CAVE_PROFILE,
         ROAD_PROFILE,
+        FOUR_BIOME_WORLD_PROFILE,
     )
     if (
         summary.get("surface_biome_worldspace_blend_active")

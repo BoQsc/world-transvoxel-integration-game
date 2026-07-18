@@ -229,6 +229,16 @@ graded density corridors with a shallow authoritative asphalt material ID
 `10`. G21 does not opt into this field. Use visual capture modes `road_network`
 and `cave_entrance_road`, or launch g22 directly for the current human proof.
 
+The world-composition playtest profile is
+`g23_four_biomes_lakes_mountains_roads_2k_256_on_demand`. It is isolated from
+g21 and g22 and starts the player in the southwest grass region. The remaining
+large categorical regions are sand, gravel highlands, and snow mountains.
+Three native material-volume lakes, three small caves, more detailed rolling
+terrain, and a connected 18-segment shallow asphalt network are generated from
+world-space source fields rather than edit stamps. `Launch Latest Human
+Playtest.cmd` points to this g23 candidate for human inspection; it remains
+uncommitted until that inspection is accepted.
+
 The flat baseline profile remains available for proof automation:
 
 ```gdscript

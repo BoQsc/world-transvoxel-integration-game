@@ -6,6 +6,7 @@ const COMPACT_PROFILE := &"g19_compact_2k_on_demand"
 const DEEP_PROFILE := &"g20_deep_2k_256_on_demand"
 const ROLLING_HILLS_CAVE_PROFILE := &"g21_rolling_hills_cave_2k_256_on_demand"
 const ROAD_PROFILE := &"g22_rolling_hills_cave_roads_2k_256_on_demand"
+const FOUR_BIOME_WORLD_PROFILE := &"g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
 const FLAT_PROFILE := &"flat_baseline"
 const STATIC_WATER_MATERIAL_ID := 9
 const ASPHALT_MATERIAL_ID := 10
@@ -357,6 +358,8 @@ func _run_autonomous_proof() -> void:
 		return
 	if selected_profile == ROAD_PROFILE and not await _verify_volumetric_road_contract(terrain_world):
 		return
+	if selected_profile == FOUR_BIOME_WORLD_PROFILE and not await _verify_four_biome_world_contract(terrain_world):
+		return
 	if not _verify_standard_multiplayer_server_contract(terrain_world):
 		return
 	await get_tree().physics_frame
@@ -590,6 +593,7 @@ func _build_hud() -> void:
 	profile_selector.add_item("g20_deep_2k_256_on_demand")
 	profile_selector.add_item("g21_rolling_hills_cave_2k_256_on_demand")
 	profile_selector.add_item("g22_rolling_hills_cave_roads_2k_256_on_demand")
+	profile_selector.add_item("g23_four_biomes_lakes_mountains_roads_2k_256_on_demand")
 	canvas.add_child(profile_selector)
 
 
@@ -712,7 +716,7 @@ func _create_player(start: Vector3) -> CharacterBody3D:
 
 
 func _is_deep_vertical_profile(profile_id: StringName) -> bool:
-	return profile_id in [DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE]
+	return profile_id in [DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE]
 
 
 func _profile_settings(profile_id: StringName) -> Dictionary:
@@ -814,6 +818,14 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		# Keep autonomous edit proofs away from the road network so the existing
 		# material-strata contract remains an independent baseline.
 		settings["edit_point"] = Vector3(1536, 27, 512)
+	elif profile_id == FOUR_BIOME_WORLD_PROFILE:
+		# The player begins on a detailed grass hill, clear of lakes, roads, and
+		# cave portals. Runtime stabilization resolves the exact collision height.
+		settings["start"] = Vector3(300, 74, 300)
+		settings["viewers"] = [Vector3(300, 48, 300)]
+		settings["edit_point"] = Vector3(300, 39, 300)
+		settings["radius"] = 8
+		settings["runtime_lod_refinement_radius_chunks"] = 2
 	return settings
 
 
@@ -857,6 +869,15 @@ func _generation_profile(profile_id: StringName) -> Resource:
 		generation.seed = 19021
 		generation.procedural_preset_id = &"rolling_hills_cave_roads"
 		generation.source_revision = 190324
+		generation.world_chunk_count_x = 128
+		generation.world_chunk_count_y = 16
+		generation.world_chunk_origin_y = -8
+		generation.world_chunk_count_z = 128
+		generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
+	elif profile_id == FOUR_BIOME_WORLD_PROFILE:
+		generation.seed = 19023
+		generation.procedural_preset_id = &"four_biomes_lakes_caves_roads"
+		generation.source_revision = 190325
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -917,7 +938,7 @@ func _update_telemetry() -> void:
 
 
 func _verify_scene_contract() -> bool:
-	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 5 and telemetry_label != null and 			player.has_method("submit_edit_input")
+	return player != null and player.has_node("FirstPersonCamera") and crosshair != null and 			profile_selector != null and profile_selector.item_count >= 6 and telemetry_label != null and 			player.has_method("submit_edit_input")
 
 
 func _verify_standard_volume_contract(terrain_world: Node) -> bool:
@@ -1010,7 +1031,8 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 	if str(generation.get("underground_depth_bands", "")) != "surface_cover<8:2|3|4|5,deep>=8:1,ore>=12:8":
 		_fail("standard material depth bands mismatch: %s" % str(generation))
 		return false
-	if str(generation.get("surface_biome_model", "")) != "deterministic_macro_surface_biomes_v1":
+	var expected_surface_biome_model := "deterministic_four_region_surface_biomes_v1" if selected_profile == FOUR_BIOME_WORLD_PROFILE else "deterministic_macro_surface_biomes_v1"
+	if str(generation.get("surface_biome_model", "")) != expected_surface_biome_model:
 		_fail("standard surface biome model mismatch: %s" % str(generation))
 		return false
 	if str(generation.get("underground_patch_model", "")) != "deterministic_deep_ore_patches_v1":
@@ -1060,7 +1082,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 			"minimum_solid_depth": 8.0,
 		},
 	]
-	if selected_profile != FLAT_PROFILE and selected_profile not in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE]:
+	if selected_profile != FLAT_PROFILE and selected_profile not in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE]:
 		probes.append_array([
 			{
 				"label": "surface_grass",
@@ -1093,7 +1115,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 				"minimum_solid_depth": 12.0,
 			},
 		])
-	elif selected_profile in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE]:
+	elif selected_profile in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE]:
 		probes.append({
 			"label": "cave_shell_deep_material",
 			"point": Vector3i(1024, -96, 1024),
@@ -1374,6 +1396,72 @@ func _verify_volumetric_road_contract(terrain_world: Node) -> bool:
 		str(selected_profile),
 		JSON.stringify(surface),
 		JSON.stringify(below),
+	])
+	return true
+
+
+func _verify_four_biome_world_contract(terrain_world: Node) -> bool:
+	var summaries_value = terrain_world.call("get_profile_summaries")
+	if not (summaries_value is Dictionary):
+		_fail("four-biome world summaries are not a dictionary: %s" % str(summaries_value))
+		return false
+	var generation_value = (summaries_value as Dictionary).get("generation", {})
+	if not (generation_value is Dictionary):
+		_fail("four-biome world generation summary missing: %s" % str(summaries_value))
+		return false
+	var generation: Dictionary = generation_value
+	var expected_contract := {
+		"procedural_preset_id": "four_biomes_lakes_caves_roads",
+		"surface_biome_model": "deterministic_four_region_surface_biomes_v1",
+		"road_network_model": "deterministic_long_connected_asphalt_network_v1",
+		"water_volume_model": "deterministic_large_lakes_material_volume_v1",
+		"cave_network_model": "deterministic_small_cave_network_v1",
+		"biome_boundary_policy": "categorical_no_cross_region_mix",
+	}
+	for key in expected_contract:
+		if str(generation.get(key, "")) != str(expected_contract[key]):
+			_fail("four-biome world generation contract mismatch key=%s summary=%s" % [key, str(generation)])
+			return false
+	var probes: Array[Dictionary] = [
+		{"label": "grass_region", "point": Vector3i(300, 38, 300), "air": false, "material": 2},
+		{"label": "sand_region", "point": Vector3i(1500, 43, 300), "air": false, "material": 4},
+		{"label": "gravel_region", "point": Vector3i(300, 28, 1700), "air": false, "material": 3},
+		{"label": "snow_region", "point": Vector3i(1500, 57, 1700), "air": false, "material": 5},
+		{"label": "grass_lake_water", "point": Vector3i(650, 20, 700), "air": true, "material": STATIC_WATER_MATERIAL_ID},
+		{"label": "sand_lake_water", "point": Vector3i(1400, 20, 700), "air": true, "material": STATIC_WATER_MATERIAL_ID},
+		{"label": "gravel_lake_water", "point": Vector3i(650, 20, 1370), "air": true, "material": STATIC_WATER_MATERIAL_ID},
+		{"label": "grass_lake_floor", "point": Vector3i(650, 0, 700), "air": false, "not_material": STATIC_WATER_MATERIAL_ID},
+		{"label": "connected_road", "point": Vector3i(590, 35, 390), "air": false, "material": ASPHALT_MATERIAL_ID},
+		{"label": "road_substrate", "point": Vector3i(590, 31, 390), "air": false, "not_material": ASPHALT_MATERIAL_ID},
+		{"label": "grass_cave_chamber", "point": Vector3i(445, 14, 570), "air": true},
+		{"label": "grass_cave_exterior", "point": Vector3i(445, 14, 630), "air": false},
+		{"label": "snow_mountain", "point": Vector3i(1540, 70, 1400), "air": false, "material": 5},
+	]
+	var observed := {}
+	for probe in probes:
+		var sample := await _query_authoritative_sample_summary(
+			terrain_world,
+			probe["point"],
+			"four-biome world %s" % str(probe["label"])
+		)
+		if not bool(sample.get("ok", false)):
+			return false
+		var density := float(sample.get("density", 0.0))
+		var material := int(sample.get("material", 0))
+		var expects_air := bool(probe["air"])
+		if (expects_air and density <= 0.0) or (not expects_air and density >= 0.0):
+			_fail("four-biome world density mismatch label=%s sample=%s" % [probe["label"], JSON.stringify(sample)])
+			return false
+		if probe.has("material") and material != int(probe["material"]):
+			_fail("four-biome world material mismatch label=%s sample=%s" % [probe["label"], JSON.stringify(sample)])
+			return false
+		if probe.has("not_material") and material == int(probe["not_material"]):
+			_fail("four-biome world forbidden material label=%s sample=%s" % [probe["label"], JSON.stringify(sample)])
+			return false
+		observed[str(probe["label"])] = sample
+	print("WT_FOUR_BIOME_WORLD_CONTRACT_PASS profile=%s samples=%s" % [
+		str(selected_profile),
+		JSON.stringify(observed),
 	])
 	return true
 
@@ -3420,7 +3508,7 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if not bool(summary.get("primary_material_texture_active", false)):
 		_fail("primary material texture mapping inactive: %s" % str(summary))
 		return false
-	var surface_depth_expected := selected_profile in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE]
+	var surface_depth_expected := selected_profile in [ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE]
 	if bool(summary.get("surface_biome_worldspace_blend_active", false)) != surface_depth_expected:
 		_fail("generated exterior biome weighting activation mismatch: expected=%s summary=%s" % [str(surface_depth_expected), str(summary)])
 		return false
@@ -3431,7 +3519,7 @@ func _verify_presentation(summary: Dictionary) -> bool:
 	if bool(summary.get("underground_ore_worldspace_blend_active", false)) != procedural_ore_expected:
 		_fail("LOD-stable procedural ore presentation activation mismatch: expected=%s summary=%s" % [str(procedural_ore_expected), str(summary)])
 		return false
-	var procedural_road_expected := selected_profile == ROAD_PROFILE
+	var procedural_road_expected := selected_profile in [ROAD_PROFILE, FOUR_BIOME_WORLD_PROFILE]
 	if bool(summary.get("surface_road_worldspace_blend_active", false)) != procedural_road_expected:
 		_fail("LOD-stable volumetric road presentation activation mismatch: expected=%s summary=%s" % [str(procedural_road_expected), str(summary)])
 		return false

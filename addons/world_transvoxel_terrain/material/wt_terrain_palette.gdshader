@@ -35,12 +35,27 @@ uniform float procedural_surface_cover_normal_end = 0.30;
 uniform float procedural_surface_biome_height_blend_width = 2.0;
 uniform float procedural_surface_biome_noise_blend_width = 0.14;
 uniform bool procedural_road_worldspace_blend_enabled = false;
+uniform bool procedural_four_biome_world_enabled = false;
+uniform float procedural_road_half_width = 6.0;
+uniform float procedural_road_shoulder_width = 5.0;
 uniform vec2 procedural_road_grade_0 = vec2(34.0, 39.0);
 uniform vec2 procedural_road_grade_1 = vec2(39.0, 40.0);
 uniform vec2 procedural_road_grade_2 = vec2(46.0, 39.0);
 uniform vec2 procedural_road_grade_3 = vec2(39.0, 34.0);
 uniform vec2 procedural_road_grade_4 = vec2(34.0, 33.0);
 uniform vec2 procedural_road_grade_5 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_6 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_7 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_8 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_9 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_10 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_11 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_12 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_13 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_14 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_15 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_16 = vec2(34.0, 34.0);
+uniform vec2 procedural_road_grade_17 = vec2(34.0, 34.0);
 uniform vec2 procedural_world_size_xz = vec2(2048.0, 2048.0);
 
 const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
@@ -161,7 +176,11 @@ vec3 procedural_road_segment_field(
 	);
 	float distance_to_segment = length(point - mix(start, end, t));
 	float grade = mix(endpoint_grades.x, endpoint_grades.y, t);
-	float grade_weight = 1.0 - smoothstep(6.0, 11.0, distance_to_segment);
+	float grade_weight = 1.0 - smoothstep(
+		procedural_road_half_width,
+		procedural_road_half_width + procedural_road_shoulder_width,
+		distance_to_segment
+	);
 	return vec3(distance_to_segment, grade, grade_weight);
 }
 
@@ -175,6 +194,27 @@ vec4 add_procedural_road_segment(vec4 field, vec3 segment) {
 
 vec4 procedural_road_field(vec2 point) {
 	vec4 field = vec4(1.0e20, 0.0, 0.0, 0.0);
+	if (procedural_four_biome_world_enabled) {
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(360.0, 360.0, 820.0, 420.0), procedural_road_grade_0));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(820.0, 420.0, 1020.0, 360.0), procedural_road_grade_1));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1020.0, 360.0, 1640.0, 380.0), procedural_road_grade_2));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1640.0, 380.0, 1700.0, 900.0), procedural_road_grade_3));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1700.0, 900.0, 1600.0, 1600.0), procedural_road_grade_4));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1600.0, 1600.0, 1020.0, 1700.0), procedural_road_grade_5));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1020.0, 1700.0, 400.0, 1600.0), procedural_road_grade_6));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(400.0, 1600.0, 300.0, 1100.0), procedural_road_grade_7));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(300.0, 1100.0, 400.0, 850.0), procedural_road_grade_8));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(400.0, 850.0, 360.0, 360.0), procedural_road_grade_9));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(400.0, 850.0, 760.0, 1040.0), procedural_road_grade_10));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(760.0, 1040.0, 1024.0, 1024.0), procedural_road_grade_11));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1024.0, 1024.0, 1280.0, 1000.0), procedural_road_grade_12));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1280.0, 1000.0, 1700.0, 900.0), procedural_road_grade_13));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1024.0, 1024.0, 1020.0, 1700.0), procedural_road_grade_14));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1024.0, 1024.0, 1020.0, 360.0), procedural_road_grade_15));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(760.0, 1040.0, 1020.0, 1700.0), procedural_road_grade_16));
+		field = add_procedural_road_segment(field, procedural_road_segment_field(point, vec4(1280.0, 1000.0, 1600.0, 1600.0), procedural_road_grade_17));
+		return field;
+	}
 	field = add_procedural_road_segment(field, procedural_road_segment_field(
 		point,
 		vec4(720.0, 820.0, 900.0, 820.0),
@@ -231,8 +271,69 @@ float procedural_rolling_hills_height(vec2 point) {
 	return 26.0 + broad + rolling + central_mound + shallow_valley + local;
 }
 
+float procedural_gaussian_feature(
+	vec2 point,
+	vec2 center,
+	vec2 radius,
+	float amplitude
+) {
+	vec2 delta = (point - center) / radius;
+	float distance_squared = dot(delta, delta);
+	if (distance_squared >= 16.0) {
+		return 0.0;
+	}
+	return amplitude * exp(-distance_squared);
+}
+
+float procedural_lake_depression_feature(
+	vec2 point,
+	vec2 center,
+	vec2 radius,
+	float depth
+) {
+	float q = length((point - center) / radius);
+	if (q >= 1.0) {
+		return 0.0;
+	}
+	return depth * (1.0 - smoothstep(0.15, 1.0, q));
+}
+
+float procedural_four_biome_height(vec2 point) {
+	float phase = procedural_seed_phase;
+	float broad =
+		8.0 * sin(point.x * 0.0031 + phase * 1.4) +
+		6.5 * cos(point.y * 0.0027 - phase * 0.9) +
+		4.5 * sin((point.x + point.y) * 0.0017 + phase * 0.6);
+	float rolling =
+		5.0 * sin((point.x - point.y) * 0.0073 + phase) *
+		cos((point.x + point.y) * 0.0058 - phase * 0.4);
+	float detail =
+		2.2 * sin(point.x * 0.021 + phase * 0.7) *
+		cos(point.y * 0.019 - phase) +
+		1.4 * sin((point.x + 2.0 * point.y) * 0.034 + phase * 0.2) +
+		0.8 * cos((2.0 * point.x - point.y) * 0.047);
+	float features =
+		procedural_gaussian_feature(point, vec2(1540.0, 1500.0), vec2(230.0, 210.0), 38.0) +
+		procedural_gaussian_feature(point, vec2(1760.0, 1320.0), vec2(170.0, 200.0), 28.0) +
+		procedural_gaussian_feature(point, vec2(1280.0, 1730.0), vec2(190.0, 150.0), 26.0) +
+		procedural_gaussian_feature(point, vec2(470.0, 1510.0), vec2(250.0, 230.0), 22.0) +
+		procedural_gaussian_feature(point, vec2(700.0, 1700.0), vec2(210.0, 180.0), 12.0) +
+		procedural_gaussian_feature(point, vec2(350.0, 360.0), vec2(280.0, 230.0), 8.0) +
+		procedural_gaussian_feature(point, vec2(800.0, 300.0), vec2(240.0, 200.0), 5.0);
+	float lake_depression = max(
+		procedural_lake_depression_feature(point, vec2(650.0, 700.0), vec2(230.0, 170.0), 34.0),
+		max(
+			procedural_lake_depression_feature(point, vec2(1400.0, 700.0), vec2(240.0, 170.0), 36.0),
+			procedural_lake_depression_feature(point, vec2(650.0, 1370.0), vec2(220.0, 160.0), 38.0)
+		)
+	);
+	return 34.0 + broad + rolling + detail + features - lake_depression;
+}
+
 float procedural_surface_height(vec3 world_pos, vec4 road) {
-	float base_surface = procedural_rolling_hills_height(world_pos.xz);
+	float base_surface = procedural_four_biome_world_enabled ?
+		procedural_four_biome_height(world_pos.xz) :
+		procedural_rolling_hills_height(world_pos.xz);
 	if (!procedural_road_worldspace_blend_enabled) {
 		return base_surface;
 	}
@@ -263,6 +364,21 @@ float procedural_exterior_surface_coverage(
 }
 
 vec4 procedural_surface_biome_weights(vec3 world_pos, vec4 road) {
+	if (procedural_four_biome_world_enabled) {
+		vec2 center = procedural_world_size_xz * 0.5 - vec2(0.5);
+		float vertical_boundary = center.x + 110.0 * sin(
+			(world_pos.z - center.y) * 0.0024 + procedural_seed_phase * 0.8
+		);
+		float horizontal_boundary = center.y + 90.0 * cos(
+			(world_pos.x - center.x) * 0.0022 - procedural_seed_phase * 0.7
+		);
+		bool west = world_pos.x < vertical_boundary;
+		bool south = world_pos.z < horizontal_boundary;
+		if (west && south) return vec4(1.0, 0.0, 0.0, 0.0);
+		if (!west && south) return vec4(0.0, 0.0, 1.0, 0.0);
+		if (west && !south) return vec4(0.0, 1.0, 0.0, 0.0);
+		return vec4(0.0, 0.0, 0.0, 1.0);
+	}
 	float surface = procedural_surface_height(world_pos, road);
 	float phase = procedural_seed_phase;
 	float macro =
@@ -300,7 +416,11 @@ vec4 procedural_surface_biome_weights(vec3 world_pos, vec4 road) {
 
 float procedural_road_worldspace_weight(vec3 world_pos, vec4 road) {
 	float road_grade = road.z > 0.0 ? road.y / road.z : world_pos.y;
-	float horizontal_weight = 1.0 - smoothstep(5.25, 6.75, road.x);
+	float horizontal_weight = 1.0 - smoothstep(
+		procedural_road_half_width - 0.75,
+		procedural_road_half_width + 0.75,
+		road.x
+	);
 	float surface_weight = 1.0 - smoothstep(4.0, 7.0, abs(world_pos.y - road_grade));
 	return clamp(horizontal_weight * surface_weight, 0.0, 1.0);
 }

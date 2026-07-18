@@ -12,8 +12,12 @@ const UNDERGROUND_MODEL := "density_volume_vertical_strata_v1"
 const MATERIAL_STRATA_MODEL := "standard_density_depth_material_strata_v1"
 const MATERIAL_PALETTE_VERSION := "world_transvoxel_material_palette_v1"
 const SURFACE_BIOME_MODEL := "deterministic_macro_surface_biomes_v1"
+const FOUR_REGION_SURFACE_BIOME_MODEL := "deterministic_four_region_surface_biomes_v1"
 const UNDERGROUND_PATCH_MODEL := "deterministic_deep_ore_patches_v1"
 const ROAD_NETWORK_MODEL := "deterministic_shallow_asphalt_corridors_v1"
+const EXPANSIVE_ROAD_NETWORK_MODEL := "deterministic_long_connected_asphalt_network_v1"
+const LARGE_LAKE_MODEL := "deterministic_large_lakes_material_volume_v1"
+const SMALL_CAVE_MODEL := "deterministic_small_cave_network_v1"
 const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 5, 7, 8, 10]
 const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 5]
 const SURFACE_INFRASTRUCTURE_MATERIAL_IDS: Array[int] = [10]
@@ -44,6 +48,7 @@ const STANDARD_MATERIAL_MEANINGS := {
 
 
 func get_contract_summary() -> Dictionary:
+	var four_biome_world := procedural_preset_id == &"four_biomes_lakes_caves_roads"
 	return {
 		"profile_id": str(profile_id),
 		"source_mode": SourceMode.keys()[source_mode],
@@ -54,9 +59,12 @@ func get_contract_summary() -> Dictionary:
 		"underground_model": UNDERGROUND_MODEL,
 		"material_strata_model": MATERIAL_STRATA_MODEL,
 		"material_palette_version": MATERIAL_PALETTE_VERSION,
-		"surface_biome_model": SURFACE_BIOME_MODEL,
+		"surface_biome_model": FOUR_REGION_SURFACE_BIOME_MODEL if four_biome_world else SURFACE_BIOME_MODEL,
 		"underground_patch_model": UNDERGROUND_PATCH_MODEL,
-		"road_network_model": ROAD_NETWORK_MODEL if procedural_preset_id == &"rolling_hills_cave_roads" else "none",
+		"road_network_model": EXPANSIVE_ROAD_NETWORK_MODEL if four_biome_world else (ROAD_NETWORK_MODEL if procedural_preset_id == &"rolling_hills_cave_roads" else "none"),
+		"water_volume_model": LARGE_LAKE_MODEL if four_biome_world else "none",
+		"cave_network_model": SMALL_CAVE_MODEL if four_biome_world else ("deterministic_reference_cave_v1" if procedural_preset_id in [&"rolling_hills_cave", &"rolling_hills_cave_roads"] else "none"),
+		"biome_boundary_policy": "categorical_no_cross_region_mix" if four_biome_world else "continuous_macro_blend",
 		"standard_material_ids": STANDARD_MATERIAL_IDS,
 		"surface_material_ids": SURFACE_MATERIAL_IDS,
 		"surface_infrastructure_material_ids": SURFACE_INFRASTRUCTURE_MATERIAL_IDS,
