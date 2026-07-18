@@ -14,6 +14,12 @@ palette version, stable material IDs, surface material IDs, and
 contract is
 [../../../STANDARD_MATERIAL_STRATA_CONTRACT.md](../../../STANDARD_MATERIAL_STRATA_CONTRACT.md).
 
+The opt-in `rolling_hills_cave_roads` preset adds
+`deterministic_shallow_asphalt_corridors_v1`. Road centerlines are evaluated by
+the native procedural source as continuous graded density corridors. They are
+not replayed edit stamps, and the existing `rolling_hills_cave` preset remains
+unchanged.
+
 Vertical volume shape is part of generation ownership. Profiles expose
 `world_chunk_count_y` and `world_chunk_origin_y`; downstream runtime bridges
 must forward those values to native procedural startup when available. The

@@ -6,13 +6,13 @@ const TEXTURE_FORMAT := "RGBA8"
 const TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const IMPLEMENTATION := "terrain_material_profile_contract_v1"
-const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v6"
+const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v7"
 const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 
 @export var profile_id: StringName = &"debug_checker_palette"
 @export_range(2, 64, 1) var texture_resolution: int = 16
 @export var shader_mode: StringName = &"uv2_material_id_checker"
-@export var material_ids: Array[int] = [1, 2, 3, 4, 5, 7, 8]
+@export var material_ids: Array[int] = [1, 2, 3, 4, 5, 7, 8, 10]
 @export var triplanar_projection: bool = true
 @export var debug_view_enabled: bool = true
 @export_range(16, 1024, 1) var standard_texture_resolution: int = DEFAULT_STANDARD_TEXTURE_RESOLUTION
@@ -25,9 +25,10 @@ const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 	&"snow",
 	&"mid_rock",
 	&"ore_patch",
+	&"asphalt",
 ]
 @export var mapping_policy: StringName = &"world_space_triplanar_ready"
-@export var blending_policy: StringName = &"authoritative_ids_with_authored_provenance_and_worldspace_procedural_ore"
+@export var blending_policy: StringName = &"authoritative_ids_with_authored_provenance_worldspace_ore_and_road_corridors"
 @export var texture_import_policy: StringName = &"mipmapped_vram_compressed_normal_aware"
 
 

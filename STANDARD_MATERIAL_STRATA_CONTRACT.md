@@ -24,6 +24,7 @@ The current standard material palette is
 | 5 | Snow surface biome material |
 | 7 | Mid-depth rock material |
 | 8 | Deep underground ore patch material |
+| 10 | Shallow asphalt road material |
 
 These IDs are intentionally documented as IDs, not just colors. Games may bind
 different textures to the IDs, but the terrain authority and edit journals must
@@ -47,6 +48,8 @@ the current minimum standard:
 - near-surface and above-surface samples may carry surface material IDs
   `2`, `3`, `4`, `5`, or `7` so the mesher can derive the visible surface palette.
 - deep underground samples may carry material `8` for deterministic ore patches.
+- the opt-in road preset may carry material `10` in its shallow graded road
+  corridors; deeper samples retain the normal terrain strata.
 
 The flat baseline uses the same material rules as the mountainous profile. It is
 not a separate heightmap-only material path.
@@ -78,6 +81,9 @@ not a separate heightmap-only material path.
 - A declared procedural classifier may provide a matching continuous
   world-space presentation only for unedited base-source material. Authored
   material must render directly and must not be overridden by that classifier.
+- Procedural road networks must be continuous density/material fields, not
+  chains of runtime sphere stamps. Their centerline grade, shoulders, and
+  shallow asphalt depth must be deterministic in world space.
 - Do not add duplicate terrain skins, double-sided materials, or full-map
   fallback layers to hide material or topology problems.
 

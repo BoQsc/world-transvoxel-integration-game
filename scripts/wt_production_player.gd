@@ -1,6 +1,6 @@
 extends CharacterBody3D
 
-const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8]
+const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8, 10]
 const PLACE_MATERIAL_NAMES := [
 	"deep_stone",
 	"grass",
@@ -9,6 +9,7 @@ const PLACE_MATERIAL_NAMES := [
 	"snow",
 	"mid_rock",
 	"ore_patch",
+	"asphalt",
 ]
 
 @export var human_input_enabled: bool = true
@@ -635,6 +636,8 @@ func _material_slot_from_key(event: InputEventKey) -> int:
 			return 5
 		KEY_7, KEY_KP_7:
 			return 6
+		KEY_8, KEY_KP_8:
+			return 7
 		_:
 			return -1
 

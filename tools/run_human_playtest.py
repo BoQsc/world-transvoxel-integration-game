@@ -19,7 +19,7 @@ from typing import Any
 WINDOWS_STEAM_GODOT = pathlib.Path(
     r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
 )
-LATEST_HUMAN_PROFILE = "g20_deep_2k_256_on_demand"
+LATEST_HUMAN_PROFILE = "g22_rolling_hills_cave_roads_2k_256_on_demand"
 LATEST_HUMAN_MATERIAL = "production_texture_array"
 
 

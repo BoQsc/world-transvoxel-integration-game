@@ -220,6 +220,13 @@ role is map-shape and cave-volume inspection. It is not yet a Terrain 1.0
 release gate because the full post-edit production gameplay proof still fails
 on g21 post-edit streaming settle.
 
+The isolated volumetric-road profile is
+`g22_rolling_hills_cave_roads_2k_256_on_demand`. It keeps the g21 seed and cave
+field, then opts into the native `rolling_hills_cave_roads` preset: continuous
+graded density corridors with a shallow authoritative asphalt material ID
+`10`. G21 does not opt into this field. Use visual capture mode `road_network`
+or launch g22 directly for the current road-network human proof.
+
 The flat baseline profile remains available for proof automation:
 
 ```gdscript

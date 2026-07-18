@@ -13,8 +13,10 @@ const MATERIAL_STRATA_MODEL := "standard_density_depth_material_strata_v1"
 const MATERIAL_PALETTE_VERSION := "world_transvoxel_material_palette_v1"
 const SURFACE_BIOME_MODEL := "deterministic_macro_surface_biomes_v1"
 const UNDERGROUND_PATCH_MODEL := "deterministic_deep_ore_patches_v1"
-const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 5, 7, 8]
+const ROAD_NETWORK_MODEL := "deterministic_shallow_asphalt_corridors_v1"
+const STANDARD_MATERIAL_IDS: Array[int] = [1, 2, 3, 4, 5, 7, 8, 10]
 const SURFACE_MATERIAL_IDS: Array[int] = [2, 3, 4, 5]
+const SURFACE_INFRASTRUCTURE_MATERIAL_IDS: Array[int] = [10]
 const UNDERGROUND_STRATA_MATERIAL_IDS: Array[int] = [1, 8]
 const UNDERGROUND_DEPTH_BANDS := "surface_cover<8:2|3|4|5,deep>=8:1,ore>=12:8"
 const STANDARD_MATERIAL_MEANINGS := {
@@ -25,6 +27,7 @@ const STANDARD_MATERIAL_MEANINGS := {
 	5: "snow_surface_biome",
 	7: "reserved_mid_depth_rock",
 	8: "deep_ore_patch",
+	10: "shallow_asphalt_road",
 }
 
 @export var source_mode: SourceMode = SourceMode.DETERMINISTIC_REFERENCE
@@ -53,8 +56,10 @@ func get_contract_summary() -> Dictionary:
 		"material_palette_version": MATERIAL_PALETTE_VERSION,
 		"surface_biome_model": SURFACE_BIOME_MODEL,
 		"underground_patch_model": UNDERGROUND_PATCH_MODEL,
+		"road_network_model": ROAD_NETWORK_MODEL if procedural_preset_id == &"rolling_hills_cave_roads" else "none",
 		"standard_material_ids": STANDARD_MATERIAL_IDS,
 		"surface_material_ids": SURFACE_MATERIAL_IDS,
+		"surface_infrastructure_material_ids": SURFACE_INFRASTRUCTURE_MATERIAL_IDS,
 		"underground_strata_material_ids": UNDERGROUND_STRATA_MATERIAL_IDS,
 		"underground_depth_bands": UNDERGROUND_DEPTH_BANDS,
 		"standard_material_meanings": STANDARD_MATERIAL_MEANINGS,

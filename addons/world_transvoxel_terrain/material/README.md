@@ -67,7 +67,7 @@ material work should bind distinct material textures or controlled blends rather
 than globally tinting one sand texture across every surface.
 
 The current production placeholder texture array has deterministic layers for
-stone, grass, gravel, sand, snow, rock, and ore. These layers are intentionally
+stone, grass, gravel, sand, snow, rock, ore, and asphalt. These layers are intentionally
 simple test textures. They prove the material/biome pipeline and should be
 replaced by real authored textures without changing the authoritative material
 IDs.
@@ -112,3 +112,12 @@ presents their boundary independently of mesh LOD. This prevents sparse ore
 from turning into per-triangle islands when coarse sampling changes. A future
 general multi-material system should store explicit indices plus weights, but
 must preserve the same edit-authority rule.
+
+The road profile uses the same restricted presentation path for
+`deterministic_shallow_asphalt_corridors_v1`. The native source owns road
+density and material ID `10`; the shader evaluates the identical world-space
+centerlines, grades, and base-surface classifier. For unedited base terrain it
+neutralizes categorical material-10 triangle spill before reapplying the
+continuous asphalt corridor, which keeps shoulders stable across LODs. The
+shader is never the road authority, and the provenance guard prevents it from
+painting over authored terrain edits.

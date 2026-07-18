@@ -22,6 +22,7 @@ The current standard palette is `world_transvoxel_material_palette_v1`.
 | 5 | snow | surface biome |
 | 7 | mid rock | mid-depth strata and exposed rocky terrain |
 | 8 | ore patch | deep underground material patch |
+| 10 | asphalt | shallow solid road surface |
 
 Material IDs are gameplay/storage state. They are persisted in terrain pages,
 edit journals, and authoritative sample queries. Shaders may derive visual
@@ -34,6 +35,7 @@ The deterministic reference world uses:
 - `standard_density_depth_material_strata_v1` for vertical strata;
 - `deterministic_macro_surface_biomes_v1` for large surface biome regions;
 - `deterministic_deep_ore_patches_v1` for underground ore patches.
+- `deterministic_shallow_asphalt_corridors_v1` for the opt-in road profile.
 
 Depth bands remain:
 
@@ -53,7 +55,7 @@ The production placeholder material path uses:
 
 - world-space triplanar projection;
 - a deterministic `Texture2DArray` material layer set with slots for stone,
-  grass, gravel, sand, snow, rock, and ore;
+  grass, gravel, sand, snow, rock, ore, and asphalt;
 - mipmaps on generated placeholder material textures;
 - native vertex-color surface biome blend weights derived from authoritative
   material IDs (`R=grass`, `G=gravel`, `B=sand`, `A=snow`);
@@ -91,6 +93,15 @@ same solid isosurface endpoint as `UV2.x`. A shader may evaluate the exact
 declared procedural classifier only when the flag is false. When it is true,
 the selected material ID is rendered directly. This preserves LOD-stable base
 ore without allowing a presentation rule to override authored stone or ore.
+
+The same rule applies to procedural roads. The road preset modifies the
+authoritative density field with continuous, world-space graded corridors and
+stores asphalt ID `10` only in the shallow top layer. Its matching shader
+classifier first reconstructs the exact procedural underlay and then reapplies
+asphalt through the continuous road field while `material_authored=false`.
+This prevents a coarse material-10 vertex from turning a whole triangle into
+an asphalt protrusion. Painting or constructing any material remains
+authoritative and suppresses this procedural reconstruction at that surface.
 
 ## Human test expectation
 

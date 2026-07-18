@@ -21,7 +21,8 @@ import godot_import_assets
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 DEEP_PROFILE = "g20_deep_2k_256_on_demand"
 ROLLING_HILLS_CAVE_PROFILE = "g21_rolling_hills_cave_2k_256_on_demand"
-PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE)
+ROAD_PROFILE = "g22_rolling_hills_cave_roads_2k_256_on_demand"
+PROFILE_CHOICES = DEFAULT_PROFILES + (DEEP_PROFILE, ROLLING_HILLS_CAVE_PROFILE, ROAD_PROFILE)
 VISUAL_CAPTURE_PROFILE = "g19_compact_2k_on_demand"
 LOD_MOVEMENT_GATE_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
 TUNNEL_VISUAL_SKY_FREE_LABELS = {
@@ -44,6 +45,8 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "biome_overview",
     "biome_surface",
     "biome_snow_ridge",
+    "road_network",
+    "road_edge_near",
     "ore_patch_exposure",
     "ore_patch_exposure_far",
     "small_edit_near",
@@ -246,6 +249,17 @@ def validate_visual_summary(
             "visual capture field underground_ore_worldspace_blend_active "
             f"expected {procedural_ore_expected!r}, got "
             f"{summary.get('underground_ore_worldspace_blend_active')!r}: "
+            f"{summary!r}"
+        )
+    procedural_road_expected = expected_profile == ROAD_PROFILE
+    if (
+        summary.get("surface_road_worldspace_blend_active")
+        is not procedural_road_expected
+    ):
+        raise RuntimeError(
+            "visual capture field surface_road_worldspace_blend_active "
+            f"expected {procedural_road_expected!r}, got "
+            f"{summary.get('surface_road_worldspace_blend_active')!r}: "
             f"{summary!r}"
         )
     if summary.get("surface_biome_worldspace_blend_active") is not False:

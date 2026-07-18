@@ -8,10 +8,18 @@ const CHECKER_TEXTURE_FORMAT := "RGBA8"
 const CHECKER_TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const QUALITY_IMPLEMENTATION := "terrain_material_texture_pipeline_v1"
-const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v6"
+const PRODUCTION_QUALITY_IMPLEMENTATION := "terrain_production_material_texture_array_authoritative_provenance_pipeline_v7"
 const DEFAULT_PRODUCTION_TEXTURE_RESOLUTION := 512
 const VISIBLE_SHADER_MODE := "native_override_world_triplanar_primary_material_texture_array"
 const AUTHORED_TEXTURE_ROOT := "res://assets/terrain_textures/material_layers"
+const REFERENCE_ROAD_SEGMENTS := [
+	Vector4(720.0, 820.0, 900.0, 820.0),
+	Vector4(900.0, 820.0, 1080.0, 820.0),
+	Vector4(900.0, 680.0, 900.0, 820.0),
+	Vector4(900.0, 820.0, 900.0, 960.0),
+	Vector4(720.0, 820.0, 760.0, 900.0),
+	Vector4(900.0, 960.0, 1040.0, 940.0),
+]
 
 @export var auto_apply: bool = true
 @export_range(1, 30, 1) var material_audit_interval_frames: int = 1
@@ -53,6 +61,7 @@ var _summary := {
 	"surface_material_blend_weights_active": false,
 	"surface_biome_worldspace_blend_active": false,
 	"underground_ore_worldspace_blend_active": false,
+	"surface_road_worldspace_blend_active": false,
 	"authored_albedo_layers": [],
 	"quality_implementation": QUALITY_IMPLEMENTATION,
 	"production_quality_implementation": PRODUCTION_QUALITY_IMPLEMENTATION,
@@ -111,6 +120,7 @@ func apply_materials_now() -> Dictionary:
 	var authored_layers := _authored_albedo_layers()
 	var generation := _generation_profile_summary()
 	var procedural_ore_active := production_active and _procedural_ore_blend_enabled(generation)
+	var procedural_road_active := production_active and _procedural_road_blend_enabled(generation)
 	_summary = {
 		"applied": native_override_set or int(result.get("checked", 0)) > 0,
 		"materialized_instances": int(result.get("checked", 0)),
@@ -139,6 +149,8 @@ func apply_materials_now() -> Dictionary:
 		"surface_biome_worldspace_blend_model": "disabled_authoritative_material_ids",
 		"underground_ore_worldspace_blend_active": procedural_ore_active,
 		"underground_ore_worldspace_blend_model": "deterministic_deep_ore_patches_v1_authored_provenance_guarded",
+		"surface_road_worldspace_blend_active": procedural_road_active,
+		"surface_road_worldspace_blend_model": "deterministic_shallow_asphalt_corridors_v1_authored_provenance_guarded",
 		"surface_biome_seed": int(generation.get("seed", 1)),
 		"authored_albedo_layers": authored_layers,
 		"authored_albedo_layer_count": authored_layers.size(),
@@ -227,10 +239,63 @@ func _apply_procedural_material_parameters(shader_material: ShaderMaterial) -> v
 	shader_material.set_shader_parameter("procedural_ore_worldspace_blend_enabled", enabled)
 	shader_material.set_shader_parameter("procedural_seed_phase", float(seed % 100000) * 0.0001)
 	shader_material.set_shader_parameter("procedural_ore_blend_width", 0.12)
+	shader_material.set_shader_parameter(
+		"procedural_world_size_xz",
+		Vector2(
+			maxf(16.0, float(int(generation.get("world_chunk_count_x", 128)) * 16)),
+			maxf(16.0, float(int(generation.get("world_chunk_count_z", 128)) * 16))
+		)
+	)
+	shader_material.set_shader_parameter(
+		"procedural_road_worldspace_blend_enabled",
+		_procedural_road_blend_enabled(generation)
+	)
+	for index in range(REFERENCE_ROAD_SEGMENTS.size()):
+		var segment: Vector4 = REFERENCE_ROAD_SEGMENTS[index]
+		shader_material.set_shader_parameter(
+			"procedural_road_grade_%d" % index,
+			Vector2(
+				_procedural_rolling_hills_height(Vector2(segment.x, segment.y), generation),
+				_procedural_rolling_hills_height(Vector2(segment.z, segment.w), generation)
+			)
+		)
 
 func _procedural_ore_blend_enabled(generation: Dictionary) -> bool:
 	return str(generation.get("source_mode", "")) == "DETERMINISTIC_REFERENCE" and \
 		str(generation.get("underground_patch_model", "")) == "deterministic_deep_ore_patches_v1"
+
+func _procedural_road_blend_enabled(generation: Dictionary) -> bool:
+	return str(generation.get("source_mode", "")) == "DETERMINISTIC_REFERENCE" and \
+		str(generation.get("procedural_preset_id", "")) == "rolling_hills_cave_roads" and \
+		str(generation.get("road_network_model", "")) == "deterministic_shallow_asphalt_corridors_v1"
+
+
+func _procedural_rolling_hills_height(point: Vector2, generation: Dictionary) -> float:
+	var width := maxf(16.0, float(int(generation.get("world_chunk_count_x", 128)) * 16))
+	var depth := maxf(16.0, float(int(generation.get("world_chunk_count_z", 128)) * 16))
+	var center := Vector2(width * 0.5 - 0.5, depth * 0.5 - 0.5)
+	var normalized := Vector2(
+		(point.x - center.x) / maxf(center.x, 1.0),
+		(point.y - center.y) / maxf(center.y, 1.0)
+	)
+	var phase := float(int(generation.get("seed", 1)) % 100000) * 0.0001
+	var broad := \
+		7.5 * sin(point.x * 0.0052 + phase * 1.7) + \
+		5.0 * cos(point.y * 0.0047 - phase * 1.2) + \
+		3.0 * sin((point.x + point.y) * 0.0034 + phase)
+	var rolling := \
+		4.0 * sin((point.x - point.y) * 0.008 + phase) * \
+			cos((point.x + point.y) * 0.006 - phase * 0.6)
+	var central_mound := 8.0 * exp(-2.7 * (
+		pow(normalized.x - 0.03, 2.0) + pow(normalized.y + 0.06, 2.0)
+	))
+	var shallow_valley := -5.5 * exp(-5.0 * (
+		pow(normalized.x + 0.34, 2.0) + pow(normalized.y - 0.22, 2.0)
+	))
+	var local := \
+		1.2 * sin(point.x * 0.018 - phase * 0.5) + \
+		0.9 * cos(point.y * 0.016 + phase * 0.9)
+	return 26.0 + broad + rolling + central_mound + shallow_valley + local
 
 func _apply_visual_mode(shader_material: ShaderMaterial) -> void:
 	shader_material.set_shader_parameter("clean_visual_enabled", visual_mode == &"clean")
@@ -371,7 +436,7 @@ func _production_texture_array(resolution: int, slot: StringName) -> Texture2DAr
 		Color(0.68, 0.70, 0.66, 1.0), # 5 snow
 		Color(0.31, 0.32, 0.31, 1.0), # 7 mid rock
 		Color(0.48, 0.29, 0.13, 1.0), # 8 ore patch
-		Color(0.37, 0.29, 0.23, 1.0), # reserved fallback
+		Color(0.09, 0.10, 0.11, 1.0), # 10 asphalt
 	]
 	var images: Array[Image] = []
 	for tile in range(TILE_COUNT):
@@ -448,7 +513,7 @@ func _authored_albedo_candidates(tile: int) -> Array[String]:
 		6:
 			names = ["ore_patch_albedo", "ore_albedo", "ore_diff"]
 		_:
-			names = ["fallback_albedo"]
+			names = ["asphalt_albedo", "road_asphalt_albedo", "asphalt_diff"]
 	var candidates: Array[String] = []
 	for name in names:
 		for extension in [".png", ".jpg", ".jpeg", ".webp"]:
@@ -473,7 +538,7 @@ func _material_layer_name(tile: int) -> String:
 		6:
 			return "ore_patch"
 		_:
-			return "fallback"
+			return "asphalt"
 
 func _production_albedo_texel(base: Color, tile: int, x: int, y: int) -> Color:
 	var coarse := _production_noise(tile, int(x / 4), int(y / 4), 1)
@@ -490,6 +555,10 @@ func _production_albedo_texel(base: Color, tile: int, x: int, y: int) -> Color:
 		scale *= 0.78 + 0.22 * fine
 		if accent > 0.74:
 			base = Color(0.84, 0.56, 0.22, 1.0)
+	elif tile == 7:
+		scale *= 0.86 + 0.10 * fine
+		if accent > 0.82:
+			base = Color(0.18, 0.19, 0.20, 1.0)
 	return Color(
 		clamp(base.r * scale, 0.0, 1.0),
 		clamp(base.g * scale, 0.0, 1.0),
@@ -503,6 +572,8 @@ func _production_normal_texel(tile: int, x: int, y: int) -> Color:
 		strength = 0.026
 	elif tile == 6:
 		strength = 0.032
+	elif tile == 7:
+		strength = 0.012
 	var bump := (_production_noise(tile, x, y, 4) - 0.5) * strength
 	return Color(0.5 + bump, 0.5 - bump, 1.0, 1.0)
 
@@ -520,6 +591,8 @@ func _production_roughness_texel(tile: int) -> Color:
 		roughness = 0.74
 	elif tile == 6:
 		roughness = 0.58
+	elif tile == 7:
+		roughness = 0.88
 	return Color(0.0, roughness, 1.0, 1.0)
 
 func _terrain_world() -> Node:
