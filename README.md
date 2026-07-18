@@ -215,8 +215,10 @@ The rolling-hills cave inspection profile is
 `g21_rolling_hills_cave_2k_256_on_demand`. It uses the native
 `rolling_hills_cave` procedural preset with the same 2048 by 2048 horizontal
 coverage and 256 vertical cells as g20, but replaces the mountain stress shape
-with gentler rolling hills and a real density-volume cave/chamber. Its current
-role is map-shape and cave-volume inspection. It is not yet a Terrain 1.0
+with gentler rolling hills and a world-distance density cave. The cave uses a
+road-aligned descending surface portal and compact smooth subtraction instead
+of a near-tangent hard CSG rim. Its current role is map-shape and cave-volume
+inspection. It is not yet a Terrain 1.0
 release gate because the full post-edit production gameplay proof still fails
 on g21 post-edit streaming settle.
 
@@ -224,8 +226,8 @@ The isolated volumetric-road profile is
 `g22_rolling_hills_cave_roads_2k_256_on_demand`. It keeps the g21 seed and cave
 field, then opts into the native `rolling_hills_cave_roads` preset: continuous
 graded density corridors with a shallow authoritative asphalt material ID
-`10`. G21 does not opt into this field. Use visual capture mode `road_network`
-or launch g22 directly for the current road-network human proof.
+`10`. G21 does not opt into this field. Use visual capture modes `road_network`
+and `cave_entrance_road`, or launch g22 directly for the current human proof.
 
 The flat baseline profile remains available for proof automation:
 

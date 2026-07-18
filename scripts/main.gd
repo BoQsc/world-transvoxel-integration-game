@@ -810,7 +810,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		# The live player viewer follows road traversal. Use the existing bounded
 		# persistent coverage viewer for the authored cave portal, whose thin CSG
 		# silhouette must not fall to the four-unit LOD2 sampling tier.
-		settings["viewers"] = [Vector3(900, 35, 1005)]
+		settings["viewers"] = [Vector3(900, 35, 988)]
 		# Keep autonomous edit proofs away from the road network so the existing
 		# material-strata contract remains an independent baseline.
 		settings["edit_point"] = Vector3(1536, 27, 512)
@@ -847,7 +847,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	elif profile_id == ROLLING_HILLS_CAVE_PROFILE:
 		generation.seed = 19021
 		generation.procedural_preset_id = &"rolling_hills_cave"
-		generation.source_revision = 190321
+		generation.source_revision = 190323
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -856,7 +856,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	elif profile_id == ROAD_PROFILE:
 		generation.seed = 19021
 		generation.procedural_preset_id = &"rolling_hills_cave_roads"
-		generation.source_revision = 190322
+		generation.source_revision = 190324
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -1214,6 +1214,24 @@ func _verify_rolling_hills_cave_contract(terrain_world: Node) -> bool:
 		_fail("rolling-hills cave profile did not select native cave preset: %s" % str(generation))
 		return false
 	var probes: Array = [
+		{
+			"label": "portal_inner_rim_air",
+			"point": Vector3i(925, 24, 1000),
+			"expected_air": true,
+			"minimum_abs_density": 0.5,
+		},
+		{
+			"label": "portal_outer_rim_solid",
+			"point": Vector3i(930, 24, 1000),
+			"expected_air": false,
+			"minimum_abs_density": 2.0,
+		},
+		{
+			"label": "portal_approach_solid",
+			"point": Vector3i(900, 34, 930),
+			"expected_air": false,
+			"minimum_abs_density": 0.5,
+		},
 		{
 			"label": "entrance_air",
 			"point": Vector3i(900, 15, 1030),
@@ -8219,6 +8237,12 @@ func _apply_capture_camera_mode() -> void:
 			player.call("set_fly_mode_enabled", true)
 			capture_position = Vector3(900.0, 54.0, 820.0)
 			capture_target = Vector3(900.0, 30.0, 990.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"cave_entrance_near":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(900.0, 52.0, 870.0)
+			capture_target = Vector3(900.0, 29.0, 975.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"ore_patch_exposure", "ore_patch_exposure_far":

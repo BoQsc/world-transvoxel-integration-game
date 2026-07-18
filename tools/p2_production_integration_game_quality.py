@@ -48,6 +48,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "road_network",
     "road_edge_near",
     "cave_entrance_road",
+    "cave_entrance_near",
     "ore_patch_exposure",
     "ore_patch_exposure_far",
     "small_edit_near",

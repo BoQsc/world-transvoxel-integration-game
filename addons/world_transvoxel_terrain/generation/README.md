@@ -5,6 +5,14 @@ and flat/reference profile definitions belong here.
 
 Hot generation execution must not be implemented in GDScript.
 
+The native `rolling_hills_cave` and `rolling_hills_cave_roads` presets share a
+world-distance cave field. Its surface entrance is a road-aligned descending
+capsule portal joined to underground chambers with compact smooth density
+operations. This prevents zero-thickness hard-CSG lips from becoming skinny
+triangles at mixed LODs. Geometry changes to this field require a new source
+revision; they are not compatible with stored pages or edit journals from an
+older procedural revision.
+
 A2 adds `WtTerrainGenerationProfile` as metadata only; it does not generate
 density or meshes.
 
