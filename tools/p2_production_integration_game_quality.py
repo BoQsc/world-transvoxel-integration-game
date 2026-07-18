@@ -47,6 +47,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "biome_snow_ridge",
     "road_network",
     "road_edge_near",
+    "cave_entrance_road",
     "ore_patch_exposure",
     "ore_patch_exposure_far",
     "small_edit_near",

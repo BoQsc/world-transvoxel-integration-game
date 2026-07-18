@@ -805,10 +805,12 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 	elif profile_id == ROAD_PROFILE:
 		if autonomous:
 			settings["start"] = Vector3(1536, 58, 512)
-			settings["viewers"] = [Vector3(1536, 58, 512)]
 		else:
 			settings["start"] = Vector3(900, 54, 820)
-			settings["viewers"] = [Vector3(900, 54, 820)]
+		# The live player viewer follows road traversal. Use the existing bounded
+		# persistent coverage viewer for the authored cave portal, whose thin CSG
+		# silhouette must not fall to the four-unit LOD2 sampling tier.
+		settings["viewers"] = [Vector3(900, 35, 1005)]
 		# Keep autonomous edit proofs away from the road network so the existing
 		# material-strata contract remains an independent baseline.
 		settings["edit_point"] = Vector3(1536, 27, 512)
@@ -8211,6 +8213,12 @@ func _apply_capture_camera_mode() -> void:
 			player.call("set_fly_mode_enabled", true)
 			capture_position = Vector3(875.0, 55.0, 780.0)
 			capture_target = Vector3(900.0, 38.0, 820.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"cave_entrance_road":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(900.0, 54.0, 820.0)
+			capture_target = Vector3(900.0, 30.0, 990.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"ore_patch_exposure", "ore_patch_exposure_far":
