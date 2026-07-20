@@ -9,7 +9,9 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export var human_input_enabled: bool = false
 @export var player_driven_viewer_enabled: bool = true
 @export var player_viewer_update_distance: float = 8.0
-@export var player_viewer_coalesce_while_streaming: bool = true
+# The native runtime already keeps the latest queued revision for each viewer.
+# Holding the player position here while streaming is busy makes demand stale.
+@export var player_viewer_coalesce_while_streaming: bool = false
 @export var player_predictive_viewer_enabled: bool = false
 @export_range(0.0, 1000000.0, 0.01) var player_predictive_viewer_distance: float = 0.0
 @export var player_focus_viewer_enabled: bool = false
