@@ -117,6 +117,32 @@ static func remove_viewer(world, viewer_id: int, revision: int) -> bool:
 	world._last_error = "ok"
 	return true
 
+static func update_collision_viewer(world, viewer_id: int, revision: int, position: Vector3, radius_chunks: int) -> bool:
+	if not world.is_backend_world_running():
+		world._last_error = "backend world must be running before collision viewer updates: %s" % world.get_backend_world_error()
+		return false
+	if not world._backend_terrain.has_method("update_collision_viewer"):
+		world._last_error = "terrain backend cannot update collision viewers"
+		return false
+	if not bool(world._backend_terrain.call("update_collision_viewer", viewer_id, revision, position, radius_chunks)):
+		world._last_error = world.get_backend_world_error()
+		return false
+	world._last_error = "ok"
+	return true
+
+static func remove_collision_viewer(world, viewer_id: int, revision: int) -> bool:
+	if not world.is_backend_world_running():
+		world._last_error = "backend world must be running before collision viewer removal"
+		return false
+	if not world._backend_terrain.has_method("remove_collision_viewer"):
+		world._last_error = "terrain backend cannot remove collision viewers"
+		return false
+	if not bool(world._backend_terrain.call("remove_collision_viewer", viewer_id, revision)):
+		world._last_error = world.get_backend_world_error()
+		return false
+	world._last_error = "ok"
+	return true
+
 static func query_chunk_state(world, chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	if world._backend_terrain == null or not world._backend_terrain.has_method("query_chunk_state"):
 		world._last_error = "backend terrain cannot query chunk state"

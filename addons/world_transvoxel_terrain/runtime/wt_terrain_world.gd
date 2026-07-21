@@ -150,6 +150,12 @@ func update_viewer(viewer_id: int, revision: int, position: Vector3, radius_chun
 func remove_viewer(viewer_id: int, revision: int) -> bool:
 	return BackendOps.remove_viewer(self, viewer_id, revision)
 
+func update_collision_viewer(viewer_id: int, revision: int, position: Vector3, radius_chunks: int) -> bool:
+	return BackendOps.update_collision_viewer(self, viewer_id, revision, position, radius_chunks)
+
+func remove_collision_viewer(viewer_id: int, revision: int) -> bool:
+	return BackendOps.remove_collision_viewer(self, viewer_id, revision)
+
 func query_chunk_state(chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	return BackendOps.query_chunk_state(self, chunk_coordinate, lod)
 

@@ -69,6 +69,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "edit_tunnel_crawl_gate",
     "edit_tunnel_transient_crawl_gate",
     "edit_tunnel_upward_lod_gate",
+    "fly_collision_stress_gate",
     "streaming_fly_gap_gate",
     "post_edit_streaming_fly_gap_gate",
 )
@@ -462,6 +463,34 @@ def validate_visual_summary(
             raise RuntimeError(f"watertightness probe did not inspect rendered triangles: {watertightness!r}")
     if summary.get("mode") in {"streaming_fly_gap_gate", "post_edit_streaming_fly_gap_gate"}:
         validate_streaming_fly_summary(summary)
+    if summary.get("mode") == "fly_collision_stress_gate":
+        validate_fly_collision_stress_summary(summary)
+
+
+def validate_fly_collision_stress_summary(summary: dict[str, object]) -> None:
+    stress = summary.get("fly_collision_stress")
+    if not isinstance(stress, dict):
+        raise RuntimeError(f"fly collision stress summary missing: {summary!r}")
+    if stress.get("enabled") is not True or stress.get("ok") is not True:
+        raise RuntimeError(f"fly collision stress gate failed: {stress!r}")
+    if int(stress.get("penetration_count", -1)) != 0:
+        raise RuntimeError(f"fly collision stress detected solid penetration: {stress!r}")
+    if float(stress.get("travel_distance", 0.0)) < 600.0:
+        raise RuntimeError(f"fly collision stress travelled too little: {stress!r}")
+    if int(stress.get("slide_collision_frames", 0)) <= 0:
+        raise RuntimeError(f"fly collision stress made no terrain contact: {stress!r}")
+    if int(stress.get("streaming_busy_frames", 0)) <= 0:
+        raise RuntimeError(f"fly collision stress did not exercise streaming: {stress!r}")
+    print(
+        "WT_FLY_COLLISION_STRESS_GATE_PROFILE_PASS profile=%s frames=%d distance=%.1f collisions=%d busy=%d"
+        % (
+            summary.get("profile"),
+            int(stress.get("frame_count", 0)),
+            float(stress.get("travel_distance", 0.0)),
+            int(stress.get("slide_collision_frames", 0)),
+            int(stress.get("streaming_busy_frames", 0)),
+        )
+    )
 
 
 def validate_streaming_fly_summary(summary: dict[str, object]) -> None:

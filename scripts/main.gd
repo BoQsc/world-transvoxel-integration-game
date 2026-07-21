@@ -98,6 +98,7 @@ var last_edit_during_load_summary := {}
 var last_manifold_stress_summary := {}
 var last_tunnel_summary := {}
 var last_streaming_fly_summary := {}
+var last_fly_collision_stress_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -257,6 +258,12 @@ func _start_profile() -> void:
 	game_world.player_predictive_viewer_distance = float(settings.get("player_predictive_viewer_distance", 0.0))
 	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
 	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
+	var collision_invoker_enabled := bool(settings.get("player_collision_invoker_enabled", false))
+	if autonomous and human_visual_capture_path.is_empty():
+		collision_invoker_enabled = false
+	game_world.player_collision_invoker_enabled = collision_invoker_enabled
+	game_world.player_collision_invoker_radius_chunks = int(settings.get("player_collision_invoker_radius_chunks", 2))
+	game_world.player_collision_prediction_distance = float(settings.get("player_collision_prediction_distance", 16.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_world_state_timeout_frames = int(settings.get("startup_world_state_timeout_frames", 900))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
@@ -826,6 +833,9 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		settings["edit_point"] = Vector3(300, 39, 300)
 		settings["radius"] = 8
 		settings["runtime_lod_refinement_radius_chunks"] = 2
+		settings["player_collision_invoker_enabled"] = true
+		settings["player_collision_invoker_radius_chunks"] = 2
+		settings["player_collision_prediction_distance"] = 16.0
 	return settings
 
 
@@ -3870,7 +3880,10 @@ func _place_player_at_tunnel_playtest_start() -> bool:
 
 
 func _capture_human_visual() -> void:
-	if human_visual_capture_mode == "streaming_fly_gap_gate":
+	if human_visual_capture_mode == "fly_collision_stress_gate":
+		if not await _run_fly_collision_stress_gate():
+			return
+	elif human_visual_capture_mode == "streaming_fly_gap_gate":
 		if not await _run_streaming_fly_gap_gate():
 			return
 	elif human_visual_capture_mode == "post_edit_streaming_fly_gap_gate":
@@ -3904,6 +3917,10 @@ func _capture_human_visual() -> void:
 		"player_focus_viewer_enabled": bool(summary.get("player_focus_viewer_enabled", false)),
 		"player_focus_viewer_distance": float(summary.get("player_focus_viewer_distance", 0.0)),
 		"player_focus_viewer_updates": int(summary.get("player_focus_viewer_updates", 0)),
+		"player_collision_invoker_enabled": bool(summary.get("player_collision_invoker_enabled", false)),
+		"player_collision_invoker_radius_chunks": int(summary.get("player_collision_invoker_radius_chunks", 0)),
+		"player_collision_prediction_distance": float(summary.get("player_collision_prediction_distance", 0.0)),
+		"player_collision_viewer_updates": int(summary.get("player_collision_viewer_updates", 0)),
 		"runtime_viewer_capacity": int(summary.get("runtime_viewer_capacity", 0)),
 		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
@@ -3969,6 +3986,7 @@ func _capture_human_visual() -> void:
 		"manifold_stress": _manifold_stress_summary(),
 		"tunnel": _tunnel_summary(),
 		"streaming_fly": _streaming_fly_summary(),
+		"fly_collision_stress": _fly_collision_stress_summary(),
 		"capture_path": human_visual_capture_path,
 	}))
 	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
@@ -4341,10 +4359,8 @@ func _run_edit_during_load_oracle(terrain_world: Node) -> bool:
 
 	await _set_capture_camera_pose(far_position, center)
 	var far_settle_notes := []
-	if not await _wait_for_lod_movement_visual_ready(
-		backend,
-		"edit-during-load far eviction",
-		far_settle_notes
+	if not await _wait_for_current_profile_settled(
+		"during edit-during-load far eviction"
 	):
 		last_edit_during_load_summary["error"] = "far_evict_not_ready"
 		return false
@@ -6569,6 +6585,291 @@ func _run_post_edit_streaming_fly_gap_gate() -> bool:
 	return await _run_streaming_fly_gap_gate(true)
 
 
+func _run_fly_collision_stress_gate() -> bool:
+	if player == null or game_world == null:
+		_fail("fly collision stress gate requires player and game world")
+		return false
+	if selected_profile != FOUR_BIOME_WORLD_PROFILE:
+		_fail("fly collision stress gate requires the four-biome g23 profile")
+		return false
+	var terrain_world: Node = game_world.get_terrain_world()
+	if terrain_world == null:
+		_fail("fly collision stress gate requires terrain world")
+		return false
+	if player.has_method("set_human_input_enabled"):
+		player.call("set_human_input_enabled", false)
+	if player.has_method("set_fly_mode_enabled"):
+		player.call("set_fly_mode_enabled", true)
+	player.velocity = Vector3.ZERO
+	var start_position := player.global_position
+	var direction := Vector3(1.0, -0.32, 1.0).normalized()
+	var speed := float(player.get("fly_speed")) * float(player.get("fly_fast_multiplier"))
+	var frame_count := 900
+	var recorded_points: Array = []
+	var first_frame_by_point := {}
+	var slide_collision_frames := 0
+	var collision_readiness_wait_frames := 0
+	var streaming_busy_frames := 0
+	var maximum_scheduler_jobs := 0
+	var maximum_active_chunk_records := 0
+	var minimum_collision_resources := 9223372036854775807
+	var minimum_fully_ready_chunk_records := 9223372036854775807
+	var current_chunk_missing_frames := 0
+	var current_chunk_not_required_frames := 0
+	var current_chunk_not_ready_frames := 0
+	var predicted_chunk_missing_frames := 0
+	var predicted_chunk_not_required_frames := 0
+	var predicted_chunk_not_ready_frames := 0
+	var minimum_y := start_position.y
+	var start_summary: Dictionary = game_world.get_game_world_summary()
+	var start_runtime_metrics: Dictionary = terrain_world.call("get_runtime_metrics")
+	for frame in range(frame_count):
+		var movement_accepted := bool(player.call(
+			"autonomous_move_with_streaming_collision",
+			direction * speed,
+			get_physics_process_delta_time()
+		))
+		if not movement_accepted:
+			collision_readiness_wait_frames += 1
+		if player.get_slide_collision_count() > 0:
+			slide_collision_frames += 1
+		if game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", false)
+		var summary: Dictionary = game_world.get_game_world_summary()
+		if _is_streaming_busy_summary(summary):
+			streaming_busy_frames += 1
+		maximum_scheduler_jobs = maxi(
+			maximum_scheduler_jobs,
+			int(summary.get("scheduler_queued_jobs", 0))
+		)
+		maximum_active_chunk_records = maxi(
+			maximum_active_chunk_records,
+			int(summary.get("active_chunk_records", 0))
+		)
+		minimum_collision_resources = mini(
+			minimum_collision_resources,
+			int(summary.get("collision_resources", 0))
+		)
+		minimum_fully_ready_chunk_records = mini(
+			minimum_fully_ready_chunk_records,
+			int(summary.get("fully_ready_chunk_records", 0))
+		)
+		var current_chunk := Vector3i(
+			floori(player.global_position.x / 16.0),
+			floori(player.global_position.y / 16.0),
+			floori(player.global_position.z / 16.0)
+		)
+		var predicted_position := player.global_position + \
+			direction * float(game_world.player_collision_prediction_distance)
+		var predicted_chunk := Vector3i(
+			floori(predicted_position.x / 16.0),
+			floori(predicted_position.y / 16.0),
+			floori(predicted_position.z / 16.0)
+		)
+		var current_state: RefCounted = terrain_world.call(
+			"query_chunk_state", current_chunk, 0
+		)
+		if current_state == null:
+			current_chunk_missing_frames += 1
+		elif not bool(current_state.call("is_collision_required")):
+			current_chunk_not_required_frames += 1
+		elif not bool(current_state.call("is_collision_ready")):
+			current_chunk_not_ready_frames += 1
+		var predicted_state: RefCounted = terrain_world.call(
+			"query_chunk_state", predicted_chunk, 0
+		)
+		if predicted_state == null:
+			predicted_chunk_missing_frames += 1
+		elif not bool(predicted_state.call("is_collision_required")):
+			predicted_chunk_not_required_frames += 1
+		elif not bool(predicted_state.call("is_collision_ready")):
+			predicted_chunk_not_ready_frames += 1
+		minimum_y = minf(minimum_y, player.global_position.y)
+		var point := Vector3i(
+			int(round(player.global_position.x)),
+			int(round(player.global_position.y)),
+			int(round(player.global_position.z))
+		)
+		if point.y < -127 or point.y > 127:
+			frame_count = frame + 1
+			break
+		var point_key := _grid_point_key(point)
+		if not first_frame_by_point.has(point_key):
+			first_frame_by_point[point_key] = frame
+			recorded_points.append(point)
+		await get_tree().physics_frame
+	var landing_setup_frames := 30
+	for setup_frame in range(landing_setup_frames):
+		player.call(
+			"autonomous_move_with_streaming_collision",
+			Vector3.UP * 64.0,
+			get_physics_process_delta_time()
+		)
+		if game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", false)
+		minimum_y = minf(minimum_y, player.global_position.y)
+		var setup_point := Vector3i(
+			int(round(player.global_position.x)),
+			int(round(player.global_position.y)),
+			int(round(player.global_position.z))
+		)
+		var setup_point_key := _grid_point_key(setup_point)
+		if not first_frame_by_point.has(setup_point_key):
+			first_frame_by_point[setup_point_key] = frame_count + setup_frame
+			recorded_points.append(setup_point)
+		await get_tree().physics_frame
+	player.velocity = Vector3.ZERO
+	if player.has_method("set_fly_mode_enabled"):
+		player.call("set_fly_mode_enabled", false)
+	var landing_frames := 0
+	var landing_collision_wait_frames := 0
+	var landing_velocity := Vector3.ZERO
+	var landed := player.is_on_floor()
+	for landing_frame in range(600):
+		if landed:
+			break
+		landing_frames = landing_frame + 1
+		var landing_delta := get_physics_process_delta_time()
+		landing_velocity.y -= 24.0 * landing_delta
+		var movement_accepted := bool(player.call(
+			"autonomous_move_with_streaming_collision",
+			landing_velocity,
+			landing_delta
+		))
+		if not movement_accepted:
+			landing_velocity = Vector3.ZERO
+			landing_collision_wait_frames += 1
+		if game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", false)
+		minimum_y = minf(minimum_y, player.global_position.y)
+		var landing_point := Vector3i(
+			int(round(player.global_position.x)),
+			int(round(player.global_position.y)),
+			int(round(player.global_position.z))
+		)
+		var landing_point_key := _grid_point_key(landing_point)
+		if not first_frame_by_point.has(landing_point_key):
+			first_frame_by_point[landing_point_key] = frame_count + landing_frame
+			recorded_points.append(landing_point)
+		await get_tree().physics_frame
+		landed = player.is_on_floor()
+
+	var query := await _query_fly_collision_stress_samples(
+		terrain_world,
+		recorded_points
+	)
+	if not bool(query.get("ok", false)):
+		last_fly_collision_stress_summary = {
+			"enabled": true,
+			"ok": false,
+			"error": str(query.get("error", "sample_query_failed")),
+			"recorded_point_count": recorded_points.size(),
+		}
+		print("WT_FLY_COLLISION_STRESS_SUMMARY ", JSON.stringify(last_fly_collision_stress_summary))
+		_fail("fly collision stress authoritative sample query failed")
+		return false
+	var penetrations := []
+	var penetration_count := 0
+	var maximum_solid_depth := 0.0
+	for sample in query.get("samples", []):
+		if sample == null:
+			continue
+		var point: Vector3i = sample.call("get_grid_point")
+		var density := float(sample.call("get_density"))
+		if density >= -1.0:
+			continue
+		penetration_count += 1
+		maximum_solid_depth = maxf(maximum_solid_depth, -density)
+		if penetrations.size() < 12:
+			var point_key := _grid_point_key(point)
+			penetrations.append({
+				"frame": int(first_frame_by_point.get(point_key, -1)),
+				"point": point_key,
+				"density": density,
+				"solid_depth": -density,
+			})
+	var travel_distance := start_position.distance_to(player.global_position)
+	var exercised := travel_distance >= 600.0 and landed and \
+		slide_collision_frames > 0 and streaming_busy_frames > 0
+	var ok := penetration_count == 0 and exercised and \
+		int(query.get("sample_count", 0)) == recorded_points.size()
+	var end_summary: Dictionary = game_world.get_game_world_summary()
+	var end_runtime_metrics: Dictionary = terrain_world.call("get_runtime_metrics")
+	last_fly_collision_stress_summary = {
+		"enabled": true,
+		"ok": ok,
+		"profile": str(selected_profile),
+		"implementation": "real_characterbody_fast_diagonal_fly_v1",
+		"frame_count": frame_count,
+		"speed": speed,
+		"start_position": _vector3_summary(start_position),
+		"end_position": _vector3_summary(player.global_position),
+		"travel_distance": travel_distance,
+		"minimum_y": minimum_y,
+		"recorded_point_count": recorded_points.size(),
+		"sample_count": int(query.get("sample_count", 0)),
+		"slide_collision_frames": slide_collision_frames,
+		"collision_readiness_wait_frames": collision_readiness_wait_frames,
+		"landing_setup_frames": landing_setup_frames,
+		"landing_frames": landing_frames,
+		"landing_collision_wait_frames": landing_collision_wait_frames,
+		"landed": landed,
+		"streaming_busy_frames": streaming_busy_frames,
+		"maximum_scheduler_jobs": maximum_scheduler_jobs,
+		"maximum_active_chunk_records": maximum_active_chunk_records,
+		"minimum_collision_resources": minimum_collision_resources,
+		"minimum_fully_ready_chunk_records": minimum_fully_ready_chunk_records,
+		"current_chunk_missing_frames": current_chunk_missing_frames,
+		"current_chunk_not_required_frames": current_chunk_not_required_frames,
+		"current_chunk_not_ready_frames": current_chunk_not_ready_frames,
+		"predicted_chunk_missing_frames": predicted_chunk_missing_frames,
+		"predicted_chunk_not_required_frames": predicted_chunk_not_required_frames,
+		"predicted_chunk_not_ready_frames": predicted_chunk_not_ready_frames,
+		"player_viewer_update_delta": int(end_summary.get("player_viewer_updates", 0)) - int(start_summary.get("player_viewer_updates", 0)),
+		"runtime_viewer_update_delta": int(end_runtime_metrics.get("viewer_updates", 0)) - int(start_runtime_metrics.get("viewer_updates", 0)),
+		"player_collision_viewer_update_delta": int(end_summary.get("player_collision_viewer_updates", 0)) - int(start_summary.get("player_collision_viewer_updates", 0)),
+		"runtime_collision_viewer_update_delta": int(end_runtime_metrics.get("collision_viewer_updates", 0)) - int(start_runtime_metrics.get("collision_viewer_updates", 0)),
+		"penetration_count": penetration_count,
+		"maximum_solid_depth": maximum_solid_depth,
+		"penetration_examples": penetrations,
+		"exercise_requirements_met": exercised,
+	}
+	print("WT_FLY_COLLISION_STRESS_SUMMARY ", JSON.stringify(last_fly_collision_stress_summary))
+	if not ok:
+		_save_diagnostic_failure_capture("fly_collision_stress")
+		_fail("fast diagonal fly entered authoritative solid terrain: %s" % JSON.stringify(last_fly_collision_stress_summary))
+		return false
+	return true
+
+
+func _query_fly_collision_stress_samples(
+	terrain_world: Node,
+	points: Array
+) -> Dictionary:
+	if points.is_empty():
+		return {"ok": false, "error": "no_recorded_points"}
+	_ensure_authoritative_sample_connections(terrain_world)
+	var request_id := int(terrain_world.call("request_authoritative_samples", points, 0))
+	if request_id <= 0:
+		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "request_rejected"
+		return {"ok": false, "error": error}
+	for _frame in range(1200):
+		if authoritative_sample_failures.has(request_id):
+			var failure_error := str(authoritative_sample_failures[request_id])
+			authoritative_sample_failures.erase(request_id)
+			return {"ok": false, "error": failure_error}
+		if authoritative_sample_batches.has(request_id):
+			var samples: Array = authoritative_sample_batches[request_id]
+			authoritative_sample_batches.erase(request_id)
+			return {
+				"ok": true,
+				"sample_count": samples.size(),
+				"samples": samples,
+			}
+		await get_tree().process_frame
+	return {"ok": false, "error": "query_timeout"}
+
+
 func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 	if player == null or game_world == null:
 		_fail("streaming fly gap gate requires player and game world")
@@ -7922,6 +8223,15 @@ func _streaming_fly_summary() -> Dictionary:
 			"ok": true,
 		}
 	return last_streaming_fly_summary
+
+
+func _fly_collision_stress_summary() -> Dictionary:
+	if last_fly_collision_stress_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_fly_collision_stress_summary
 
 
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:

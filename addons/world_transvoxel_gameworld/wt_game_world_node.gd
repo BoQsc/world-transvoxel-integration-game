@@ -2,6 +2,7 @@ extends Node3D
 
 const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
+const COLLISION_INVOKER_CHUNK_EXTENT := 16.0
 const ReferenceScene := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -16,6 +17,9 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0.0, 1000000.0, 0.01) var player_predictive_viewer_distance: float = 0.0
 @export var player_focus_viewer_enabled: bool = false
 @export_range(0.0, 1000000.0, 0.01) var player_focus_viewer_distance: float = 0.0
+@export var player_collision_invoker_enabled: bool = false
+@export_range(0, 16, 1) var player_collision_invoker_radius_chunks: int = 2
+@export_range(0.0, 1000000.0, 0.01) var player_collision_prediction_distance: float = 16.0
 @export var debug_overlay_enabled: bool = false
 @export var startup_requires_cold_idle: bool = true
 @export_range(1, 7200, 1) var startup_world_state_timeout_frames: int = 900
@@ -56,12 +60,15 @@ var _viewer_revision := 1000
 var _player_viewer_id := 1
 var _player_predictive_viewer_id := 64
 var _player_focus_viewer_id := 65
+var _player_collision_viewer_id := 66
 var _last_player_viewer_position := Vector3(INF, INF, INF)
 var _last_predictive_viewer_position := Vector3(INF, INF, INF)
 var _last_focus_viewer_position := Vector3(INF, INF, INF)
+var _last_collision_viewer_position := Vector3(INF, INF, INF)
 var _accepted_player_viewer_updates := 0
 var _accepted_predictive_viewer_updates := 0
 var _accepted_focus_viewer_updates := 0
+var _accepted_collision_viewer_updates := 0
 var _coalesced_player_viewer_updates := 0
 var _last_player_viewer_coalesce_reason := "none"
 var _last_error := ""
@@ -175,6 +182,8 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
+	if not _update_player_collision_invoker(position, previous_position, force):
+		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
 	if not _update_focus_player_viewer(force):
@@ -388,6 +397,10 @@ func get_game_world_summary() -> Dictionary:
 		"player_focus_viewer_enabled": player_focus_viewer_enabled,
 		"player_focus_viewer_distance": player_focus_viewer_distance,
 		"player_focus_viewer_updates": _accepted_focus_viewer_updates,
+		"player_collision_invoker_enabled": player_collision_invoker_enabled,
+		"player_collision_invoker_radius_chunks": player_collision_invoker_radius_chunks,
+		"player_collision_prediction_distance": player_collision_prediction_distance,
+		"player_collision_viewer_updates": _accepted_collision_viewer_updates,
 		"viewer_positions": _viewer_positions.size(),
 		"viewer_radius_chunks": _viewer_radius_chunks,
 		"viewer_maximum_lod": _viewer_maximum_lod,
@@ -701,6 +714,66 @@ func _should_update_predictive_player_viewer(position: Vector3) -> bool:
 	if is_inf(_last_predictive_viewer_position.x):
 		return true
 	return position.distance_to(_last_predictive_viewer_position) >= player_viewer_update_distance
+
+
+func _update_player_collision_invoker(
+	position: Vector3,
+	previous_position: Vector3,
+	force: bool
+) -> bool:
+	if not player_collision_invoker_enabled:
+		return true
+	var invoker_position := position
+	if not is_inf(previous_position.x):
+		var movement := position - previous_position
+		if movement.length_squared() > 0.0001:
+			var maximum_prediction_distance := \
+				float(player_collision_invoker_radius_chunks) * \
+				COLLISION_INVOKER_CHUNK_EXTENT
+			var prediction_distance := minf(
+				player_collision_prediction_distance,
+				maximum_prediction_distance
+			)
+			invoker_position += movement.normalized() * prediction_distance
+	if not force and _collision_invoker_chunk(invoker_position) == \
+			_collision_invoker_chunk(_last_collision_viewer_position):
+		return true
+	_viewer_revision += 1
+	if not bool(_reference_scene.call(
+		"update_reference_collision_viewer",
+		_player_collision_viewer_id,
+		_viewer_revision,
+		invoker_position,
+		player_collision_invoker_radius_chunks
+	)):
+		return _fail("player collision viewer update failed: %s" % _terrain_world_error())
+	_last_collision_viewer_position = invoker_position
+	_accepted_collision_viewer_updates += 1
+	return true
+
+
+func is_player_collision_ready_at(position: Vector3) -> bool:
+	if not player_collision_invoker_enabled:
+		return true
+	var terrain_world := get_terrain_world()
+	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
+		return false
+	var state: RefCounted = terrain_world.call(
+		"query_chunk_state", _collision_invoker_chunk(position), 0
+	)
+	return state != null and \
+		bool(state.call("is_collision_required")) and \
+		bool(state.call("is_collision_ready"))
+
+
+func _collision_invoker_chunk(position: Vector3) -> Vector3i:
+	if is_inf(position.x) or is_inf(position.y) or is_inf(position.z):
+		return Vector3i(2147483647, 2147483647, 2147483647)
+	return Vector3i(
+		floori(position.x / COLLISION_INVOKER_CHUNK_EXTENT),
+		floori(position.y / COLLISION_INVOKER_CHUNK_EXTENT),
+		floori(position.z / COLLISION_INVOKER_CHUNK_EXTENT)
+	)
 
 
 func _update_focus_player_viewer(force: bool) -> bool:

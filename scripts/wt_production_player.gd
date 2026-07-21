@@ -59,6 +59,14 @@ func autonomous_translate(delta: Vector3) -> bool:
 	return true
 
 
+func autonomous_move_with_streaming_collision(
+	motion_velocity: Vector3,
+	delta: float
+) -> bool:
+	velocity = motion_velocity
+	return _move_with_streaming_collision(delta)
+
+
 func set_fly_mode_enabled(enabled: bool) -> void:
 	_set_fly_mode_enabled(enabled)
 
@@ -162,12 +170,12 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= 24.0 * delta
 	elif Input.is_key_pressed(KEY_SPACE):
 		velocity.y = 7.0
-	move_and_slide()
+	_move_with_streaming_collision(delta)
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 
 
-func _physics_process_fly(_delta: float) -> void:
+func _physics_process_fly(delta: float) -> void:
 	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
 	var movement_basis := global_transform.basis
 	if camera != null:
@@ -191,9 +199,22 @@ func _physics_process_fly(_delta: float) -> void:
 	if Input.is_key_pressed(KEY_SHIFT):
 		speed *= fly_fast_multiplier
 	velocity = direction * speed
-	move_and_slide()
+	_move_with_streaming_collision(delta)
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
+
+
+func _move_with_streaming_collision(delta: float) -> bool:
+	if game_world != null and \
+			game_world.has_method("is_player_collision_ready_at") and \
+			not bool(game_world.call(
+				"is_player_collision_ready_at",
+				global_position + velocity * delta
+			)):
+		velocity = Vector3.ZERO
+		return false
+	move_and_slide()
+	return true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -595,6 +616,8 @@ func _set_fly_mode_enabled(enabled: bool) -> void:
 			collision_mask = _walk_collision_mask
 			motion_mode = _walk_motion_mode
 			_walk_collision_state_saved = false
+		if game_world != null and game_world.has_method("update_player_viewer"):
+			game_world.call("update_player_viewer", true)
 	print("human_fly_mode=%s" % ("on" if fly_mode_enabled else "off"))
 
 
