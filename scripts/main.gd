@@ -833,6 +833,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		settings["edit_point"] = Vector3(300, 39, 300)
 		settings["radius"] = 8
 		settings["runtime_lod_refinement_radius_chunks"] = 2
+		settings["player_viewer_update_distance"] = 8.0
 		settings["player_collision_invoker_enabled"] = true
 		settings["player_collision_invoker_radius_chunks"] = 2
 		settings["player_collision_prediction_distance"] = 16.0

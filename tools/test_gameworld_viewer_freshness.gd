@@ -23,6 +23,7 @@ class FakeReferenceScene:
 
 	var terrain_world: Node
 	var viewer_updates: Array[Dictionary] = []
+	var collision_viewer_updates: Array[Dictionary] = []
 
 	func _init(value: Node) -> void:
 		terrain_world = value
@@ -43,6 +44,20 @@ class FakeReferenceScene:
 			"position": position,
 			"radius_chunks": radius_chunks,
 			"maximum_lod": maximum_lod,
+		})
+		return true
+
+	func update_reference_collision_viewer(
+		viewer_id: int,
+		revision: int,
+		position: Vector3,
+		radius_chunks: int
+	) -> bool:
+		collision_viewer_updates.append({
+			"viewer_id": viewer_id,
+			"revision": revision,
+			"position": position,
+			"radius_chunks": radius_chunks,
 		})
 		return true
 
@@ -68,7 +83,8 @@ func _run_test() -> void:
 		null
 	)
 	root.add_child(game_world)
-	game_world.player_viewer_update_distance = 1.0
+	game_world.player_viewer_update_distance = 8.0
+	game_world.player_collision_invoker_enabled = true
 	var terrain_world := FakeTerrainWorld.new()
 	var reference_scene := FakeReferenceScene.new(terrain_world)
 	reference_scene.add_child(terrain_world)
@@ -79,6 +95,14 @@ func _run_test() -> void:
 
 	if not game_world.update_player_viewer(true):
 		_fail("initial forced player viewer update failed")
+		return
+	player.global_position = Vector3(1.0, 0.0, 0.0)
+	if not game_world.update_player_viewer(false):
+		_fail("collision-only player viewer update was rejected")
+		return
+	if reference_scene.viewer_updates.size() != 1 or \
+			reference_scene.collision_viewer_updates.size() != 2:
+		_fail("collision invoker was coupled to visual viewer cadence")
 		return
 	player.global_position = Vector3(32.0, 0.0, 0.0)
 	if not game_world.update_player_viewer(false):
@@ -99,7 +123,8 @@ func _run_test() -> void:
 	if accepted_updates != 2:
 		_fail("accepted player viewer count mismatch: %d" % accepted_updates)
 		return
-	print("WT_GAMEWORLD_VIEWER_FRESHNESS_PASS updates=2 debt=1")
+	print("WT_GAMEWORLD_VIEWER_FRESHNESS_PASS updates=2 collision_updates=%d debt=1" % \
+		reference_scene.collision_viewer_updates.size())
 	game_world.free()
 	quit(0)
 

@@ -166,6 +166,9 @@ func update_player_viewer(force: bool = false) -> bool:
 	if not player_driven_viewer_enabled or _reference_scene == null or _player == null:
 		return false
 	var position: Vector3 = _player.global_position
+	var previous_position := _last_player_viewer_position
+	if not _update_player_collision_invoker(position, previous_position, force):
+		return false
 	if not force and not _should_update_player_viewer(position):
 		return true
 	if not force and player_viewer_coalesce_while_streaming:
@@ -174,7 +177,6 @@ func update_player_viewer(force: bool = false) -> bool:
 			_coalesced_player_viewer_updates += 1
 			_last_player_viewer_coalesce_reason = coalesce_reason
 			return true
-	var previous_position := _last_player_viewer_position
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
@@ -182,8 +184,6 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
-	if not _update_player_collision_invoker(position, previous_position, force):
-		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
 	if not _update_focus_player_viewer(force):
@@ -749,6 +749,7 @@ func _update_player_collision_invoker(
 		return _fail("player collision viewer update failed: %s" % _terrain_world_error())
 	_last_collision_viewer_position = invoker_position
 	_accepted_collision_viewer_updates += 1
+	_begin_streaming_burst()
 	return true
 
 
