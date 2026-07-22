@@ -62,6 +62,7 @@ var human_artifact_inspect_marker_path := ""
 var human_artifact_marker_sequence_file_path := ""
 var human_artifact_marker_sequence_wait_frames := 180
 var human_artifact_storage_root_override := ""
+var human_artifact_marker_context_error := ""
 var initial_human_material_mode := ""
 var human_windowed := false
 var runtime_render_apply_budget_override := -1
@@ -932,6 +933,7 @@ func _configure_human_artifact_marker_replay_context() -> void:
 		return
 	var marker := _load_human_artifact_marker_json(marker_path)
 	if marker.is_empty():
+		human_artifact_marker_context_error = "marker context load failed: %s" % marker_path
 		print("WT_HUMAN_ARTIFACT_MARKER_CONTEXT_LOAD_FAIL path=%s" % marker_path)
 		return
 	var marker_profile := str(marker.get("profile", ""))
@@ -941,6 +943,7 @@ func _configure_human_artifact_marker_replay_context() -> void:
 	var storage_bundle: Dictionary = marker.get("storage_bundle", {})
 	var bundle_root := str(storage_bundle.get("bundle_root", ""))
 	if bundle_root.is_empty():
+		human_artifact_marker_context_error = "marker has no storage bundle and cannot be exact-replayed: %s" % marker_path
 		print("WT_HUMAN_ARTIFACT_MARKER_STORAGE_BUNDLE_MISSING path=%s" % marker_path)
 		return
 	var world_journal_path := str(storage_bundle.get(
@@ -948,6 +951,7 @@ func _configure_human_artifact_marker_replay_context() -> void:
 		bundle_root.path_join("world.wtedit")
 	))
 	if not FileAccess.file_exists(world_journal_path):
+		human_artifact_marker_context_error = "marker storage bundle journal is missing: %s" % world_journal_path
 		print("WT_HUMAN_ARTIFACT_MARKER_STORAGE_BUNDLE_JOURNAL_MISSING path=%s journal=%s" % [
 			marker_path,
 			world_journal_path,
@@ -1882,6 +1886,10 @@ func _run_human_artifact_marker_smoke() -> void:
 
 
 func _run_human_artifact_replay_marker() -> void:
+	if not human_artifact_marker_context_error.is_empty():
+		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_CONTEXT_FAIL %s" % human_artifact_marker_context_error)
+		get_tree().quit(1)
+		return
 	var marker := _load_human_artifact_marker_json(human_artifact_replay_marker_path)
 	if marker.is_empty():
 		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_LOAD_FAIL path=%s" % human_artifact_replay_marker_path)
@@ -1901,6 +1909,9 @@ func _run_human_artifact_replay_marker() -> void:
 
 
 func _run_human_artifact_inspect_marker() -> bool:
+	if not human_artifact_marker_context_error.is_empty():
+		_fail("human artifact inspect marker context is not exact: %s" % human_artifact_marker_context_error)
+		return false
 	var marker := _load_human_artifact_marker_json(human_artifact_inspect_marker_path)
 	if marker.is_empty():
 		_fail("human artifact inspect marker could not be loaded: %s" % human_artifact_inspect_marker_path)
