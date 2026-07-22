@@ -3,7 +3,6 @@ extends Node3D
 const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
 const COLLISION_INVOKER_CHUNK_EXTENT := 16.0
-const FRAME_STABLE_COLLISION_APPLY_BUDGET := 2
 const ReferenceScene := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -33,15 +32,15 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
-@export_range(0, 2, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
 @export var runtime_shader_fade_parameter_enabled: bool = false
 @export var runtime_global_coarse_lod_coverage: bool = false
 @export_range(0, 128, 1) var runtime_streaming_burst_render_apply_budget: int = 0
-@export_range(0, 2, 1) var runtime_streaming_burst_collision_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_streaming_burst_collision_apply_budget: int = 0
 @export_range(0, 600, 1) var runtime_streaming_burst_frames: int = 0
 @export_range(0, 128, 1) var runtime_edit_burst_render_apply_budget: int = 0
-@export_range(0, 2, 1) var runtime_edit_burst_collision_apply_budget: int = 0
+@export_range(0, 128, 1) var runtime_edit_burst_collision_apply_budget: int = 0
 @export_range(0, 600, 1) var runtime_edit_burst_frames: int = 0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
@@ -414,17 +413,14 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
-		"effective_runtime_collision_apply_budget": _frame_stable_collision_budget(runtime_collision_apply_budget),
 		"runtime_render_transition_frames": runtime_render_transition_frames,
 		"runtime_shader_fade_parameter_enabled": runtime_shader_fade_parameter_enabled,
 		"runtime_global_coarse_lod_coverage": runtime_global_coarse_lod_coverage,
 		"runtime_streaming_burst_render_apply_budget": runtime_streaming_burst_render_apply_budget,
 		"runtime_streaming_burst_collision_apply_budget": runtime_streaming_burst_collision_apply_budget,
-		"effective_runtime_streaming_burst_collision_apply_budget": _frame_stable_collision_budget(runtime_streaming_burst_collision_apply_budget),
 		"runtime_streaming_burst_frames": runtime_streaming_burst_frames,
 		"runtime_edit_burst_render_apply_budget": runtime_edit_burst_render_apply_budget,
 		"runtime_edit_burst_collision_apply_budget": runtime_edit_burst_collision_apply_budget,
-		"effective_runtime_edit_burst_collision_apply_budget": _frame_stable_collision_budget(runtime_edit_burst_collision_apply_budget),
 		"runtime_edit_burst_frames": runtime_edit_burst_frames,
 		"streaming_burst_frames_remaining": _streaming_burst_frames_remaining,
 		"runtime_collision_activation_distance": runtime_collision_activation_distance,
@@ -577,7 +573,7 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_collision_entry_capacity = runtime_collision_entry_capacity
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
 	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
-	terrain_world.runtime_collision_apply_budget = _frame_stable_collision_budget(runtime_collision_apply_budget)
+	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
 	terrain_world.runtime_render_transition_frames = runtime_render_transition_frames
 	terrain_world.runtime_shader_fade_parameter_enabled = runtime_shader_fade_parameter_enabled
 	terrain_world.runtime_global_coarse_lod_coverage = runtime_global_coarse_lod_coverage
@@ -589,13 +585,12 @@ func _begin_streaming_burst() -> void:
 	if runtime_streaming_burst_frames <= 0:
 		return
 	var render_budget := runtime_streaming_burst_render_apply_budget
-	var collision_budget := _frame_stable_collision_budget(runtime_streaming_burst_collision_apply_budget)
-	var steady_collision_budget := _frame_stable_collision_budget(runtime_collision_apply_budget)
-	if render_budget <= runtime_render_apply_budget and collision_budget <= steady_collision_budget:
+	var collision_budget := runtime_streaming_burst_collision_apply_budget
+	if render_budget <= runtime_render_apply_budget and collision_budget <= runtime_collision_apply_budget:
 		return
 	if not _apply_live_apply_budgets(
 		maxi(runtime_render_apply_budget, render_budget),
-		maxi(steady_collision_budget, collision_budget)
+		maxi(runtime_collision_apply_budget, collision_budget)
 	):
 		return
 	_streaming_burst_frames_remaining = runtime_streaming_burst_frames
@@ -604,16 +599,15 @@ func _begin_streaming_burst() -> void:
 func _begin_edit_burst() -> void:
 	var frames := runtime_edit_burst_frames
 	var render_budget := runtime_edit_burst_render_apply_budget
-	var collision_budget := _frame_stable_collision_budget(runtime_edit_burst_collision_apply_budget)
-	var steady_collision_budget := _frame_stable_collision_budget(runtime_collision_apply_budget)
+	var collision_budget := runtime_edit_burst_collision_apply_budget
 	if frames <= 0:
 		_begin_streaming_burst()
 		return
-	if render_budget <= runtime_render_apply_budget and collision_budget <= steady_collision_budget:
+	if render_budget <= runtime_render_apply_budget and collision_budget <= runtime_collision_apply_budget:
 		return
 	if not _apply_live_apply_budgets(
 		maxi(runtime_render_apply_budget, render_budget),
-		maxi(steady_collision_budget, collision_budget)
+		maxi(runtime_collision_apply_budget, collision_budget)
 	):
 		return
 	_streaming_burst_frames_remaining = maxi(_streaming_burst_frames_remaining, frames)
@@ -626,15 +620,8 @@ func _apply_live_apply_budgets(render_budget: int, collision_budget: int) -> boo
 	if backend.has_method("set_render_apply_budget"):
 		backend.call("set_render_apply_budget", render_budget)
 	if backend.has_method("set_collision_apply_budget"):
-		backend.call("set_collision_apply_budget", _frame_stable_collision_budget(collision_budget))
+		backend.call("set_collision_apply_budget", collision_budget)
 	return true
-
-
-func _frame_stable_collision_budget(collision_budget: int) -> int:
-	return mini(
-		maxi(collision_budget, 0),
-		FRAME_STABLE_COLLISION_APPLY_BUDGET
-	)
 
 
 func _get_backend_terrain() -> Node:

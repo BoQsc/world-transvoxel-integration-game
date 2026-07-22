@@ -393,11 +393,8 @@ requires an active edited-exact-region contract summary: committed edits must be
 covered by retained edit viewers, with no retention fallback, no queued
 render/collision work, and no pending chunk replacement or retirement before the
 gate may pass. The gameworld keeps a low steady render / collision apply budget
-of 8 render applications and 2 collision applications per frame. It uses a short
-viewer-movement render burst budget of 128 for 30 frames to avoid exposing
-partial LOD replacement sets while the player is moving, but collision
-application remains capped to 2 per frame to avoid physics-shape replacement
-spikes.
+of 8 and uses a short viewer-movement burst budget of 128 for 30 frames to avoid
+exposing partial LOD replacement sets while the player is moving.
 
 For the two-site edited-retention gate, run:
 

@@ -751,15 +751,15 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_collision_entry_capacity": 4096,
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
-			"runtime_collision_apply_budget": 2,
+			"runtime_collision_apply_budget": 8,
 			"runtime_render_transition_frames": 0,
 			"runtime_shader_fade_parameter_enabled": false,
 			"runtime_global_coarse_lod_coverage": true,
 			"runtime_streaming_burst_render_apply_budget": 128,
-			"runtime_streaming_burst_collision_apply_budget": 2,
+			"runtime_streaming_burst_collision_apply_budget": 128,
 			"runtime_streaming_burst_frames": 30,
 			"runtime_edit_burst_render_apply_budget": 128,
-			"runtime_edit_burst_collision_apply_budget": 2,
+			"runtime_edit_burst_collision_apply_budget": 128,
 			"runtime_edit_burst_frames": 240,
 			"runtime_collision_activation_distance": 192.0,
 			"runtime_collision_deactivation_distance": 256.0,
@@ -788,15 +788,15 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_collision_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
 		"runtime_lod_refinement_radius_chunks": 3,
 		"runtime_render_apply_budget": 8,
-		"runtime_collision_apply_budget": 2,
+		"runtime_collision_apply_budget": 8,
 		"runtime_render_transition_frames": 0,
 		"runtime_shader_fade_parameter_enabled": false,
 		"runtime_global_coarse_lod_coverage": true,
 		"runtime_streaming_burst_render_apply_budget": 128,
-		"runtime_streaming_burst_collision_apply_budget": 2,
+		"runtime_streaming_burst_collision_apply_budget": 128,
 		"runtime_streaming_burst_frames": 30,
 		"runtime_edit_burst_render_apply_budget": 128,
-		"runtime_edit_burst_collision_apply_budget": 2,
+		"runtime_edit_burst_collision_apply_budget": 128,
 		"runtime_edit_burst_frames": 240,
 		"runtime_collision_activation_distance": 192.0,
 		"runtime_collision_deactivation_distance": 256.0,
@@ -1142,13 +1142,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 		var error := str(terrain_world.call("get_last_error")) if terrain_world.has_method("get_last_error") else "unknown"
 		_fail("material strata authoritative sample query rejected: %s" % error)
 		return false
-	var sample_timeout_frames := 240
-	if game_world != null:
-		sample_timeout_frames = maxi(
-			sample_timeout_frames,
-			game_world.startup_world_state_timeout_frames
-		)
-	for _frame in range(sample_timeout_frames):
+	for _frame in range(240):
 		if authoritative_sample_failures.has(request_id):
 			var failure_error := str(authoritative_sample_failures[request_id])
 			authoritative_sample_failures.erase(request_id)
@@ -1159,10 +1153,7 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 			authoritative_sample_batches.erase(request_id)
 			return _verify_material_strata_samples(probes, samples)
 		await get_tree().process_frame
-	_fail("material strata authoritative sample query timed out request=%d frames=%d" % [
-		request_id,
-		sample_timeout_frames,
-	])
+	_fail("material strata authoritative sample query timed out request=%d" % request_id)
 	return false
 
 
@@ -3936,16 +3927,13 @@ func _capture_human_visual() -> void:
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),
 		"runtime_render_apply_budget": int(summary.get("runtime_render_apply_budget", 0)),
 		"runtime_collision_apply_budget": int(summary.get("runtime_collision_apply_budget", 0)),
-		"effective_runtime_collision_apply_budget": int(summary.get("effective_runtime_collision_apply_budget", 0)),
 		"runtime_render_transition_frames": int(summary.get("runtime_render_transition_frames", 0)),
 		"runtime_shader_fade_parameter_enabled": bool(summary.get("runtime_shader_fade_parameter_enabled", false)),
 		"runtime_streaming_burst_render_apply_budget": int(summary.get("runtime_streaming_burst_render_apply_budget", 0)),
 		"runtime_streaming_burst_collision_apply_budget": int(summary.get("runtime_streaming_burst_collision_apply_budget", 0)),
-		"effective_runtime_streaming_burst_collision_apply_budget": int(summary.get("effective_runtime_streaming_burst_collision_apply_budget", 0)),
 		"runtime_streaming_burst_frames": int(summary.get("runtime_streaming_burst_frames", 0)),
 		"runtime_edit_burst_render_apply_budget": int(summary.get("runtime_edit_burst_render_apply_budget", 0)),
 		"runtime_edit_burst_collision_apply_budget": int(summary.get("runtime_edit_burst_collision_apply_budget", 0)),
-		"effective_runtime_edit_burst_collision_apply_budget": int(summary.get("effective_runtime_edit_burst_collision_apply_budget", 0)),
 		"runtime_edit_burst_frames": int(summary.get("runtime_edit_burst_frames", 0)),
 		"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
 		"runtime_collision_activation_distance": float(summary.get("runtime_collision_activation_distance", 0.0)),
