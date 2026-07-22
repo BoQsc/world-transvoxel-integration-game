@@ -1726,7 +1726,7 @@ func handle_human_command(command: StringName) -> bool:
 			_set_local_terrain_lights_enabled(not local_terrain_lights_enabled)
 			return true
 		&"mark_artifact":
-			call_deferred("_run_human_artifact_mark_from_input")
+			_capture_human_artifact_mark("human")
 			return true
 		&"mark_path_point":
 			call_deferred("_run_human_artifact_path_point_from_input")
@@ -1891,8 +1891,6 @@ func _run_human_artifact_marker_sequence() -> void:
 			get_tree().quit(1)
 			return
 		await _apply_human_artifact_marker_pose(marker)
-		if game_world != null and game_world.has_method("update_player_viewer"):
-			game_world.call("update_player_viewer", true)
 		await get_tree().physics_frame
 		_update_telemetry()
 		var immediate_ok := await _capture_human_artifact_mark(_human_artifact_sequence_capture_source(index, "immediate"))
@@ -2042,7 +2040,7 @@ func _apply_human_artifact_marker_pose(marker: Dictionary) -> void:
 		camera.current = true
 		camera.make_current()
 	if game_world != null and game_world.has_method("update_player_viewer"):
-		game_world.call("update_player_viewer", false)
+		game_world.call("update_player_viewer", true)
 	await get_tree().process_frame
 
 
@@ -2287,9 +2285,11 @@ func _human_artifact_sky_pixel_examples(sky_summary: Dictionary) -> Array:
 	var group_keys := [
 		"isolated_crosshair_examples",
 		"isolated_lower_center_examples",
+		"isolated_terrain_band_examples",
 		"isolated_examples",
 		"crosshair_examples",
 		"lower_center_examples",
+		"terrain_band_examples",
 	]
 	if int(sky_summary.get("whole_sky_pixels", 0)) <= 256:
 		group_keys.append("examples")
