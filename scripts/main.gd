@@ -2371,11 +2371,15 @@ func _human_artifact_probe_specs(target_summary: Dictionary) -> Array:
 	return specs
 
 
-func _human_artifact_sky_pixel_rays(sky_summary: Dictionary) -> Array:
+func _human_artifact_sky_pixel_rays(
+	sky_summary: Dictionary,
+	pixel_summaries: Array = []
+) -> Array:
 	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D if player != null else null
 	if camera == null or get_world_3d() == null:
 		return []
-	var pixel_summaries := _human_artifact_sky_pixel_examples(sky_summary)
+	if pixel_summaries.is_empty():
+		pixel_summaries = _human_artifact_sky_pixel_examples(sky_summary)
 	var reports := []
 	var direct_space_state := get_world_3d().direct_space_state
 	for index in range(pixel_summaries.size()):
@@ -3286,6 +3290,7 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 	var lower_center_examples := []
 	var terrain_band_examples := []
 	var isolated_examples := []
+	var isolated_center_examples := []
 	var isolated_lower_center_examples := []
 	var isolated_terrain_band_examples := []
 	var isolated_crosshair_examples := []
@@ -3306,6 +3311,8 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 				center_sky_pixels += sample_weight
 				if isolated:
 					isolated_center_sky_pixels += sample_weight
+					if isolated_center_examples.size() < 8:
+						isolated_center_examples.append(_pixel_summary(x, y, color))
 			if x >= center_left and x < center_right and y >= lower_center_top and y < lower_center_bottom:
 				lower_center_sky_pixels += sample_weight
 				if lower_center_examples.size() < 8:
@@ -3349,6 +3356,7 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 		"lower_center_examples": lower_center_examples,
 		"terrain_band_examples": terrain_band_examples,
 		"isolated_examples": isolated_examples,
+		"isolated_center_examples": isolated_center_examples,
 		"isolated_lower_center_examples": isolated_lower_center_examples,
 		"isolated_terrain_band_examples": isolated_terrain_band_examples,
 		"isolated_crosshair_examples": isolated_crosshair_examples,
@@ -7124,7 +7132,25 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 			var sample_gap_sensitive := gap_sensitive and frame >= gap_sensitive_start_frame
 			var image := get_viewport().get_texture().get_image()
 			var sky := _screen_sky_pixel_summary(image, 4 if post_edit else 1)
-			var visual_gap := sample_gap_sensitive and _streaming_fly_sky_gap_detected(sky, post_edit)
+			var visual_gap_candidate := sample_gap_sensitive and _streaming_fly_sky_gap_detected(sky, post_edit)
+			var visual_gap_pixel_examples := []
+			var sky_pixel_rays := []
+			var render_ray_hits := []
+			var visual_gap := visual_gap_candidate
+			if visual_gap_candidate:
+				visual_gap_pixel_examples = _streaming_fly_visual_gap_pixel_examples(sky, post_edit)
+				sky_pixel_rays = _human_artifact_sky_pixel_rays(
+					sky,
+					visual_gap_pixel_examples
+				)
+				render_ray_hits = _human_artifact_render_ray_hits(
+					backend_for_probe,
+					sky_pixel_rays
+				)
+				visual_gap = _streaming_fly_visual_gap_confirmed(
+					sky_pixel_rays,
+					render_ray_hits
+				)
 			var coverage_gap := sample_gap_sensitive and _streaming_fly_coverage_gap_detected(summary)
 			var geometry_probe := {}
 			var geometry_gap := false
@@ -7177,6 +7203,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"target": _vector3_summary(target),
 				"gap_detected": gap,
 				"visual_gap_detected": visual_gap,
+				"visual_gap_candidate": visual_gap_candidate,
 				"coverage_gap_detected": coverage_gap,
 				"geometry_gap_detected": geometry_gap,
 				"gap_sensitive": sample_gap_sensitive,
@@ -7203,21 +7230,22 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
 				"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
 			}
-			if gap:
-				var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
-				var backend: Node = null
-				if terrain_world != null and terrain_world.has_method("get_backend_terrain"):
-					backend = terrain_world.call("get_backend_terrain")
-				var sky_pixel_rays := _human_artifact_sky_pixel_rays(sky)
-				var render_ray_hits := _human_artifact_render_ray_hits(backend, sky_pixel_rays)
+			if visual_gap_candidate or gap:
+				if sky_pixel_rays.is_empty():
+					sky_pixel_rays = _human_artifact_sky_pixel_rays(sky)
+					render_ray_hits = _human_artifact_render_ray_hits(
+						backend_for_probe,
+						sky_pixel_rays
+					)
+				sample["visual_gap_pixel_examples"] = visual_gap_pixel_examples
 				sample["sky_pixel_rays"] = sky_pixel_rays
 				sample["render_ray_hits"] = render_ray_hits
 				sample["chunk_neighborhood"] = _human_artifact_chunk_neighborhood(
-					terrain_world,
+					terrain_world_for_probe,
 					render_ray_hits
 				)
 				sample["render_seam_diagnostics"] = _human_artifact_render_seam_diagnostics(
-					backend,
+					backend_for_probe,
 					render_ray_hits
 				)
 			samples.append(sample)
@@ -7443,6 +7471,69 @@ func _streaming_fly_sky_gap_detected(sky: Dictionary, post_edit: bool = false) -
 		int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
 		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4 or \
 		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8
+
+
+func _streaming_fly_visual_gap_pixel_examples(
+	sky: Dictionary,
+	post_edit: bool = false
+) -> Array:
+	var group_keys := []
+	if post_edit:
+		if int(sky.get("lower_center_sky_pixels", 0)) > 256:
+			group_keys.append("lower_center_examples")
+		if int(sky.get("isolated_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_center_examples")
+		if int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_lower_center_examples")
+	else:
+		if int(sky.get("crosshair_sky_pixels", 0)) > 0:
+			group_keys.append("crosshair_examples")
+		if int(sky.get("lower_center_sky_pixels", 0)) > 16:
+			group_keys.append("lower_center_examples")
+		if int(sky.get("isolated_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_center_examples")
+		if int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_lower_center_examples")
+		if int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8:
+			group_keys.append("isolated_terrain_band_examples")
+	var pixels := []
+	var seen := {}
+	for group_key in group_keys:
+		var group: Array = sky.get(group_key, [])
+		for value in group:
+			if not value is Dictionary:
+				continue
+			var pixel: Dictionary = value
+			var key := "%d,%d" % [int(pixel.get("x", 0)), int(pixel.get("y", 0))]
+			if seen.has(key):
+				continue
+			seen[key] = true
+			pixels.append(pixel)
+			if pixels.size() >= 12:
+				return pixels
+	return pixels
+
+
+func _streaming_fly_visual_gap_confirmed(
+	sky_pixel_rays: Array,
+	render_ray_hits: Array
+) -> bool:
+	if sky_pixel_rays.is_empty():
+		return true
+	var render_by_index := {}
+	for report in render_ray_hits:
+		if report is Dictionary:
+			render_by_index[int(report.get("index", -1))] = report
+	for ray in sky_pixel_rays:
+		if not ray is Dictionary:
+			continue
+		var ray_index := int(ray.get("index", -1))
+		var render: Dictionary = render_by_index.get(ray_index, {})
+		if bool(ray.get("physics_hit", false)) or \
+				bool(render.get("render_any_hit", false)):
+			continue
+		return true
+	return false
 
 
 func _streaming_fly_coverage_gap_detected(summary: Dictionary) -> bool:
