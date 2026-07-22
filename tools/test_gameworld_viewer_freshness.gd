@@ -24,6 +24,7 @@ class FakeReferenceScene:
 	var terrain_world: Node
 	var viewer_updates: Array[Dictionary] = []
 	var collision_viewer_updates: Array[Dictionary] = []
+	var update_order: Array[String] = []
 
 	func _init(value: Node) -> void:
 		terrain_world = value
@@ -38,6 +39,7 @@ class FakeReferenceScene:
 		radius_chunks: int,
 		maximum_lod: int
 	) -> bool:
+		update_order.append("visual")
 		viewer_updates.append({
 			"viewer_id": viewer_id,
 			"revision": revision,
@@ -53,6 +55,7 @@ class FakeReferenceScene:
 		position: Vector3,
 		radius_chunks: int
 	) -> bool:
+		update_order.append("collision")
 		collision_viewer_updates.append({
 			"viewer_id": viewer_id,
 			"revision": revision,
@@ -96,6 +99,9 @@ func _run_test() -> void:
 	if not game_world.update_player_viewer(true):
 		_fail("initial forced player viewer update failed")
 		return
+	if reference_scene.update_order != ["visual", "collision"]:
+		_fail("initial paired viewer order was not visual-first: %s" % str(reference_scene.update_order))
+		return
 	player.global_position = Vector3(1.0, 0.0, 0.0)
 	if not game_world.update_player_viewer(false):
 		_fail("collision-only player viewer update was rejected")
@@ -114,6 +120,10 @@ func _run_test() -> void:
 			"streaming debt suppressed the current player position: updates=%d" %
 			reference_scene.viewer_updates.size()
 		)
+		return
+	if reference_scene.update_order.slice(reference_scene.update_order.size() - 2) != \
+			["visual", "collision"]:
+		_fail("moved paired viewer order was not visual-first: %s" % str(reference_scene.update_order))
 		return
 	var latest: Dictionary = reference_scene.viewer_updates.back()
 	if latest.get("position", Vector3.ZERO) != player.global_position:

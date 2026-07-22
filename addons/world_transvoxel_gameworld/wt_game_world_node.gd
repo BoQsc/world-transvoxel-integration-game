@@ -167,16 +167,18 @@ func update_player_viewer(force: bool = false) -> bool:
 		return false
 	var position: Vector3 = _player.global_position
 	var previous_position := _last_player_viewer_position
-	if not _update_player_collision_invoker(position, previous_position, force):
-		return false
-	if not force and not _should_update_player_viewer(position):
-		return true
+	var visual_update_required := force or _should_update_player_viewer(position)
+	if not visual_update_required:
+		return _update_player_collision_invoker(position, previous_position, force)
 	if not force and player_viewer_coalesce_while_streaming:
 		var coalesce_reason := _player_viewer_streaming_debt_reason()
 		if not coalesce_reason.is_empty():
 			_coalesced_player_viewer_updates += 1
 			_last_player_viewer_coalesce_reason = coalesce_reason
-			return true
+			return _update_player_collision_invoker(position, previous_position, force)
+	# When both roles move, enqueue the visual viewer first. The native worker
+	# consumes one viewer event before a foreground edit, so collision-first order
+	# can commit an edit against collision-only demand before visual demand arrives.
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
@@ -184,6 +186,8 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
+	if not _update_player_collision_invoker(position, previous_position, force):
+		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
 	if not _update_focus_player_viewer(force):
