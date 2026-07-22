@@ -109,7 +109,17 @@ func _process(_delta: float) -> void:
 		_repair_missing_materials_if_needed()
 
 func get_material_summary() -> Dictionary:
-	return _summary.duplicate()
+	var summary := _summary.duplicate()
+	if bool(summary.get("native_render_material_override", false)):
+		var backend := _backend_terrain()
+		if backend != null and backend.has_method("get_render_resource_count"):
+			# Native overrides cover every owned render resource, including newly
+			# streamed chunks and temporary replacement records. Read the O(1)
+			# native resource count only when telemetry is requested.
+			summary["materialized_instances"] = int(
+				backend.call("get_render_resource_count")
+			)
+	return summary
 
 func get_material_quality_summary() -> Dictionary:
 	var summary := get_material_summary()
@@ -131,6 +141,14 @@ func apply_materials_now() -> Dictionary:
 		backend,
 		_water_material_instance()
 	)
+	# The native render sink retains both overrides and applies them whenever a
+	# chunk is created or replaced. Once that persistent path is installed,
+	# polling streaming counters and rescanning the terrain every frame is both
+	# redundant and harmful to input/frame pacing. Explicit calls still update
+	# runtime visual-mode changes immediately.
+	if auto_apply and native_override_set and water_override_set:
+		_auto_apply_signature = "persistent_native_overrides"
+		set_process(false)
 	var result := {"checked": 0, "updated": 0}
 	if not native_override_set:
 		result = _apply_to_meshes(backend, material)
