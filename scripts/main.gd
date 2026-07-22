@@ -61,6 +61,7 @@ var human_artifact_replay_marker_path := ""
 var human_artifact_inspect_marker_path := ""
 var human_artifact_marker_sequence_file_path := ""
 var human_artifact_marker_sequence_wait_frames := 180
+var human_artifact_storage_root_override := ""
 var initial_human_material_mode := ""
 var human_windowed := false
 var runtime_render_apply_budget_override := -1
@@ -133,6 +134,7 @@ func _ready() -> void:
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
+	_configure_human_artifact_marker_replay_context()
 	if not initial_human_material_mode.is_empty():
 		_set_human_material_mode_by_name(initial_human_material_mode)
 	elif not autonomous and human_visual_capture_path.is_empty():
@@ -924,7 +926,51 @@ func _storage_profile(profile_id: StringName) -> Resource:
 	return storage
 
 
+func _configure_human_artifact_marker_replay_context() -> void:
+	var marker_path := _active_human_artifact_marker_path()
+	if marker_path.is_empty():
+		return
+	var marker := _load_human_artifact_marker_json(marker_path)
+	if marker.is_empty():
+		print("WT_HUMAN_ARTIFACT_MARKER_CONTEXT_LOAD_FAIL path=%s" % marker_path)
+		return
+	var marker_profile := str(marker.get("profile", ""))
+	if not marker_profile.is_empty():
+		selected_profile = StringName(marker_profile)
+		playtest_profile_id = selected_profile
+	var storage_bundle: Dictionary = marker.get("storage_bundle", {})
+	var bundle_root := str(storage_bundle.get("bundle_root", ""))
+	if bundle_root.is_empty():
+		print("WT_HUMAN_ARTIFACT_MARKER_STORAGE_BUNDLE_MISSING path=%s" % marker_path)
+		return
+	var world_journal_path := str(storage_bundle.get(
+		"world_journal_path",
+		bundle_root.path_join("world.wtedit")
+	))
+	if not FileAccess.file_exists(world_journal_path):
+		print("WT_HUMAN_ARTIFACT_MARKER_STORAGE_BUNDLE_JOURNAL_MISSING path=%s journal=%s" % [
+			marker_path,
+			world_journal_path,
+		])
+		return
+	human_artifact_storage_root_override = bundle_root
+	print("WT_HUMAN_ARTIFACT_MARKER_STORAGE_BUNDLE_ACTIVE path=%s root=%s" % [
+		marker_path,
+		human_artifact_storage_root_override,
+	])
+
+
+func _active_human_artifact_marker_path() -> String:
+	if not human_artifact_replay_marker_path.is_empty():
+		return human_artifact_replay_marker_path
+	if not human_artifact_inspect_marker_path.is_empty():
+		return human_artifact_inspect_marker_path
+	return ""
+
+
 func _storage_root(profile_id: StringName) -> String:
+	if not autonomous and not human_artifact_storage_root_override.is_empty():
+		return human_artifact_storage_root_override
 	if profile_id == FLAT_PROFILE:
 		if autonomous:
 			return "res://build/p2-production-game/%s" % str(profile_id)
@@ -2088,6 +2134,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		if _human_artifact_precise_probe_is_mesh_quality_warning(probe):
 			mesh_quality_warning_precise_probes.append(probe)
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+	var storage_bundle := _capture_human_artifact_storage_bundle(marker_id, runtime_summary)
 	var summary := {
 		"marker_id": marker_id,
 		"source": source,
@@ -2095,6 +2142,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"screenshot_path": screenshot_path,
 		"json_path": json_path,
 		"screenshot_error": image_error,
+		"storage_bundle": storage_bundle,
 		"camera": _human_artifact_camera_summary(),
 		"player": _human_artifact_player_summary(),
 		"interaction_target": target_summary,
@@ -2136,6 +2184,8 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"isolated_crosshair_sky_pixels": int(sky_summary.get("isolated_crosshair_sky_pixels", 0)),
 		"isolated_center_sky_pixels": int(sky_summary.get("isolated_center_sky_pixels", 0)),
 		"isolated_sky_pixels": int(sky_summary.get("isolated_sky_pixels", 0)),
+		"storage_bundle_available": bool(storage_bundle.get("available", false)),
+		"storage_bundle_root": str(storage_bundle.get("bundle_root", "")),
 		"sky_pixel_rays": sky_pixel_rays.size(),
 		"render_ray_hits": render_ray_hits.size(),
 		"probe_count": probes.size(),
@@ -2155,6 +2205,76 @@ func _human_artifact_capture_root() -> String:
 	var root := ProjectSettings.globalize_path(HUMAN_ARTIFACT_CAPTURE_ROOT)
 	DirAccess.make_dir_recursive_absolute(root)
 	return root
+
+
+func _capture_human_artifact_storage_bundle(marker_id: String, runtime_summary: Dictionary) -> Dictionary:
+	var source_root := _storage_root(selected_profile)
+	var bundle_root := HUMAN_ARTIFACT_CAPTURE_ROOT.path_join("%s_storage" % marker_id)
+	var source_journal := source_root.path_join("world.wtedit")
+	var bundle_journal := bundle_root.path_join("world.wtedit")
+	var result := {
+		"available": false,
+		"source_root": source_root,
+		"bundle_root": bundle_root,
+		"source_world_journal_path": source_journal,
+		"world_journal_path": bundle_journal,
+		"copy_error": ERR_UNAVAILABLE,
+		"runtime_edit_commit_count": int(runtime_summary.get("edit_commit_count", 0)),
+		"runtime_last_edit_committed_revision": int(runtime_summary.get("last_edit_committed_revision", 0)),
+	}
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(source_root)):
+		result["reason"] = "source_storage_missing"
+		return result
+	var copy_error := _copy_directory_recursive_absolute(
+		ProjectSettings.globalize_path(source_root),
+		ProjectSettings.globalize_path(bundle_root)
+	)
+	result["copy_error"] = copy_error
+	result["available"] = copy_error == OK and FileAccess.file_exists(bundle_journal)
+	if not bool(result["available"]):
+		result["reason"] = "copy_failed_or_journal_missing"
+	return result
+
+
+func _copy_directory_recursive_absolute(source_root: String, target_root: String) -> int:
+	var make_error := DirAccess.make_dir_recursive_absolute(target_root)
+	if make_error != OK:
+		return make_error
+	var directory := DirAccess.open(source_root)
+	if directory == null:
+		return DirAccess.get_open_error()
+	directory.list_dir_begin()
+	while true:
+		var name := directory.get_next()
+		if name.is_empty():
+			break
+		if name == "." or name == "..":
+			continue
+		var source_path := source_root.path_join(name)
+		var target_path := target_root.path_join(name)
+		var error := OK
+		if directory.current_is_dir():
+			error = _copy_directory_recursive_absolute(source_path, target_path)
+		else:
+			error = _copy_file_absolute(source_path, target_path)
+		if error != OK:
+			directory.list_dir_end()
+			return error
+	directory.list_dir_end()
+	return OK
+
+
+func _copy_file_absolute(source_path: String, target_path: String) -> int:
+	var bytes := FileAccess.get_file_as_bytes(source_path)
+	var read_error := FileAccess.get_open_error()
+	if read_error != OK:
+		return read_error
+	var file := FileAccess.open(target_path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_buffer(bytes)
+	file.close()
+	return OK
 
 
 func _human_artifact_marker_id(source: String) -> String:
