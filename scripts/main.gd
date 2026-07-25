@@ -4051,8 +4051,13 @@ func _capture_human_visual() -> void:
 		for _frame in range(30):
 			await get_tree().process_frame
 	last_watertightness_summary = _collect_watertightness_summary()
-	var image := get_viewport().get_texture().get_image()
-	image.save_png(human_visual_capture_path)
+	var capture_written := false
+	var viewport_texture := get_viewport().get_texture() if DisplayServer.get_name() != "headless" else null
+	if viewport_texture != null:
+		var image := viewport_texture.get_image()
+		if image != null and not human_visual_capture_path.is_empty():
+			image.save_png(human_visual_capture_path)
+			capture_written = true
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var presentation: Dictionary = _presentation_summary()
 	var watertightness_acceptance := _watertightness_acceptance_summary(last_watertightness_summary)
@@ -4142,6 +4147,7 @@ func _capture_human_visual() -> void:
 		"streaming_fly": _streaming_fly_summary(),
 		"fly_collision_stress": _fly_collision_stress_summary(),
 		"capture_path": human_visual_capture_path,
+		"capture_written": capture_written,
 	}))
 	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
@@ -7672,10 +7678,8 @@ func _wait_for_lod_movement_visual_ready(
 	for frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
-		if _is_lod_movement_visual_ready_summary(summary):
-			if frame % 15 != 0 and frame != frame_limit - 1:
-				await get_tree().process_frame
-				continue
+		var strict_summary_ready := _is_lod_movement_visual_ready_summary(summary)
+		if strict_summary_ready or frame % 15 == 0 or frame == frame_limit - 1:
 			var probe := WatertightnessProbe.collect(
 				backend,
 				"edit_lod_movement_gate_visual_ready",
@@ -7721,11 +7725,18 @@ func _wait_for_lod_movement_visual_ready(
 				if not bool(exact_region.get("ok", false)):
 					await get_tree().process_frame
 					continue
-				if int(summary.get("pending_chunk_retirements", 0)) != 0 or \
+				if not strict_summary_ready or \
+						int(summary.get("pending_chunk_retirements", 0)) != 0 or \
 						int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 					strict_settle_notes.append({
 						"context": context,
+						"local_probe_ready": true,
 						"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
+						"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
+						"scheduler_sampling_records": int(summary.get("scheduler_sampling_records", 0)),
+						"scheduler_meshing_records": int(summary.get("scheduler_meshing_records", 0)),
+						"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+						"scheduler_queued_completions": int(summary.get("scheduler_queued_completions", 0)),
 						"active_chunk_records": int(summary.get("active_chunk_records", 0)),
 						"visual_ready_chunk_records": int(summary.get("visual_ready_chunk_records", 0)),
 						"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
@@ -8072,7 +8083,7 @@ func _is_open_gap_free_probe(probe: Dictionary) -> bool:
 
 
 func _save_lod_movement_gate_captures() -> bool:
-	if human_visual_capture_path.is_empty():
+	if human_visual_capture_path.is_empty() or DisplayServer.get_name() == "headless":
 		return true
 	var steps := _edit_lod_movement_path()
 	for step in steps:
@@ -8097,7 +8108,7 @@ func _capture_variant_path(label: String) -> String:
 
 
 func _save_diagnostic_failure_capture(label: String) -> void:
-	if human_visual_capture_path.is_empty():
+	if human_visual_capture_path.is_empty() or DisplayServer.get_name() == "headless":
 		return
 	var safe_label := label.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(":", "_")
 	var output_path := _capture_variant_path("failure_" + safe_label)
