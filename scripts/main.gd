@@ -67,6 +67,7 @@ var initial_human_material_mode := ""
 var human_windowed := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
+var runtime_collision_apply_deadline_us_override := -1
 var lod_movement_direct_only := false
 var lod_movement_operation_limit := -1
 var lod_movement_gap_only_probe := false
@@ -127,6 +128,7 @@ func _ready() -> void:
 	human_windowed = args.has("--human-windowed")
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
+	runtime_collision_apply_deadline_us_override = int(_arg_value(args, "--runtime-collision-apply-deadline-us", "-1"))
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
 	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
 	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
@@ -223,6 +225,8 @@ func _human_play_is_active() -> bool:
 	for key in [
 		"queued_render",
 		"queued_collision",
+		"deferred_collision",
+		"total_collision_backlog",
 		"pending_chunk_retirements",
 		"render_fading_resources",
 		"streaming_burst_frames_remaining",
@@ -238,6 +242,8 @@ func _start_profile() -> void:
 		settings["runtime_render_apply_budget"] = runtime_render_apply_budget_override
 	if runtime_collision_apply_budget_override >= 0:
 		settings["runtime_collision_apply_budget"] = runtime_collision_apply_budget_override
+	if runtime_collision_apply_deadline_us_override >= 0:
+		settings["runtime_collision_apply_deadline_us"] = runtime_collision_apply_deadline_us_override
 	if maximum_lod_override >= 0:
 		settings["maximum_lod"] = maximum_lod_override
 		if maximum_lod_override == 0:
@@ -279,6 +285,7 @@ func _start_profile() -> void:
 	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
 	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
+	game_world.runtime_collision_apply_deadline_us = int(settings.get("runtime_collision_apply_deadline_us", 0))
 	game_world.runtime_render_transition_frames = int(settings.get("runtime_render_transition_frames", 0))
 	game_world.runtime_shader_fade_parameter_enabled = bool(settings.get("runtime_shader_fade_parameter_enabled", false))
 	game_world.runtime_global_coarse_lod_coverage = bool(settings.get("runtime_global_coarse_lod_coverage", false))
@@ -411,7 +418,7 @@ func _run_autonomous_proof() -> void:
 	var presentation: Dictionary = _presentation_summary()
 	if not _verify_presentation(presentation):
 		return
-	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d material=1 materialized=%d production_texture_active=%d primary_material_texture_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
+	print("%s profile=%s addon=%s api_version=%d launch=project_godot player=1 camera=1 crosshair=1 profile_selector=1 telemetry=1 input_edit=1 traversal=1 edit_committed=1 repeated_edits=1 interaction_raycast=1 storage_journal=1 streaming_settled=1 spawn_floor_hit=%d spawn_above_floor=%d maximum_lod=%d render_resources=%d collision_resources=%d active_records=%d edit_commits=%d edit_failures=%d collision_apply_deadline_ns=%d collision_apply_time_ns_maximum=%d collision_apply_deadline_exhaustions=%d total_collision_backlog=%d collision_required_not_ready=%d material=1 materialized=%d production_texture_active=%d primary_material_texture_active=%d native_render_material_override=%d presentation=terrain_1_0 validation_internals=0" % [
 		MARKER,
 		str(selected_profile),
 		str(summary.get("addon_id", "")),
@@ -424,6 +431,11 @@ func _run_autonomous_proof() -> void:
 		int(summary.get("active_chunk_records", 0)),
 		int(summary.get("edit_commit_count", 0)),
 		int(summary.get("edit_failure_count", 0)),
+		int(summary.get("collision_apply_deadline_ns", 0)),
+		int(summary.get("collision_apply_time_ns_maximum", 0)),
+		int(summary.get("collision_apply_deadline_exhaustions", 0)),
+		int(summary.get("total_collision_backlog", 0)),
+		int(summary.get("collision_required_not_ready_chunk_records", 0)),
 		int(presentation.get("materialized_instances", 0)),
 		1 if bool(presentation.get("production_texture_active", false)) else 0,
 		1 if bool(presentation.get("primary_material_texture_active", false)) else 0,
@@ -755,6 +767,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
 			"runtime_collision_apply_budget": 8,
+			"runtime_collision_apply_deadline_us": 4000,
 			"runtime_render_transition_frames": 0,
 			"runtime_shader_fade_parameter_enabled": false,
 			"runtime_global_coarse_lod_coverage": true,
@@ -792,6 +805,7 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": 3,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
+		"runtime_collision_apply_deadline_us": 4000,
 		"runtime_render_transition_frames": 0,
 		"runtime_shader_fade_parameter_enabled": false,
 		"runtime_global_coarse_lod_coverage": true,
@@ -7754,8 +7768,14 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 		return false
 	if int(summary.get("collision_resources", 0)) <= 0:
 		return false
-	if summary.has("fully_ready_chunk_records") and \
-			int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
+	if summary.has("non_retiring_visual_ready_chunk_records") and \
+			int(summary.get("non_retiring_visual_ready_chunk_records", 0)) < int(summary.get(
+				"non_retiring_chunk_records",
+				summary.get("active_chunk_records", 0)
+			)):
+		return false
+	elif summary.has("visual_ready_chunk_records") and \
+			int(summary.get("visual_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
 		return false
 	return true
 

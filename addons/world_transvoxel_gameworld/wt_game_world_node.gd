@@ -33,6 +33,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
+@export_range(0, 33333, 1) var runtime_collision_apply_deadline_us: int = 0
 @export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
 @export var runtime_shader_fade_parameter_enabled: bool = false
 @export var runtime_global_coarse_lod_coverage: bool = false
@@ -413,6 +414,7 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
+		"runtime_collision_apply_deadline_us": runtime_collision_apply_deadline_us,
 		"runtime_render_transition_frames": runtime_render_transition_frames,
 		"runtime_shader_fade_parameter_enabled": runtime_shader_fade_parameter_enabled,
 		"runtime_global_coarse_lod_coverage": runtime_global_coarse_lod_coverage,
@@ -432,12 +434,27 @@ func get_game_world_summary() -> Dictionary:
 		"non_retiring_chunk_records": int(metrics.get("non_retiring_chunk_records", 0)),
 		"non_retiring_visual_ready_chunk_records": int(metrics.get("non_retiring_visual_ready_chunk_records", 0)),
 		"non_retiring_fully_ready_chunk_records": int(metrics.get("non_retiring_fully_ready_chunk_records", 0)),
+		"collision_required_chunk_records": int(metrics.get("collision_required_chunk_records", 0)),
+		"collision_ready_chunk_records": int(metrics.get("collision_ready_chunk_records", 0)),
+		"collision_required_not_ready_chunk_records": int(metrics.get("collision_required_not_ready_chunk_records", 0)),
+		"first_collision_not_ready_key": Vector4i(
+			int(metrics.get("first_collision_not_ready_key_x", 0)),
+			int(metrics.get("first_collision_not_ready_key_y", 0)),
+			int(metrics.get("first_collision_not_ready_key_z", 0)),
+			int(metrics.get("first_collision_not_ready_key_lod", 0))
+		),
+		"first_collision_not_ready_generation": int(metrics.get("first_collision_not_ready_generation", 0)),
+		"first_collision_not_ready_visual_required": bool(metrics.get("first_collision_not_ready_visual_required", false)),
+		"first_collision_not_ready_visual_ready": bool(metrics.get("first_collision_not_ready_visual_ready", false)),
+		"first_collision_not_ready_staged": bool(metrics.get("first_collision_not_ready_staged", false)),
 		"pending_retirement_records": int(metrics.get("pending_retirement_records", 0)),
 		"pending_retirement_records_missing": int(metrics.get("pending_retirement_records_missing", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
 		"collision_resources": int(metrics.get("collision_resources", 0)),
 		"queued_render": int(metrics.get("queued_render", 0)),
 		"queued_collision": int(metrics.get("queued_collision", 0)),
+		"deferred_collision": int(metrics.get("deferred_collision", 0)),
+		"total_collision_backlog": int(metrics.get("total_collision_backlog", 0)),
 		"application_submitted_render": int(metrics.get("application_submitted_render", 0)),
 		"application_applied_render": int(metrics.get("application_applied_render", 0)),
 		"application_stale_render": int(metrics.get("application_stale_render", 0)),
@@ -447,6 +464,10 @@ func get_game_world_summary() -> Dictionary:
 		"application_unrequired_collision": int(metrics.get("application_unrequired_collision", 0)),
 		"application_sink_failures": int(metrics.get("application_sink_failures", 0)),
 		"application_queue_rejections": int(metrics.get("application_queue_rejections", 0)),
+		"collision_apply_deadline_ns": int(metrics.get("collision_apply_deadline_ns", 0)),
+		"collision_apply_time_ns_last": int(metrics.get("collision_apply_time_ns_last", 0)),
+		"collision_apply_time_ns_maximum": int(metrics.get("collision_apply_time_ns_maximum", 0)),
+		"collision_apply_deadline_exhaustions": int(metrics.get("collision_apply_deadline_exhaustions", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"pending_chunk_replacements": int(metrics.get("pending_chunk_replacements", 0)),
 		"blocked_pending_chunk_replacements": int(metrics.get("blocked_pending_chunk_replacements", 0)),
@@ -503,6 +524,8 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"world_running": bool(metrics.get("world_running", false)),
 		"queued_render": int(metrics.get("queued_render", 0)),
 		"queued_collision": int(metrics.get("queued_collision", 0)),
+		"deferred_collision": int(metrics.get("deferred_collision", 0)),
+		"total_collision_backlog": int(metrics.get("total_collision_backlog", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"pending_chunk_replacements": int(metrics.get("pending_chunk_replacements", 0)),
 		"blocked_pending_chunk_replacements": int(metrics.get("blocked_pending_chunk_replacements", 0)),
@@ -528,6 +551,19 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
 		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
+		"collision_required_chunk_records": int(metrics.get("collision_required_chunk_records", 0)),
+		"collision_ready_chunk_records": int(metrics.get("collision_ready_chunk_records", 0)),
+		"collision_required_not_ready_chunk_records": int(metrics.get("collision_required_not_ready_chunk_records", 0)),
+		"first_collision_not_ready_key": Vector4i(
+			int(metrics.get("first_collision_not_ready_key_x", 0)),
+			int(metrics.get("first_collision_not_ready_key_y", 0)),
+			int(metrics.get("first_collision_not_ready_key_z", 0)),
+			int(metrics.get("first_collision_not_ready_key_lod", 0))
+		),
+		"first_collision_not_ready_generation": int(metrics.get("first_collision_not_ready_generation", 0)),
+		"first_collision_not_ready_visual_required": bool(metrics.get("first_collision_not_ready_visual_required", false)),
+		"first_collision_not_ready_visual_ready": bool(metrics.get("first_collision_not_ready_visual_ready", false)),
+		"first_collision_not_ready_staged": bool(metrics.get("first_collision_not_ready_staged", false)),
 		"application_submitted_render": int(metrics.get("application_submitted_render", 0)),
 		"application_applied_render": int(metrics.get("application_applied_render", 0)),
 		"application_stale_render": int(metrics.get("application_stale_render", 0)),
@@ -545,6 +581,10 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"application_unrequired_collision": int(metrics.get("application_unrequired_collision", 0)),
 		"application_sink_failures": int(metrics.get("application_sink_failures", 0)),
 		"application_queue_rejections": int(metrics.get("application_queue_rejections", 0)),
+		"collision_apply_deadline_ns": int(metrics.get("collision_apply_deadline_ns", 0)),
+		"collision_apply_time_ns_last": int(metrics.get("collision_apply_time_ns_last", 0)),
+		"collision_apply_time_ns_maximum": int(metrics.get("collision_apply_time_ns_maximum", 0)),
+		"collision_apply_deadline_exhaustions": int(metrics.get("collision_apply_deadline_exhaustions", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
 		"collision_resources": int(metrics.get("collision_resources", 0)),
 		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
@@ -627,6 +667,7 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
 	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
+	terrain_world.runtime_collision_apply_deadline_us = runtime_collision_apply_deadline_us
 	terrain_world.runtime_render_transition_frames = runtime_render_transition_frames
 	terrain_world.runtime_shader_fade_parameter_enabled = runtime_shader_fade_parameter_enabled
 	terrain_world.runtime_global_coarse_lod_coverage = runtime_global_coarse_lod_coverage

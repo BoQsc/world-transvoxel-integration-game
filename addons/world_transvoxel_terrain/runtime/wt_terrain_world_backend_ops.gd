@@ -220,6 +220,7 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
 		["runtime_render_apply_budget", "render_apply_budget"],
 		["runtime_collision_apply_budget", "collision_apply_budget"],
+		["runtime_collision_apply_deadline_us", "collision_apply_deadline_us"],
 		["runtime_render_transition_frames", "render_transition_frames"],
 	]:
 		var value := int(world.get(pair[0]))
