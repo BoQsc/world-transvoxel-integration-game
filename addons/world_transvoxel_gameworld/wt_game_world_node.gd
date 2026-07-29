@@ -31,6 +31,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
+@export_range(0, 8, 1) var runtime_procedural_generation_worker_count: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 33333, 1) var runtime_collision_apply_deadline_us: int = 0
@@ -66,6 +67,9 @@ var _last_player_viewer_position := Vector3(INF, INF, INF)
 var _last_predictive_viewer_position := Vector3(INF, INF, INF)
 var _last_focus_viewer_position := Vector3(INF, INF, INF)
 var _last_collision_viewer_position := Vector3(INF, INF, INF)
+var _last_collision_observation_position := Vector3(INF, INF, INF)
+var _pending_collision_motion := Vector3.ZERO
+var _pending_collision_motion_valid := false
 var _accepted_player_viewer_updates := 0
 var _accepted_predictive_viewer_updates := 0
 var _accepted_focus_viewer_updates := 0
@@ -170,13 +174,13 @@ func update_player_viewer(force: bool = false) -> bool:
 	var previous_position := _last_player_viewer_position
 	var visual_update_required := force or _should_update_player_viewer(position)
 	if not visual_update_required:
-		return _update_player_collision_invoker(position, previous_position, force)
+		return _update_player_collision_invoker(position, force)
 	if not force and player_viewer_coalesce_while_streaming:
 		var coalesce_reason := _player_viewer_streaming_debt_reason()
 		if not coalesce_reason.is_empty():
 			_coalesced_player_viewer_updates += 1
 			_last_player_viewer_coalesce_reason = coalesce_reason
-			return _update_player_collision_invoker(position, previous_position, force)
+			return _update_player_collision_invoker(position, force)
 	# When both roles move, enqueue the visual viewer first. The native worker
 	# consumes one viewer event before a foreground edit, so collision-first order
 	# can commit an edit against collision-only demand before visual demand arrives.
@@ -187,7 +191,7 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
-	if not _update_player_collision_invoker(position, previous_position, force):
+	if not _update_player_collision_invoker(position, force):
 		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
@@ -412,6 +416,7 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_viewer_capacity": runtime_viewer_capacity,
 		"runtime_demand_capacity_per_viewer": runtime_demand_capacity_per_viewer,
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
+		"runtime_procedural_generation_worker_count": runtime_procedural_generation_worker_count,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
 		"runtime_collision_apply_deadline_us": runtime_collision_apply_deadline_us,
@@ -468,6 +473,12 @@ func get_game_world_summary() -> Dictionary:
 		"collision_apply_time_ns_last": int(metrics.get("collision_apply_time_ns_last", 0)),
 		"collision_apply_time_ns_maximum": int(metrics.get("collision_apply_time_ns_maximum", 0)),
 		"collision_apply_deadline_exhaustions": int(metrics.get("collision_apply_deadline_exhaustions", 0)),
+		"collision_apply_frame_time_ns_last": int(metrics.get("collision_apply_frame_time_ns_last", 0)),
+		"collision_apply_frame_time_ns_total": int(metrics.get("collision_apply_frame_time_ns_total", 0)),
+		"collision_apply_frame_time_ns_maximum": int(metrics.get("collision_apply_frame_time_ns_maximum", 0)),
+		"collision_apply_frame_items_last": int(metrics.get("collision_apply_frame_items_last", 0)),
+		"collision_apply_frame_items_maximum": int(metrics.get("collision_apply_frame_items_maximum", 0)),
+		"collision_apply_frame_deadline_overruns": int(metrics.get("collision_apply_frame_deadline_overruns", 0)),
 		"pending_chunk_retirements": int(metrics.get("pending_chunk_retirements", 0)),
 		"pending_chunk_replacements": int(metrics.get("pending_chunk_replacements", 0)),
 		"blocked_pending_chunk_replacements": int(metrics.get("blocked_pending_chunk_replacements", 0)),
@@ -496,6 +507,56 @@ func get_game_world_summary() -> Dictionary:
 		"scheduler_failed_records": int(metrics.get("scheduler_failed_records", 0)),
 		"scheduler_queued_jobs": int(metrics.get("scheduler_queued_jobs", 0)),
 		"scheduler_queued_completions": int(metrics.get("scheduler_queued_completions", 0)),
+		"storage_queued_requests": int(metrics.get("storage_queued_requests", 0)),
+		"storage_queued_completions": int(metrics.get("storage_queued_completions", 0)),
+		"storage_active_requests": int(metrics.get("storage_active_requests", 0)),
+		"storage_accepted_requests": int(metrics.get("storage_accepted_requests", 0)),
+		"storage_started_requests": int(metrics.get("storage_started_requests", 0)),
+		"storage_completed_requests": int(metrics.get("storage_completed_requests", 0)),
+		"storage_request_queue_rejections": int(metrics.get("storage_request_queue_rejections", 0)),
+		"storage_duplicate_requests": int(metrics.get("storage_duplicate_requests", 0)),
+		"storage_successful_pages": int(metrics.get("storage_successful_pages", 0)),
+		"storage_load_time_ns_last": int(metrics.get("storage_load_time_ns_last", 0)),
+		"storage_load_time_ns_total": int(metrics.get("storage_load_time_ns_total", 0)),
+		"storage_load_time_ns_maximum": int(metrics.get("storage_load_time_ns_maximum", 0)),
+		"storage_worker_count": int(metrics.get("storage_worker_count", 0)),
+		"storage_in_flight_requests": int(metrics.get("storage_in_flight_requests", 0)),
+		"storage_maximum_in_flight_requests": int(
+			metrics.get("storage_maximum_in_flight_requests", 0)
+		),
+		"storage_in_flight_elapsed_ns": int(metrics.get("storage_in_flight_elapsed_ns", 0)),
+		"storage_in_flight_key": Vector4i(
+			int(metrics.get("storage_in_flight_key_x", 0)),
+			int(metrics.get("storage_in_flight_key_y", 0)),
+			int(metrics.get("storage_in_flight_key_z", 0)),
+			int(metrics.get("storage_in_flight_key_lod", 0))
+		),
+		"storage_in_flight_generation": int(metrics.get("storage_in_flight_generation", 0)),
+		"page_loading_records": int(metrics.get("page_loading_records", 0)),
+		"page_sample_ready_records": int(metrics.get("page_sample_ready_records", 0)),
+		"page_awaiting_mesh_records": int(metrics.get("page_awaiting_mesh_records", 0)),
+		"page_mesh_ready_records": int(metrics.get("page_mesh_ready_records", 0)),
+		"page_ready_records": int(metrics.get("page_ready_records", 0)),
+		"page_unresolved_dependencies": int(metrics.get("page_unresolved_dependencies", 0)),
+		"page_pending_dependency_requests": int(metrics.get("page_pending_dependency_requests", 0)),
+		"page_pinned_pages": int(metrics.get("page_pinned_pages", 0)),
+		"page_dependency_requests": int(metrics.get("page_dependency_requests", 0)),
+		"page_dependency_reprioritizations": int(metrics.get("page_dependency_reprioritizations", 0)),
+		"page_dependency_cache_hits": int(metrics.get("page_dependency_cache_hits", 0)),
+		"page_dependency_cache_misses": int(metrics.get("page_dependency_cache_misses", 0)),
+		"page_accepted_storage_completions": int(metrics.get("page_accepted_storage_completions", 0)),
+		"page_stale_storage_completions": int(metrics.get("page_stale_storage_completions", 0)),
+		"page_cache_encoded_entries": int(metrics.get("page_cache_encoded_entries", 0)),
+		"page_cache_decoded_entries": int(metrics.get("page_cache_decoded_entries", 0)),
+		"page_cache_encoded_hits": int(metrics.get("page_cache_encoded_hits", 0)),
+		"page_cache_encoded_misses": int(metrics.get("page_cache_encoded_misses", 0)),
+		"page_cache_encoded_insertions": int(metrics.get("page_cache_encoded_insertions", 0)),
+		"page_cache_encoded_refreshes": int(metrics.get("page_cache_encoded_refreshes", 0)),
+		"page_cache_encoded_evictions": int(metrics.get("page_cache_encoded_evictions", 0)),
+		"page_cache_decoded_hits": int(metrics.get("page_cache_decoded_hits", 0)),
+		"page_cache_decoded_misses": int(metrics.get("page_cache_decoded_misses", 0)),
+		"page_cache_decoded_insertions": int(metrics.get("page_cache_decoded_insertions", 0)),
+		"page_cache_decoded_evictions": int(metrics.get("page_cache_decoded_evictions", 0)),
 		"page_sample_failures": int(metrics.get("page_sample_failures", 0)),
 		"page_mesh_failures": int(metrics.get("page_mesh_failures", 0)),
 		"page_last_failure_key": Vector4i(
@@ -585,6 +646,12 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"collision_apply_time_ns_last": int(metrics.get("collision_apply_time_ns_last", 0)),
 		"collision_apply_time_ns_maximum": int(metrics.get("collision_apply_time_ns_maximum", 0)),
 		"collision_apply_deadline_exhaustions": int(metrics.get("collision_apply_deadline_exhaustions", 0)),
+		"collision_apply_frame_time_ns_last": int(metrics.get("collision_apply_frame_time_ns_last", 0)),
+		"collision_apply_frame_time_ns_total": int(metrics.get("collision_apply_frame_time_ns_total", 0)),
+		"collision_apply_frame_time_ns_maximum": int(metrics.get("collision_apply_frame_time_ns_maximum", 0)),
+		"collision_apply_frame_items_last": int(metrics.get("collision_apply_frame_items_last", 0)),
+		"collision_apply_frame_items_maximum": int(metrics.get("collision_apply_frame_items_maximum", 0)),
+		"collision_apply_frame_deadline_overruns": int(metrics.get("collision_apply_frame_deadline_overruns", 0)),
 		"render_resources": int(metrics.get("render_resources", 0)),
 		"collision_resources": int(metrics.get("collision_resources", 0)),
 		"scheduler_sampling_records": int(metrics.get("scheduler_sampling_records", 0)),
@@ -593,6 +660,52 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"scheduler_failed_records": int(metrics.get("scheduler_failed_records", 0)),
 		"scheduler_queued_jobs": int(metrics.get("scheduler_queued_jobs", 0)),
 		"scheduler_queued_completions": int(metrics.get("scheduler_queued_completions", 0)),
+		"storage_queued_requests": int(metrics.get("storage_queued_requests", 0)),
+		"storage_queued_completions": int(metrics.get("storage_queued_completions", 0)),
+		"storage_active_requests": int(metrics.get("storage_active_requests", 0)),
+		"storage_accepted_requests": int(metrics.get("storage_accepted_requests", 0)),
+		"storage_started_requests": int(metrics.get("storage_started_requests", 0)),
+		"storage_completed_requests": int(metrics.get("storage_completed_requests", 0)),
+		"storage_request_queue_rejections": int(metrics.get("storage_request_queue_rejections", 0)),
+		"storage_duplicate_requests": int(metrics.get("storage_duplicate_requests", 0)),
+		"storage_successful_pages": int(metrics.get("storage_successful_pages", 0)),
+		"storage_load_time_ns_last": int(metrics.get("storage_load_time_ns_last", 0)),
+		"storage_load_time_ns_total": int(metrics.get("storage_load_time_ns_total", 0)),
+		"storage_load_time_ns_maximum": int(metrics.get("storage_load_time_ns_maximum", 0)),
+		"storage_in_flight_requests": int(metrics.get("storage_in_flight_requests", 0)),
+		"storage_in_flight_elapsed_ns": int(metrics.get("storage_in_flight_elapsed_ns", 0)),
+		"storage_in_flight_key": Vector4i(
+			int(metrics.get("storage_in_flight_key_x", 0)),
+			int(metrics.get("storage_in_flight_key_y", 0)),
+			int(metrics.get("storage_in_flight_key_z", 0)),
+			int(metrics.get("storage_in_flight_key_lod", 0))
+		),
+		"storage_in_flight_generation": int(metrics.get("storage_in_flight_generation", 0)),
+		"page_loading_records": int(metrics.get("page_loading_records", 0)),
+		"page_sample_ready_records": int(metrics.get("page_sample_ready_records", 0)),
+		"page_awaiting_mesh_records": int(metrics.get("page_awaiting_mesh_records", 0)),
+		"page_mesh_ready_records": int(metrics.get("page_mesh_ready_records", 0)),
+		"page_ready_records": int(metrics.get("page_ready_records", 0)),
+		"page_unresolved_dependencies": int(metrics.get("page_unresolved_dependencies", 0)),
+		"page_pending_dependency_requests": int(metrics.get("page_pending_dependency_requests", 0)),
+		"page_pinned_pages": int(metrics.get("page_pinned_pages", 0)),
+		"page_dependency_requests": int(metrics.get("page_dependency_requests", 0)),
+		"page_dependency_reprioritizations": int(metrics.get("page_dependency_reprioritizations", 0)),
+		"page_dependency_cache_hits": int(metrics.get("page_dependency_cache_hits", 0)),
+		"page_dependency_cache_misses": int(metrics.get("page_dependency_cache_misses", 0)),
+		"page_accepted_storage_completions": int(metrics.get("page_accepted_storage_completions", 0)),
+		"page_stale_storage_completions": int(metrics.get("page_stale_storage_completions", 0)),
+		"page_cache_encoded_entries": int(metrics.get("page_cache_encoded_entries", 0)),
+		"page_cache_decoded_entries": int(metrics.get("page_cache_decoded_entries", 0)),
+		"page_cache_encoded_hits": int(metrics.get("page_cache_encoded_hits", 0)),
+		"page_cache_encoded_misses": int(metrics.get("page_cache_encoded_misses", 0)),
+		"page_cache_encoded_insertions": int(metrics.get("page_cache_encoded_insertions", 0)),
+		"page_cache_encoded_refreshes": int(metrics.get("page_cache_encoded_refreshes", 0)),
+		"page_cache_encoded_evictions": int(metrics.get("page_cache_encoded_evictions", 0)),
+		"page_cache_decoded_hits": int(metrics.get("page_cache_decoded_hits", 0)),
+		"page_cache_decoded_misses": int(metrics.get("page_cache_decoded_misses", 0)),
+		"page_cache_decoded_insertions": int(metrics.get("page_cache_decoded_insertions", 0)),
+		"page_cache_decoded_evictions": int(metrics.get("page_cache_decoded_evictions", 0)),
 		"page_sample_failures": int(metrics.get("page_sample_failures", 0)),
 		"page_mesh_failures": int(metrics.get("page_mesh_failures", 0)),
 		"page_last_failure_key": Vector4i(
@@ -665,6 +778,8 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_render_entry_capacity = runtime_render_entry_capacity
 	terrain_world.runtime_collision_entry_capacity = runtime_collision_entry_capacity
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
+	terrain_world.runtime_procedural_generation_worker_count = \
+		runtime_procedural_generation_worker_count
 	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
 	terrain_world.runtime_collision_apply_deadline_us = runtime_collision_apply_deadline_us
@@ -816,23 +931,29 @@ func _should_update_predictive_player_viewer(position: Vector3) -> bool:
 
 func _update_player_collision_invoker(
 	position: Vector3,
-	previous_position: Vector3,
 	force: bool
 ) -> bool:
 	if not player_collision_invoker_enabled:
 		return true
 	var invoker_position := position
-	if not is_inf(previous_position.x):
-		var movement := position - previous_position
-		if movement.length_squared() > 0.0001:
-			var maximum_prediction_distance := \
-				float(player_collision_invoker_radius_chunks) * \
-				COLLISION_INVOKER_CHUNK_EXTENT
-			var prediction_distance := minf(
-				player_collision_prediction_distance,
-				maximum_prediction_distance
-			)
-			invoker_position += movement.normalized() * prediction_distance
+	var movement := Vector3.ZERO
+	if _pending_collision_motion_valid:
+		movement = _pending_collision_motion
+		_pending_collision_motion = Vector3.ZERO
+		_pending_collision_motion_valid = false
+	elif not is_inf(_last_collision_observation_position.x):
+		movement = position - _last_collision_observation_position
+	_last_collision_observation_position = position
+	if movement.length_squared() > 0.0001:
+		invoker_position += movement.normalized() * \
+			_player_collision_prediction_distance()
+	return _submit_player_collision_invoker(invoker_position, force)
+
+
+func _submit_player_collision_invoker(
+	invoker_position: Vector3,
+	force: bool
+) -> bool:
 	if not force and _collision_invoker_chunk(invoker_position) == \
 			_collision_invoker_chunk(_last_collision_viewer_position):
 		return true
@@ -851,9 +972,29 @@ func _update_player_collision_invoker(
 	return true
 
 
+func _player_collision_prediction_distance() -> float:
+	var maximum_prediction_distance := \
+		float(player_collision_invoker_radius_chunks) * \
+			COLLISION_INVOKER_CHUNK_EXTENT
+	return minf(
+		player_collision_prediction_distance,
+		maximum_prediction_distance
+	)
+
+
 func is_player_collision_ready_at(position: Vector3) -> bool:
 	if not player_collision_invoker_enabled:
 		return true
+	if _player != null:
+		var player_position: Vector3 = _player.global_position
+		_pending_collision_motion = position - player_position
+		_pending_collision_motion_valid = true
+		var invoker_position := player_position
+		if _pending_collision_motion.length_squared() > 0.0001:
+			invoker_position += _pending_collision_motion.normalized() * \
+				_player_collision_prediction_distance()
+		if not _submit_player_collision_invoker(invoker_position, false):
+			return false
 	var terrain_world := get_terrain_world()
 	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
 		return false

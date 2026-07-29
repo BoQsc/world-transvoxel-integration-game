@@ -72,6 +72,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "fly_collision_stress_gate",
     "streaming_fly_gap_gate",
     "post_edit_streaming_fly_gap_gate",
+    "runtime_baseline_gate",
 )
 VISUAL_SUMMARY_PREFIX = "WT_HUMAN_VISUAL_CAPTURE_SUMMARY "
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -465,6 +466,56 @@ def validate_visual_summary(
         validate_streaming_fly_summary(summary)
     if summary.get("mode") == "fly_collision_stress_gate":
         validate_fly_collision_stress_summary(summary)
+    if summary.get("mode") == "runtime_baseline_gate":
+        validate_runtime_baseline_summary(summary)
+
+
+def validate_runtime_baseline_summary(summary: dict[str, object]) -> None:
+    baseline = summary.get("runtime_baseline")
+    if not isinstance(baseline, dict):
+        raise RuntimeError(f"runtime baseline summary missing: {summary!r}")
+    if baseline.get("enabled") is not True or baseline.get("ok") is not True:
+        raise RuntimeError(f"runtime baseline acceptance failure: {baseline!r}")
+    if baseline.get("measurement_complete") is not True:
+        raise RuntimeError(f"runtime baseline measurement incomplete: {baseline!r}")
+    movement = baseline.get("movement")
+    edit = baseline.get("edit")
+    frame_time = baseline.get("frame_time_ms")
+    if not isinstance(movement, dict) or not isinstance(edit, dict) or not isinstance(frame_time, dict):
+        raise RuntimeError(f"runtime baseline result sections missing: {baseline!r}")
+    if int(movement.get("frames", 0)) < 1000:
+        raise RuntimeError(f"runtime baseline movement route was not exercised: {movement!r}")
+    collision_budget = baseline.get("collision_apply_frame_budget")
+    if not isinstance(collision_budget, dict) or collision_budget.get("ok") is not True:
+        raise RuntimeError(
+            f"runtime baseline collision frame budget failed: {collision_budget!r}"
+        )
+    if edit.get("interaction_accepted") is not True:
+        raise RuntimeError(f"runtime baseline carve was not accepted: {edit!r}")
+    if int(edit.get("authority_commit_frames", -1)) < 0:
+        raise RuntimeError(f"runtime baseline carve did not commit: {edit!r}")
+    acceptance = baseline.get("acceptance")
+    if not isinstance(acceptance, dict) or acceptance.get("ok") is not True:
+        raise RuntimeError(
+            f"runtime baseline acceptance thresholds failed: {acceptance!r}"
+        )
+    failures = acceptance.get("failures")
+    if not isinstance(failures, list) or failures:
+        raise RuntimeError(
+            f"runtime baseline acceptance failure list is not empty: {acceptance!r}"
+        )
+    print(
+        "WT_RUNTIME_BASELINE_PROFILE_PASS profile=%s blocked=%d p95=%.3f p99=%.3f "
+        "visual_frames=%d collision_frames=%d"
+        % (
+            summary.get("profile"),
+            int(movement.get("blocked_frames", 0)),
+            float(frame_time.get("p95", 0.0)),
+            float(frame_time.get("p99", 0.0)),
+            int(edit.get("visual_ready_frames_after_commit", -1)),
+            int(edit.get("collision_ready_frames_after_commit", -1)),
+        )
+    )
 
 
 def validate_fly_collision_stress_summary(summary: dict[str, object]) -> None:

@@ -37,6 +37,7 @@ signal edit_failed(error: String)
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
+@export_range(0, 8, 1) var runtime_procedural_generation_worker_count: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 33333, 1) var runtime_collision_apply_deadline_us: int = 0

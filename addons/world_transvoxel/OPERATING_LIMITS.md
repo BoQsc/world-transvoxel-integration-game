@@ -4,7 +4,7 @@
 
 The 1.0.14-dev development build inherits the 1.0.9 Windows x86-64
 qualification matrix, includes the documented 1.0.10-dev batched authoritative
-sample query, makes native render transition fading opt-in/default-off, makes
+sample query, keeps native render transition fading opt-in/default-off, keeps
 fade shader instance-parameter writes opt-in/default-off, and adds the
 endpoint-regularized mesh extraction boundary documented below. It is
 qualified only for:
@@ -84,31 +84,44 @@ activation distance.
 
 ## Streaming and edited-LOD continuity
 
-The authoritative edited-terrain LOD rule lives in the core repository at
-`world-transvoxel/docs/contracts/PRODUCTION_EDITED_TERRAIN_LOD_CORRECTNESS_CONTRACT.md`.
-This section records the practical runtime limits carried by this integration
-game copy.
+The authoritative contract is
+[`docs/contracts/PRODUCTION_EDITED_TERRAIN_LOD_CORRECTNESS_CONTRACT.md`](../../docs/contracts/PRODUCTION_EDITED_TERRAIN_LOD_CORRECTNESS_CONTRACT.md).
+This section records the practical runtime limits that implement it.
 
 - Moving-viewer terrain is streamed from an active desired chunk set. Projects
   should expect coarse far terrain plus detailed chunks around active viewers,
   not every LOD0 chunk of a large world resident at once.
+- Edited terrain LOD fidelity is a budgeted runtime guarantee, not an unlimited
+  world-state guarantee. A project may dig or place more terrain, over a wider
+  area, than the active chunk capacity and edit-retention planner budget can keep
+  at near detail from a distant camera. In that case older, farther, or lower
+  priority edited regions may be represented by coarser LOD until a viewer moves
+  close enough to refine them again.
 - Runtime mesh watertightness and streaming visual continuity are separate
   claims. A mesh probe with zero interior boundary/nonmanifold edges does not by
   itself prove that every possible camera path is free from transient loading or
   LOD-popping artifacts.
 - Recent edit LOD-retention zones are promoted into temporary planner viewers so
-  recently dug or placed terrain remains detailed when the player moves away and
-  returns. The current implementation remembers up to 256 edit-retention zones,
-  keeps the newest 32 zones active even without a real viewer nearby, merges
-  zones within 64 m, uses one LOD0 root-radius chunk, and clamps edit refinement
-  to one through six LOD0 chunks. When the full retention plan exceeds capacity,
-  runtime planning degrades retention by keeping the newest/visible zones first
-  and reducing retention refinement before dropping retention entirely.
+  recently dug or placed terrain remains detailed longer when the player moves
+  away and returns. The current implementation remembers up to 256
+  edit-retention zones, keeps the newest 32 zones active even without a real
+  viewer nearby, merges zones within 64 m, uses one LOD0 root-radius chunk, and
+  clamps edit refinement to one through six LOD0 chunks. When the full retention
+  plan exceeds capacity, runtime planning degrades retention by keeping the
+  newest/visible zones first and reducing retention refinement before dropping
+  retention entirely. This prevents the known all-or-nothing fallback failure,
+  but it does not make every far edit permanently high-detail.
 - Multi-site edit retention is capacity-sensitive. The compact 2K profile with
   two distant edited sites is qualified with active/render/collision capacities
   of 2048. A 1024 active-chunk cap was observed to trigger retention fallback
   under two-site digging and could produce distance-dependent edited-hole
   simplification or disappearance.
+- Any downstream game or addon that depends on long-distance visibility of mined,
+  dug, placed, or restored terrain must explicitly budget and validate it. The
+  required validation class is: create player-like edits, move/fly close, mid,
+  far, and back, then assert edit persistence, no open/nonmanifold rendered
+  geometry, and acceptable far-LOD shape continuity for that game's camera
+  distances and performance settings.
 - Render transition fading is opt-in and disabled by default. Enabling
   `render_transition_frames` is a presentation choice; it must not be used as a
   substitute for missing geometry or as proof that terrain is seamless.

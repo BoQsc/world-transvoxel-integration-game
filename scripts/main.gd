@@ -18,6 +18,7 @@ const GenerationProfile := preload("res://addons/world_transvoxel_terrain/genera
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
 const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
+const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_watertightness_probe.gd")
@@ -68,6 +69,9 @@ var human_windowed := false
 var runtime_render_apply_budget_override := -1
 var runtime_collision_apply_budget_override := -1
 var runtime_collision_apply_deadline_us_override := -1
+var player_collision_invoker_radius_chunks_override := -1
+var player_collision_prediction_distance_override := -1.0
+var procedural_generation_worker_count_override := -1
 var lod_movement_direct_only := false
 var lod_movement_operation_limit := -1
 var lod_movement_gap_only_probe := false
@@ -102,6 +106,7 @@ var last_manifold_stress_summary := {}
 var last_tunnel_summary := {}
 var last_streaming_fly_summary := {}
 var last_fly_collision_stress_summary := {}
+var last_runtime_baseline_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -129,6 +134,15 @@ func _ready() -> void:
 	runtime_render_apply_budget_override = int(_arg_value(args, "--runtime-render-apply-budget", "-1"))
 	runtime_collision_apply_budget_override = int(_arg_value(args, "--runtime-collision-apply-budget", "-1"))
 	runtime_collision_apply_deadline_us_override = int(_arg_value(args, "--runtime-collision-apply-deadline-us", "-1"))
+	player_collision_invoker_radius_chunks_override = int(
+		_arg_value(args, "--player-collision-invoker-radius-chunks", "-1")
+	)
+	player_collision_prediction_distance_override = float(
+		_arg_value(args, "--player-collision-prediction-distance", "-1")
+	)
+	procedural_generation_worker_count_override = int(
+		_arg_value(args, "--procedural-generation-workers", "-1")
+	)
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
 	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
 	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
@@ -205,10 +219,10 @@ func _update_frame_rate_policy(force: bool = false) -> void:
 
 
 func _target_frame_cap() -> int:
-	if not window_has_focus:
-		return BACKGROUND_MAX_FPS
 	if autonomous or not human_visual_capture_path.is_empty():
 		return FOREGROUND_MAX_FPS
+	if not window_has_focus:
+		return BACKGROUND_MAX_FPS
 	if _human_play_is_active():
 		return FOREGROUND_MAX_FPS
 	return IDLE_MAX_FPS
@@ -271,8 +285,14 @@ func _start_profile() -> void:
 	if autonomous and human_visual_capture_path.is_empty():
 		collision_invoker_enabled = false
 	game_world.player_collision_invoker_enabled = collision_invoker_enabled
-	game_world.player_collision_invoker_radius_chunks = int(settings.get("player_collision_invoker_radius_chunks", 2))
-	game_world.player_collision_prediction_distance = float(settings.get("player_collision_prediction_distance", 16.0))
+	game_world.player_collision_invoker_radius_chunks = \
+		player_collision_invoker_radius_chunks_override \
+		if player_collision_invoker_radius_chunks_override >= 0 else \
+		int(settings.get("player_collision_invoker_radius_chunks", 2))
+	game_world.player_collision_prediction_distance = \
+		player_collision_prediction_distance_override \
+		if player_collision_prediction_distance_override >= 0.0 else \
+		float(settings.get("player_collision_prediction_distance", 16.0))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_world_state_timeout_frames = int(settings.get("startup_world_state_timeout_frames", 900))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
@@ -283,6 +303,10 @@ func _start_profile() -> void:
 	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
 	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
 	game_world.runtime_lod_refinement_radius_chunks = int(settings.get("runtime_lod_refinement_radius_chunks", 0))
+	game_world.runtime_procedural_generation_worker_count = \
+		procedural_generation_worker_count_override \
+		if procedural_generation_worker_count_override > 0 else \
+		int(settings.get("runtime_procedural_generation_worker_count", 0))
 	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
 	game_world.runtime_collision_apply_deadline_us = int(settings.get("runtime_collision_apply_deadline_us", 0))
@@ -853,7 +877,11 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		settings["player_viewer_update_distance"] = 8.0
 		settings["player_collision_invoker_enabled"] = true
 		settings["player_collision_invoker_radius_chunks"] = 2
-		settings["player_collision_prediction_distance"] = 16.0
+		# Keep 8 world units of the radius-2 collision sphere behind the
+		# predicted center. A full-radius (32-unit) shift can exclude the
+		# current chunk during diagonal flight; 16 units did not provide
+		# enough lead for the reference 128-unit/s inspection speed.
+		settings["player_collision_prediction_distance"] = 24.0
 	return settings
 
 
@@ -4034,7 +4062,22 @@ func _place_player_at_tunnel_playtest_start() -> bool:
 
 
 func _capture_human_visual() -> void:
-	if human_visual_capture_mode == "fly_collision_stress_gate":
+	if human_visual_capture_mode == "runtime_baseline_gate":
+		var runtime_baseline_gate = RuntimeBaselineGate.new()
+		last_runtime_baseline_summary = await runtime_baseline_gate.run(
+			self,
+			game_world,
+			player,
+			selected_profile
+		)
+		print("WT_RUNTIME_BASELINE_SUMMARY ", JSON.stringify(last_runtime_baseline_summary))
+		if not bool(last_runtime_baseline_summary.get("ok", false)):
+			_fail(
+				"runtime baseline acceptance failure: %s" %
+				JSON.stringify(last_runtime_baseline_summary)
+			)
+			return
+	elif human_visual_capture_mode == "fly_collision_stress_gate":
 		if not await _run_fly_collision_stress_gate():
 			return
 	elif human_visual_capture_mode == "streaming_fly_gap_gate":
@@ -4146,6 +4189,7 @@ func _capture_human_visual() -> void:
 		"tunnel": _tunnel_summary(),
 		"streaming_fly": _streaming_fly_summary(),
 		"fly_collision_stress": _fly_collision_stress_summary(),
+		"runtime_baseline": _runtime_baseline_summary(),
 		"capture_path": human_visual_capture_path,
 		"capture_written": capture_written,
 	}))
@@ -6732,8 +6776,18 @@ func _run_post_edit_streaming_fly_gap_gate() -> bool:
 	if operations.is_empty():
 		_fail("post-edit streaming fly gap gate produced no operations")
 		return false
+	var pre_edit_summary: Dictionary = game_world.get_game_world_summary()
+	print(
+		"WT_POST_EDIT_STREAMING_BASELINE ",
+		JSON.stringify(_post_edit_streaming_pipeline_digest(pre_edit_summary))
+	)
 	if not await _submit_post_edit_streaming_fly_operations(terrain_world, operations):
 		return false
+	var post_commit_summary: Dictionary = game_world.get_game_world_summary()
+	print(
+		"WT_POST_EDIT_STREAMING_COMMITTED ",
+		JSON.stringify(_post_edit_streaming_pipeline_digest(post_commit_summary))
+	)
 	if not await _wait_for_streaming_fly_visual_ready(
 		"after post-edit streaming fly operations",
 		maxi(240, human_visual_capture_wait_frames)
@@ -6743,6 +6797,34 @@ func _run_post_edit_streaming_fly_gap_gate() -> bool:
 	interaction_inspection_operation_count = operations.size()
 	interaction_inspection_applied = true
 	return await _run_streaming_fly_gap_gate(true)
+
+
+func _post_edit_streaming_pipeline_digest(summary: Dictionary) -> Dictionary:
+	return {
+		"active_chunk_records": int(summary.get("active_chunk_records", 0)),
+		"fully_ready_chunk_records": int(summary.get("fully_ready_chunk_records", 0)),
+		"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
+		"storage_accepted_requests": int(summary.get("storage_accepted_requests", 0)),
+		"storage_completed_requests": int(summary.get("storage_completed_requests", 0)),
+		"storage_duplicate_requests": int(summary.get("storage_duplicate_requests", 0)),
+		"storage_load_time_ns_total": int(summary.get("storage_load_time_ns_total", 0)),
+		"storage_worker_count": int(summary.get("storage_worker_count", 0)),
+		"storage_maximum_in_flight_requests": int(
+			summary.get("storage_maximum_in_flight_requests", 0)
+		),
+		"page_dependency_requests": int(summary.get("page_dependency_requests", 0)),
+		"page_dependency_cache_hits": int(summary.get("page_dependency_cache_hits", 0)),
+		"page_dependency_cache_misses": int(summary.get("page_dependency_cache_misses", 0)),
+		"page_accepted_storage_completions": int(summary.get("page_accepted_storage_completions", 0)),
+		"page_cache_encoded_entries": int(summary.get("page_cache_encoded_entries", 0)),
+		"page_cache_decoded_entries": int(summary.get("page_cache_decoded_entries", 0)),
+		"page_cache_encoded_hits": int(summary.get("page_cache_encoded_hits", 0)),
+		"page_cache_encoded_misses": int(summary.get("page_cache_encoded_misses", 0)),
+		"page_cache_encoded_evictions": int(summary.get("page_cache_encoded_evictions", 0)),
+		"page_cache_decoded_hits": int(summary.get("page_cache_decoded_hits", 0)),
+		"page_cache_decoded_misses": int(summary.get("page_cache_decoded_misses", 0)),
+		"page_cache_decoded_evictions": int(summary.get("page_cache_decoded_evictions", 0)),
+	}
 
 
 func _run_fly_collision_stress_gate() -> bool:
@@ -7443,24 +7525,47 @@ func _post_edit_streaming_fly_operations() -> Array:
 
 func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> bool:
 	var last_summary := {}
-	for _frame in range(frame_limit):
+	var started_usec := Time.get_ticks_usec()
+	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
 		if _is_lod_movement_visual_ready_summary(summary):
+			print(
+				"WT_STREAMING_FLY_VISUAL_READY_TIMING ",
+				JSON.stringify({
+					"context": context,
+					"ok": true,
+					"frames": frame,
+					"elapsed_msec": float(Time.get_ticks_usec() - started_usec) / 1000.0,
+					"pipeline": _post_edit_streaming_pipeline_digest(summary),
+				})
+			)
 			return true
-		await get_tree().process_frame
+		if frame < frame_limit:
+			await get_tree().process_frame
+	print(
+		"WT_STREAMING_FLY_VISUAL_READY_TIMING ",
+		JSON.stringify({
+			"context": context,
+			"ok": false,
+			"frames": frame_limit,
+			"elapsed_msec": float(Time.get_ticks_usec() - started_usec) / 1000.0,
+			"pipeline": _post_edit_streaming_pipeline_digest(last_summary),
+		})
+	)
 	_fail("streaming fly visual-ready wait failed %s: %s" % [context, str(last_summary)])
 	return false
 
 
 func _wait_for_streaming_fly_start_coverage_ready(context: String, frame_limit: int) -> bool:
 	var last_summary := {}
-	for _frame in range(frame_limit):
+	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
 		if _is_streaming_fly_start_coverage_ready(summary):
 			return true
-		await get_tree().process_frame
+		if frame < frame_limit:
+			await get_tree().process_frame
 	_fail("streaming fly start coverage wait failed %s: %s" % [context, str(last_summary)])
 	return false
 
@@ -7675,11 +7780,14 @@ func _wait_for_lod_movement_visual_ready(
 	var frame_limit := maxi(120, human_visual_capture_wait_frames)
 	var center := _edit_lod_movement_gate_center() if is_inf(probe_center.x) else probe_center
 	var radius := _edit_lod_movement_probe_radius() if probe_radius < 0.0 else probe_radius
-	for frame in range(frame_limit):
+	# Evaluate once before waiting and once after every permitted frame. The
+	# previous loop awaited the final frame and then failed without observing
+	# the state that frame published.
+	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
 		var strict_summary_ready := _is_lod_movement_visual_ready_summary(summary)
-		if strict_summary_ready or frame % 15 == 0 or frame == frame_limit - 1:
+		if strict_summary_ready or frame % 15 == 0 or frame == frame_limit:
 			var probe := WatertightnessProbe.collect(
 				backend,
 				"edit_lod_movement_gate_visual_ready",
@@ -7723,8 +7831,10 @@ func _wait_for_lod_movement_visual_ready(
 				var exact_region := _edited_exact_region_contract_summary(summary, radius)
 				last_probe["edited_exact_region"] = exact_region
 				if not bool(exact_region.get("ok", false)):
-					await get_tree().process_frame
-					continue
+					if frame < frame_limit:
+						await get_tree().process_frame
+						continue
+					break
 				if not strict_summary_ready or \
 						int(summary.get("pending_chunk_retirements", 0)) != 0 or \
 						int(summary.get("fully_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
@@ -7744,7 +7854,8 @@ func _wait_for_lod_movement_visual_ready(
 						"collision_resources": int(summary.get("collision_resources", 0)),
 					})
 				return true
-		await get_tree().process_frame
+		if frame < frame_limit:
+			await get_tree().process_frame
 	_save_diagnostic_failure_capture(context)
 	_fail("LOD movement visual-ready wait failed %s: summary=%s probe=%s" % [context, str(last_summary), str(last_probe)])
 	return false
@@ -7779,15 +7890,15 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 		return false
 	if int(summary.get("collision_resources", 0)) <= 0:
 		return false
-	if summary.has("non_retiring_visual_ready_chunk_records") and \
-			int(summary.get("non_retiring_visual_ready_chunk_records", 0)) < int(summary.get(
-				"non_retiring_chunk_records",
-				summary.get("active_chunk_records", 0)
-			)):
-		return false
-	elif summary.has("visual_ready_chunk_records") and \
-			int(summary.get("visual_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
-		return false
+	if summary.has("non_retiring_visual_ready_chunk_records"):
+		if int(summary.get("non_retiring_visual_ready_chunk_records", 0)) < int(summary.get(
+					"non_retiring_chunk_records",
+					summary.get("active_chunk_records", 0)
+				)):
+			return false
+	elif summary.has("visual_ready_chunk_records"):
+		if int(summary.get("visual_ready_chunk_records", 0)) < int(summary.get("active_chunk_records", 0)):
+			return false
 	return true
 
 
@@ -8486,6 +8597,15 @@ func _fly_collision_stress_summary() -> Dictionary:
 			"ok": true,
 		}
 	return last_fly_collision_stress_summary
+
+
+func _runtime_baseline_summary() -> Dictionary:
+	if last_runtime_baseline_summary.is_empty():
+		return {
+			"enabled": false,
+			"ok": true,
+		}
+	return last_runtime_baseline_summary
 
 
 func _ensure_authoritative_sample_connections(terrain_world: Node) -> void:

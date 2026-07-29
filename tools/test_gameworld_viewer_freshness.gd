@@ -88,6 +88,7 @@ func _run_test() -> void:
 	root.add_child(game_world)
 	game_world.player_viewer_update_distance = 8.0
 	game_world.player_collision_invoker_enabled = true
+	game_world.player_collision_prediction_distance = 24.0
 	var terrain_world := FakeTerrainWorld.new()
 	var reference_scene := FakeReferenceScene.new(terrain_world)
 	reference_scene.add_child(terrain_world)
@@ -109,6 +110,68 @@ func _run_test() -> void:
 	if reference_scene.viewer_updates.size() != 1 or \
 			reference_scene.collision_viewer_updates.size() != 2:
 		_fail("collision invoker was coupled to visual viewer cadence")
+		return
+	var predicted_forward: Dictionary = reference_scene.collision_viewer_updates.back()
+	if not is_equal_approx(
+		float(predicted_forward.get("position", Vector3.ZERO).x),
+		25.0
+	):
+		_fail("collision invoker did not use the latest forward observation")
+		return
+	if not game_world.update_player_viewer(false):
+		_fail("stopped collision invoker update was rejected")
+		return
+	var recentered: Dictionary = reference_scene.collision_viewer_updates.back()
+	if not is_equal_approx(
+		float(recentered.get("position", Vector3.ZERO).x),
+		1.0
+	):
+		_fail("stopped collision invoker retained stale forward prediction")
+		return
+	var collision_updates_before_blocked_intent := \
+		reference_scene.collision_viewer_updates.size()
+	if game_world.is_player_collision_ready_at(Vector3(3.0, 0.0, 0.0)):
+		_fail("fake terrain unexpectedly reported collision readiness")
+		return
+	if not game_world.update_player_viewer(false):
+		_fail("blocked-intent collision invoker update was rejected")
+		return
+	if reference_scene.collision_viewer_updates.size() != \
+			collision_updates_before_blocked_intent + 1:
+		_fail("blocked movement retracted or duplicated its predictive invoker")
+		return
+	var predicted_blocked_intent: Dictionary = \
+		reference_scene.collision_viewer_updates.back()
+	if not is_equal_approx(
+		float(predicted_blocked_intent.get("position", Vector3.ZERO).x),
+		25.0
+	):
+		_fail("blocked movement did not retain requested forward prediction")
+		return
+	if game_world.is_player_collision_ready_at(player.global_position):
+		_fail("fake terrain unexpectedly reported stopped collision readiness")
+		return
+	if not game_world.update_player_viewer(false):
+		_fail("intentional-stop collision invoker update was rejected")
+		return
+	var intent_recentered: Dictionary = \
+		reference_scene.collision_viewer_updates.back()
+	if not is_equal_approx(
+		float(intent_recentered.get("position", Vector3.ZERO).x),
+		1.0
+	):
+		_fail("intentional zero-motion input did not recenter collision")
+		return
+	player.global_position = Vector3.ZERO
+	if not game_world.update_player_viewer(false):
+		_fail("reversed collision invoker update was rejected")
+		return
+	var predicted_reverse: Dictionary = reference_scene.collision_viewer_updates.back()
+	if not is_equal_approx(
+		float(predicted_reverse.get("position", Vector3.ZERO).x),
+		-24.0
+	):
+		_fail("collision invoker did not reverse from the latest observation")
 		return
 	player.global_position = Vector3(32.0, 0.0, 0.0)
 	if not game_world.update_player_viewer(false):

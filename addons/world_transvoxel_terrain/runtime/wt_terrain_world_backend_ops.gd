@@ -218,6 +218,10 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		["runtime_render_entry_capacity", "render_entry_capacity"],
 		["runtime_collision_entry_capacity", "collision_entry_capacity"],
 		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
+		[
+			"runtime_procedural_generation_worker_count",
+			"procedural_generation_worker_count",
+		],
 		["runtime_render_apply_budget", "render_apply_budget"],
 		["runtime_collision_apply_budget", "collision_apply_budget"],
 		["runtime_collision_apply_deadline_us", "collision_apply_deadline_us"],
