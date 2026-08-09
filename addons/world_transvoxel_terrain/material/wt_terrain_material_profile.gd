@@ -6,8 +6,7 @@ const TEXTURE_FORMAT := "RGBA8"
 const TEXTURE_BYTES_PER_PIXEL := 4
 const MAX_STANDARD_TEXTURE_BYTES := 4 * 1024
 const IMPLEMENTATION := "terrain_material_profile_contract_v1"
-const PRODUCTION_IMPLEMENTATION := "terrain_production_material_texture_array_explicit_weight_layers_pipeline_v9"
-const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
+const PRODUCTION_IMPLEMENTATION := "terrain_native_explicit_material_weights_v1"
 
 @export var profile_id: StringName = &"debug_checker_palette"
 @export_range(2, 64, 1) var texture_resolution: int = 16
@@ -15,20 +14,13 @@ const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 @export var material_ids: Array[int] = [1, 2, 3, 4, 5, 7, 8, 10]
 @export var triplanar_projection: bool = true
 @export var debug_view_enabled: bool = true
-@export_range(16, 1024, 1) var standard_texture_resolution: int = DEFAULT_STANDARD_TEXTURE_RESOLUTION
+@export_range(16, 512, 1) var standard_texture_resolution: int = 64
 @export var production_texture_slots: Array[StringName] = [&"albedo", &"normal", &"roughness_orm"]
 @export var sample_material_names: Array[StringName] = [
-	&"deep_stone",
-	&"grass",
-	&"gravel",
-	&"sand",
-	&"snow",
-	&"mid_rock",
-	&"ore_patch",
-	&"asphalt",
+	&"deep_stone", &"grass", &"gravel", &"sand", &"snow", &"reserved_rock", &"ore", &"asphalt"
 ]
 @export var mapping_policy: StringName = &"world_space_triplanar_ready"
-@export var blending_policy: StringName = &"authoritative_ids_with_authored_provenance_worldspace_ore_and_road_corridors"
+@export var blending_policy: StringName = &"native_generated_and_authored_eight_weight_layers"
 @export var texture_import_policy: StringName = &"mipmapped_vram_compressed_normal_aware"
 
 

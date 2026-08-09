@@ -7,6 +7,8 @@ const BackendBridge := preload("res://addons/world_transvoxel_terrain/runtime/wt
 const BackendOps := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_world_backend_ops.gd")
 const Contracts := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_world_contracts.gd")
 const RuntimeAudit := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_audit.gd")
+const RuntimeState := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_state.gd")
+const RuntimeEvents := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_world_runtime_events.gd")
 const DebugSnapshot := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_debug_snapshot.gd")
 const VALIDATION_MARKERS := [
 	"a4_phase1_resource_semantics_only",
@@ -14,6 +16,7 @@ const VALIDATION_MARKERS := [
 	"terrain_world_lifecycle",
 	"reference_profile_runtime_cold_idle",
 	"terrain_addon_api_contract_v1",
+	"tqp52_generation_aware_readiness_v1",
 ]
 
 signal world_snapshot_ready(request_id: int, manifest_path: String, source_revision: int, world_revision: int, page_count: int)
@@ -24,19 +27,25 @@ signal authoritative_samples_ready(request_id: int, samples: Array)
 signal authoritative_samples_failed(request_id: int, error: String)
 signal edit_committed(world_revision: int)
 signal edit_failed(error: String)
+signal runtime_generation_changed(api_generation: int, running: bool, reason: String)
+signal terrain_request_completed(request_id: int, kind: String, api_generation: int, world_revision: int)
+signal terrain_request_failed(request_id: int, kind: String, api_generation: int, error: String)
+signal terrain_request_cancelled(request_id: int, kind: String, api_generation: int, reason: String)
+signal readiness_changed(snapshot: Dictionary)
 
 @export var terrain_profile: Resource
+@export var runtime_profile: Resource
 @export var generation_profile: Resource
 @export var storage_profile: Resource
 @export var recovery_policy: Resource
 @export var material_profile: Resource
 @export var auto_report_dependency_status: bool = false
 @export_range(0, 65536, 1) var runtime_active_chunk_capacity: int = 0
-@export_range(0, 1024, 1) var runtime_viewer_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_demand_capacity_per_viewer: int = 0
 @export_range(0, 65536, 1) var runtime_render_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
+@export_range(0, 1024, 1) var runtime_viewer_capacity: int = 0
 @export_range(0, 8, 1) var runtime_procedural_generation_worker_count: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
@@ -51,6 +60,7 @@ var _backend_terrain: Node
 var _backend_config: Resource
 var _last_error: String = "ok"
 var _last_edit_submission_summary: Dictionary = {}
+var _runtime_state = RuntimeState.new()
 
 func _ready() -> void:
 	if Engine.is_editor_hint() and auto_report_dependency_status:
@@ -120,46 +130,101 @@ func start_world() -> bool:
 	return start_backend_world()
 
 func start_backend_world() -> bool:
-	return BackendOps.start_backend_world(self)
+	var profile_error := _runtime_state.configure(runtime_profile)
+	if not profile_error.is_empty():
+		_last_error = profile_error
+		return false
+	var accepted := BackendOps.start_backend_world(self)
+	if accepted:
+		_transition_runtime(true, "world_started")
+	return accepted
 
 func stop_world() -> bool:
 	return stop_backend_world()
 
 func stop_backend_world() -> bool:
-	return BackendOps.stop_backend_world(self)
+	var accepted := BackendOps.stop_backend_world(self)
+	if accepted:
+		_transition_runtime(false, "world_stopped")
+	return accepted
 
 func submit_edit_batch(batch: Resource, author_id: int = 0) -> bool:
-	return BackendOps.submit_edit_batch(self, batch, author_id)
+	var accepted := BackendOps.submit_edit_batch(self, batch, author_id)
+	if accepted:
+		_runtime_state.mark_edit_submitted()
+		_emit_readiness()
+	return accepted
 
 func get_last_edit_submission_summary() -> Dictionary:
 	return _last_edit_submission_summary
 
 func request_world_compaction(output_directory: String, new_source_revision: int) -> int:
-	return BackendOps.request_world_compaction(self, output_directory, new_source_revision)
+	return _track_request(&"world_snapshot", BackendOps.request_world_compaction.bind(self, output_directory, new_source_revision))
 
 func request_world_migration(output_directory: String) -> int:
-	return BackendOps.request_world_migration(self, output_directory)
+	return _track_request(&"world_snapshot", BackendOps.request_world_migration.bind(self, output_directory))
 
 func request_authoritative_sample(point: Vector3i, lod: int = 0) -> int:
-	return BackendOps.request_authoritative_sample(self, point, lod)
+	return _track_request(&"sample", BackendOps.request_authoritative_sample.bind(self, point, lod))
 
 func request_authoritative_samples(points: Array, lod: int = 0) -> int:
-	return BackendOps.request_authoritative_samples(self, points, lod)
+	return _track_request(&"samples", BackendOps.request_authoritative_samples.bind(self, points, lod))
 
 func update_viewer(viewer_id: int, revision: int, position: Vector3, radius_chunks: int, maximum_lod: int = 0) -> bool:
-	return BackendOps.update_viewer(self, viewer_id, revision, position, radius_chunks, maximum_lod)
+	var validation_error := _runtime_state.validate_viewer_update(viewer_id, revision, false)
+	if not validation_error.is_empty():
+		_last_error = validation_error
+		return false
+	var accepted := BackendOps.update_viewer(self, viewer_id, revision, position, radius_chunks, maximum_lod)
+	if accepted:
+		_runtime_state.record_viewer_update(viewer_id, revision, false)
+		_emit_readiness()
+	return accepted
 
 func remove_viewer(viewer_id: int, revision: int) -> bool:
-	return BackendOps.remove_viewer(self, viewer_id, revision)
+	var validation_error := _runtime_state.validate_viewer_removal(viewer_id, revision, false)
+	if not validation_error.is_empty():
+		_last_error = validation_error
+		return false
+	var accepted := BackendOps.remove_viewer(self, viewer_id, revision)
+	if accepted:
+		_runtime_state.record_viewer_removal(viewer_id, false)
+		_emit_readiness()
+	return accepted
 
 func update_collision_viewer(viewer_id: int, revision: int, position: Vector3, radius_chunks: int) -> bool:
-	return BackendOps.update_collision_viewer(self, viewer_id, revision, position, radius_chunks)
+	var validation_error := _runtime_state.validate_viewer_update(viewer_id, revision, true)
+	if not validation_error.is_empty():
+		_last_error = validation_error
+		return false
+	var accepted := BackendOps.update_collision_viewer(self, viewer_id, revision, position, radius_chunks)
+	if accepted:
+		_runtime_state.record_viewer_update(viewer_id, revision, true)
+		_emit_readiness()
+	return accepted
 
 func remove_collision_viewer(viewer_id: int, revision: int) -> bool:
-	return BackendOps.remove_collision_viewer(self, viewer_id, revision)
+	var validation_error := _runtime_state.validate_viewer_removal(viewer_id, revision, true)
+	if not validation_error.is_empty():
+		_last_error = validation_error
+		return false
+	var accepted := BackendOps.remove_collision_viewer(self, viewer_id, revision)
+	if accepted:
+		_runtime_state.record_viewer_removal(viewer_id, true)
+		_emit_readiness()
+	return accepted
 
 func query_chunk_state(chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	return BackendOps.query_chunk_state(self, chunk_coordinate, lod)
+
+func get_chunk_readiness(chunk_coordinate: Vector3i, lod: int = 0) -> Dictionary:
+	return _runtime_state.chunk_readiness(self, chunk_coordinate, lod)
+
+func get_readiness_snapshot() -> Dictionary:
+	return _runtime_state.readiness_snapshot(self)
+
+func get_api_generation() -> int:
+	return _runtime_state.get_api_generation()
 
 func get_runtime_metrics() -> Dictionary:
 	return RuntimeAudit.get_runtime_metrics(_backend_terrain)
@@ -185,14 +250,6 @@ func get_terrain_api_contract_summary() -> Dictionary:
 func get_contract_summary() -> Dictionary:
 	return Contracts.contract_summary(self)
 
-
-func _on_backend_edit_committed(world_revision: int) -> void:
-	edit_committed.emit(world_revision)
-
-
-func _on_backend_edit_failed(error: String) -> void:
-	edit_failed.emit(error)
-
 func get_a4_phase1_summary() -> Dictionary:
 	return Contracts.a4_phase1_summary(self)
 
@@ -203,19 +260,37 @@ func get_a4_phase4_summary() -> Dictionary:
 	return Contracts.a4_phase4_summary(self)
 
 func _on_backend_world_snapshot_ready(request_id: int, manifest_path: String, source_revision: int, world_revision: int, page_count: int) -> void:
-	world_snapshot_ready.emit(request_id, manifest_path, source_revision, world_revision, page_count)
+	RuntimeEvents.forward_ready(self, _runtime_state, request_id, &"world_snapshot", [manifest_path, source_revision, world_revision, page_count])
 
 func _on_backend_world_snapshot_failed(request_id: int, error: String) -> void:
-	world_snapshot_failed.emit(request_id, error)
+	RuntimeEvents.forward_failed(self, _runtime_state, request_id, &"world_snapshot", error)
 
 func _on_backend_authoritative_sample_ready(request_id: int, sample: RefCounted) -> void:
-	authoritative_sample_ready.emit(request_id, sample)
+	RuntimeEvents.forward_ready(self, _runtime_state, request_id, &"sample", [sample])
 
 func _on_backend_authoritative_sample_failed(request_id: int, error: String) -> void:
-	authoritative_sample_failed.emit(request_id, error)
+	RuntimeEvents.forward_failed(self, _runtime_state, request_id, &"sample", error)
 
 func _on_backend_authoritative_samples_ready(request_id: int, samples: Array) -> void:
-	authoritative_samples_ready.emit(request_id, samples)
+	RuntimeEvents.forward_ready(self, _runtime_state, request_id, &"samples", [samples])
 
 func _on_backend_authoritative_samples_failed(request_id: int, error: String) -> void:
-	authoritative_samples_failed.emit(request_id, error)
+	RuntimeEvents.forward_failed(self, _runtime_state, request_id, &"samples", error)
+
+func _on_backend_edit_committed(world_revision: int) -> void:
+	RuntimeEvents.forward_edit(self, _runtime_state, true, world_revision)
+
+func _on_backend_edit_failed(error: String) -> void:
+	RuntimeEvents.forward_edit(self, _runtime_state, false, error)
+
+func _track_request(kind: StringName, submit: Callable) -> int:
+	return RuntimeEvents.track_request(self, _runtime_state, kind, submit)
+
+func _finish_request(request_id: int, kind: StringName, error: String) -> bool:
+	return RuntimeEvents.finish_request(self, _runtime_state, request_id, kind, error)
+
+func _transition_runtime(running: bool, reason: String) -> void:
+	RuntimeEvents.transition_runtime(self, _runtime_state, running, reason)
+
+func _emit_readiness() -> void:
+	RuntimeEvents.emit_readiness(self, _runtime_state)

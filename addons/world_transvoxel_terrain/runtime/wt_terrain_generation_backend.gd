@@ -8,6 +8,21 @@ static func start_backend_world(
 	manifest_path: String,
 	object_root: String
 ) -> Dictionary:
+	if backend_terrain == null:
+		return {
+			"started": false,
+			"error": "backend terrain is required",
+		}
+	if generation_profile == null:
+		if not backend_terrain.has_method("start_world"):
+			return {
+				"started": false,
+				"error": "backend terrain cannot start persisted worlds",
+			}
+		return {
+			"started": bool(backend_terrain.call("start_world", manifest_path, object_root)),
+			"error": "",
+		}
 	var source_mode := _source_mode_name(generation_profile)
 	var chunk_count_x := int(generation_profile.get("world_chunk_count_x"))
 	var chunk_count_y := int(generation_profile.get("world_chunk_count_y"))
@@ -119,9 +134,7 @@ static func _source_mode_name(generation_profile: Resource) -> String:
 
 
 static func _procedural_preset_id(generation_profile: Resource) -> String:
-	if generation_profile == null:
-		return "mountain_reference"
-	if not _resource_has_property(generation_profile, "procedural_preset_id"):
+	if generation_profile == null or not _resource_has_property(generation_profile, "procedural_preset_id"):
 		return "mountain_reference"
 	var preset_id := str(generation_profile.get("procedural_preset_id"))
 	return preset_id if not preset_id.is_empty() else "mountain_reference"

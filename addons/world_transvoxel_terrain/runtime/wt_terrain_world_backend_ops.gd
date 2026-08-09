@@ -119,7 +119,7 @@ static func remove_viewer(world, viewer_id: int, revision: int) -> bool:
 
 static func update_collision_viewer(world, viewer_id: int, revision: int, position: Vector3, radius_chunks: int) -> bool:
 	if not world.is_backend_world_running():
-		world._last_error = "backend world must be running before collision viewer updates: %s" % world.get_backend_world_error()
+		world._last_error = "backend world must be running before collision viewer updates"
 		return false
 	if not world._backend_terrain.has_method("update_collision_viewer"):
 		world._last_error = "terrain backend cannot update collision viewers"
@@ -211,6 +211,10 @@ static func _validate_storage_profile(world) -> bool:
 	return true
 
 static func _apply_runtime_config_overrides(world, config: Resource) -> void:
+	if world.runtime_profile != null and world.runtime_profile.has_method("get_backend_config_overrides"):
+		var overrides := Dictionary(world.runtime_profile.call("get_backend_config_overrides"))
+		for property_name in overrides:
+			config.set(str(property_name), overrides[property_name])
 	for pair in [
 		["runtime_active_chunk_capacity", "active_chunk_capacity"],
 		["runtime_viewer_capacity", "viewer_capacity"],
@@ -218,10 +222,7 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		["runtime_render_entry_capacity", "render_entry_capacity"],
 		["runtime_collision_entry_capacity", "collision_entry_capacity"],
 		["runtime_lod_refinement_radius_chunks", "lod_refinement_radius_chunks"],
-		[
-			"runtime_procedural_generation_worker_count",
-			"procedural_generation_worker_count",
-		],
+		["runtime_procedural_generation_worker_count", "procedural_generation_worker_count"],
 		["runtime_render_apply_budget", "render_apply_budget"],
 		["runtime_collision_apply_budget", "collision_apply_budget"],
 		["runtime_collision_apply_deadline_us", "collision_apply_deadline_us"],
@@ -230,16 +231,14 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		var value := int(world.get(pair[0]))
 		if value > 0:
 			config.set(pair[1], value)
-	if bool(world.get("runtime_shader_fade_parameter_enabled")):
+	if bool(world.runtime_shader_fade_parameter_enabled):
 		config.set("shader_fade_parameter_enabled", true)
-	if bool(world.get("runtime_global_coarse_lod_coverage")):
+	if bool(world.runtime_global_coarse_lod_coverage):
 		config.set("global_coarse_lod_coverage", true)
-	var collision_activation_distance := float(world.get("runtime_collision_activation_distance"))
-	if collision_activation_distance > 0.0:
-		config.set("collision_activation_distance", collision_activation_distance)
-	var collision_deactivation_distance := float(world.get("runtime_collision_deactivation_distance"))
-	if collision_deactivation_distance > 0.0:
-		config.set("collision_deactivation_distance", collision_deactivation_distance)
+	if world.runtime_collision_activation_distance > 0.0:
+		config.set("collision_activation_distance", world.runtime_collision_activation_distance)
+	if world.runtime_collision_deactivation_distance > 0.0:
+		config.set("collision_deactivation_distance", world.runtime_collision_deactivation_distance)
 
 static func _finish_request(world, request_id: int) -> int:
 	if request_id <= 0:

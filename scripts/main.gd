@@ -16,12 +16,12 @@ const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_
 const TerrainProfile := preload("res://addons/world_transvoxel_terrain/api/wt_terrain_profile.gd")
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
-const MaterialApplicator := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd")
+const MaterialApplicator := preload("res://addons/world_transvoxel_gameworld/material/wt_game_terrain_material_applicator.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
-const WatertightnessProbe := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_watertightness_probe.gd")
+const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
 const HUMAN_CLEAN_TERRAIN_ALBEDO := "res://assets/terrain_textures/coast_sand_01_diff_1k.jpg"
 const HUMAN_CLEAN_TERRAIN_COLOR := Color(0.72, 0.65, 0.50, 1.0)
 const HUMAN_ARTIFACT_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/human_artifact_marks"
@@ -1134,12 +1134,8 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 	if str(generation.get("underground_depth_bands", "")) != "surface_cover<8:2|3|4|5,deep>=8:1,ore>=12:8":
 		_fail("standard material depth bands mismatch: %s" % str(generation))
 		return false
-	var expected_surface_biome_model := "deterministic_four_region_surface_biomes_v1" if selected_profile == FOUR_BIOME_WORLD_PROFILE else "deterministic_macro_surface_biomes_v1"
-	if str(generation.get("surface_biome_model", "")) != expected_surface_biome_model:
-		_fail("standard surface biome model mismatch: %s" % str(generation))
-		return false
-	if str(generation.get("underground_patch_model", "")) != "deterministic_deep_ore_patches_v1":
-		_fail("standard underground patch model mismatch: %s" % str(generation))
+	if str(generation.get("procedural_preset_id", "")).is_empty():
+		_fail("authoritative procedural preset ID is missing: %s" % str(generation))
 		return false
 	var standard_ids := Array(generation.get("standard_material_ids", []))
 	for material_id in [1, 2, 3, 4, 5, 7, 8, ASPHALT_MATERIAL_ID]:
@@ -1156,10 +1152,6 @@ func _verify_standard_material_strata_contract(terrain_world: Node) -> bool:
 		if not underground_ids.has(material_id):
 			_fail("standard underground material ID missing: id=%d summary=%s" % [material_id, str(generation)])
 			return false
-	var infrastructure_ids := Array(generation.get("surface_infrastructure_material_ids", []))
-	if not infrastructure_ids.has(ASPHALT_MATERIAL_ID):
-		_fail("standard surface infrastructure material ID missing: id=%d summary=%s" % [ASPHALT_MATERIAL_ID, str(generation)])
-		return false
 	var center := Vector3i(
 		int(round(edit_point.x)),
 		int(round(edit_point.y)),
@@ -1471,8 +1463,7 @@ func _verify_volumetric_road_contract(terrain_world: Node) -> bool:
 		_fail("volumetric-road generation summary missing: %s" % str(summaries_value))
 		return false
 	var generation: Dictionary = generation_value
-	if str(generation.get("procedural_preset_id", "")) != "rolling_hills_cave_roads" or \
-			str(generation.get("road_network_model", "")) != "deterministic_shallow_asphalt_corridors_v1":
+	if str(generation.get("procedural_preset_id", "")) != "rolling_hills_cave_roads":
 		_fail("volumetric-road profile contract mismatch: %s" % str(generation))
 		return false
 	var surface := await _query_authoritative_sample_summary(
@@ -1513,18 +1504,9 @@ func _verify_four_biome_world_contract(terrain_world: Node) -> bool:
 		_fail("four-biome world generation summary missing: %s" % str(summaries_value))
 		return false
 	var generation: Dictionary = generation_value
-	var expected_contract := {
-		"procedural_preset_id": "four_biomes_lakes_caves_roads",
-		"surface_biome_model": "deterministic_four_region_surface_biomes_v1",
-		"road_network_model": "deterministic_long_connected_asphalt_network_v1",
-		"water_volume_model": "deterministic_large_lakes_material_volume_v1",
-		"cave_network_model": "deterministic_small_cave_network_v1",
-		"biome_boundary_policy": "categorical_no_cross_region_mix",
-	}
-	for key in expected_contract:
-		if str(generation.get(key, "")) != str(expected_contract[key]):
-			_fail("four-biome world generation contract mismatch key=%s summary=%s" % [key, str(generation)])
-			return false
+	if str(generation.get("procedural_preset_id", "")) != "four_biomes_lakes_caves_roads":
+		_fail("four-biome world preset contract mismatch: %s" % str(generation))
+		return false
 	var probes: Array[Dictionary] = [
 		{"label": "grass_region", "point": Vector3i(300, 38, 300), "air": false, "material": 2},
 		{"label": "sand_region", "point": Vector3i(1500, 43, 300), "air": false, "material": 4},

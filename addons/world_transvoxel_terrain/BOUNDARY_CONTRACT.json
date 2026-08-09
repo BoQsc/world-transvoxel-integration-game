@@ -1,0 +1,89 @@
+{
+  "schema": "world_transvoxel.terrain.production_addon_boundary.v1",
+  "milestone": "TQP-51",
+  "candidate_id": "world-transvoxel-terrain-cpu-tqp51-1",
+  "status": "CANDIDATE_BOUNDARY_FROZEN",
+  "release_claim": false,
+  "addon_root": "addons/world_transvoxel_terrain",
+  "dependency": {
+    "name": "world-transvoxel",
+    "required_revision": "f4abd7ab4f921f98aba4ee45b4453af0bae53cd8",
+    "required_classes": [
+      "WorldTransvoxelTerrain",
+      "WorldTransvoxelConfig",
+      "WorldTransvoxelEditTransaction"
+    ],
+    "vendored": false,
+    "fallback_mesher": false,
+    "missing_dependency_policy": "FAIL_CLOSED"
+  },
+  "ownership": {
+    "world_transvoxel": [
+      "authoritative density and material volume",
+      "regular and transition Transvoxel meshing",
+      "native worker scheduling",
+      "streaming and storage primitives",
+      "collision payload production",
+      "terrain page publication and sample query authority"
+    ],
+    "terrain_addon": [
+      "terrain lifecycle and profile orchestration",
+      "bounded viewer edit storage and query request adapters",
+      "edit command validation and forwarding",
+      "material and presentation policy",
+      "bounded diagnostics and telemetry formatting"
+    ],
+    "game": [
+      "player camera and input",
+      "gameplay rules",
+      "game-specific presentation and systems"
+    ],
+    "labs": [
+      "qualification tests",
+      "retained evidence",
+      "standards and acceptance decisions"
+    ]
+  },
+  "threading": {
+    "worker_owner": "world-transvoxel native backend",
+    "terrain_addon_role": "main-thread bounded coordination only",
+    "addon_worker_threads": false,
+    "gdscript_hot_paths": false
+  },
+  "lifetimes": {
+    "terrain_world": "WtTerrainWorld owns backend and configuration instances while running",
+    "profiles": "assigned Resources persist for the owning terrain-world lifetime",
+    "published_geometry": "world-transvoxel owns published render and collision payloads",
+    "edit_batches": "caller-owned Resources are validated and converted into one upstream transaction",
+    "shutdown": "WtTerrainWorld requests upstream stop and releases backend references after shutdown"
+  },
+  "extension_points": [
+    "profile Resources",
+    "material and presentation policy",
+    "bounded request adapters",
+    "diagnostic snapshot consumers"
+  ],
+  "failure_policy": {
+    "missing_dependency": "reject startup with an explicit error",
+    "invalid_profile": "reject startup with an explicit error",
+    "invalid_edit": "reject submission with an explicit error",
+    "backend_error": "surface the upstream error and fail the request",
+    "silent_fallback": false
+  },
+  "unsupported": [
+    "synthetic terrain surfaces or fallback meshers",
+    "runtime dependency on cell lab terrain lab sandbox or validation game",
+    "GPU terrain backend",
+    "gameplay systems",
+    "production texture qualification before TQP-53",
+    "production API and profile readiness before TQP-52",
+    "production release claim"
+  ],
+  "presentation_scaffolding": {
+    "status": "DIAGNOSTIC_UNQUALIFIED_UNTIL_TQP53",
+    "generated_checker_and_atlas_textures": true,
+    "terrain_authority": false,
+    "geometry_authority": false
+  },
+  "next_milestone": "TQP-52"
+}

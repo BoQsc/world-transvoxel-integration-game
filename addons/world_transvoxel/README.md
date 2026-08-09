@@ -60,12 +60,14 @@ opt-in/default-off because Godot retains per-instance shader-parameter slots
 after use. Version 1.0.12-dev also makes native render transition fading
 opt-in/default-off; the default replacement path is a direct swap so terrain
 edits do not blink. Version 1.0.13-dev stabilizes mesh-finalizer edge ownership
-with quantized position keys at 1/1024 world-unit precision. Version
-1.0.14-dev endpoint-regularizes isosurface interpolation to `[1/32, 31/32]`
-before canonical chunk positioning and normal interpolation, replacing the old
-M2 mesh hash with `02f60fe4c93375f9` and resolving the reproduced closed
-edited-surface sliver warning without deleting surface triangles. These
-development builds are not the deterministic PQ4 release artifact. The release
+with quantized position keys at 1/1024 world-unit precision. Version 1.0.15-dev
+endpoint-regularized canonical chunk positioning but did not retain every cell
+triangle incident to an exact-isovalue tangent sample. Version 1.0.16-dev
+applies the same `[1/32, 31/32]` interpolation policy in the shared cell backend
+before degenerate cleanup. The retained M2 mesh hash is `f3ebfec883e2de19`;
+exact-isovalue cell and 18-chunk smoothed-crater closure regressions now reject
+the previously missed interior openings. These development builds are not the
+deterministic PQ4 release artifact. The release
 ships API/limit documentation, addon-local bake/storage wrappers, runtime
 DLLs, and native tools. Compute acceleration is optional later work.
 
@@ -77,6 +79,11 @@ use 8 vertical chunks at origin 0. Larger bounded volumes must pass explicit
 `128 x 16 x 128` LOD0 chunks and vertical origin `-8`. The native page/catalog
 ceiling is `524288` pages so this 2K x 256 reference volume can start as real
 volumetric terrain.
+
+Diagnostic-only native helpers live under `src/diagnostics`. They are allowed to
+expose authoritative backend data for tests and external validation labs, but
+they must not carry editor UI, lab scenes, fallback meshers, or production
+terrain gameplay workflow.
 
 Build from the repository root:
 

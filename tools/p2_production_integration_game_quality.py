@@ -80,7 +80,7 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
 )
 DEFAULT_CAPTURE_ROOT_NAME = "world_transvoxel_captures"
 MATERIAL_SHADER_RELATIVE_PATH = pathlib.Path(
-    "addons/world_transvoxel_terrain/material/wt_terrain_palette.gdshader"
+    "addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader"
 )
 RENDER_SINK_RELATIVE_PATH = pathlib.Path(
     "addons/world_transvoxel/src/render/wt_godot_render_sink.cpp"
@@ -192,7 +192,12 @@ def find_godot(explicit: str | None) -> pathlib.Path:
     )
 
 
-def run_profile(godot: pathlib.Path, project: pathlib.Path, profile: str) -> None:
+def run_profile(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    profile: str,
+    timeout_seconds: int,
+) -> None:
     cmd = [
         str(godot),
         "--headless",
@@ -204,7 +209,21 @@ def run_profile(godot: pathlib.Path, project: pathlib.Path, profile: str) -> Non
         profile,
     ]
     print("running:", " ".join(cmd), flush=True)
-    completed = subprocess.run(cmd, text=True, capture_output=True)
+    try:
+        completed = subprocess.run(
+            cmd,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        if error.stdout:
+            print(error.stdout, end="")
+        if error.stderr:
+            print(error.stderr, end="", file=sys.stderr)
+        raise RuntimeError(
+            f"profile {profile} exceeded {timeout_seconds} seconds"
+        ) from error
     if completed.stdout:
         print(completed.stdout, end="")
     if completed.stderr:
@@ -1575,6 +1594,12 @@ def main(argv: list[str]) -> int:
         help="Profile to run. May be passed more than once. Defaults to both.",
     )
     parser.add_argument(
+        "--profile-timeout-seconds",
+        type=int,
+        default=1800,
+        help="Hard timeout for each deep autonomous profile (default: 1800).",
+    )
+    parser.add_argument(
         "--skip-build",
         action="store_true",
         help="Accepted for compatibility; this proof never builds.",
@@ -1812,7 +1837,7 @@ def main(argv: list[str]) -> int:
     print("WT_GODOT_IMPORT_ASSETS_PASS required_imports=%d" % len(godot_import_assets.REQUIRED_TEXTURE_IMPORTS))
     profiles = tuple(args.profile) if args.profile else DEFAULT_PROFILES
     for profile in profiles:
-        run_profile(godot, project, profile)
+        run_profile(godot, project, profile, args.profile_timeout_seconds)
     print("WT_PRODUCTION_INTEGRATION_GAME_QUALITY_PASS profiles=%d" % len(profiles))
     if args.visual_smoke:
         modes = tuple(args.visual_mode) if args.visual_mode else DEFAULT_VISUAL_MODES

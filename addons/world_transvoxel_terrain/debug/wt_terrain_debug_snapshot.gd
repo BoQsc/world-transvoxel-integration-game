@@ -11,6 +11,7 @@ static func capture(terrain_world: Node) -> Dictionary:
 	return {
 		"world": _world_summary(terrain_world),
 		"terrain_profile": _resource_summary(_get_property(terrain_world, "terrain_profile")),
+		"runtime_profile": _resource_summary(_get_property(terrain_world, "runtime_profile")),
 		"generation_profile": _resource_summary(_get_property(terrain_world, "generation_profile")),
 		"storage_profile": _resource_summary(_get_property(terrain_world, "storage_profile")),
 		"recovery_policy": _resource_summary(_get_property(terrain_world, "recovery_policy")),
@@ -19,6 +20,7 @@ static func capture(terrain_world: Node) -> Dictionary:
 		"streaming": _streaming_summary(metrics),
 		"edit": _edit_summary(terrain_world, metrics),
 		"material": _material_summary(terrain_world),
+		"readiness": _call_dictionary(terrain_world, "get_readiness_snapshot"),
 		"implementation": IMPLEMENTATION,
 	}
 

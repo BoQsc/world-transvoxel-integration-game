@@ -3,6 +3,7 @@ extends Node3D
 class_name WtTerrainReferenceScene
 
 const TerrainProfile := preload("res://addons/world_transvoxel_terrain/api/wt_terrain_profile.gd")
+const RuntimeProfile := preload("res://addons/world_transvoxel_terrain/api/wt_terrain_runtime_profile.gd")
 const GenerationProfile := preload("res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd")
 const MaterialProfile := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_profile.gd")
 const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd")
@@ -38,6 +39,8 @@ func ensure_reference_defaults() -> bool:
 		return false
 	if terrain_world.get("terrain_profile") == null:
 		terrain_world.set("terrain_profile", TerrainProfile.new())
+	if terrain_world.get("runtime_profile") == null:
+		terrain_world.set("runtime_profile", RuntimeProfile.create_builtin(RuntimeProfile.Preset.REFERENCE))
 	if terrain_world.get("generation_profile") == null:
 		terrain_world.set("generation_profile", GenerationProfile.new())
 	if terrain_world.get("storage_profile") == null:
@@ -125,6 +128,7 @@ func remove_reference_viewer(viewer_id: int, revision: int) -> bool:
 	refresh_debug_snapshot()
 	return accepted
 
+
 func update_reference_collision_viewer(
 	viewer_id: int,
 	revision: int,
@@ -140,13 +144,12 @@ func update_reference_collision_viewer(
 	refresh_debug_snapshot()
 	return accepted
 
+
 func remove_reference_collision_viewer(viewer_id: int, revision: int) -> bool:
 	var terrain_world := get_terrain_world()
 	if terrain_world == null or not terrain_world.has_method("remove_collision_viewer"):
 		return false
-	var accepted := bool(terrain_world.call(
-		"remove_collision_viewer", viewer_id, revision
-	))
+	var accepted := bool(terrain_world.call("remove_collision_viewer", viewer_id, revision))
 	refresh_debug_snapshot()
 	return accepted
 

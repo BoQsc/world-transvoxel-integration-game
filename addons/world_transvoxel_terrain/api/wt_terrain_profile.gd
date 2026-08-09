@@ -7,7 +7,7 @@ class_name WtTerrainProfile
 @export_range(-65536, 65536, 1) var vertical_origin_cell: int = 0
 @export var finite_closed_boundary: bool = true
 @export var plus_y_is_up: bool = true
-@export var profile_id: StringName = &"reference_2048x64"
+@export var profile_id: StringName = &"reference_2048x128"
 
 
 func get_contract_summary() -> Dictionary:

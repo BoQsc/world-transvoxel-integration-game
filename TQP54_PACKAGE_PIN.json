@@ -1,0 +1,19 @@
+{
+  "schema": "world_transvoxel.integration.package_pin.v1",
+  "milestone": "TQP-54",
+  "status": "QUALIFIED",
+  "candidate": {
+    "repository": "world-transvoxel-terrain",
+    "commit": "4e2f05c397755afd26df93738d40870032bbeaff",
+    "addon_tree": "1ca9f2625e0c54c41470086aedde2e4862d0fc4e",
+    "package_digest_sha256": "afd0e17da130cc147d903039a079dcb2a99e2776c3408950da8e8caa447fde51",
+    "files": 87
+  },
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "f4abd7ab4f921f98aba4ee45b4453af0bae53cd8",
+    "addon_tree": "6c9054cc15ef3c83c9d8da67744b7ae66010ced7",
+    "package_digest_sha256": "979b35485e7decd7a20fe0ba420dc7e1d9511d5a3d6a91313e00e474f3a847f9",
+    "files": 173
+  }
+}

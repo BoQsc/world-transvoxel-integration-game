@@ -1,0 +1,47 @@
+{
+  "schema": "world_transvoxel.integration.tqp54_migration.v1",
+  "milestone": "TQP-54",
+  "status": "QUALIFIED",
+  "release_claim": false,
+  "runtime_boundary": "WtTerrainWorld",
+  "package_policy": "EXACT_PINNED_AUTHORITIES_NO_FALLBACKS",
+  "presentation_boundary": {
+    "owner": "world_transvoxel_gameworld",
+    "material_applicator": "addons/world_transvoxel_gameworld/material/wt_game_terrain_material_applicator.gd",
+    "material_shader": "addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+    "water_shader": "addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+    "deep_topology_probe": "addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd"
+  },
+  "migration_rules": [
+    {
+      "old": "game-specific material and topology diagnostics under world_transvoxel_terrain",
+      "new": "world_transvoxel_gameworld presentation and debug paths",
+      "policy": "MOVED"
+    },
+    {
+      "old": "generation summary presentation descriptors",
+      "new": "authoritative procedural_preset_id plus native sample queries",
+      "policy": "REPLACED_WITH_AUTHORITY"
+    },
+    {
+      "old": "custom edit_journal_path",
+      "new": "<object_root_path>/world.wtedit",
+      "policy": "REJECT_UNSUPPORTED"
+    },
+    {
+      "old": "persist_edits=false",
+      "new": "native append-only persistence required",
+      "policy": "REJECT_UNSUPPORTED"
+    }
+  ],
+  "save_compatibility": "native world, chunk, and edit-journal formats unchanged",
+  "deep_gate_timeout_seconds": 1800,
+  "qualification_gates": [
+    "WT_TQP54_PACKAGE_SYNC_PASS",
+    "WT_TQP54_PROJECT_IMPORT_PASS",
+    "WT_TQP54_MIGRATION_GODOT_PASS",
+    "WT_TQP54_MIGRATION_QUALIFICATION_PASS",
+    "WT_TQP54_MIGRATION_CONTRACT_PASS"
+  ],
+  "next_milestone": "TQP-55"
+}

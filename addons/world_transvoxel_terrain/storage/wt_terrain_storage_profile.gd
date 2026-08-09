@@ -25,8 +25,12 @@ func get_validation_error() -> String:
 		return "object_root_path must not be empty"
 	if edit_journal_path.is_empty():
 		return "edit_journal_path must not be empty"
+	if edit_journal_path != get_effective_edit_journal_path():
+		return "edit_journal_path must equal the native object-root journal path: %s" % get_effective_edit_journal_path()
 	if snapshot_directory.is_empty():
 		return "snapshot_directory must not be empty"
+	if not persist_edits:
+		return "persist_edits=false is unsupported; native authority always journals committed edits"
 	if _is_read_only_resource_path(world_manifest_path):
 		return "world_manifest_path must not use res://"
 	if _is_read_only_resource_path(object_root_path):
@@ -46,13 +50,20 @@ func get_contract_summary() -> Dictionary:
 		"world_manifest_path": world_manifest_path,
 		"object_root_path": object_root_path,
 		"edit_journal_path": edit_journal_path,
+		"effective_edit_journal_path": get_effective_edit_journal_path(),
+		"custom_edit_journal_path_supported": false,
 		"snapshot_directory": snapshot_directory,
 		"persist_edits": persist_edits,
+		"persistence_mode": "native_append_only_required",
 		"allow_res_paths_for_test_fixtures": allow_res_paths_for_test_fixtures,
 		"journal_format_version": journal_format_version,
 		"valid": is_valid(),
 		"implementation": "resource_semantics_only",
 	}
+
+
+func get_effective_edit_journal_path() -> String:
+	return object_root_path.path_join("world.wtedit")
 
 
 func _is_read_only_resource_path(path: String) -> bool:

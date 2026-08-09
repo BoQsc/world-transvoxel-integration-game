@@ -83,7 +83,7 @@ func get_validation_error() -> String:
 	if mode != Mode.RESTORE_TO_BASE and density_value == 0.0:
 		return "non-restore edit operation density_value must not be zero"
 	if requires_material() and material_id <= 0:
-		return "construct, fill, paint, and volume placement operations require a positive material_id"
+		return "construct, fill, and paint operations require a positive material_id"
 	if brush_shape == BrushShape.BOX or brush_shape == BrushShape.CAPSULE:
 		if box_extents.x <= 0.0 or box_extents.y <= 0.0 or box_extents.z <= 0.0:
 			return "box and capsule operations require positive box_extents"

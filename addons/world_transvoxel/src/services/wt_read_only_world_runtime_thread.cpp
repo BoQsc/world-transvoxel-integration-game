@@ -1,5 +1,6 @@
 #include "services/wt_read_only_world_runtime.h"
 
+#include "services/wt_edit_runtime_replacement.h"
 #include "services/wt_page_meshing_runtime.h"
 #include "storage/wt_async_storage_service.h"
 #include "storage/wt_storage_page_cache.h"
@@ -250,6 +251,26 @@ void WtReadOnlyWorldRuntime::refresh_metrics_snapshot() noexcept {
 			scheduler_->queued_completion_count();
 		snapshot.scheduler_queue_rejections = scheduler.queue_rejections;
 	}
+	if (edit_replacement_) {
+		const WtEditRuntimeReplacementMetrics edit =
+			edit_replacement_->get_metrics();
+		snapshot.edit_transaction_attempts = edit.transaction_attempts;
+		snapshot.edit_completed_transactions = edit.completed_transactions;
+		snapshot.edit_empty_transactions = edit.empty_transactions;
+		snapshot.edit_queried_chunks = edit.queried_chunks;
+		snapshot.edit_replaced_chunks = edit.replaced_chunks;
+		snapshot.edit_evicted_page_entries = edit.evicted_page_entries;
+		snapshot.edit_evicted_resource_entries = edit.evicted_resource_entries;
+		snapshot.edit_spatial_rejections = edit.spatial_rejections;
+		snapshot.edit_capacity_rejections = edit.capacity_rejections;
+		snapshot.edit_state_rejections = edit.state_rejections;
+		snapshot.edit_scheduler_failures = edit.scheduler_failures;
+		snapshot.edit_application_failures = edit.application_failures;
+		snapshot.edit_page_meshing_runtime_failures =
+			edit.page_meshing_runtime_failures;
+		snapshot.edit_cancelled_page_meshing_generations =
+			edit.cancelled_page_meshing_generations;
+	}
 	const WtAsyncStorageMetrics storage = storage_.get_metrics();
 	snapshot.storage_queued_requests = storage_.queued_request_count();
 	snapshot.storage_queued_completions = storage_.queued_completion_count();
@@ -274,6 +295,26 @@ void WtReadOnlyWorldRuntime::refresh_metrics_snapshot() noexcept {
 	snapshot.storage_in_flight_key_z = storage.in_flight_key_z;
 	snapshot.storage_in_flight_key_lod = storage.in_flight_key_lod;
 	snapshot.storage_in_flight_generation = storage.in_flight_generation;
+	if (lod_planner_) {
+		const WtPageHierarchyMetrics hierarchy =
+			lod_planner_->hierarchy_metrics();
+		snapshot.hierarchy_kind = static_cast<std::uint64_t>(hierarchy.kind);
+		snapshot.hierarchy_declared_pages = hierarchy.declared_page_count;
+		snapshot.hierarchy_explicit_index_entries =
+			hierarchy.explicit_index_entries;
+		snapshot.hierarchy_estimated_index_bytes =
+			hierarchy.estimated_index_bytes;
+		snapshot.hierarchy_membership_queries = hierarchy.membership_queries;
+		snapshot.hierarchy_child_queries = hierarchy.child_queries;
+		snapshot.hierarchy_ancestor_queries = hierarchy.ancestor_queries;
+		snapshot.hierarchy_neighbor_queries = hierarchy.neighbor_queries;
+		snapshot.hierarchy_range_queries = hierarchy.range_queries;
+		snapshot.hierarchy_viewer_root_queries = hierarchy.viewer_root_queries;
+		snapshot.hierarchy_lod_enumerations = hierarchy.lod_enumerations;
+	}
+	snapshot.hierarchy_sparse_overlay_entries = storage_.overlay_page_count();
+	snapshot.hierarchy_sparse_overlay_index_bytes =
+		storage_.overlay_index_bytes();
 	if (page_runtime_) {
 		const WtPageMeshingRuntimeMetrics page = page_runtime_->get_metrics();
 		snapshot.page_sample_failures = page.sample_failures;

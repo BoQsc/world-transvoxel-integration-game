@@ -4,6 +4,7 @@ class_name WtTerrainWorldContracts
 static func profile_summaries(world) -> Dictionary:
 	return {
 		"terrain": resource_summary(world.terrain_profile),
+		"runtime": resource_summary(world.runtime_profile),
 		"generation": resource_summary(world.generation_profile),
 		"storage": resource_summary(world.storage_profile),
 		"recovery": resource_summary(world.recovery_policy),
@@ -50,11 +51,12 @@ static func hot_path_boundary_summary(world) -> Dictionary:
 static func terrain_api_contract_summary(world) -> Dictionary:
 	return {
 		"api_name": "WtTerrainWorld",
-		"api_version": 1,
-		"implementation": "terrain_addon_api_contract_v1",
+		"api_version": 2,
+		"implementation": "tqp52_production_runtime_contract_v2",
 		"stable_groups": {
 			"profiles": [
 				"terrain_profile",
+				"runtime_profile",
 				"generation_profile",
 				"storage_profile",
 				"recovery_policy",
@@ -70,7 +72,14 @@ static func terrain_api_contract_summary(world) -> Dictionary:
 				"get_world_source_revision",
 				"get_world_page_count",
 			],
-			"streaming": ["update_viewer", "remove_viewer", "query_chunk_state"],
+			"streaming": [
+				"update_viewer",
+				"remove_viewer",
+				"update_collision_viewer",
+				"remove_collision_viewer",
+				"query_chunk_state",
+				"get_chunk_readiness",
+			],
 			"editing": [
 				"submit_edit_batch",
 				"get_last_edit_submission_summary",
@@ -83,6 +92,15 @@ static func terrain_api_contract_summary(world) -> Dictionary:
 				"world_snapshot_ready",
 				"world_snapshot_failed",
 			],
+			"readiness": [
+				"get_api_generation",
+				"get_readiness_snapshot",
+				"runtime_generation_changed",
+				"readiness_changed",
+				"terrain_request_completed",
+				"terrain_request_failed",
+				"terrain_request_cancelled",
+			],
 			"telemetry": ["get_runtime_metrics", "is_cold_idle", "get_cold_idle_summary"],
 			"debug": [
 				"get_debug_snapshot",
@@ -91,6 +109,7 @@ static func terrain_api_contract_summary(world) -> Dictionary:
 			],
 		},
 		"profile_summaries": profile_summaries(world),
+		"readiness": world.get_readiness_snapshot(),
 		"hot_path_boundary": hot_path_boundary_summary(world),
 		"world": world_summary(world),
 	}
@@ -99,6 +118,7 @@ static func contract_summary(world) -> Dictionary:
 	return {
 		"terrain_world": "WtTerrainWorld",
 		"has_terrain_profile": world.terrain_profile != null,
+		"has_runtime_profile": world.runtime_profile != null,
 		"has_generation_profile": world.generation_profile != null,
 		"has_storage_profile": world.storage_profile != null,
 		"has_recovery_policy": world.recovery_policy != null,
@@ -107,6 +127,7 @@ static func contract_summary(world) -> Dictionary:
 		"bridge": world.get_bridge_status(),
 		"backend_world_state": world.get_backend_world_state_name(),
 		"cold_idle": world.is_cold_idle(),
+		"readiness": world.get_readiness_snapshot(),
 		"terrain_api": terrain_api_contract_summary(world),
 		"hot_path_boundary": hot_path_boundary_summary(world),
 		"implementation": "a4_phase4_reference_profile_runtime_cold_idle",

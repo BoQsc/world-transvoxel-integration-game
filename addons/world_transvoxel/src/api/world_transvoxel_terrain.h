@@ -63,6 +63,10 @@ public:
 		const godot::String &world_manifest_path,
 		const godot::String &object_root
 	);
+	bool start_procedural_snapshot(
+		const godot::String &snapshot_directory,
+		const godot::String &journal_root
+	);
 	bool start_procedural_world(
 		std::int64_t chunk_count_x,
 		std::int64_t chunk_count_z,
@@ -154,6 +158,7 @@ public:
 		const godot::Vector3i &chunk_coordinate,
 		std::int64_t lod
 	) const;
+	godot::Array query_active_chunk_states() const;
 	std::int64_t request_authoritative_sample(
 		const godot::Vector3i &grid_point,
 		std::int64_t lod = 0

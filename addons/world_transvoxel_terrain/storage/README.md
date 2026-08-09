@@ -7,8 +7,10 @@ Storage formats must be deterministic and versioned before game use.
 
 Current A4 phase 1 resources:
 
-- `WtTerrainStorageProfile` defines manifest, edit journal, and snapshot write
-  targets;
+- `WtTerrainStorageProfile` defines manifest, object-root, native journal, and
+  snapshot targets. The native authority owns `<object_root>/world.wtedit`;
+  custom journal filenames and disabled persistence are rejected instead of
+  being silently ignored;
 - `WtTerrainRecoveryPolicy` defines manual recovery targets while automatic
   regeneration, smoothing, structural collapse, and fluid equilibrium remain
   disabled by default.

@@ -24,6 +24,11 @@ server-compatible: density/material samples, world revisions, journals,
 snapshots, and validated edit transactions are authoritative; client meshes,
 materials, lighting, and HUD are presentation.
 
+TQP-54 downstream migration is qualified against exact candidate and authority
+pins. See [docs/TQP54_DOWNSTREAM_INTEGRATION_MIGRATION.md](docs/TQP54_DOWNSTREAM_INTEGRATION_MIGRATION.md)
+and `TQP54_PACKAGE_PIN.json`. This is an integration qualification, not a final
+Terrain 1.0 release claim.
+
 ## Critical edited-terrain LOD boundary
 
 This integration game inherits the core World Transvoxel edited-terrain LOD

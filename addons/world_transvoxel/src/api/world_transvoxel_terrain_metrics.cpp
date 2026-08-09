@@ -1,5 +1,6 @@
 #include "api/world_transvoxel_terrain.h"
 
+#include "physics/wt_godot_collision_sink.h"
 #include "render/wt_godot_render_sink.h"
 #include "services/wt_chunk_application.h"
 
@@ -173,6 +174,40 @@ godot::Dictionary WorldTransvoxelTerrain::get_runtime_metrics() const {
 	set_metric(output, "edit_rejections", runtime.edit_rejections);
 	set_metric(output, "edit_replacements", runtime.edit_replacements);
 	set_metric(
+		output, "edit_transaction_attempts", runtime.edit_transaction_attempts
+	);
+	set_metric(
+		output,
+		"edit_completed_transactions",
+		runtime.edit_completed_transactions
+	);
+	set_metric(output, "edit_empty_transactions", runtime.edit_empty_transactions);
+	set_metric(output, "edit_queried_chunks", runtime.edit_queried_chunks);
+	set_metric(output, "edit_replaced_chunks", runtime.edit_replaced_chunks);
+	set_metric(
+		output, "edit_evicted_page_entries", runtime.edit_evicted_page_entries
+	);
+	set_metric(
+		output,
+		"edit_evicted_resource_entries",
+		runtime.edit_evicted_resource_entries
+	);
+	set_metric(output, "edit_spatial_rejections", runtime.edit_spatial_rejections);
+	set_metric(output, "edit_capacity_rejections", runtime.edit_capacity_rejections);
+	set_metric(output, "edit_state_rejections", runtime.edit_state_rejections);
+	set_metric(output, "edit_scheduler_failures", runtime.edit_scheduler_failures);
+	set_metric(output, "edit_application_failures", runtime.edit_application_failures);
+	set_metric(
+		output,
+		"edit_page_meshing_runtime_failures",
+		runtime.edit_page_meshing_runtime_failures
+	);
+	set_metric(
+		output,
+		"edit_cancelled_page_meshing_generations",
+		runtime.edit_cancelled_page_meshing_generations
+	);
+	set_metric(
 		output,
 		"edit_lod_retention_zones",
 		runtime.edit_lod_retention_zones
@@ -332,6 +367,67 @@ godot::Dictionary WorldTransvoxelTerrain::get_runtime_metrics() const {
 		output,
 		"storage_in_flight_generation",
 		runtime.storage_in_flight_generation
+	);
+	set_metric(output, "hierarchy_kind", runtime.hierarchy_kind);
+	set_metric(
+		output,
+		"hierarchy_declared_pages",
+		runtime.hierarchy_declared_pages
+	);
+	set_metric(
+		output,
+		"hierarchy_explicit_index_entries",
+		runtime.hierarchy_explicit_index_entries
+	);
+	set_metric(
+		output,
+		"hierarchy_estimated_index_bytes",
+		runtime.hierarchy_estimated_index_bytes
+	);
+	set_metric(
+		output,
+		"hierarchy_sparse_overlay_entries",
+		runtime.hierarchy_sparse_overlay_entries
+	);
+	set_metric(
+		output,
+		"hierarchy_sparse_overlay_index_bytes",
+		runtime.hierarchy_sparse_overlay_index_bytes
+	);
+	set_metric(
+		output,
+		"hierarchy_membership_queries",
+		runtime.hierarchy_membership_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_child_queries",
+		runtime.hierarchy_child_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_ancestor_queries",
+		runtime.hierarchy_ancestor_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_neighbor_queries",
+		runtime.hierarchy_neighbor_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_range_queries",
+		runtime.hierarchy_range_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_viewer_root_queries",
+		runtime.hierarchy_viewer_root_queries
+	);
+	set_metric(
+		output,
+		"hierarchy_lod_enumerations",
+		runtime.hierarchy_lod_enumerations
 	);
 	set_metric(output, "page_sample_failures", runtime.page_sample_failures);
 	set_metric(output, "page_mesh_failures", runtime.page_mesh_failures);
@@ -690,6 +786,9 @@ godot::Dictionary WorldTransvoxelTerrain::get_runtime_metrics() const {
 		render_sink_->staged_count()
 	);
 	output["collision_resources"] = get_collision_resource_count();
+	output["staged_collision_resources"] = static_cast<std::int64_t>(
+		collision_sink_->staged_count()
+	);
 	return output;
 }
 

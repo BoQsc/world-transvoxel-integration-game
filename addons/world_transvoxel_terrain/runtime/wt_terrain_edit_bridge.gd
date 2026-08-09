@@ -2,6 +2,9 @@
 extends RefCounted
 class_name WtTerrainEditBridge
 
+const VolumeBridge := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_edit_volume_bridge.gd")
+const SdfBridge := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_edit_sdf_bridge.gd")
+
 const BACKEND_EDIT_METHODS := [
 	"carve_sdf_sphere",
 	"carve_smooth_sdf_sphere",
@@ -177,26 +180,9 @@ func _apply_sdf_sphere(
 	method_name: String,
 	strength: float
 ) -> int:
-	var smooth_radius := float(operation.get("smooth_radius"))
-	var ok := false
-	if smooth_radius > 0.0:
-		var smooth_method_name := method_name.replace("_sdf_sphere", "_smooth_sdf_sphere")
-		ok = bool(transaction.call(
-			smooth_method_name,
-			operation.get("center"),
-			float(operation.get("radius")),
-			strength,
-			smooth_radius
-		))
-	else:
-		ok = bool(transaction.call(
-			method_name,
-			operation.get("center"),
-			float(operation.get("radius")),
-			strength
-		))
-	if not ok:
-		_last_error = _transaction_error(transaction)
+	var result := SdfBridge.apply_sphere(transaction, operation, method_name, strength)
+	if not bool(result.get("accepted", false)):
+		_last_error = str(result.get("error", "SDF operation failed"))
 		return 0
 	return 1
 
@@ -206,27 +192,9 @@ func _apply_sdf_material_sphere(
 	operation: Resource,
 	strength: float
 ) -> int:
-	var smooth_radius := float(operation.get("smooth_radius"))
-	var ok := false
-	if smooth_radius > 0.0:
-		ok = bool(transaction.call(
-			"construct_material_smooth_sdf_sphere",
-			operation.get("center"),
-			float(operation.get("radius")),
-			strength,
-			int(operation.get("material_id")),
-			smooth_radius
-		))
-	else:
-		ok = bool(transaction.call(
-			"construct_material_sdf_sphere",
-			operation.get("center"),
-			float(operation.get("radius")),
-			strength,
-			int(operation.get("material_id"))
-		))
-	if not ok:
-		_last_error = _transaction_error(transaction)
+	var result := SdfBridge.apply_material_sphere(transaction, operation, strength)
+	if not bool(result.get("accepted", false)):
+		_last_error = str(result.get("error", "material SDF operation failed"))
 		return 0
 	return 1
 
@@ -254,26 +222,11 @@ func _apply_paint(transaction: Object, shape: StringName, operation: Resource) -
 		return 0
 	return 1
 
+
 func _apply_volume_material(transaction: Object, shape: StringName, operation: Resource) -> int:
-	var material_id := int(operation.get("material_id"))
-	var ok := false
-	if shape == &"sphere":
-		ok = bool(transaction.call(
-			"place_material_volume_sphere",
-			operation.get("center"),
-			float(operation.get("radius")),
-			material_id
-		))
-	else:
-		var bounds: AABB = operation.call("estimate_affected_aabb")
-		ok = bool(transaction.call(
-			"place_material_volume_box",
-			bounds.position,
-			bounds.position + bounds.size,
-			material_id
-		))
-	if not ok:
-		_last_error = _transaction_error(transaction)
+	var result := VolumeBridge.apply(transaction, shape, operation)
+	if not bool(result.get("accepted", false)):
+		_last_error = str(result.get("error", "volume material operation failed"))
 		return 0
 	return 1
 

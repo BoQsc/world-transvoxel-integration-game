@@ -1,0 +1,30 @@
+{
+  "schema": "world_transvoxel.integration.tqp54_retained_evidence.v1",
+  "date": "2026-08-09",
+  "status": "PASS",
+  "platform": "windows-x86_64",
+  "project_imports": [
+    {"engine": "4.6.3", "marker": "WT_TQP54_PROJECT_IMPORT_PASS engine=4.6.3"},
+    {"engine": "4.7", "marker": "WT_TQP54_PROJECT_IMPORT_PASS engine=4.7"}
+  ],
+  "runtime_smokes": [
+    {
+      "engine": "4.6.3",
+      "marker": "WT_TQP54_MIGRATION_GODOT_PASS render=1 collision=1 edit=committed journal=replayed failure=closed generation=3"
+    },
+    {
+      "engine": "4.7",
+      "marker": "WT_TQP54_MIGRATION_GODOT_PASS render=1 collision=1 edit=committed journal=replayed failure=closed generation=3"
+    }
+  ],
+  "candidate_regression_checks": [
+    "WT_TERRAIN_TQP52_QUALIFICATION_PASS engines=2",
+    "WT_TERRAIN_A5_PHASE5_EXIT_REVIEW_PASS validators=7 smokes=4"
+  ],
+  "observations": [
+    "The former unbounded deep flat_baseline profile exceeded 900 seconds and was terminated.",
+    "The timeout attempt is not qualification evidence; the runner now bounds each deep profile to 1800 seconds by default.",
+    "The focused migration gate completed both engines in under one minute on this machine."
+  ],
+  "release_claim": false
+}
