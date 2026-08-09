@@ -4,9 +4,9 @@
   "status": "QUALIFIED",
   "candidate": {
     "repository": "world-transvoxel-terrain",
-    "commit": "5a96a2b86c2e8dbadb0203c8a063eb3eb52e405d",
-    "addon_tree": "1ca9f2625e0c54c41470086aedde2e4862d0fc4e",
-    "package_digest_sha256": "afd0e17da130cc147d903039a079dcb2a99e2776c3408950da8e8caa447fde51",
+    "commit": "20f0a6e4b5fd32016e106a1bac9c1248f2d2a81f",
+    "addon_tree": "bd8b7c6ebde90c483ff354f97db09512008e6fcc",
+    "package_digest_sha256": "df63530846029be9b39fe939c18b2cc20c43fbe961aa481428be6ebac174f96b",
     "files": 87
   },
   "authority": {
