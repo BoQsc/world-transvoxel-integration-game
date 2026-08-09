@@ -22,6 +22,12 @@ categories into explicit overlay sections for the reference scene label.
 smoke tests. Game repositories should not carry their own backend mesh traversal
 helper just to prove terrain has drawable mesh instances.
 
-`WtTerrainWatertightnessProbe` owns rendered mesh edge/winding audits for
-integration smoke tests. Game repositories may choose probe centers and edit
-patterns, but the backend mesh traversal and edge counting should stay here.
+`WtTerrainWatertightnessProbe` owns rendered mesh manifold, shared-edge
+orientation, zero-area, and normal-agreement diagnostics. Game repositories may
+choose probe centers and edit patterns, but backend mesh traversal and edge
+counting stay here.
+
+TQP-57 adds `WtTerrainLargeAcceptanceScene` and `WtTerrainLodAudit`. The scene
+is an editor-inspectable standalone 2048 x 256 x 2048 CPU terrain fixture using
+only the pinned native authority. Its retained qualification locates and audits
+a live mixed-LOD seam instead of inferring continuity from LOD counts alone.

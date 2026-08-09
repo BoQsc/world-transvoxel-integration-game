@@ -7,7 +7,7 @@
   "addon_root": "addons/world_transvoxel_terrain",
   "dependency": {
     "name": "world-transvoxel",
-    "required_revision": "f4abd7ab4f921f98aba4ee45b4453af0bae53cd8",
+    "required_revision": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
     "required_classes": [
       "WorldTransvoxelTerrain",
       "WorldTransvoxelConfig",

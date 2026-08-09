@@ -217,6 +217,10 @@ func remove_collision_viewer(viewer_id: int, revision: int) -> bool:
 func query_chunk_state(chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	return BackendOps.query_chunk_state(self, chunk_coordinate, lod)
 
+
+func query_active_chunk_states() -> Array:
+	return BackendOps.query_active_chunk_states(self)
+
 func get_chunk_readiness(chunk_coordinate: Vector3i, lod: int = 0) -> Dictionary:
 	return _runtime_state.chunk_readiness(self, chunk_coordinate, lod)
 

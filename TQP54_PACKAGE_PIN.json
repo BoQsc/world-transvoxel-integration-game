@@ -4,16 +4,16 @@
   "status": "QUALIFIED",
   "candidate": {
     "repository": "world-transvoxel-terrain",
-    "commit": "20f0a6e4b5fd32016e106a1bac9c1248f2d2a81f",
-    "addon_tree": "bd8b7c6ebde90c483ff354f97db09512008e6fcc",
-    "package_digest_sha256": "df63530846029be9b39fe939c18b2cc20c43fbe961aa481428be6ebac174f96b",
-    "files": 87
+    "commit": "2184988ec7d317f6aedc212e6198997b60888dfa",
+    "addon_tree": "f727fb2fdd1f06037c7daab239e895fb9a98f359",
+    "package_digest_sha256": "1b7332ab974b78759df4d1086bd874eca70080e30d5f572867c916f3bb34b25c",
+    "files": 94
   },
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "f4abd7ab4f921f98aba4ee45b4453af0bae53cd8",
-    "addon_tree": "6c9054cc15ef3c83c9d8da67744b7ae66010ced7",
-    "package_digest_sha256": "979b35485e7decd7a20fe0ba420dc7e1d9511d5a3d6a91313e00e474f3a847f9",
+    "commit": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
+    "addon_tree": "aae6e92e527402aa4a9cfbb0479fe0ecc54c2db8",
+    "package_digest_sha256": "d811680553b6e13b15708ef324a3d2b73d4b41a3d01f381a4c031bb3b439ea3f",
     "files": 173
   }
 }

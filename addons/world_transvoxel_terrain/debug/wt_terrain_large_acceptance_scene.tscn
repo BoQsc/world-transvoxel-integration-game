@@ -1,0 +1,271 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/debug/wt_terrain_large_acceptance_scene.gd" id="1_scene"]
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd" id="2_world"]
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/material/wt_terrain_material_applicator.gd" id="3_material"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.08, 0.18, 0.28, 1)
+sky_horizon_color = Color(0.62, 0.72, 0.73, 1)
+ground_bottom_color = Color(0.035, 0.05, 0.045, 1)
+ground_horizon_color = Color(0.32, 0.38, 0.32, 1)
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMaterial")
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.68, 0.74, 0.72, 1)
+ambient_light_energy = 0.62
+reflected_light_source = 2
+tonemap_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="WorldLineMaterial"]
+shading_mode = 0
+albedo_color = Color(0.96, 0.72, 0.18, 0.8)
+transparency = 1
+no_depth_test = true
+
+[sub_resource type="StandardMaterial3D" id="ResidentLineMaterial"]
+shading_mode = 0
+albedo_color = Color(0.12, 0.86, 0.92, 0.78)
+transparency = 1
+no_depth_test = true
+
+[sub_resource type="SphereMesh" id="ViewerMesh"]
+radius = 2.0
+height = 4.0
+
+[sub_resource type="StandardMaterial3D" id="ViewerMaterial"]
+shading_mode = 0
+albedo_color = Color(1, 0.32, 0.1, 1)
+emission_enabled = true
+emission = Color(1, 0.12, 0.02, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StyleBoxFlat" id="DockStyle"]
+bg_color = Color(0.025, 0.04, 0.045, 0.965)
+border_width_right = 1
+border_color = Color(0.18, 0.3, 0.31, 1)
+content_margin_left = 16.0
+content_margin_top = 16.0
+content_margin_right = 16.0
+content_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StatusStyle"]
+bg_color = Color(0.045, 0.075, 0.075, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.16, 0.66, 0.62, 0.7)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
+[node name="WtTerrainLargeAcceptanceScene" type="Node3D"]
+script = ExtResource("1_scene")
+
+[node name="TerrainWorld" type="Node3D" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_world")
+
+[node name="MaterialApplicator" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("3_material")
+reference_scene_path = NodePath("..")
+visual_mode = &"production"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-54, -34, 0)
+light_color = Color(1, 0.93, 0.8, 1)
+light_energy = 1.22
+shadow_enabled = true
+directional_shadow_max_distance = 320.0
+
+[node name="Fill" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-28, 142, 0)
+light_color = Color(0.44, 0.67, 0.78, 1)
+light_energy = 0.3
+
+[node name="Camera3D" type="Camera3D" parent="."]
+unique_name_in_owner = true
+current = true
+fov = 58.0
+near = 0.15
+far = 5000.0
+
+[node name="WorldBounds" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+material_override = SubResource("WorldLineMaterial")
+cast_shadow = 0
+
+[node name="ResidentBounds" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+material_override = SubResource("ResidentLineMaterial")
+cast_shadow = 0
+
+[node name="ViewerMarker" type="MeshInstance3D" parent="."]
+unique_name_in_owner = true
+mesh = SubResource("ViewerMesh")
+material_override = SubResource("ViewerMaterial")
+cast_shadow = 0
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="Dock" type="PanelContainer" parent="Interface"]
+offset_right = 372.0
+anchor_bottom = 1.0
+grow_vertical = 1
+theme_override_styles/panel = SubResource("DockStyle")
+
+[node name="Content" type="VBoxContainer" parent="Interface/Dock"]
+theme_override_constants/separation = 7
+
+[node name="Title" type="Label" parent="Interface/Dock/Content"]
+theme_override_colors/font_color = Color(0.91, 0.96, 0.94, 1)
+theme_override_font_sizes/font_size = 21
+text = "CPU Large Terrain Acceptance"
+
+[node name="Subtitle" type="Label" parent="Interface/Dock/Content"]
+theme_override_colors/font_color = Color(0.48, 0.73, 0.7, 1)
+text = "TQP-57 / production addon / world-transvoxel"
+
+[node name="StatusPanel" type="PanelContainer" parent="Interface/Dock/Content"]
+theme_override_styles/panel = SubResource("StatusStyle")
+
+[node name="StatusRows" type="VBoxContainer" parent="Interface/Dock/Content/StatusPanel"]
+theme_override_constants/separation = 5
+
+[node name="StatusLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.35, 0.9, 0.65, 1)
+theme_override_font_sizes/font_size = 18
+text = "STARTING"
+
+[node name="ProfileLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+text = "2,048 x 256 x 2,048 cells"
+
+[node name="ViewerLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+text = "Viewer pending"
+
+[node name="ResidencyLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+text = "Residency pending"
+
+[node name="LodLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+text = "LOD audit pending"
+
+[node name="PipelineLabel" type="Label" parent="Interface/Dock/Content/StatusPanel/StatusRows"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.65, 0.7, 0.69, 1)
+text = "Pipeline pending"
+
+[node name="Separator1" type="HSeparator" parent="Interface/Dock/Content"]
+
+[node name="TeleportHeading" type="Label" parent="Interface/Dock/Content"]
+theme_override_colors/font_color = Color(0.55, 0.76, 0.74, 1)
+text = "STREAMING WINDOW"
+
+[node name="TeleportRow1" type="HBoxContainer" parent="Interface/Dock/Content"]
+theme_override_constants/separation = 6
+
+[node name="NearButton" type="Button" parent="Interface/Dock/Content/TeleportRow1"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Near"
+
+[node name="CenterButton" type="Button" parent="Interface/Dock/Content/TeleportRow1"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Center"
+
+[node name="EditSiteButton" type="Button" parent="Interface/Dock/Content/TeleportRow1"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Edit site"
+
+[node name="TeleportRow2" type="HBoxContainer" parent="Interface/Dock/Content"]
+theme_override_constants/separation = 6
+
+[node name="FarZButton" type="Button" parent="Interface/Dock/Content/TeleportRow2"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Far Z"
+
+[node name="FarXButton" type="Button" parent="Interface/Dock/Content/TeleportRow2"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Far X"
+
+[node name="OverviewButton" type="Button" parent="Interface/Dock/Content/TeleportRow2"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Overview"
+
+[node name="EditRow" type="HBoxContainer" parent="Interface/Dock/Content"]
+theme_override_constants/separation = 6
+
+[node name="CarveButton" type="Button" parent="Interface/Dock/Content/EditRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Carve"
+
+[node name="ConstructButton" type="Button" parent="Interface/Dock/Content/EditRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Construct"
+
+[node name="RestartButton" type="Button" parent="Interface/Dock/Content/EditRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "Restart"
+
+[node name="Separator2" type="HSeparator" parent="Interface/Dock/Content"]
+
+[node name="BoundsToggle" type="CheckButton" parent="Interface/Dock/Content"]
+unique_name_in_owner = true
+button_pressed = true
+text = "World envelope"
+
+[node name="ResidentToggle" type="CheckButton" parent="Interface/Dock/Content"]
+unique_name_in_owner = true
+text = "Resident chunk bounds"
+
+[node name="TrackToggle" type="CheckButton" parent="Interface/Dock/Content"]
+unique_name_in_owner = true
+button_pressed = true
+text = "Stream with camera"
+
+[node name="Scope" type="Label" parent="Interface/Dock/Content"]
+size_flags_vertical = 3
+theme_override_colors/font_color = Color(0.5, 0.56, 0.55, 1)
+text = "BOUNDED ADAPTIVE RESIDENCY\nLOD0 / LOD1 / LOD2\nNO FALLBACK TERRAIN"
+vertical_alignment = 2
+
+[node name="SceneBadge" type="Label" parent="Interface"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -278.0
+offset_top = 20.0
+offset_right = -22.0
+offset_bottom = 64.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0.9, 0.94, 0.92, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "CPU TERRAIN STANDARD 1.0"
+horizontal_alignment = 2

@@ -149,6 +149,14 @@ static func query_chunk_state(world, chunk_coordinate: Vector3i, lod: int) -> Re
 		return null
 	return world._backend_terrain.call("query_chunk_state", chunk_coordinate, lod)
 
+
+static func query_active_chunk_states(world) -> Array:
+	if world._backend_terrain == null or not world._backend_terrain.has_method("query_active_chunk_states"):
+		world._last_error = "backend terrain cannot query active chunk states"
+		return []
+	world._last_error = "ok"
+	return Array(world._backend_terrain.call("query_active_chunk_states"))
+
 static func ensure_backend_terrain(world) -> bool:
 	if world._backend_terrain != null and is_instance_valid(world._backend_terrain):
 		connect_backend_runtime_signals(world)
