@@ -29,7 +29,15 @@ def load_json(path: Path) -> dict[str, object]:
 
 def git_value(repository: Path, revision: str) -> str:
     return subprocess.check_output(
-        ["git", "-C", str(repository), "rev-parse", revision],
+        [
+            "git",
+            "-c",
+            f"safe.directory={repository.as_posix()}",
+            "-C",
+            str(repository),
+            "rev-parse",
+            revision,
+        ],
         text=True,
     ).strip()
 
@@ -82,6 +90,11 @@ def main() -> None:
     require(pin.get("status") == "QUALIFIED", "package pin is not qualified")
     require(contract.get("status") == "QUALIFIED", "migration contract is not qualified")
     require(evidence.get("status") == "PASS", "retained migration evidence is not passing")
+    require(
+        contract.get("engine_policy", {}).get("minimum_version") == "4.7"
+        and contract.get("engine_policy", {}).get("current_qualification_matrix") == ["4.7"],
+        "Godot qualification policy must target only 4.7",
+    )
 
     candidate = pin["candidate"]
     authority = pin["authority"]
@@ -156,12 +169,12 @@ def main() -> None:
     rules = contract.get("migration_rules", [])
     require(isinstance(rules, list) and len(rules) == 4, "migration rules are incomplete")
     require(
-        len(evidence.get("project_imports", [])) == 2
-        and len(evidence.get("runtime_smokes", [])) == 2,
-        "retained cross-version evidence is incomplete",
+        [item.get("engine") for item in evidence.get("project_imports", [])] == ["4.7"]
+        and [item.get("engine") for item in evidence.get("runtime_smokes", [])] == ["4.7"],
+        "retained Godot 4.7 evidence is incomplete",
     )
     print(
-        "WT_TQP54_MIGRATION_CONTRACT_PASS candidate_files=%d authority_files=%d engines=2 boundary=gameworld"
+        "WT_TQP54_MIGRATION_CONTRACT_PASS candidate_files=%d authority_files=%d engines=1 boundary=gameworld"
         % (int(candidate["files"]), int(authority["files"]))
     )
 

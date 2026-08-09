@@ -18,7 +18,7 @@ ARTIFACT_ROOT = ROOT / "artifacts" / "tqp54_migration"
 FIXTURE_ROOT = ARTIFACT_ROOT / "project"
 SCRIPT = "res://tests/tqp54_migration_smoke.gd"
 MARKER = "WT_TQP54_MIGRATION_GODOT_PASS"
-ENGINE_VERSIONS = ("4.6.3", "4.7")
+ENGINE_VERSIONS = ("4.7",)
 
 
 def discover_engines(explicit: list[Path]) -> list[tuple[str, Path]]:
@@ -70,7 +70,7 @@ def prepare_fixture() -> None:
                 "",
                 "[application]",
                 'config/name="TQP-54 Migration Fixture"',
-                'config/features=PackedStringArray("4.6", "Forward Plus")',
+                'config/features=PackedStringArray("4.7", "Forward Plus")',
                 "",
                 "[editor_plugins]",
                 'enabled=PackedStringArray("res://addons/world_transvoxel/plugin.cfg", "res://addons/world_transvoxel_terrain/plugin.cfg", "res://addons/world_transvoxel_gameworld/plugin.cfg")',

@@ -44,16 +44,41 @@ def package_files(root: pathlib.Path) -> dict[pathlib.PurePosixPath, pathlib.Pat
     return result
 
 
+def containing_repository(path: pathlib.Path) -> pathlib.Path:
+    for candidate in (path, *path.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    raise RuntimeError("Git repository not found for %s" % path)
+
+
 def tracked_package_files(root: pathlib.Path) -> dict[pathlib.PurePosixPath, pathlib.Path]:
+    repository_hint = containing_repository(root)
     repository = pathlib.Path(
         subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            [
+                "git",
+                "-c",
+                "safe.directory=%s" % repository_hint.as_posix(),
+                "-C",
+                str(root),
+                "rev-parse",
+                "--show-toplevel",
+            ],
             text=True,
         ).strip()
     )
     prefix = root.relative_to(repository).as_posix()
     output = subprocess.check_output(
-        ["git", "-C", str(repository), "ls-files", "--", prefix],
+        [
+            "git",
+            "-c",
+            "safe.directory=%s" % repository.as_posix(),
+            "-C",
+            str(repository),
+            "ls-files",
+            "--",
+            prefix,
+        ],
         text=True,
     )
     result: dict[pathlib.PurePosixPath, pathlib.Path] = {}

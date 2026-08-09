@@ -2,6 +2,12 @@
   "schema": "world_transvoxel.integration.tqp54_migration.v1",
   "milestone": "TQP-54",
   "status": "QUALIFIED",
+  "engine_policy": {
+    "minimum_version": "4.7",
+    "current_qualification_matrix": ["4.7"],
+    "newer_versions": "require_explicit_qualification_before_promotion",
+    "legacy_results": "historical_evidence_not_support_requirement"
+  },
   "release_claim": false,
   "runtime_boundary": "WtTerrainWorld",
   "package_policy": "EXACT_PINNED_AUTHORITIES_NO_FALLBACKS",

@@ -1,6 +1,9 @@
 # TQP-54 Downstream Integration Migration
 
-Status: qualified on Godot 4.6.3 and 4.7.
+Status: qualified on Godot 4.7.
+
+Godot 4.7 is the minimum and sole current qualification target. Older engine
+results are historical evidence, not a compatibility requirement.
 
 The integration game consumes exact pinned copies of `world-transvoxel` and
 `world-transvoxel-terrain`. Gameplay reaches native authority through
