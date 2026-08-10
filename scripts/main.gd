@@ -592,6 +592,11 @@ func _wait_for_current_profile_settled(context: String) -> bool:
 
 func _wait_for_human_startup_visual_ready() -> bool:
 	var frame_limit := 900
+	if game_world != null:
+		frame_limit = maxi(
+			frame_limit,
+			int(game_world.get("startup_world_state_timeout_frames"))
+		)
 	var last_summary := {}
 	for _frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
@@ -9143,3 +9148,6 @@ func _fail(message: String) -> void:
 	push_error("WT_PRODUCTION_GAME_P2_FAIL: " + message)
 	if autonomous or not human_visual_capture_path.is_empty():
 		get_tree().quit(1)
+	elif loading_label != null:
+		_set_human_loading_visible(true)
+		loading_label.text = "Terrain startup failed\n%s" % message
