@@ -336,6 +336,7 @@ def validate_visual_summary(
         "runtime_collision_deactivation_distance": 256.0,
         "edit_failure_count": 0,
         "native_render_material_override": True,
+        "production_texture_resolution": 512,
         "primary_material_texture_active": True,
         "surface_material_blend_weights_active": True,
         "clean_material_variation_enabled": False,

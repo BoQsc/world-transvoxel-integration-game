@@ -3650,6 +3650,7 @@ func _presentation_summary() -> Dictionary:
 		material_summary = material_applicator.call("get_material_quality_summary")
 	return {
 		"materialized_instances": int(material_summary.get("materialized_instances", 0)),
+		"production_texture_resolution": int(material_summary.get("production_texture_resolution", 0)),
 		"production_texture_active": bool(material_summary.get("production_texture_active", false)),
 		"primary_material_texture_active": bool(material_summary.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(material_summary.get("surface_biome_worldspace_blend_active", false)),
@@ -3677,6 +3678,9 @@ func _presentation_summary() -> Dictionary:
 func _verify_presentation(summary: Dictionary) -> bool:
 	if int(summary.get("materialized_instances", 0)) < expected_resources:
 		_fail("terrain materials not applied to active render meshes: %s" % str(summary))
+		return false
+	if int(summary.get("production_texture_resolution", 0)) != 512:
+		_fail("production terrain texture resolution is not 512: %s" % str(summary))
 		return false
 	if not bool(summary.get("production_texture_active", false)):
 		_fail("production terrain texture pipeline inactive: %s" % str(summary))
@@ -4148,6 +4152,7 @@ func _capture_human_visual() -> void:
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"native_water_material_override": bool(presentation.get("native_water_material_override", false)),
+		"production_texture_resolution": int(presentation.get("production_texture_resolution", 0)),
 		"surface_material_blend_weights_active": bool(presentation.get("surface_material_blend_weights_active", false)),
 		"primary_material_texture_active": bool(presentation.get("primary_material_texture_active", false)),
 		"surface_biome_worldspace_blend_active": bool(presentation.get("surface_biome_worldspace_blend_active", false)),
