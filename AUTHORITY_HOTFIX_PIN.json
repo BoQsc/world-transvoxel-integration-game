@@ -4,25 +4,25 @@
   "base_tqp54_pin": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "841fd094c55858e3f4a4731666e1e5a39015cb21",
-    "addon_tree": "c5eb6471a2788f4d88d98928201689f1be988609",
-    "package_digest_sha256": "cfe70c9bc23b7653d89a0a78aa3b5c203a39798ab26d634c95e9e7d1aa457714",
+    "commit": "f30818b9ce0f0b3f9ddb75726db5522d97167404",
+    "addon_tree": "11a431247a13870e9085e2295576b433c9441c80",
+    "package_digest_sha256": "b1dad365bc35d7ec583b84cf3eb59ced5300be548575cd58b3f79f7ccddaf2e7",
     "files": 175,
     "fallback": false,
     "generated_runtime": [
       {
         "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
-        "bytes": 2363904,
-        "sha256": "f20084037ef831e000e5781b3f4d75a566f1386779d9aead2fa90881b77db4fd"
+        "bytes": 2127872,
+        "sha256": "b9fb19599aaaa74e59f789ad313721b0c108feb7239059b4436a67441d1b6c9b"
       },
       {
         "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
-        "bytes": 2249728,
-        "sha256": "917847820be5665045e2b6e71faa9b6bf8a9e0294600a3e49eedea8c6ad70294"
+        "bytes": 2053632,
+        "sha256": "45fa0cc13693e03ef342d58bf17038322eb8ce32926dca8d7cbda2b8f990026a"
       }
     ]
   },
-  "scope": "cross-LOD edit replacement publication",
+  "scope": "cross-LOD edit replacement publication and exact-mask transition remeshing",
   "performance_scope": "EXISTING_MULTISITE_LATENCY_FAILURE_REMAINS_UNQUALIFIED",
-  "evidence": "docs/evidence/authority_841fd09/qualification.json"
+  "evidence": "docs/evidence/authority_f30818b/qualification.json"
 }

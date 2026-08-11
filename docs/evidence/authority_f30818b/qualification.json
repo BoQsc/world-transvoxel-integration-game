@@ -1,0 +1,76 @@
+{
+  "schema": "world_transvoxel.integration.authority_hotfix_qualification.v1",
+  "date": "2026-08-11",
+  "status": "ACCEPTED_CORRECTNESS_HOTFIX",
+  "release_claim": false,
+  "authority": {
+    "repository": "world-transvoxel",
+    "base_commit": "841fd094c55858e3f4a4731666e1e5a39015cb21",
+    "commit": "f30818b9ce0f0b3f9ddb75726db5522d97167404",
+    "addon_tree": "11a431247a13870e9085e2295576b433c9441c80",
+    "package_digest_sha256": "b1dad365bc35d7ec583b84cf3eb59ced5300be548575cd58b3f79f7ccddaf2e7",
+    "debug_binary_sha256": "b9fb19599aaaa74e59f789ad313721b0c108feb7239059b4436a67441d1b6c9b",
+    "release_binary_sha256": "45fa0cc13693e03ef342d58bf17038322eb8ce32926dca8d7cbda2b8f990026a",
+    "scope": "cross-LOD edit publication plus exact-mask transition remeshing"
+  },
+  "environment": {
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "renderer": "Vulkan Forward+",
+    "logical_cpu_affinity": [0, 1, 2]
+  },
+  "defect": {
+    "classification": "authority runtime cross-mask transition publication",
+    "transvoxel_tables_or_paper": false,
+    "observed_behavior": "a temporary sawtooth opening exposed the background along an LOD boundary until a closer exact-mask mesh became resident",
+    "cause": "a mesh generated for one transition mask was republished with another mask after source-mask deformation had already discarded required triangles"
+  },
+  "characterization": {
+    "baseline_commit": "841fd094c55858e3f4a4731666e1e5a39015cb21",
+    "baseline_lod_hash": "4d3cbadcef8d851df1061e6845444ba9ad4c02ac9671b072c92b1b944a4e2314",
+    "baseline_bridge_geometry": ["320/1674", "320/1674"],
+    "baseline_staged_transition_generations": 0,
+    "baseline_preserved_collision_generations": 0
+  },
+  "correctness_gates": {
+    "native_debug": "PASS",
+    "native_release": "PASS",
+    "lod_streaming_hash": "7c9071d1c31da0397e48db0338c299b8bf923dbb0e80448ae11cf049c3c0d2fb",
+    "fixed_bridge_geometry": ["320/1674", "351/1812"],
+    "staged_transition_generations": 1,
+    "preserved_collision_generations": 1,
+    "transition_mesh_completions": 3,
+    "authority_repository_validation": "PASS",
+    "godot_4_7_import": "PASS",
+    "human_micro_hole_live_replay": {
+      "status": "PASS",
+      "transactions": 96,
+      "settled_isolated_sky_pixels": 0,
+      "targeted_seam_mismatch": false
+    },
+    "integration_quality_gate": "PARTIAL_PASS_BASELINE_LIMITATIONS_RECORDED",
+    "settled_visual_topology": {
+      "status": "BLOCKED_BY_BASELINE_EQUIVALENT_SETTLING_LIMIT",
+      "candidate_pending_replacements": 252,
+      "accepted_baseline_pending_replacements": 252
+    },
+    "streaming_fly_gap_gate": {
+      "status": "BLOCKED_BY_BASELINE_EQUIVALENT_LOCAL_COLLISION_PROBE_LIMIT",
+      "candidate_visual_gap_detected": false,
+      "candidate_coverage_gap_detected": false,
+      "accepted_baseline_visual_gap_detected": false,
+      "accepted_baseline_coverage_gap_detected": false,
+      "geometry_probe_available": false
+    },
+    "human_retest": "REQUIRED"
+  },
+  "decision": {
+    "apply_authority_package": true,
+    "change_terrain_wrapper": false,
+    "change_gameworld": false,
+    "fallback_added": false,
+    "remaining_performance_work": [
+      "delayed first edit after relocation",
+      "flight stutter"
+    ]
+  }
+}
