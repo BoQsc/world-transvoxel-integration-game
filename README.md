@@ -29,6 +29,12 @@ pins. See [docs/TQP54_DOWNSTREAM_INTEGRATION_MIGRATION.md](docs/TQP54_DOWNSTREAM
 and `TQP54_PACKAGE_PIN.json`. This is an integration qualification, not a final
 Terrain 1.0 release claim.
 
+`AUTHORITY_HOTFIX_PIN.json` layers the qualified `841fd09` cross-LOD edit
+publication correction over the retained TQP-54 authority base. The hotfix
+prevents edited fine render/collision ownership from appearing beneath an old
+coarse LOD owner. It does not claim that the existing multi-site replacement
+latency is acceptable; that performance gate remains open.
+
 Authority commit `789aea6` was evaluated separately and rejected for the
 integration pin because its three-CPU multi-site edit replacement latency did
 not qualify. See

@@ -1,0 +1,28 @@
+{
+  "schema": "world_transvoxel.integration.authority_hotfix_pin.v1",
+  "status": "ACTIVE_CORRECTNESS_HOTFIX",
+  "base_tqp54_pin": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "841fd094c55858e3f4a4731666e1e5a39015cb21",
+    "addon_tree": "c5eb6471a2788f4d88d98928201689f1be988609",
+    "package_digest_sha256": "cfe70c9bc23b7653d89a0a78aa3b5c203a39798ab26d634c95e9e7d1aa457714",
+    "files": 175,
+    "fallback": false,
+    "generated_runtime": [
+      {
+        "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bytes": 2363904,
+        "sha256": "f20084037ef831e000e5781b3f4d75a566f1386779d9aead2fa90881b77db4fd"
+      },
+      {
+        "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+        "bytes": 2249728,
+        "sha256": "917847820be5665045e2b6e71faa9b6bf8a9e0294600a3e49eedea8c6ad70294"
+      }
+    ]
+  },
+  "scope": "cross-LOD edit replacement publication",
+  "performance_scope": "EXISTING_MULTISITE_LATENCY_FAILURE_REMAINS_UNQUALIFIED",
+  "evidence": "docs/evidence/authority_841fd09/qualification.json"
+}

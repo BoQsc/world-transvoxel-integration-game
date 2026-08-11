@@ -1,0 +1,51 @@
+{
+  "schema": "world_transvoxel.integration.authority_hotfix_qualification.v1",
+  "date": "2026-08-11",
+  "status": "ACCEPTED_CORRECTNESS_HOTFIX",
+  "release_claim": false,
+  "authority": {
+    "repository": "world-transvoxel",
+    "base_commit": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
+    "commit": "841fd094c55858e3f4a4731666e1e5a39015cb21",
+    "addon_tree": "c5eb6471a2788f4d88d98928201689f1be988609",
+    "package_digest_sha256": "cfe70c9bc23b7653d89a0a78aa3b5c203a39798ab26d634c95e9e7d1aa457714",
+    "debug_binary_sha256": "f20084037ef831e000e5781b3f4d75a566f1386779d9aead2fa90881b77db4fd",
+    "release_binary_sha256": "917847820be5665045e2b6e71faa9b6bf8a9e0294600a3e49eedea8c6ad70294",
+    "scope": "cross-LOD edit replacement publication only"
+  },
+  "environment": {
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "renderer": "Vulkan Forward+",
+    "logical_cpu_affinity": [0, 1, 2]
+  },
+  "defect": {
+    "classification": "downstream frame-thread publication policy",
+    "transvoxel_tables_or_paper": false,
+    "observed_behavior": "edited fine geometry and collision could publish beneath an unchanged coarse LOD render awaiting retirement"
+  },
+  "correctness_gates": {
+    "native_debug": "PASS",
+    "native_release": "PASS",
+    "godot_4_7_debug_runs": 3,
+    "godot_4_7_release": "PASS",
+    "mixed_ownership_frames": 0,
+    "canonical_lod_hash": "4d3cbadcef8d851df1061e6845444ba9ad4c02ac9671b072c92b1b944a4e2314",
+    "mutation_result": "REJECTED",
+    "mutation_visible_cross_lod_frames": 3,
+    "repository_validation": "PASS"
+  },
+  "integration_gate": {
+    "status": "KNOWN_BASELINE_FAILURE",
+    "failure_context": "multi-site LOD site B edit 15 did not reach gameplay-settled state",
+    "baseline_also_failed": true,
+    "page_or_mesh_failure": false,
+    "performance_acceptance_claim": false
+  },
+  "decision": {
+    "apply_authority_package": true,
+    "change_terrain_wrapper": false,
+    "change_gameworld": false,
+    "human_retest_required": true,
+    "remaining_work": "bounded edited-region residency and foreground replacement latency"
+  }
+}
