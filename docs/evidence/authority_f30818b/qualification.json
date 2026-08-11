@@ -61,7 +61,12 @@
       "accepted_baseline_coverage_gap_detected": false,
       "geometry_probe_available": false
     },
-    "human_retest": "REQUIRED"
+    "human_retest": {
+      "status": "PASS_NO_OPENING_OBSERVED",
+      "date": "2026-08-11",
+      "scope": "temporary LOD opening",
+      "configuration": "standard fullscreen g23 production-texture playtest"
+    }
   },
   "decision": {
     "apply_authority_package": true,
