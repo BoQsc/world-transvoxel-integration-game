@@ -1,0 +1,79 @@
+{
+  "schema": "world_transvoxel.integration.authority_qualification.v1",
+  "date": "2026-08-11",
+  "status": "REJECTED",
+  "release_claim": false,
+  "consumer": {
+    "repository": "world-transvoxel-integration-game",
+    "commit": "04bbc51b9a0cfcb72132e64bef9ecaf4bab4d77f",
+    "authority_pin_preserved": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
+    "terrain_package_tree_preserved": "877fc23c3c303eb16ec018e33c6d7cd9551e9c6d"
+  },
+  "candidate": {
+    "repository": "world-transvoxel",
+    "commit": "789aea6e83a793552e260d187f90b2dd44395401",
+    "addon_tree": "6d3fe307dc2fa157e8aff6b291d22e0d25ea1bba",
+    "files": 173,
+    "scope": "addons/world_transvoxel only"
+  },
+  "environment": {
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "renderer": "Vulkan Forward+",
+    "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+    "logical_cpu_affinity": [0, 1, 2]
+  },
+  "gates": {
+    "cold_edit_during_load": {
+      "status": "PASS",
+      "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+      "operation_count": 64,
+      "committed_batches": 8,
+      "density_mismatches": 0,
+      "material_mismatches": 0,
+      "watertightness_boundary_edges": 0,
+      "watertightness_nonmanifold_edges": 0,
+      "stdout_sha256": "2154539148B95BFFA5F0D9AE2485C8D605404C4979D766DF1A13533F32D48381"
+    },
+    "canonical_multisite_lod": {
+      "status": "FAIL",
+      "profile": "g19_compact_2k_on_demand",
+      "failure_context": "site A edit 15",
+      "active_chunk_records": 963,
+      "blocked_pending_replacements": 1,
+      "visual_ready_chunk_records": 962,
+      "scheduler_failed_records": 0,
+      "page_sample_failures": 0,
+      "page_mesh_failures": 0,
+      "stderr_sha256": "D06E9B3B48722A3E0C127A7543305AEDD9A0B49F2531B732DF974685348D1474"
+    },
+    "extended_multisite_diagnostic": {
+      "status": "FAIL",
+      "acceptance_gate": false,
+      "failure_context": "site B edit 15",
+      "real_time_floor_seconds": 30,
+      "retention_zones": 2,
+      "active_chunk_records": 1593,
+      "blocked_pending_replacements": 8,
+      "priority_publication_queue_count": 8,
+      "scheduler_sampling_records": 7,
+      "scheduler_meshing_records": 1,
+      "page_loading_records": 7,
+      "page_sample_failures": 0,
+      "page_mesh_failures": 0,
+      "stderr_sha256": "04006CFE9D8DE9A6EAD5EB22ECDCEF0E064255EA2B3D5050CEC4FBF3EA32826D"
+    }
+  },
+  "classification": {
+    "thin_unchanged_surface": "previous render generation retained during staged replacement",
+    "density_corruption": false,
+    "duplicate_texture_layer": false,
+    "transvoxel_table_defect": false,
+    "replacement_latency_acceptable": false
+  },
+  "decision": {
+    "apply_candidate": false,
+    "change_terrain_package": false,
+    "change_gameworld": false,
+    "next_gate": "bounded edited-region residency and foreground replacement latency"
+  }
+}

@@ -29,6 +29,11 @@ pins. See [docs/TQP54_DOWNSTREAM_INTEGRATION_MIGRATION.md](docs/TQP54_DOWNSTREAM
 and `TQP54_PACKAGE_PIN.json`. This is an integration qualification, not a final
 Terrain 1.0 release claim.
 
+Authority commit `789aea6` was evaluated separately and rejected for the
+integration pin because its three-CPU multi-site edit replacement latency did
+not qualify. See
+[docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md](docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md).
+
 ## Critical edited-terrain LOD boundary
 
 This integration game inherits the core World Transvoxel edited-terrain LOD
