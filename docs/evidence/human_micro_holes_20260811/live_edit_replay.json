@@ -1,0 +1,3693 @@
+{
+  "schema": "wt_human_edit_live_replay_v1",
+  "source_marker": "res://docs/evidence/human_micro_holes_20260811/marker.json",
+  "source_journal": "res://docs/evidence/human_micro_holes_20260811/world.wtedit",
+  "journal_sha256": "955415e06376d2095a706b707d2ae34e47a7ee748feceaa2bd7582c811977354",
+  "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+  "source_revision": 190325,
+  "initial_world_revision": 0,
+  "final_world_revision": 96,
+  "transaction_count": 96,
+  "command_count": 96,
+  "targeted_seams": [
+    {
+      "owner": "WT_Render_55_1_57_L0",
+      "neighbor": "WT_Render_55_1_58_L0",
+      "lod": 0,
+      "face": {
+        "axis": 2,
+        "axis_name": "z",
+        "plane": 928.0,
+        "side": 1
+      },
+      "focus": {
+        "x": 886.318359375,
+        "y": 18.7782592773438,
+        "z": 927.997924804688
+      },
+      "window_radius": 32.0,
+      "recorded_edge_comparison": {
+        "exact_match": false,
+        "matched_edges": 16,
+        "missing_from_neighbor_count": 1,
+        "missing_from_neighbor_samples": [
+          "8820000,203569|8821428,200000"
+        ],
+        "missing_from_owner_count": 0,
+        "missing_from_owner_samples": [],
+        "neighbor_unique_edges": 16,
+        "owner_unique_edges": 17
+      }
+    }
+  ],
+  "transactions": [
+    {
+      "index": 0,
+      "source_revision": 190325,
+      "base_revision": 0,
+      "committed_revision": 1,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 1,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              36,
+              296
+            ],
+            "maximum": [
+              302,
+              41,
+              300
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.945068,
+              38.7132568,
+              298.003265
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 1,
+      "source_revision": 190325,
+      "base_revision": 1,
+      "committed_revision": 2,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 2,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              35,
+              295
+            ],
+            "maximum": [
+              302,
+              40,
+              299
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.917297,
+              37.2852631,
+              296.993195
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 2,
+      "source_revision": 190325,
+      "base_revision": 2,
+      "committed_revision": 3,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 3,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              34,
+              294
+            ],
+            "maximum": [
+              302,
+              38,
+              298
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.889343,
+              35.849472,
+              295.977661
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 3,
+      "source_revision": 190325,
+      "base_revision": 3,
+      "committed_revision": 4,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 4,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              32,
+              293
+            ],
+            "maximum": [
+              302,
+              37,
+              297
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.861877,
+              34.4363708,
+              294.978149
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 4,
+      "source_revision": 190325,
+      "base_revision": 4,
+      "committed_revision": 5,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 5,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              31,
+              292
+            ],
+            "maximum": [
+              302,
+              35,
+              296
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.833954,
+              33.0024261,
+              293.963898
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 5,
+      "source_revision": 190325,
+      "base_revision": 5,
+      "committed_revision": 6,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 6,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              298,
+              29,
+              291
+            ],
+            "maximum": [
+              302,
+              34,
+              295
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.80658,
+              31.5955353,
+              292.968781
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 6,
+      "source_revision": 190325,
+      "base_revision": 6,
+      "committed_revision": 7,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 7,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              297,
+              28,
+              290
+            ],
+            "maximum": [
+              302,
+              32,
+              294
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.779297,
+              30.1929016,
+              291.976685
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 7,
+      "source_revision": 190325,
+      "base_revision": 7,
+      "committed_revision": 8,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 8,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              295,
+              36,
+              295
+            ],
+            "maximum": [
+              300,
+              41,
+              300
+            ]
+          },
+          "sphere": {
+            "center": [
+              297.558411,
+              38.705246,
+              297.789368
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 8,
+      "source_revision": 190325,
+      "base_revision": 8,
+      "committed_revision": 9,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 9,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              294,
+              35,
+              295
+            ],
+            "maximum": [
+              299,
+              40,
+              299
+            ]
+          },
+          "sphere": {
+            "center": [
+              296.619476,
+              37.6165619,
+              296.93924
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 9,
+      "source_revision": 190325,
+      "base_revision": 9,
+      "committed_revision": 10,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 10,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              293,
+              34,
+              294
+            ],
+            "maximum": [
+              298,
+              39,
+              298
+            ]
+          },
+          "sphere": {
+            "center": [
+              295.68396,
+              36.5318298,
+              296.092194
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 10,
+      "source_revision": 190325,
+      "base_revision": 10,
+      "committed_revision": 11,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 11,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              292,
+              33,
+              293
+            ],
+            "maximum": [
+              297,
+              38,
+              298
+            ]
+          },
+          "sphere": {
+            "center": [
+              294.762054,
+              35.4629059,
+              295.257507
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 11,
+      "source_revision": 190325,
+      "base_revision": 11,
+      "committed_revision": 12,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 12,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              292,
+              32,
+              292
+            ],
+            "maximum": [
+              296,
+              37,
+              297
+            ]
+          },
+          "sphere": {
+            "center": [
+              293.840363,
+              34.3942108,
+              294.423004
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 12,
+      "source_revision": 190325,
+      "base_revision": 12,
+      "committed_revision": 13,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 13,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              291,
+              31,
+              291
+            ],
+            "maximum": [
+              295,
+              36,
+              296
+            ]
+          },
+          "sphere": {
+            "center": [
+              292.908081,
+              33.3132324,
+              293.578918
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 13,
+      "source_revision": 190325,
+      "base_revision": 13,
+      "committed_revision": 14,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 14,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              297,
+              36,
+              291
+            ],
+            "maximum": [
+              302,
+              40,
+              295
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.33963,
+              38.0828247,
+              292.881409
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 14,
+      "source_revision": 190325,
+      "base_revision": 14,
+      "committed_revision": 15,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 15,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              297,
+              35,
+              289
+            ],
+            "maximum": [
+              301,
+              40,
+              294
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.195679,
+              37.3299866,
+              291.32959
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 15,
+      "source_revision": 190325,
+      "base_revision": 15,
+      "committed_revision": 16,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 16,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              297,
+              34,
+              287
+            ],
+            "maximum": [
+              301,
+              39,
+              292
+            ]
+          },
+          "sphere": {
+            "center": [
+              299.05365,
+              36.5870972,
+              289.798279
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 16,
+      "source_revision": 190325,
+      "base_revision": 16,
+      "committed_revision": 17,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 17,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              297,
+              34,
+              286
+            ],
+            "maximum": [
+              301,
+              38,
+              291
+            ]
+          },
+          "sphere": {
+            "center": [
+              298.911957,
+              35.8461304,
+              288.270874
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 17,
+      "source_revision": 190325,
+      "base_revision": 17,
+      "committed_revision": 18,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 18,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              296,
+              33,
+              284
+            ],
+            "maximum": [
+              301,
+              37,
+              289
+            ]
+          },
+          "sphere": {
+            "center": [
+              298.769745,
+              35.1024323,
+              286.737915
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 18,
+      "source_revision": 190325,
+      "base_revision": 18,
+      "committed_revision": 19,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 19,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              296,
+              32,
+              283
+            ],
+            "maximum": [
+              301,
+              37,
+              288
+            ]
+          },
+          "sphere": {
+            "center": [
+              298.633728,
+              34.3911438,
+              285.271729
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 19,
+      "source_revision": 190325,
+      "base_revision": 19,
+      "committed_revision": 20,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 20,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              294,
+              37,
+              297
+            ],
+            "maximum": [
+              298,
+              41,
+              302
+            ]
+          },
+          "sphere": {
+            "center": [
+              295.904602,
+              39.1375885,
+              299.240814
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 20,
+      "source_revision": 190325,
+      "base_revision": 20,
+      "committed_revision": 21,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 21,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              292,
+              36,
+              297
+            ],
+            "maximum": [
+              297,
+              41,
+              301
+            ]
+          },
+          "sphere": {
+            "center": [
+              294.447327,
+              38.2840881,
+              298.970673
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 21,
+      "source_revision": 190325,
+      "base_revision": 21,
+      "committed_revision": 22,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 22,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              291,
+              35,
+              296
+            ],
+            "maximum": [
+              295,
+              40,
+              301
+            ]
+          },
+          "sphere": {
+            "center": [
+              293.021637,
+              37.4490509,
+              298.70639
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 22,
+      "source_revision": 190325,
+      "base_revision": 22,
+      "committed_revision": 23,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 23,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              289,
+              34,
+              296
+            ],
+            "maximum": [
+              294,
+              39,
+              301
+            ]
+          },
+          "sphere": {
+            "center": [
+              291.627869,
+              36.6327362,
+              298.447998
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 23,
+      "source_revision": 190325,
+      "base_revision": 23,
+      "committed_revision": 24,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 24,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              872,
+              21,
+              946
+            ],
+            "maximum": [
+              876,
+              25,
+              950
+            ]
+          },
+          "sphere": {
+            "center": [
+              874.002747,
+              23.1830444,
+              948.14917
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 24,
+      "source_revision": 190325,
+      "base_revision": 24,
+      "committed_revision": 25,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 25,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              871,
+              21,
+              944
+            ],
+            "maximum": [
+              876,
+              25,
+              949
+            ]
+          },
+          "sphere": {
+            "center": [
+              873.393982,
+              23.0006866,
+              946.589233
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 25,
+      "source_revision": 190325,
+      "base_revision": 25,
+      "committed_revision": 26,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 26,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              871,
+              21,
+              946
+            ],
+            "maximum": [
+              876,
+              25,
+              951
+            ]
+          },
+          "sphere": {
+            "center": [
+              873.576477,
+              23.1780396,
+              948.290283
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 26,
+      "source_revision": 190325,
+      "base_revision": 26,
+      "committed_revision": 27,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 27,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              871,
+              21,
+              946
+            ],
+            "maximum": [
+              876,
+              25,
+              951
+            ]
+          },
+          "sphere": {
+            "center": [
+              873.576477,
+              23.1780396,
+              948.290283
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 27,
+      "source_revision": 190325,
+      "base_revision": 27,
+      "committed_revision": 28,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 28,
+          "operation": "sdf_construct",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 4,
+          "bounds": {
+            "minimum": [
+              871,
+              21,
+              946
+            ],
+            "maximum": [
+              876,
+              25,
+              951
+            ]
+          },
+          "sphere": {
+            "center": [
+              873.576477,
+              23.1780396,
+              948.290283
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 28,
+      "source_revision": 190325,
+      "base_revision": 28,
+      "committed_revision": 29,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 29,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              874,
+              20,
+              941
+            ],
+            "maximum": [
+              878,
+              25,
+              946
+            ]
+          },
+          "sphere": {
+            "center": [
+              876.164795,
+              22.7556915,
+              943.6698
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 29,
+      "source_revision": 190325,
+      "base_revision": 29,
+      "committed_revision": 30,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 30,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              875,
+              19,
+              942
+            ],
+            "maximum": [
+              880,
+              24,
+              946
+            ]
+          },
+          "sphere": {
+            "center": [
+              877.486328,
+              21.7346344,
+              943.934082
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 30,
+      "source_revision": 190325,
+      "base_revision": 30,
+      "committed_revision": 31,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 31,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              876,
+              18,
+              942
+            ],
+            "maximum": [
+              881,
+              23,
+              946
+            ]
+          },
+          "sphere": {
+            "center": [
+              878.792664,
+              20.7271423,
+              944.195374
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 31,
+      "source_revision": 190325,
+      "base_revision": 31,
+      "committed_revision": 32,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 32,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              878,
+              17,
+              942
+            ],
+            "maximum": [
+              882,
+              22,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              880.104675,
+              19.715271,
+              944.457764
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 32,
+      "source_revision": 190325,
+      "base_revision": 32,
+      "committed_revision": 33,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 33,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              879,
+              16,
+              942
+            ],
+            "maximum": [
+              884,
+              21,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              881.397827,
+              18.717926,
+              944.71637
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 33,
+      "source_revision": 190325,
+      "base_revision": 33,
+      "committed_revision": 34,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 34,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              880,
+              15,
+              943
+            ],
+            "maximum": [
+              885,
+              20,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              882.712708,
+              17.7038116,
+              944.97937
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 34,
+      "source_revision": 190325,
+      "base_revision": 34,
+      "committed_revision": 35,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 35,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              874,
+              20,
+              939
+            ],
+            "maximum": [
+              879,
+              25,
+              944
+            ]
+          },
+          "sphere": {
+            "center": [
+              876.729919,
+              22.3056641,
+              941.633057
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 35,
+      "source_revision": 190325,
+      "base_revision": 35,
+      "committed_revision": 36,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 36,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              876,
+              19,
+              939
+            ],
+            "maximum": [
+              880,
+              24,
+              943
+            ]
+          },
+          "sphere": {
+            "center": [
+              878.026672,
+              21.3011475,
+              941.12616
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 36,
+      "source_revision": 190325,
+      "base_revision": 36,
+      "committed_revision": 37,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 37,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              877,
+              18,
+              938
+            ],
+            "maximum": [
+              882,
+              23,
+              943
+            ]
+          },
+          "sphere": {
+            "center": [
+              879.267395,
+              20.3399963,
+              940.641174
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 37,
+      "source_revision": 190325,
+      "base_revision": 37,
+      "committed_revision": 38,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 38,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              878,
+              17,
+              938
+            ],
+            "maximum": [
+              883,
+              22,
+              942
+            ]
+          },
+          "sphere": {
+            "center": [
+              880.500305,
+              19.3849792,
+              940.159302
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 38,
+      "source_revision": 190325,
+      "base_revision": 38,
+      "committed_revision": 39,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 39,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              879,
+              16,
+              937
+            ],
+            "maximum": [
+              884,
+              21,
+              942
+            ]
+          },
+          "sphere": {
+            "center": [
+              881.724915,
+              18.4362946,
+              939.680603
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 39,
+      "source_revision": 190325,
+      "base_revision": 39,
+      "committed_revision": 40,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 40,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              881,
+              15,
+              937
+            ],
+            "maximum": [
+              885,
+              20,
+              941
+            ]
+          },
+          "sphere": {
+            "center": [
+              883.012878,
+              17.4386139,
+              939.177185
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 40,
+      "source_revision": 190325,
+      "base_revision": 40,
+      "committed_revision": 41,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 41,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              882,
+              14,
+              936
+            ],
+            "maximum": [
+              887,
+              19,
+              941
+            ]
+          },
+          "sphere": {
+            "center": [
+              884.247559,
+              16.482193,
+              938.69458
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 41,
+      "source_revision": 190325,
+      "base_revision": 41,
+      "committed_revision": 42,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 42,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              883,
+              13,
+              936
+            ],
+            "maximum": [
+              888,
+              18,
+              941
+            ]
+          },
+          "sphere": {
+            "center": [
+              885.47052,
+              15.5348206,
+              938.216553
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 42,
+      "source_revision": 190325,
+      "base_revision": 42,
+      "committed_revision": 43,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 43,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              884,
+              12,
+              935
+            ],
+            "maximum": [
+              889,
+              17,
+              940
+            ]
+          },
+          "sphere": {
+            "center": [
+              886.702209,
+              14.5807343,
+              937.735168
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 43,
+      "source_revision": 190325,
+      "base_revision": 43,
+      "committed_revision": 44,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 44,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              869,
+              21,
+              945
+            ],
+            "maximum": [
+              873,
+              25,
+              949
+            ]
+          },
+          "sphere": {
+            "center": [
+              870.898499,
+              22.920929,
+              947.054321
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 44,
+      "source_revision": 190325,
+      "base_revision": 44,
+      "committed_revision": 45,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 45,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              868,
+              20,
+              946
+            ],
+            "maximum": [
+              872,
+              24,
+              951
+            ]
+          },
+          "sphere": {
+            "center": [
+              870.166504,
+              22.1855316,
+              948.38916
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 45,
+      "source_revision": 190325,
+      "base_revision": 45,
+      "committed_revision": 46,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 46,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              19,
+              947
+            ],
+            "maximum": [
+              872,
+              24,
+              952
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.467285,
+              21.4830933,
+              949.664185
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 46,
+      "source_revision": 190325,
+      "base_revision": 46,
+      "committed_revision": 47,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 47,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              866,
+              18,
+              949
+            ],
+            "maximum": [
+              871,
+              23,
+              953
+            ]
+          },
+          "sphere": {
+            "center": [
+              868.727905,
+              20.7402496,
+              951.012573
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 47,
+      "source_revision": 190325,
+      "base_revision": 47,
+      "committed_revision": 48,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 48,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              866,
+              18,
+              950
+            ],
+            "maximum": [
+              870,
+              22,
+              955
+            ]
+          },
+          "sphere": {
+            "center": [
+              867.965698,
+              19.9745178,
+              952.402466
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 48,
+      "source_revision": 190325,
+      "base_revision": 48,
+      "committed_revision": 49,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 49,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              20,
+              942
+            ],
+            "maximum": [
+              872,
+              25,
+              946
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.514709,
+              22.5630798,
+              943.936951
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 49,
+      "source_revision": 190325,
+      "base_revision": 49,
+      "committed_revision": 50,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 50,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              866,
+              19,
+              942
+            ],
+            "maximum": [
+              871,
+              24,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              868.200439,
+              21.6220551,
+              944.260925
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 50,
+      "source_revision": 190325,
+      "base_revision": 50,
+      "committed_revision": 51,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 51,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              865,
+              18,
+              942
+            ],
+            "maximum": [
+              869,
+              23,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              866.869812,
+              20.669281,
+              944.588989
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 51,
+      "source_revision": 190325,
+      "base_revision": 51,
+      "committed_revision": 52,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 52,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              863,
+              17,
+              943
+            ],
+            "maximum": [
+              868,
+              22,
+              947
+            ]
+          },
+          "sphere": {
+            "center": [
+              865.528137,
+              19.7086334,
+              944.919739
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 52,
+      "source_revision": 190325,
+      "base_revision": 52,
+      "committed_revision": 53,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 53,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              862,
+              16,
+              943
+            ],
+            "maximum": [
+              867,
+              21,
+              948
+            ]
+          },
+          "sphere": {
+            "center": [
+              864.201538,
+              18.7587433,
+              945.246765
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 53,
+      "source_revision": 190325,
+      "base_revision": 53,
+      "committed_revision": 54,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 54,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              861,
+              15,
+              943
+            ],
+            "maximum": [
+              865,
+              20,
+              948
+            ]
+          },
+          "sphere": {
+            "center": [
+              862.858459,
+              17.7971039,
+              945.577881
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 54,
+      "source_revision": 190325,
+      "base_revision": 54,
+      "committed_revision": 55,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 55,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              20,
+              939
+            ],
+            "maximum": [
+              872,
+              25,
+              944
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.798157,
+              22.314209,
+              941.252625
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 55,
+      "source_revision": 190325,
+      "base_revision": 55,
+      "committed_revision": 56,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 56,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              866,
+              19,
+              938
+            ],
+            "maximum": [
+              871,
+              24,
+              943
+            ]
+          },
+          "sphere": {
+            "center": [
+              868.612793,
+              21.3028717,
+              940.603821
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 56,
+      "source_revision": 190325,
+      "base_revision": 56,
+      "committed_revision": 57,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 57,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              865,
+              18,
+              938
+            ],
+            "maximum": [
+              870,
+              23,
+              942
+            ]
+          },
+          "sphere": {
+            "center": [
+              867.434753,
+              20.2977448,
+              939.959045
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 57,
+      "source_revision": 190325,
+      "base_revision": 57,
+      "committed_revision": 58,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 58,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              864,
+              17,
+              937
+            ],
+            "maximum": [
+              869,
+              22,
+              942
+            ]
+          },
+          "sphere": {
+            "center": [
+              866.29657,
+              19.3266144,
+              939.33606
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 58,
+      "source_revision": 190325,
+      "base_revision": 58,
+      "committed_revision": 59,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 59,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              863,
+              16,
+              936
+            ],
+            "maximum": [
+              867,
+              21,
+              941
+            ]
+          },
+          "sphere": {
+            "center": [
+              865.137573,
+              18.3377686,
+              938.701721
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 59,
+      "source_revision": 190325,
+      "base_revision": 59,
+      "committed_revision": 60,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 60,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              862,
+              15,
+              936
+            ],
+            "maximum": [
+              866,
+              20,
+              940
+            ]
+          },
+          "sphere": {
+            "center": [
+              863.924072,
+              17.3024139,
+              938.037537
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 60,
+      "source_revision": 190325,
+      "base_revision": 60,
+      "committed_revision": 61,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 61,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              860,
+              14,
+              935
+            ],
+            "maximum": [
+              865,
+              19,
+              940
+            ]
+          },
+          "sphere": {
+            "center": [
+              862.771973,
+              16.3193817,
+              937.406921
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 61,
+      "source_revision": 190325,
+      "base_revision": 61,
+      "committed_revision": 62,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 62,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              859,
+              13,
+              934
+            ],
+            "maximum": [
+              864,
+              18,
+              939
+            ]
+          },
+          "sphere": {
+            "center": [
+              861.619202,
+              15.3358459,
+              936.776001
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 62,
+      "source_revision": 190325,
+      "base_revision": 62,
+      "committed_revision": 63,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 63,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              858,
+              12,
+              934
+            ],
+            "maximum": [
+              863,
+              17,
+              938
+            ]
+          },
+          "sphere": {
+            "center": [
+              860.46759,
+              14.3532562,
+              936.14563
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 63,
+      "source_revision": 190325,
+      "base_revision": 63,
+      "committed_revision": 64,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 64,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              857,
+              11,
+              933
+            ],
+            "maximum": [
+              862,
+              16,
+              938
+            ]
+          },
+          "sphere": {
+            "center": [
+              859.337952,
+              13.3894806,
+              935.527405
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 64,
+      "source_revision": 190325,
+      "base_revision": 64,
+      "committed_revision": 65,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 65,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              870,
+              20,
+              937
+            ],
+            "maximum": [
+              875,
+              24,
+              941
+            ]
+          },
+          "sphere": {
+            "center": [
+              872.295288,
+              22.170517,
+              938.858765
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 65,
+      "source_revision": 190325,
+      "base_revision": 65,
+      "committed_revision": 66,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 66,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              870,
+              19,
+              935
+            ],
+            "maximum": [
+              874,
+              23,
+              940
+            ]
+          },
+          "sphere": {
+            "center": [
+              872.030273,
+              21.1874084,
+              937.461975
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 66,
+      "source_revision": 190325,
+      "base_revision": 66,
+      "committed_revision": 67,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 67,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              869,
+              18,
+              934
+            ],
+            "maximum": [
+              874,
+              23,
+              938
+            ]
+          },
+          "sphere": {
+            "center": [
+              871.771973,
+              20.2291412,
+              936.100464
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 67,
+      "source_revision": 190325,
+      "base_revision": 67,
+      "committed_revision": 68,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 68,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              869,
+              17,
+              932
+            ],
+            "maximum": [
+              874,
+              22,
+              937
+            ]
+          },
+          "sphere": {
+            "center": [
+              871.519653,
+              19.2930145,
+              934.770447
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 68,
+      "source_revision": 190325,
+      "base_revision": 68,
+      "committed_revision": 69,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 69,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              869,
+              16,
+              931
+            ],
+            "maximum": [
+              874,
+              21,
+              936
+            ]
+          },
+          "sphere": {
+            "center": [
+              871.270508,
+              18.368927,
+              933.45752
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 69,
+      "source_revision": 190325,
+      "base_revision": 69,
+      "committed_revision": 70,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 70,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              869,
+              15,
+              930
+            ],
+            "maximum": [
+              873,
+              20,
+              934
+            ]
+          },
+          "sphere": {
+            "center": [
+              871.004639,
+              17.3826294,
+              932.056213
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 70,
+      "source_revision": 190325,
+      "base_revision": 70,
+      "committed_revision": 71,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 71,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              868,
+              14,
+              928
+            ],
+            "maximum": [
+              873,
+              19,
+              933
+            ]
+          },
+          "sphere": {
+            "center": [
+              870.75238,
+              16.4467773,
+              930.726562
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 71,
+      "source_revision": 190325,
+      "base_revision": 71,
+      "committed_revision": 72,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 72,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              868,
+              13,
+              927
+            ],
+            "maximum": [
+              873,
+              18,
+              932
+            ]
+          },
+          "sphere": {
+            "center": [
+              870.511414,
+              15.5527191,
+              929.456299
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 72,
+      "source_revision": 190325,
+      "base_revision": 72,
+      "committed_revision": 73,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 73,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              868,
+              12,
+              926
+            ],
+            "maximum": [
+              873,
+              17,
+              930
+            ]
+          },
+          "sphere": {
+            "center": [
+              870.256104,
+              14.6057892,
+              928.110962
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 73,
+      "source_revision": 190325,
+      "base_revision": 73,
+      "committed_revision": 74,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 74,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              868,
+              11,
+              924
+            ],
+            "maximum": [
+              872,
+              16,
+              929
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.99292,
+              13.6294098,
+              926.723694
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 74,
+      "source_revision": 190325,
+      "base_revision": 74,
+      "committed_revision": 75,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 75,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              10,
+              923
+            ],
+            "maximum": [
+              872,
+              15,
+              928
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.743469,
+              12.7039337,
+              925.408813
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 75,
+      "source_revision": 190325,
+      "base_revision": 75,
+      "committed_revision": 76,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 76,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              9,
+              922
+            ],
+            "maximum": [
+              872,
+              14,
+              926
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.486328,
+              11.7500916,
+              924.053589
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 76,
+      "source_revision": 190325,
+      "base_revision": 76,
+      "committed_revision": 77,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 77,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              867,
+              8,
+              920
+            ],
+            "maximum": [
+              872,
+              13,
+              925
+            ]
+          },
+          "sphere": {
+            "center": [
+              869.227661,
+              10.7903748,
+              922.690063
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 77,
+      "source_revision": 190325,
+      "base_revision": 77,
+      "committed_revision": 78,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 78,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              874,
+              20,
+              933
+            ],
+            "maximum": [
+              879,
+              24,
+              938
+            ]
+          },
+          "sphere": {
+            "center": [
+              876.245117,
+              21.818924,
+              935.59613
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 78,
+      "source_revision": 190325,
+      "base_revision": 78,
+      "committed_revision": 79,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 79,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              875,
+              19,
+              932
+            ],
+            "maximum": [
+              879,
+              23,
+              936
+            ]
+          },
+          "sphere": {
+            "center": [
+              876.885925,
+              21.1472778,
+              934.080444
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 79,
+      "source_revision": 190325,
+      "base_revision": 79,
+      "committed_revision": 80,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 80,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              875,
+              18,
+              930
+            ],
+            "maximum": [
+              880,
+              23,
+              935
+            ]
+          },
+          "sphere": {
+            "center": [
+              877.487854,
+              20.516449,
+              932.656799
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 80,
+      "source_revision": 190325,
+      "base_revision": 80,
+      "committed_revision": 81,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 81,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              876,
+              18,
+              929
+            ],
+            "maximum": [
+              880,
+              22,
+              934
+            ]
+          },
+          "sphere": {
+            "center": [
+              878.096924,
+              19.8780823,
+              931.216187
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 81,
+      "source_revision": 190325,
+      "base_revision": 81,
+      "committed_revision": 82,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 82,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              876,
+              17,
+              927
+            ],
+            "maximum": [
+              881,
+              22,
+              932
+            ]
+          },
+          "sphere": {
+            "center": [
+              878.699036,
+              19.2470093,
+              929.791992
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 82,
+      "source_revision": 190325,
+      "base_revision": 82,
+      "committed_revision": 83,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 83,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              877,
+              16,
+              926
+            ],
+            "maximum": [
+              882,
+              21,
+              931
+            ]
+          },
+          "sphere": {
+            "center": [
+              879.285767,
+              18.6320953,
+              928.404297
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 83,
+      "source_revision": 190325,
+      "base_revision": 83,
+      "committed_revision": 84,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 84,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              878,
+              16,
+              925
+            ],
+            "maximum": [
+              882,
+              20,
+              929
+            ]
+          },
+          "sphere": {
+            "center": [
+              879.922913,
+              17.9643402,
+              926.897339
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 84,
+      "source_revision": 190325,
+      "base_revision": 84,
+      "committed_revision": 85,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 85,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              878,
+              15,
+              923
+            ],
+            "maximum": [
+              883,
+              20,
+              928
+            ]
+          },
+          "sphere": {
+            "center": [
+              880.510132,
+              17.3488617,
+              925.508362
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 85,
+      "source_revision": 190325,
+      "base_revision": 85,
+      "committed_revision": 86,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 86,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              881,
+              19,
+              927
+            ],
+            "maximum": [
+              886,
+              23,
+              931
+            ]
+          },
+          "sphere": {
+            "center": [
+              883.253418,
+              20.8614197,
+              929.163147
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 86,
+      "source_revision": 190325,
+      "base_revision": 86,
+      "committed_revision": 87,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 87,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              882,
+              18,
+              926
+            ],
+            "maximum": [
+              886,
+              22,
+              930
+            ]
+          },
+          "sphere": {
+            "center": [
+              884.092773,
+              19.8051147,
+              928.064819
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 87,
+      "source_revision": 190325,
+      "base_revision": 87,
+      "committed_revision": 88,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 88,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              882,
+              18,
+              926
+            ],
+            "maximum": [
+              886,
+              22,
+              930
+            ]
+          },
+          "sphere": {
+            "center": [
+              884.092773,
+              19.8051147,
+              928.064819
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 88,
+      "source_revision": 190325,
+      "base_revision": 88,
+      "committed_revision": 89,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 89,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              883,
+              16,
+              925
+            ],
+            "maximum": [
+              887,
+              21,
+              929
+            ]
+          },
+          "sphere": {
+            "center": [
+              884.935303,
+              18.7447357,
+              926.962219
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 89,
+      "source_revision": 190325,
+      "base_revision": 89,
+      "committed_revision": 90,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 90,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              883,
+              16,
+              925
+            ],
+            "maximum": [
+              887,
+              21,
+              929
+            ]
+          },
+          "sphere": {
+            "center": [
+              884.935303,
+              18.7447357,
+              926.962219
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 90,
+      "source_revision": 190325,
+      "base_revision": 90,
+      "committed_revision": 91,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 91,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              883,
+              15,
+              924
+            ],
+            "maximum": [
+              888,
+              20,
+              928
+            ]
+          },
+          "sphere": {
+            "center": [
+              885.750854,
+              17.718338,
+              925.894958
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 91,
+      "source_revision": 190325,
+      "base_revision": 91,
+      "committed_revision": 92,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 92,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              883,
+              15,
+              924
+            ],
+            "maximum": [
+              888,
+              20,
+              928
+            ]
+          },
+          "sphere": {
+            "center": [
+              885.750854,
+              17.718338,
+              925.894958
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 92,
+      "source_revision": 190325,
+      "base_revision": 92,
+      "committed_revision": 93,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 93,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              884,
+              14,
+              923
+            ],
+            "maximum": [
+              889,
+              19,
+              927
+            ]
+          },
+          "sphere": {
+            "center": [
+              886.549927,
+              16.7126617,
+              924.849304
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 93,
+      "source_revision": 190325,
+      "base_revision": 93,
+      "committed_revision": 94,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 94,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              885,
+              13,
+              922
+            ],
+            "maximum": [
+              890,
+              18,
+              926
+            ]
+          },
+          "sphere": {
+            "center": [
+              887.347107,
+              15.7093353,
+              923.80603
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 94,
+      "source_revision": 190325,
+      "base_revision": 94,
+      "committed_revision": 95,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 95,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              886,
+              12,
+              920
+            ],
+            "maximum": [
+              890,
+              17,
+              925
+            ]
+          },
+          "sphere": {
+            "center": [
+              888.157104,
+              14.6899109,
+              922.746033
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    },
+    {
+      "index": 95,
+      "source_revision": 190325,
+      "base_revision": 95,
+      "committed_revision": 96,
+      "commands": [
+        {
+          "sequence": 0,
+          "world_revision": 96,
+          "operation": "sdf_carve",
+          "shape": "sphere",
+          "density_value": 1,
+          "material": 0,
+          "bounds": {
+            "minimum": [
+              886,
+              12,
+              920
+            ],
+            "maximum": [
+              890,
+              17,
+              925
+            ]
+          },
+          "sphere": {
+            "center": [
+              888.157104,
+              14.6899109,
+              922.746033
+            ],
+            "radius": 1.80000305
+          },
+          "smooth_radius": 0.0
+        }
+      ],
+      "author_id": 56056
+    }
+  ]
+}

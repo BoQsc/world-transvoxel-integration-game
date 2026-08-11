@@ -59,6 +59,7 @@ var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
 var human_preserve_storage := false
 var human_artifact_replay_marker_path := ""
+var human_artifact_live_replay_fixture_path := ""
 var human_artifact_inspect_marker_path := ""
 var human_artifact_marker_sequence_file_path := ""
 var human_artifact_marker_sequence_wait_frames := 180
@@ -94,6 +95,7 @@ var human_material_mode_index := 0
 var human_artifact_marker_busy := false
 var human_artifact_mark_index := 0
 var last_human_artifact_mark_summary := {}
+var human_artifact_targeted_seams: Array = []
 var interaction_inspection_applied := false
 var interaction_inspection_operation_count := 0
 var last_watertightness_summary := {}
@@ -126,6 +128,7 @@ func _ready() -> void:
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	human_preserve_storage = args.has("--human-preserve-storage")
 	human_artifact_replay_marker_path = _arg_value(args, "--human-artifact-replay-marker", "")
+	human_artifact_live_replay_fixture_path = _arg_value(args, "--human-artifact-live-replay-fixture", "")
 	human_artifact_inspect_marker_path = _arg_value(args, "--human-artifact-inspect-marker", "")
 	human_artifact_marker_sequence_file_path = _arg_value(args, "--human-artifact-marker-sequence-file", "")
 	human_artifact_marker_sequence_wait_frames = int(_arg_value(args, "--human-artifact-marker-sequence-wait-frames", "180"))
@@ -353,6 +356,9 @@ func _start_profile() -> void:
 			return
 		_set_human_loading_visible(false)
 	_update_telemetry()
+	if not human_artifact_live_replay_fixture_path.is_empty():
+		call_deferred("_run_human_artifact_live_replay")
+		return
 	if not human_artifact_marker_sequence_file_path.is_empty():
 		call_deferred("_run_human_artifact_marker_sequence")
 		return
@@ -987,6 +993,9 @@ func _configure_human_artifact_marker_replay_context() -> void:
 	if not marker_profile.is_empty():
 		selected_profile = StringName(marker_profile)
 		playtest_profile_id = selected_profile
+	if not human_artifact_live_replay_fixture_path.is_empty():
+		print("WT_HUMAN_ARTIFACT_LIVE_REPLAY_FRESH_STORAGE marker=%s" % marker_path)
+		return
 	var storage_bundle: Dictionary = marker.get("storage_bundle", {})
 	var bundle_root := str(storage_bundle.get("bundle_root", ""))
 	if bundle_root.is_empty():
@@ -1012,6 +1021,9 @@ func _configure_human_artifact_marker_replay_context() -> void:
 
 
 func _active_human_artifact_marker_path() -> String:
+	if not human_artifact_live_replay_fixture_path.is_empty():
+		var fixture := _load_human_artifact_marker_json(human_artifact_live_replay_fixture_path)
+		return str(fixture.get("source_marker", ""))
 	if not human_artifact_replay_marker_path.is_empty():
 		return human_artifact_replay_marker_path
 	if not human_artifact_inspect_marker_path.is_empty():
@@ -1914,6 +1926,255 @@ func _run_human_artifact_marker_smoke() -> void:
 		get_tree().quit(1)
 
 
+func _run_human_artifact_live_replay() -> void:
+	var fixture := _load_human_artifact_marker_json(human_artifact_live_replay_fixture_path)
+	if str(fixture.get("schema", "")) != "wt_human_edit_live_replay_v1":
+		push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_FIXTURE_FAIL path=%s" % human_artifact_live_replay_fixture_path)
+		get_tree().quit(1)
+		return
+	var marker := _load_human_artifact_marker_json(str(fixture.get("source_marker", "")))
+	if marker.is_empty():
+		push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_MARKER_FAIL path=%s" % str(fixture.get("source_marker", "")))
+		get_tree().quit(1)
+		return
+	human_artifact_targeted_seams = Array(fixture.get("targeted_seams", [])).duplicate(true)
+	await _apply_human_artifact_marker_pose(marker)
+	if not await _wait_for_current_profile_settled("before human artifact live replay"):
+		return
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null:
+		push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_WORLD_FAIL")
+		get_tree().quit(1)
+		return
+	var initial_revision := int(fixture.get("initial_world_revision", 0))
+	if int(terrain_world.call("get_backend_world_revision")) != initial_revision:
+		push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_INITIAL_REVISION_FAIL expected=%d actual=%d" % [
+			initial_revision,
+			int(terrain_world.call("get_backend_world_revision")),
+		])
+		get_tree().quit(1)
+		return
+	var transactions: Array = fixture.get("transactions", [])
+	var observations := []
+	var first_transient_mismatch := {}
+	for transaction_index in range(transactions.size()):
+		var transaction: Dictionary = transactions[transaction_index]
+		var before_revision := int(terrain_world.call("get_backend_world_revision"))
+		if before_revision != int(transaction.get("base_revision", -1)):
+			push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_BASE_REVISION_FAIL index=%d expected=%d actual=%d" % [
+				transaction_index,
+				int(transaction.get("base_revision", -1)),
+				before_revision,
+			])
+			get_tree().quit(1)
+			return
+		var batch := _human_artifact_live_replay_batch(transaction)
+		if batch == null:
+			get_tree().quit(1)
+			return
+		if not bool(terrain_world.call("submit_edit_batch", batch, int(transaction.get("author_id", 56056)))):
+			push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_SUBMIT_FAIL index=%d error=%s" % [
+				transaction_index,
+				str(terrain_world.call("get_last_error")),
+			])
+			get_tree().quit(1)
+			return
+		var committed_revision := int(transaction.get("committed_revision", before_revision + 1))
+		if not await game_world.wait_for_world_revision(committed_revision):
+			push_error("WT_HUMAN_ARTIFACT_LIVE_REPLAY_COMMIT_FAIL index=%d revision=%d" % [
+				transaction_index,
+				committed_revision,
+			])
+			get_tree().quit(1)
+			return
+		var command_center := _human_artifact_live_replay_transaction_center(transaction)
+		var near_target := command_center.distance_to(player.global_position) <= 192.0
+		var cadence_frames := 6 if near_target else 0
+		for cadence_frame in range(cadence_frames + 1):
+			if cadence_frame > 0:
+				await get_tree().process_frame
+			var observation := _human_artifact_live_replay_observation(
+				terrain_world,
+				transaction_index,
+				committed_revision,
+				cadence_frame
+			)
+			if bool(observation.get("mismatch", false)):
+				if first_transient_mismatch.is_empty():
+					first_transient_mismatch = observation.duplicate(true)
+				observations.append(observation)
+			elif transaction_index >= transactions.size() - 4 and cadence_frame == cadence_frames:
+				observations.append(observation)
+	var capture_phases := []
+	var first_capture_mismatch := {}
+	for phase in [
+		{"label": "immediate", "frames": 0},
+		{"label": "f008", "frames": 8},
+		{"label": "f032", "frames": 24},
+		{"label": "f180", "frames": 148},
+	]:
+		for _frame in range(int(phase["frames"])):
+			await get_tree().process_frame
+		_update_telemetry()
+		var capture_ok := await _capture_human_artifact_mark("live_replay_%s" % str(phase["label"]))
+		var capture_summary := last_human_artifact_mark_summary.duplicate(true)
+		var capture_mismatch := _human_artifact_targeted_summary_has_mismatch(
+			Array(capture_summary.get("targeted_render_seam_diagnostics", []))
+		)
+		if capture_mismatch and first_capture_mismatch.is_empty():
+			first_capture_mismatch = {
+				"phase": str(phase["label"]),
+				"world_revision": int(terrain_world.call("get_backend_world_revision")),
+				"targeted_render_seam_diagnostics": capture_summary.get("targeted_render_seam_diagnostics", []),
+			}
+		capture_phases.append({
+			"label": str(phase["label"]),
+			"capture_ok": capture_ok,
+			"marker_id": str(capture_summary.get("marker_id", "")),
+			"json_path": str(capture_summary.get("json_path", "")),
+			"screenshot_path": str(capture_summary.get("screenshot_path", "")),
+			"isolated_sky_pixels": int(Dictionary(capture_summary.get("screen_sky_pixels", {})).get("isolated_sky_pixels", 0)),
+			"targeted_seam_mismatch": capture_mismatch,
+		})
+	var final_revision := int(terrain_world.call("get_backend_world_revision"))
+	var expected_final_revision := int(fixture.get("final_world_revision", transactions.size()))
+	var settled_capture: Dictionary = capture_phases.back() if not capture_phases.is_empty() else {}
+	var settled_seam_mismatch := bool(settled_capture.get("targeted_seam_mismatch", true))
+	var settled_isolated_sky_pixels := int(settled_capture.get("isolated_sky_pixels", -1))
+	var transient_mismatch_observation_count := 0
+	for observation in observations:
+		if bool(Dictionary(observation).get("mismatch", false)):
+			transient_mismatch_observation_count += 1
+	var result := {
+		"schema": "wt_human_edit_live_replay_result_v1",
+		"fixture": human_artifact_live_replay_fixture_path,
+		"profile": str(selected_profile),
+		"transaction_count": transactions.size(),
+		"final_world_revision": final_revision,
+		"expected_final_world_revision": expected_final_revision,
+		"targeted_seam_mismatch": settled_seam_mismatch,
+		"settled_isolated_sky_pixels": settled_isolated_sky_pixels,
+		"first_capture_mismatch": first_capture_mismatch,
+		"first_transient_mismatch": first_transient_mismatch,
+		"transient_mismatch_observation_count": transient_mismatch_observation_count,
+		"observation_count": observations.size(),
+		"observations": observations,
+		"captures": capture_phases,
+	}
+	var result_path := _write_human_artifact_live_replay_result(result)
+	var passed := final_revision == expected_final_revision and \
+		not settled_seam_mismatch and settled_isolated_sky_pixels == 0
+	var marker_name := "WT_HUMAN_MICRO_HOLE_LIVE_REPLAY_PASS" if passed else "WT_HUMAN_MICRO_HOLE_LIVE_REPLAY_FAIL"
+	print("%s %s" % [marker_name, JSON.stringify({
+		"result_path": result_path,
+		"transactions": transactions.size(),
+		"final_world_revision": final_revision,
+		"targeted_seam_mismatch": settled_seam_mismatch,
+		"settled_isolated_sky_pixels": settled_isolated_sky_pixels,
+		"transient_mismatch_observations": int(result["transient_mismatch_observation_count"]),
+	})])
+	get_tree().quit(0 if passed else 2)
+
+
+func _human_artifact_live_replay_batch(transaction: Dictionary) -> Resource:
+	var batch = EditBatch.new()
+	for command_value in Array(transaction.get("commands", [])):
+		if not command_value is Dictionary:
+			push_error("human artifact live replay command is not a dictionary")
+			return null
+		var command: Dictionary = command_value
+		var operation_name := str(command.get("operation", ""))
+		var shape_name := str(command.get("shape", ""))
+		if shape_name != "sphere":
+			push_error("human artifact live replay supports exact sphere commands only: %s" % shape_name)
+			return null
+		var sphere: Dictionary = command.get("sphere", {})
+		var center_values: Array = sphere.get("center", [])
+		if center_values.size() != 3:
+			push_error("human artifact live replay sphere center is invalid")
+			return null
+		var operation = EditOperation.new()
+		match operation_name:
+			"sdf_carve":
+				operation.mode = EditOperation.Mode.CARVE
+			"sdf_construct":
+				operation.mode = EditOperation.Mode.CONSTRUCT
+			"paint_material":
+				operation.mode = EditOperation.Mode.PAINT
+			_:
+				push_error("human artifact live replay operation is unsupported: %s" % operation_name)
+				return null
+		operation.brush_shape = EditOperation.BrushShape.SPHERE
+		operation.center = Vector3(float(center_values[0]), float(center_values[1]), float(center_values[2]))
+		operation.radius = float(sphere.get("radius", 0.0))
+		operation.smooth_radius = float(command.get("smooth_radius", 0.0))
+		operation.material_id = int(command.get("material", 0))
+		operation.strength = absf(float(command.get("density_value", 1.0)))
+		operation.density_value = float(command.get("density_value", 1.0))
+		if not batch.add_operation(operation):
+			push_error("human artifact live replay operation was rejected: %s" % str(command))
+			return null
+	return batch
+
+
+func _human_artifact_live_replay_transaction_center(transaction: Dictionary) -> Vector3:
+	var commands: Array = transaction.get("commands", [])
+	if commands.is_empty() or not commands[0] is Dictionary:
+		return Vector3(INF, INF, INF)
+	var sphere: Dictionary = Dictionary(commands[0]).get("sphere", {})
+	var center: Array = sphere.get("center", [])
+	if center.size() != 3:
+		return Vector3(INF, INF, INF)
+	return Vector3(float(center[0]), float(center[1]), float(center[2]))
+
+
+func _human_artifact_live_replay_observation(
+	terrain_world: Node,
+	transaction_index: int,
+	world_revision: int,
+	cadence_frame: int
+) -> Dictionary:
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	var diagnostics := _human_artifact_targeted_render_seam_diagnostics(backend)
+	return {
+		"transaction_index": transaction_index,
+		"world_revision": world_revision,
+		"cadence_frame": cadence_frame,
+		"mismatch": _human_artifact_targeted_summary_has_mismatch(diagnostics),
+		"targeted_render_seam_diagnostics": diagnostics,
+	}
+
+
+func _human_artifact_targeted_summary_has_mismatch(diagnostics: Array) -> bool:
+	for diagnostic_value in diagnostics:
+		if not diagnostic_value is Dictionary:
+			continue
+		var diagnostic: Dictionary = diagnostic_value
+		var owner: Dictionary = diagnostic.get("owner_seam", {})
+		var neighbor: Dictionary = diagnostic.get("neighbor_seam", {})
+		var comparison: Dictionary = diagnostic.get("edge_comparison", {})
+		if bool(owner.get("found", false)) and bool(neighbor.get("found", false)) and \
+				int(owner.get("unique_seam_edge_count", 0)) > 0 and \
+				int(neighbor.get("unique_seam_edge_count", 0)) > 0 and \
+				not bool(comparison.get("exact_match", false)):
+			return true
+	return false
+
+
+func _write_human_artifact_live_replay_result(result: Dictionary) -> String:
+	var root := _human_artifact_capture_root().path_join("live_replays")
+	DirAccess.make_dir_recursive_absolute(root)
+	var stamp := Time.get_datetime_string_from_system(false)
+	stamp = stamp.replace("-", "").replace(":", "").replace(" ", "_")
+	var output_path := root.path_join("%s_live_replay_result.json" % stamp)
+	var file := FileAccess.open(output_path, FileAccess.WRITE)
+	if file == null:
+		return ""
+	file.store_string(JSON.stringify(result))
+	file.close()
+	return output_path
+
+
 func _run_human_artifact_replay_marker() -> void:
 	if not human_artifact_marker_context_error.is_empty():
 		push_error("WT_HUMAN_ARTIFACT_REPLAY_MARKER_CONTEXT_FAIL %s" % human_artifact_marker_context_error)
@@ -2194,6 +2455,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"render_ray_hits": render_ray_hits,
 		"chunk_neighborhood": _human_artifact_chunk_neighborhood(terrain_world, render_ray_hits),
 		"render_seam_diagnostics": _human_artifact_render_seam_diagnostics(backend, render_ray_hits),
+		"targeted_render_seam_diagnostics": _human_artifact_targeted_render_seam_diagnostics(backend),
 		"probe_count": probes.size(),
 		"problematic_probe_count": problematic_probes.size(),
 		"problematic_probes": problematic_probes,
@@ -2661,9 +2923,11 @@ func _accumulate_render_ray_triangle(
 	_update_render_ray_hit(report, "any", hit)
 	var normal := _vector3_from_summary(hit.get("normal", {}))
 	var facing_dot := normal.dot(direction)
-	if facing_dot < -0.0001:
+	# Godot treats clockwise triangles as front-facing. The render sink converts
+	# authority indices to that winding, so a positive dot faces the ray origin.
+	if facing_dot > 0.0001:
 		_update_render_ray_hit(report, "front_like", hit)
-	elif facing_dot > 0.0001:
+	elif facing_dot < -0.0001:
 		_update_render_ray_hit(report, "back_like", hit)
 
 
@@ -2809,6 +3073,47 @@ func _human_artifact_render_seam_diagnostics(backend: Node, render_ray_hits: Arr
 	return output
 
 
+func _human_artifact_targeted_render_seam_diagnostics(backend: Node) -> Array:
+	if backend == null or human_artifact_targeted_seams.is_empty():
+		return []
+	var output := []
+	for target_value in human_artifact_targeted_seams:
+		if not target_value is Dictionary:
+			continue
+		var target: Dictionary = target_value
+		var face: Dictionary = target.get("face", {})
+		var focus := _vector3_from_summary(target.get("focus", {}))
+		var window_radius := maxf(float(target.get("window_radius", 32.0)), 32.0)
+		var owner_name := str(target.get("owner", ""))
+		var neighbor_name := str(target.get("neighbor", ""))
+		var owner_summary := _human_artifact_mesh_seam_summary(
+			backend,
+			owner_name,
+			face,
+			focus,
+			window_radius
+		)
+		var neighbor_summary := _human_artifact_mesh_seam_summary(
+			backend,
+			neighbor_name,
+			face,
+			focus,
+			window_radius
+		)
+		output.append({
+			"owner": owner_name,
+			"neighbor": neighbor_name,
+			"lod": int(target.get("lod", 0)),
+			"face": face,
+			"focus": _vector3_summary(focus),
+			"window_radius": window_radius,
+			"owner_seam": owner_summary,
+			"neighbor_seam": neighbor_summary,
+			"edge_comparison": _human_artifact_compare_seam_edges(owner_summary, neighbor_summary),
+		})
+	return output
+
+
 func _parse_human_artifact_render_chunk_name(owner_name: String) -> Dictionary:
 	const PREFIX := "WT_Render_"
 	if not owner_name.begins_with(PREFIX):
@@ -2883,6 +3188,7 @@ func _human_artifact_mesh_seam_summary(
 		"unique_seam_edge_count": 0,
 		"near_triangles": [],
 		"seam_edges": [],
+		"seam_edge_keys": [],
 	}
 	var instance := _human_artifact_find_mesh_instance_by_name(backend, owner_name)
 	if instance == null:
@@ -2951,6 +3257,9 @@ func _human_artifact_mesh_seam_summary(
 					window_radius
 				)
 	result["unique_seam_edge_count"] = edge_keys.size()
+	var complete_edge_keys: Array = edge_keys.keys()
+	complete_edge_keys.sort()
+	result["seam_edge_keys"] = complete_edge_keys
 	return result
 
 
@@ -3025,13 +3334,11 @@ func _human_artifact_find_mesh_instance_by_name(root: Node, owner_name: String) 
 
 func _human_artifact_compare_seam_edges(owner_summary: Dictionary, neighbor_summary: Dictionary) -> Dictionary:
 	var owner_keys := {}
-	for edge in owner_summary.get("seam_edges", []):
-		if edge is Dictionary:
-			owner_keys[str(edge.get("key", ""))] = true
+	for key in owner_summary.get("seam_edge_keys", []):
+		owner_keys[str(key)] = true
 	var neighbor_keys := {}
-	for edge in neighbor_summary.get("seam_edges", []):
-		if edge is Dictionary:
-			neighbor_keys[str(edge.get("key", ""))] = true
+	for key in neighbor_summary.get("seam_edge_keys", []):
+		neighbor_keys[str(key)] = true
 	var missing_from_neighbor := []
 	for key in owner_keys.keys():
 		if not neighbor_keys.has(key) and missing_from_neighbor.size() < 16:

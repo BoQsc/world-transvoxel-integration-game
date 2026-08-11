@@ -13,7 +13,7 @@ The marker recorded 24 isolated sky pixels, including 20 in its terrain band.
 The camera was at `(883.87457, 20.57763, 928.19537)` and the player was in
 walking mode.
 
-The strongest captured geometric signal is an LOD0 chunk-face mismatch between
+The original capture appeared to report an LOD0 chunk-face mismatch between
 owner chunk `(55, 1, 57)` and neighbor `(55, 1, 58)` on the `z = 928` plane:
 
 - exact edge match: false
@@ -21,25 +21,54 @@ owner chunk `(55, 1, 57)` and neighbor `(55, 1, 58)` on the `z = 928` plane:
 - neighbor unique edges: 16
 - missing neighbor edge: `8820000,203569|8821428,200000`
 
-Sky-pixel rays found both physics and render geometry at the affected wall, but
-reported back-facing render triangles and no front-facing triangle. The broad
-and precise topology probes both reported zero problematic probes, so those
-existing probes do not cover this visible defect class.
+That result was a diagnostic false positive. The old check clipped triangles to
+a four-cell window and compared only the first 32 sampled edge records. A full
+shared-face comparison finds 30 unique edges on each chunk, exact 30/30 edge
+agreement, one incident boundary edge per chunk, and opposite edge orientation
+across every pair.
+
+The original `front_like` and `back_like` labels were also reversed for Godot.
+Godot renders clockwise triangles as front-facing, and the authority render
+sink deliberately converts its indices to that winding. All six settled
+sky-pixel rays hit Godot-front-facing render triangles at the same distance as
+their physics hits.
 
 The last recorded interaction was carve attempt 99 at
 `(888.15710, 14.68991, 922.74603)` with radius `1.8`. The copied edit journal
 contains 96 committed revisions and permits exact replay from the marked state.
 
-Do not classify the root cause yet. Candidate scopes include chunk-boundary
-surface ownership, triangle winding/render culling, edit remeshing, and the
-authority meshing implementation. The evidence does not implicate the
-Transvoxel paper or tables by itself.
+## Resolution
+
+The authority mesher and `WtRenderPayload` conversion reproduce the final edit
+state without a missing edge or an exposed reverse-facing first hit. The visual
+pixels came from projecting adjacent chunk meshes through separate model-view
+transforms. Algebraically identical boundary positions could round to slightly
+different clip-space positions, exposing isolated background pixels when the
+camera viewed almost along the chunk plane.
+
+The production terrain shader now reconstructs world position first and writes
+clip-space `POSITION` from that shared world position. The exact 96-transaction
+live replay settles at world revision 96 with:
+
+- complete shared-face comparison: 30/30 exact
+- settled isolated sky pixels: 0 (previously 6 in the deterministic replay)
+- authoritative camera density: positive (camera is in air)
+- native raw-mesh first-hit reversals: 0/6
+- native render-payload first-hit reversals: 0/6
+
+This was a downstream chunk-projection defect. It does not implicate the
+Transvoxel paper, lookup tables, or final authority mesh generation.
 
 ## Files
 
 - `marker.json`: complete marker diagnostics and scene/runtime state
 - `marker.png`: exact human screenshot captured by the marker
 - `world.wtedit`: copied edit journal for replay
+- `live_edit_replay.json`: deterministic 96-transaction replay fixture
+
+The replay is gated by `tools/test_human_micro_hole_live_replay.py`. It limits
+Godot to three logical CPUs and requires both a complete settled seam match and
+zero settled isolated sky pixels.
 
 ## SHA-256
 

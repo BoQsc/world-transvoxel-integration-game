@@ -70,6 +70,7 @@ varying vec4 authored_material_weights_high;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world_position, 1.0);
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	generated_material_weights_low = CUSTOM0;
 	generated_material_weights_high = CUSTOM1;
