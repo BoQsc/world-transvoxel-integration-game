@@ -264,6 +264,14 @@ def _aggregate(
             "edit",
             "relocation_to_collision_ready_ms",
         ),
+        "relocation_to_visual_ready_lower_bound_ms": (
+            "edit",
+            "relocation_to_visual_ready_lower_bound_ms",
+        ),
+        "relocation_to_collision_ready_lower_bound_ms": (
+            "edit",
+            "relocation_to_collision_ready_lower_bound_ms",
+        ),
         "visual_collision_divergence_frames": (
             "edit",
             "visual_collision_divergence_frames",
@@ -301,6 +309,13 @@ def _aggregate(
             "mesh_job_time_ns_maximum_end",
         ),
     }
+    censored_fields = {
+        "visual_ready_frames_after_commit",
+        "collision_ready_frames_after_commit",
+        "relocation_to_visual_ready_ms",
+        "relocation_to_collision_ready_ms",
+        "visual_collision_divergence_frames",
+    }
     aggregates: dict[str, object] = {}
     for label, path in fields.items():
         values = [_number(run, *path) for run in runs]
@@ -325,12 +340,29 @@ def _aggregate(
     }
     for label, key in execution_fields.items():
         values = [float(run[key]) for run in executions]
-        aggregates[label] = {
+        observed_values = [value for value in values if value >= 0]
+        summary = {
             "values": values,
-            "median": statistics.median(values),
-            "minimum": min(values),
-            "maximum": max(values),
+            "observed_count": len(observed_values),
+            "censored_count": len(values) - len(observed_values),
+            "median": statistics.median(observed_values) if observed_values else None,
+            "minimum": min(observed_values) if observed_values else None,
+            "maximum": max(observed_values) if observed_values else None,
         }
+        if label not in censored_fields and summary["censored_count"] != 0:
+            raise RuntimeError(f"unexpected negative measurement for {label}: {values!r}")
+        aggregates[label] = summary
+    ready_windows = [
+        _number(run, "edit", "ready_observation_window_ms") for run in runs
+    ]
+    aggregates["ready_observation_window_ms"] = {
+        "values": ready_windows,
+        "observed_count": len(ready_windows),
+        "censored_count": 0,
+        "median": statistics.median(ready_windows),
+        "minimum": min(ready_windows),
+        "maximum": max(ready_windows),
+    }
     target_miss = any(run["target_status"] == "MEASURED_TARGET_MISS" for run in executions)
     failure_names = sorted(
         {

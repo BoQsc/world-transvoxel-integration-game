@@ -517,6 +517,28 @@ func _run_single_edit_measurement(
 	var authority_commit_ms := _frames_elapsed_ms(commit_frame_us, commit_frame)
 	var visual_ready_ms := _frames_elapsed_ms(ready_frame_us, visual_ready_frame)
 	var collision_ready_ms := _frames_elapsed_ms(ready_frame_us, collision_ready_frame)
+	var ready_observation_window_ms := _frames_elapsed_ms(
+		ready_frame_us,
+		ready_frame_us.size()
+	)
+	var relocation_to_visual_ready_ms := -1.0
+	if visual_ready_ms >= 0.0:
+		relocation_to_visual_ready_ms = (
+			physics_target_wait_ms + authority_commit_ms + visual_ready_ms
+		)
+	var relocation_to_collision_ready_ms := -1.0
+	if collision_ready_ms >= 0.0:
+		relocation_to_collision_ready_ms = (
+			physics_target_wait_ms + authority_commit_ms + collision_ready_ms
+		)
+	var relocation_to_visual_ready_lower_bound_ms := (
+		physics_target_wait_ms + authority_commit_ms +
+		(visual_ready_ms if visual_ready_ms >= 0.0 else ready_observation_window_ms)
+	)
+	var relocation_to_collision_ready_lower_bound_ms := (
+		physics_target_wait_ms + authority_commit_ms +
+		(collision_ready_ms if collision_ready_ms >= 0.0 else ready_observation_window_ms)
+	)
 	return {
 		"measurement_complete": interaction_accepted and commit_frame >= 0,
 		"physics_target_found": not physics_hit.is_empty(),
@@ -545,12 +567,16 @@ func _run_single_edit_measurement(
 		"collision_required": collision_required,
 		"collision_ready_frames_after_commit": collision_ready_frame,
 		"collision_ready_ms_after_commit": collision_ready_ms,
-		"relocation_to_visual_ready_ms": (
-			physics_target_wait_ms + authority_commit_ms + visual_ready_ms
-		),
-		"relocation_to_collision_ready_ms": (
-			physics_target_wait_ms + authority_commit_ms + collision_ready_ms
-		),
+		"ready_observation_window_frames": ready_frame_us.size(),
+		"ready_observation_window_ms": ready_observation_window_ms,
+		"visual_ready_censored": visual_ready_frame < 0,
+		"collision_ready_censored": collision_ready_frame < 0,
+		"relocation_to_visual_ready_ms": relocation_to_visual_ready_ms,
+		"relocation_to_collision_ready_ms": relocation_to_collision_ready_ms,
+		"relocation_to_visual_ready_lower_bound_ms":
+			relocation_to_visual_ready_lower_bound_ms,
+		"relocation_to_collision_ready_lower_bound_ms":
+			relocation_to_collision_ready_lower_bound_ms,
 		"logical_visual_ready_frames_after_commit": logical_visual_ready_frame,
 		"logical_collision_ready_frames_after_commit":
 			logical_collision_ready_frame,
