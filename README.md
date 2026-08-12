@@ -41,6 +41,14 @@ integration pin because its three-CPU multi-site edit replacement latency did
 not qualify. See
 [docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md](docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md).
 
+The current reviewed terrain is frozen as the CPU human-performance comparison
+baseline in
+[docs/AUTHORITATIVE_CPU_HUMAN_BASELINE.md](docs/AUTHORITATIVE_CPU_HUMAN_BASELINE.md).
+Known flight stutter and delayed first edit after relocation are retained as
+measured target misses. Optimization and the GPU architecture decision remain
+blocked until a real-time causal terrain-pipeline trace explains their order
+and cost.
+
 ## Critical edited-terrain LOD boundary
 
 This integration game inherits the core World Transvoxel edited-terrain LOD

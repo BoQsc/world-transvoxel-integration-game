@@ -510,12 +510,18 @@ func _run_single_edit_measurement(
 	var divergence_frames := -1
 	if visual_ready_frame >= 0 and collision_ready_frame >= 0:
 		divergence_frames = absi(visual_ready_frame - collision_ready_frame)
+	var physics_target_wait_ms := _frames_elapsed_ms(
+		target_wait_frame_us,
+		physics_target_wait_frames
+	)
+	var authority_commit_ms := _frames_elapsed_ms(commit_frame_us, commit_frame)
 	var visual_ready_ms := _frames_elapsed_ms(ready_frame_us, visual_ready_frame)
 	var collision_ready_ms := _frames_elapsed_ms(ready_frame_us, collision_ready_frame)
 	return {
 		"measurement_complete": interaction_accepted and commit_frame >= 0,
 		"physics_target_found": not physics_hit.is_empty(),
 		"physics_target_wait_frames": physics_target_wait_frames,
+		"physics_target_wait_ms": physics_target_wait_ms,
 		"physics_target_wait_frame_time_ms": _frame_time_summary(target_wait_frame_us),
 		"interaction_accepted": interaction_accepted,
 		"interaction_call_ms": float(interaction_call_us) / 1000.0,
@@ -532,13 +538,19 @@ func _run_single_edit_measurement(
 		"collision_generation_after": final_collision_generation,
 		"resource_generation_api": resource_generation_api,
 		"authority_commit_frames": commit_frame,
-		"authority_commit_ms": _frames_elapsed_ms(commit_frame_us, commit_frame),
+		"authority_commit_ms": authority_commit_ms,
 		"generation_changed_frames_after_commit": generation_ready_frame,
 		"visual_ready_frames_after_commit": visual_ready_frame,
 		"visual_ready_ms_after_commit": visual_ready_ms,
 		"collision_required": collision_required,
 		"collision_ready_frames_after_commit": collision_ready_frame,
 		"collision_ready_ms_after_commit": collision_ready_ms,
+		"relocation_to_visual_ready_ms": (
+			physics_target_wait_ms + authority_commit_ms + visual_ready_ms
+		),
+		"relocation_to_collision_ready_ms": (
+			physics_target_wait_ms + authority_commit_ms + collision_ready_ms
+		),
 		"logical_visual_ready_frames_after_commit": logical_visual_ready_frame,
 		"logical_collision_ready_frames_after_commit":
 			logical_collision_ready_frame,
