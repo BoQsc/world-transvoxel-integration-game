@@ -101,45 +101,46 @@ def _run_measurement(
         "--procedural-generation-workers",
         str(procedural_generation_workers),
     ]
-    started = time.perf_counter()
-    process = subprocess.Popen(
-        command,
-        cwd=project,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    peak_rss_bytes = 0
-    process_cpu_seconds = 0.0
-    deadline = started + 1800.0
-    while process.poll() is None:
-        if time.perf_counter() >= deadline:
-            process.kill()
-            process.communicate()
-            raise RuntimeError("runtime baseline exceeded 1800 seconds")
-        try:
-            tracked = [psutil.Process(process.pid)]
-            tracked.extend(tracked[0].children(recursive=True))
-            rss_bytes = 0
-            cpu_seconds = 0.0
-            for tracked_process in tracked:
-                try:
-                    rss_bytes += tracked_process.memory_info().rss
-                    cpu = tracked_process.cpu_times()
-                    cpu_seconds += cpu.user + cpu.system
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            peak_rss_bytes = max(peak_rss_bytes, rss_bytes)
-            process_cpu_seconds = max(process_cpu_seconds, cpu_seconds)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-        time.sleep(0.05)
-    stdout, stderr = process.communicate()
-    wall_seconds = time.perf_counter() - started
     stdout_path = capture_dir / f"{stem}.stdout.log"
     stderr_path = capture_dir / f"{stem}.stderr.log"
-    stdout_path.write_text(stdout, encoding="utf-8")
-    stderr_path.write_text(stderr, encoding="utf-8")
+    started = time.perf_counter()
+    with stdout_path.open("w", encoding="utf-8") as stdout_stream, stderr_path.open(
+        "w", encoding="utf-8"
+    ) as stderr_stream:
+        process = subprocess.Popen(
+            command,
+            cwd=project,
+            text=True,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+        )
+        peak_rss_bytes = 0
+        process_cpu_seconds = 0.0
+        deadline = started + 1800.0
+        while process.poll() is None:
+            if time.perf_counter() >= deadline:
+                process.kill()
+                process.wait()
+                raise RuntimeError("runtime baseline exceeded 1800 seconds")
+            try:
+                tracked = [psutil.Process(process.pid)]
+                tracked.extend(tracked[0].children(recursive=True))
+                rss_bytes = 0
+                cpu_seconds = 0.0
+                for tracked_process in tracked:
+                    try:
+                        rss_bytes += tracked_process.memory_info().rss
+                        cpu = tracked_process.cpu_times()
+                        cpu_seconds += cpu.user + cpu.system
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                peak_rss_bytes = max(peak_rss_bytes, rss_bytes)
+                process_cpu_seconds = max(process_cpu_seconds, cpu_seconds)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+            time.sleep(0.05)
+    wall_seconds = time.perf_counter() - started
+    stdout = stdout_path.read_text(encoding="utf-8")
 
     baseline = _runtime_baseline_from_stdout(stdout)
     _validate_completed_measurement(baseline)
