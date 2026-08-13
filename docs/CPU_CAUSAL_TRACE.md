@@ -27,3 +27,26 @@ probe collection. Final conclusions require same-build, same-route,
 same-affinity trace-off and trace-on runs with observer overhead reported.
 The qualifier retains a compact causal event slice beside its JSON report; the
 full rolling trace remains a local diagnostic artifact because it is large.
+
+## CPU-B2 retained result
+
+The retained paired route at integration commit `dc61dff` passes CPU-B2. Four
+edited replacement chunks completed storage, sampling, meshing, publication,
+render sink, collision sink, and replacement readiness by `165.621 ms`. The
+first blocker after that point still contained 679 chunk replacements and 2,571
+chunk retirements. The visibility batch published 416 render and 120 collision
+records at `10399.180 ms`, leaving `10233.587 ms` after the edited chunks had
+already reached their sinks. The observed delayed edit is therefore attributed
+to the conservative relocation-wide visibility staging barrier on this route.
+
+All five traced movement rejections occurred through the production collision
+readiness gate during the fast diagonal phase. Sampled rejected frames had
+2,060-2,336 collision-required chunks not ready, 670-685 blocked replacements,
+and 1,946-2,228 retirements. The largest movement-frame hitch was accepted, so
+frame-time spikes remain separate and are not fully attributed by CPU-B2.
+
+Tracing is materially intrusive: this pair observed 26.6% more wall time,
+44.5% more process CPU time, 11.2% higher frame p99, and 57.2% higher maximum
+frame time. It remains disabled by default and traced latency is not the
+performance baseline. CPU-B3 must address one proven factor at a time and use
+trace-off A/B measurements for performance decisions.

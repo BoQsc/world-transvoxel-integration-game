@@ -1,0 +1,1818 @@
+{
+  "authority_pin": {
+    "addon_tree": "38d987a68e1a7f5f5043da7d790dab49cfed20ee",
+    "commit": "2714ea8b25f588f244a96eacea16ca2f10b856af",
+    "fallback": false,
+    "files": 177,
+    "generated_runtime": [
+      {
+        "bytes": 2381824,
+        "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "sha256": "583ced55e408a90f2929acf8d0eb9fa5976e5af1f151b7c05ae2a9aed8700ffc"
+      },
+      {
+        "bytes": 2268672,
+        "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+        "sha256": "5bfe00cde1ea6b0db597bc390ae2865d95fbfd18571f5b2beca5cb6346667274"
+      }
+    ],
+    "package_digest_sha256": "7ad9c353ab8a0d9ae6102b90a600cc41d978b37439fde7aa1844e6fd54a88895",
+    "repository": "world-transvoxel"
+  },
+  "causal_attribution": {
+    "classification": "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION",
+    "complete": true,
+    "runs": [
+      {
+        "all_edit_replacement_pipelines_complete": true,
+        "classification": "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION",
+        "complete": true,
+        "edit_cause_id": 1,
+        "edit_replacement_count": 4,
+        "edit_replacements": [
+          {
+            "chunk": {
+              "generation": 6333,
+              "lod": 0,
+              "x": 34,
+              "y": 2,
+              "z": 34
+            },
+            "complete": true,
+            "missing_event_kinds": [],
+            "stage_elapsed_ms": {
+              "collision_sink_applied": [
+                148.3263
+              ],
+              "frontend_publication_processed": [
+                24.455,
+                147.1647,
+                147.1683
+              ],
+              "mesh_completion_consumed": [
+                143.9385
+              ],
+              "mesh_finished": [
+                123.882
+              ],
+              "mesh_started": [
+                113.613
+              ],
+              "publication_popped": [
+                24.4538,
+                147.1636,
+                147.165
+              ],
+              "publication_queued": [
+                13.2891,
+                145.2456,
+                145.2461
+              ],
+              "render_sink_applied": [
+                147.716
+              ],
+              "sample_finished": [
+                39.4511
+              ],
+              "sample_started": [
+                39.4298
+              ],
+              "storage_completion_consumed": [
+                68.9461
+              ],
+              "storage_finished": [
+                44.4731
+              ],
+              "storage_requested": [
+                39.4416
+              ],
+              "storage_started": [
+                39.4498
+              ],
+              "visibility_replacement_ready": [
+                148.7881
+              ]
+            }
+          },
+          {
+            "chunk": {
+              "generation": 6335,
+              "lod": 0,
+              "x": 34,
+              "y": 2,
+              "z": 35
+            },
+            "complete": true,
+            "missing_event_kinds": [],
+            "stage_elapsed_ms": {
+              "collision_sink_applied": [
+                164.985
+              ],
+              "frontend_publication_processed": [
+                24.4573,
+                163.8283,
+                163.8613
+              ],
+              "mesh_completion_consumed": [
+                146.617
+              ],
+              "mesh_finished": [
+                143.9331
+              ],
+              "mesh_started": [
+                132.9629
+              ],
+              "publication_popped": [
+                24.4563,
+                163.8271,
+                163.8285
+              ],
+              "publication_queued": [
+                13.2902,
+                148.0797,
+                148.0801
+              ],
+              "render_sink_applied": [
+                164.2936
+              ],
+              "sample_finished": [
+                39.4853
+              ],
+              "sample_started": [
+                39.4702
+              ],
+              "storage_completion_consumed": [
+                75.1956
+              ],
+              "storage_finished": [
+                48.8272
+              ],
+              "storage_requested": [
+                39.4801
+              ],
+              "storage_started": [
+                44.4744
+              ],
+              "visibility_replacement_ready": [
+                165.6049
+              ]
+            }
+          },
+          {
+            "chunk": {
+              "generation": 6334,
+              "lod": 0,
+              "x": 35,
+              "y": 2,
+              "z": 34
+            },
+            "complete": true,
+            "missing_event_kinds": [],
+            "stage_elapsed_ms": {
+              "collision_sink_applied": [
+                148.778
+              ],
+              "frontend_publication_processed": [
+                24.4561,
+                147.1688,
+                147.1702
+              ],
+              "mesh_completion_consumed": [
+                145.2487
+              ],
+              "mesh_finished": [
+                132.9595
+              ],
+              "mesh_started": [
+                123.8853
+              ],
+              "publication_popped": [
+                24.4552,
+                147.1685,
+                147.169
+              ],
+              "publication_queued": [
+                13.2897,
+                146.6102,
+                146.6108
+              ],
+              "render_sink_applied": [
+                147.826
+              ],
+              "sample_finished": [
+                39.4687
+              ],
+              "sample_started": [
+                39.4526
+              ],
+              "storage_completion_consumed": [
+                71.6533
+              ],
+              "storage_finished": [
+                48.2731
+              ],
+              "storage_requested": [
+                39.4634
+              ],
+              "storage_started": [
+                43.9782
+              ],
+              "visibility_replacement_ready": [
+                148.8043
+              ]
+            }
+          },
+          {
+            "chunk": {
+              "generation": 6332,
+              "lod": 0,
+              "x": 35,
+              "y": 2,
+              "z": 35
+            },
+            "complete": true,
+            "missing_event_kinds": [],
+            "stage_elapsed_ms": {
+              "collision_sink_applied": [
+                165.5923
+              ],
+              "frontend_publication_processed": [
+                24.4536,
+                163.8618,
+                163.8661
+              ],
+              "mesh_completion_consumed": [
+                148.083
+              ],
+              "mesh_finished": [
+                113.6095
+              ],
+              "mesh_started": [
+                104.3292
+              ],
+              "publication_popped": [
+                24.4515,
+                163.8615,
+                163.8621
+              ],
+              "publication_queued": [
+                13.2878,
+                149.718,
+                149.7183
+              ],
+              "render_sink_applied": [
+                164.4251
+              ],
+              "sample_finished": [
+                39.4281
+              ],
+              "sample_started": [
+                39.3949
+              ],
+              "storage_completion_consumed": [
+                66.4031
+              ],
+              "storage_finished": [
+                43.9765
+              ],
+              "storage_requested": [
+                39.409
+              ],
+              "storage_started": [
+                39.4196
+              ],
+              "visibility_replacement_ready": [
+                165.6207
+              ]
+            }
+          }
+        ],
+        "exact_publication_events": [
+          {
+            "cause_id": "edit:submission:1",
+            "elapsed_us": 33431454,
+            "frame": 2002,
+            "kind": "exact_render_published",
+            "payload": {
+              "frame_after_commit": 620,
+              "generation": 6332
+            }
+          },
+          {
+            "cause_id": "edit:submission:1",
+            "elapsed_us": 33431834,
+            "frame": 2002,
+            "kind": "exact_collision_published",
+            "payload": {
+              "frame_after_commit": 620,
+              "generation": 6332
+            }
+          }
+        ],
+        "finding": "Edited chunks completed storage, sampling, meshing, publication, and both Godot sinks before a relocation-wide replacement set cleared; the conservative global visibility batch was the observed delay.",
+        "first_global_blocker_after_ready": {
+          "elapsed_ms": 165.7158,
+          "pending_chunk_replacements": 679,
+          "pending_chunk_retirements": 2571,
+          "pending_render_retirements": 0
+        },
+        "first_visibility_batch_after_ready": {
+          "elapsed_ms": 10399.1797,
+          "staged_collision_records": 120,
+          "staged_render_records": 416
+        },
+        "last_edit_replacement_ready_elapsed_ms": 165.6207,
+        "last_edit_replacement_sink_elapsed_ms": 165.5923,
+        "visibility_wait_after_last_sink_ms": 10233.5874
+      }
+    ]
+  },
+  "claim_boundaries": {
+    "authoritative_for": [
+      "event availability and order on the Godot 4.7 CPU-B1 route",
+      "bounded trace retention and explicit loss accounting",
+      "observed trace overhead on this machine and route",
+      "causal attribution of delayed first-edit visibility on this route",
+      "causal attribution of observed collision-gated movement rejection"
+    ],
+    "not_authoritative_for": [
+      "performance remediation",
+      "complete attribution of flight frame-time spikes",
+      "universal hardware overhead",
+      "GPU architecture selection",
+      "CPU or whole-system watts"
+    ]
+  },
+  "date": "2026-08-13",
+  "milestone": "CPU-B2",
+  "movement_attribution": {
+    "classification": "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG",
+    "complete": true,
+    "runs": [
+      {
+        "blocked_movement_frames": 5,
+        "blocked_samples": [
+          {
+            "frame": 1219,
+            "frame_ms": 16.672,
+            "metrics": {
+              "blocked_pending_chunk_replacements": 674,
+              "collision_required_not_ready_chunk_records": 2064,
+              "pending_chunk_replacements": 674,
+              "pending_chunk_retirements": 1946,
+              "scheduler_queued_jobs": 670,
+              "storage_queued_requests": 0
+            },
+            "phase": "fast_diagonal_outbound"
+          },
+          {
+            "frame": 1220,
+            "frame_ms": 16.654,
+            "metrics": {
+              "blocked_pending_chunk_replacements": 670,
+              "collision_required_not_ready_chunk_records": 2060,
+              "pending_chunk_replacements": 670,
+              "pending_chunk_retirements": 1946,
+              "scheduler_queued_jobs": 670,
+              "storage_queued_requests": 0
+            },
+            "phase": "fast_diagonal_outbound"
+          },
+          {
+            "frame": 1253,
+            "frame_ms": 16.671,
+            "metrics": {
+              "blocked_pending_chunk_replacements": 685,
+              "collision_required_not_ready_chunk_records": 2336,
+              "pending_chunk_replacements": 685,
+              "pending_chunk_retirements": 2228,
+              "scheduler_queued_jobs": 666,
+              "storage_queued_requests": 9
+            },
+            "phase": "fast_diagonal_outbound"
+          }
+        ],
+        "claim_boundary": "This run attributes observed movement rejection, not every source of flight frame-time variance.",
+        "classification": "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG",
+        "complete": true,
+        "finding": "Observed movement rejection is the production player's collision-readiness gate while relocation has a large not-ready collision and replacement backlog. The largest movement-frame hitch was accepted, so frame-time spikes remain a separate CPU-B3 target.",
+        "largest_movement_frame": {
+          "frame": 83,
+          "frame_ms": 51.425,
+          "metrics": {
+            "blocked_pending_chunk_replacements": 11,
+            "collision_required_not_ready_chunk_records": 4,
+            "pending_chunk_replacements": 11,
+            "pending_chunk_retirements": 54,
+            "scheduler_queued_jobs": 7,
+            "storage_queued_requests": 0
+          },
+          "movement_accepted": true,
+          "phase": "normal_outbound"
+        },
+        "movement_frames": 1020,
+        "sampled_blocked_movement_frames": 3
+      }
+    ]
+  },
+  "performance_comparison": {
+    "authority_commit_ms": {
+      "delta": 5.669000000000004,
+      "relative_delta": 0.17796823004960144,
+      "trace_off_median": 31.854,
+      "trace_off_values": [
+        31.854
+      ],
+      "trace_on_median": 37.523,
+      "trace_on_values": [
+        37.523
+      ]
+    },
+    "average_active_cores": {
+      "delta": 0.18332393343128173,
+      "relative_delta": 0.1409745065496672,
+      "trace_off_median": 1.3004048598438913,
+      "trace_off_values": [
+        1.3004048598438913
+      ],
+      "trace_on_median": 1.483728793275173,
+      "trace_on_values": [
+        1.483728793275173
+      ]
+    },
+    "blocked_movement_frames": {
+      "delta": -17.0,
+      "relative_delta": -0.7727272727272727,
+      "trace_off_median": 22.0,
+      "trace_off_values": [
+        22.0
+      ],
+      "trace_on_median": 5.0,
+      "trace_on_values": [
+        5.0
+      ]
+    },
+    "frame_maximum_ms": {
+      "delta": 27.46099999999999,
+      "relative_delta": 0.5719730895003227,
+      "trace_off_median": 48.011,
+      "trace_off_values": [
+        48.011
+      ],
+      "trace_on_median": 75.472,
+      "trace_on_values": [
+        75.472
+      ]
+    },
+    "frame_p95_ms": {
+      "delta": -0.1650000000000027,
+      "relative_delta": -0.008963494132985805,
+      "trace_off_median": 18.408,
+      "trace_off_values": [
+        18.408
+      ],
+      "trace_on_median": 18.243,
+      "trace_on_values": [
+        18.243
+      ]
+    },
+    "frame_p99_ms": {
+      "delta": 2.8580000000000005,
+      "relative_delta": 0.11205206618050657,
+      "trace_off_median": 25.506,
+      "trace_off_values": [
+        25.506
+      ],
+      "trace_on_median": 28.364,
+      "trace_on_values": [
+        28.364
+      ]
+    },
+    "process_cpu_seconds": {
+      "delta": 28.5,
+      "relative_delta": 0.4449865820931935,
+      "trace_off_median": 64.046875,
+      "trace_off_values": [
+        64.046875
+      ],
+      "trace_on_median": 92.546875,
+      "trace_on_values": [
+        92.546875
+      ]
+    },
+    "relocation_to_collision_ready_ms": {
+      "delta": 10225.292,
+      "relative_delta": 51.18762921691421,
+      "trace_off_median": 199.761,
+      "trace_off_values": [
+        199.761
+      ],
+      "trace_on_median": 10425.053,
+      "trace_on_values": [
+        10425.053
+      ]
+    },
+    "relocation_to_visual_ready_ms": {
+      "delta": 10225.292,
+      "relative_delta": 51.18762921691421,
+      "trace_off_median": 199.761,
+      "trace_off_values": [
+        199.761
+      ],
+      "trace_on_median": 10425.053,
+      "trace_on_values": [
+        10425.053
+      ]
+    },
+    "wall_seconds": {
+      "delta": 13.123033999931067,
+      "relative_delta": 0.2664494901493161,
+      "trace_off_median": 49.25148850004189,
+      "trace_off_values": [
+        49.25148850004189
+      ],
+      "trace_on_median": 62.374522499972954,
+      "trace_on_values": [
+        62.374522499972954
+      ]
+    }
+  },
+  "provenance": {
+    "authority_addon_tree": "38d987a68e1a7f5f5043da7d790dab49cfed20ee",
+    "authority_commit": "2714ea8b25f588f244a96eacea16ca2f10b856af",
+    "authority_package_digest_sha256": "7ad9c353ab8a0d9ae6102b90a600cc41d978b37439fde7aa1844e6fd54a88895",
+    "debug_binary_sha256": "583ced55e408a90f2929acf8d0eb9fa5976e5af1f151b7c05ae2a9aed8700ffc",
+    "godot_executable": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+    "integration_commit": "dc61dff5371b5dba4c7ebdae62a331dac6702a44",
+    "integration_repository": "world-transvoxel-integration-game",
+    "integration_tree": "6b20078dab658a50e77ef49a0779a3b8e5669e51",
+    "logical_cpu_affinity": [
+      0,
+      1,
+      2
+    ],
+    "logical_cpu_count": 4,
+    "measurement_contract": "authoritative_cpu_human_baseline_v1",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "power_source": {
+      "available": true,
+      "battery_percent": 100,
+      "plugged_in": true,
+      "watts_available": false
+    },
+    "processor": "Intel64 Family 6 Model 158 Stepping 9, GenuineIntel",
+    "release_binary_sha256": "5bfe00cde1ea6b0db597bc390ae2865d95fbfd18571f5b2beca5cb6346667274",
+    "runtime_kind": "godot_editor_debug"
+  },
+  "purpose": "real-time causal terrain pipeline trace qualification",
+  "route": {
+    "collision_prediction_distance": 24.0,
+    "collision_radius_chunks": 2,
+    "edit_ready_observation_frames": 1800,
+    "logical_cpu_affinity": [
+      0,
+      1,
+      2
+    ],
+    "mode": "runtime_baseline_gate",
+    "pairs": 1,
+    "procedural_generation_workers": 2,
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
+  },
+  "schema": "world_transvoxel.cpu_b2_qualification.v2",
+  "status": "PASS",
+  "trace_contract": {
+    "no_aggregate_fallback": true,
+    "required_native_event_kinds": [
+      "chunk_demand_accepted",
+      "collision_sink_applied",
+      "edit_committed",
+      "edit_processing_started",
+      "edit_submitted",
+      "frontend_publication_processed",
+      "mesh_completion_consumed",
+      "mesh_finished",
+      "mesh_started",
+      "publication_popped",
+      "publication_queued",
+      "render_sink_applied",
+      "sample_finished",
+      "sample_started",
+      "storage_completion_consumed",
+      "storage_finished",
+      "storage_requested",
+      "storage_started",
+      "trace_started",
+      "trace_stopped",
+      "viewer_plan_applied",
+      "viewer_plan_started",
+      "visibility_batch_published",
+      "visibility_replacement_ready",
+      "visibility_staging_blocked"
+    ],
+    "retained_causal_slices": [
+      "causal_slice_01.json"
+    ],
+    "schema": "world_transvoxel.cpu_causal_trace.v2",
+    "summaries": [
+      {
+        "complete": true,
+        "downstream_dropped_event_count": 0,
+        "downstream_event_count": 2335,
+        "duration_us": 33435410,
+        "missing_native_event_kinds": [],
+        "native_capture_us_maximum": 24214,
+        "native_capture_us_total": 1488106,
+        "native_consumer_gap_event_count": 0,
+        "native_event_count": 105792,
+        "native_event_kinds": [
+          "chunk_demand_accepted",
+          "collision_sink_applied",
+          "edit_committed",
+          "edit_processing_started",
+          "edit_submitted",
+          "frontend_publication_processed",
+          "mesh_completion_consumed",
+          "mesh_finished",
+          "mesh_started",
+          "publication_popped",
+          "publication_queued",
+          "render_sink_applied",
+          "sample_finished",
+          "sample_started",
+          "storage_completion_consumed",
+          "storage_finished",
+          "storage_requested",
+          "storage_started",
+          "trace_started",
+          "trace_stopped",
+          "viewer_plan_applied",
+          "viewer_plan_started",
+          "visibility_batch_published",
+          "visibility_replacement_ready",
+          "visibility_staging_blocked"
+        ],
+        "native_local_dropped_event_count": 0,
+        "native_source_overwrite_count": 40256,
+        "observer_capture_us_maximum": 27975,
+        "observer_capture_us_total": 2113577,
+        "pipeline_capture_us_total": 2030858,
+        "pipeline_snapshot_count": 405,
+        "serialization_probe_us": 2101924
+      }
+    ],
+    "trace_disabled_by_default": true,
+    "trace_paths": [
+      ".godot/world_transvoxel_captures/cpu_b2_causal_trace/traces/trace_on_01.json"
+    ],
+    "traces_complete": true
+  },
+  "trace_off": {
+    "executions": [
+      {
+        "acceptance_failures": [
+          "blocked_movement_frames"
+        ],
+        "average_active_cores": 1.3004048598438913,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline\\.godot\\world_transvoxel_captures\\cpu_b2_causal_trace\\trace_off_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--runtime-baseline-edit-ready-wait-frames",
+          "1800"
+        ],
+        "godot_returncode": 1,
+        "measurement_complete": true,
+        "peak_process_tree_rss_bytes": 818409472,
+        "process_cpu_seconds": 64.046875,
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design",
+        "run": 1,
+        "stderr_log": ".godot/world_transvoxel_captures/cpu_b2_causal_trace/trace_off_01.stderr.log",
+        "stdout_log": ".godot/world_transvoxel_captures/cpu_b2_causal_trace/trace_off_01.stdout.log",
+        "target_status": "MEASURED_TARGET_MISS",
+        "wall_seconds": 49.25148850004189
+      }
+    ],
+    "runs": [
+      {
+        "acceptance": {
+          "failures": [
+            "blocked_movement_frames"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 69,
+          "maximum_collision_apply_frame_time_ns_observed": 6913700,
+          "maximum_collision_apply_time_ns_last": 1992600,
+          "maximum_collision_apply_time_ns_observed": 3310200,
+          "maximum_mesh_job_time_ns_observed": 79957900,
+          "maximum_pending_chunk_replacements": 784,
+          "maximum_pending_chunk_retirements": 2214,
+          "maximum_queued_collision": 2,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 44224400,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 784,
+          "maximum_staged_render_resources": 213,
+          "samples": 94
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 6913700,
+          "maximum_single_apply_ns": 3310200,
+          "ok": true,
+          "soft_bound_ns": 7560200
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": 2,
+          "authority_commit_ms": 31.854,
+          "collision_generation_after": 5848,
+          "collision_ready_censored": false,
+          "collision_ready_frames_after_commit": 10,
+          "collision_ready_ms_after_commit": 167.907,
+          "collision_required": true,
+          "commit_frame_time_ms": {
+            "maximum": 16.76,
+            "over_16_67_ms": 1,
+            "over_33_3_ms": 0,
+            "p50": 15.094,
+            "p95": 16.76,
+            "p99": 16.76,
+            "samples": 2
+          },
+          "edit_position": {
+            "x": 560.990905761719,
+            "y": 39.134880065918,
+            "z": 560.0
+          },
+          "generation_after": 5848,
+          "generation_before": 5665,
+          "generation_changed_frames_after_commit": 1,
+          "interaction_accepted": true,
+          "interaction_call_ms": 1.21,
+          "interaction_ray_hit": true,
+          "interaction_reason": "raycast_hit",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "physics_collision",
+          "logical_collision_ready_frames_after_commit": 10,
+          "logical_visual_ready_frames_after_commit": 10,
+          "measurement_complete": true,
+          "physics_target_found": true,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "physics_target_wait_frames": 0,
+          "physics_target_wait_ms": 0.0,
+          "ready_frame_time_ms": {
+            "maximum": 18.088,
+            "over_16_67_ms": 5,
+            "over_33_3_ms": 0,
+            "p50": 16.593,
+            "p95": 18.088,
+            "p99": 18.088,
+            "samples": 10
+          },
+          "ready_observation_window_frames": 10,
+          "ready_observation_window_ms": 167.907,
+          "relocation_to_collision_ready_lower_bound_ms": 199.761,
+          "relocation_to_collision_ready_ms": 199.761,
+          "relocation_to_visual_ready_lower_bound_ms": 199.761,
+          "relocation_to_visual_ready_ms": 199.761,
+          "render_generation_after": 5848,
+          "resource_generation_api": true,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": 0,
+          "visual_ready_censored": false,
+          "visual_ready_frames_after_commit": 10,
+          "visual_ready_ms_after_commit": 167.907
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "frame_time_ms": {
+          "maximum": 48.011,
+          "over_16_67_ms": 467,
+          "over_33_3_ms": 3,
+          "p50": 16.666,
+          "p95": 18.408,
+          "p99": 25.506,
+          "samples": 1392
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": true,
+        "movement": {
+          "accepted_frames": 998,
+          "blocked_frames": 22,
+          "blocked_ratio": 0.0215686274509804,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 7,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 559.520568847656,
+          "y": 42.0228500366211,
+          "z": 529.298400878906
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 33.211,
+              "over_16_67_ms": 24,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 18.575,
+              "p99": 33.211,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 367.942443847656,
+              "y": 40.7117195129395,
+              "z": 367.772155761719
+            },
+            "frame_time_ms": {
+              "maximum": 48.011,
+              "over_16_67_ms": 72,
+              "over_33_3_ms": 1,
+              "p50": 16.665,
+              "p95": 18.646,
+              "p99": 31.007,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 95.9653244018555
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 25.506,
+              "over_16_67_ms": 16,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 18.569,
+              "p99": 25.506,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.068908691406,
+              "y": 42.0692176818848,
+              "z": 299.898620605469
+            },
+            "frame_time_ms": {
+              "maximum": 35.71,
+              "over_16_67_ms": 71,
+              "over_33_3_ms": 1,
+              "p50": 16.665,
+              "p95": 18.424,
+              "p99": 30.713,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 367.942443847656,
+              "y": 40.7117195129395,
+              "z": 367.772155761719
+            },
+            "travel_distance": 95.9972763061523
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 46.027,
+              "over_16_67_ms": 15,
+              "over_33_3_ms": 1,
+              "p50": 16.666,
+              "p95": 20.045,
+              "p99": 46.027,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 556.010009765625,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "frame_time_ms": {
+              "maximum": 31.103,
+              "over_16_67_ms": 50,
+              "over_33_3_ms": 0,
+              "p50": 16.664,
+              "p95": 18.178,
+              "p99": 22.238,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.068908691406,
+              "y": 42.0692176818848,
+              "z": 299.898620605469
+            },
+            "travel_distance": 255.947616577148
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 25.05,
+              "over_16_67_ms": 11,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 18.59,
+              "p99": 25.05,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.009643554688,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "frame_time_ms": {
+              "maximum": 18.594,
+              "over_16_67_ms": 47,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 17.953,
+              "p99": 18.366,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 556.010009765625,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "travel_distance": 256.000366210938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 17.721,
+              "over_16_67_ms": 12,
+              "over_33_3_ms": 0,
+              "p50": 16.664,
+              "p95": 17.461,
+              "p99": 17.721,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 106,
+            "blocked_frames": 14,
+            "blocked_ratio": 0.116666666666667,
+            "end_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 525.910461425781
+            },
+            "frame_time_ms": {
+              "maximum": 22.496,
+              "over_16_67_ms": 44,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 18.687,
+              "p99": 22.18,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 7,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.009643554688,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "travel_distance": 226.008575439453
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 16.685,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.681,
+              "p99": 16.685,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 269.910522460938
+            },
+            "frame_time_ms": {
+              "maximum": 21.578,
+              "over_16_67_ms": 16,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.689,
+              "p99": 19.018,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 525.910461425781
+            },
+            "travel_distance": 255.999938964844
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 19.847,
+              "over_16_67_ms": 6,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.676,
+              "p99": 19.847,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 172,
+            "blocked_frames": 8,
+            "blocked_ratio": 0.0444444444444444,
+            "end_position": {
+              "x": 559.520568847656,
+              "y": 42.0228500366211,
+              "z": 529.298400878906
+            },
+            "frame_time_ms": {
+              "maximum": 29.297,
+              "over_16_67_ms": 36,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 17.292,
+              "p99": 26.818,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 4,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 269.910522460938
+            },
+            "travel_distance": 366.907012939453
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 18.323,
+              "over_16_67_ms": 34,
+              "over_33_3_ms": 0,
+              "p50": 16.664,
+              "p95": 18.003,
+              "p99": 18.323,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "route_net_displacement": 346.308624267578,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 162,
+          "collision_apply_frame_items_maximum_end": 69,
+          "collision_apply_frame_time_ns_maximum_end": 6913700,
+          "collision_apply_frame_time_ns_total": 1298026800,
+          "collision_apply_time_ns_maximum_end": 3310200,
+          "collision_apply_time_ns_total": 1298026800,
+          "collision_viewer_updates": 94,
+          "mesh_job_time_ns_maximum_end": 79957900,
+          "sample_job_time_ns_maximum_end": 44224400,
+          "viewer_updates": 151
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        }
+      }
+    ]
+  },
+  "trace_on": {
+    "executions": [
+      {
+        "acceptance_failures": [
+          "visual_ready_wait",
+          "collision_ready_wait"
+        ],
+        "average_active_cores": 1.483728793275173,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline\\.godot\\world_transvoxel_captures\\cpu_b2_causal_trace\\trace_on_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--runtime-baseline-edit-ready-wait-frames",
+          "1800",
+          "--cpu-causal-trace-output",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline\\.godot\\world_transvoxel_captures\\cpu_b2_causal_trace\\traces\\trace_on_01.json"
+        ],
+        "godot_returncode": 1,
+        "measurement_complete": true,
+        "peak_process_tree_rss_bytes": 1548869632,
+        "process_cpu_seconds": 92.546875,
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design",
+        "run": 1,
+        "stderr_log": ".godot/world_transvoxel_captures/cpu_b2_causal_trace/trace_on_01.stderr.log",
+        "stdout_log": ".godot/world_transvoxel_captures/cpu_b2_causal_trace/trace_on_01.stdout.log",
+        "target_status": "MEASURED_TARGET_MISS",
+        "wall_seconds": 62.374522499972954
+      }
+    ],
+    "runs": [
+      {
+        "acceptance": {
+          "failures": [
+            "visual_ready_wait",
+            "collision_ready_wait"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 66,
+          "maximum_collision_apply_frame_time_ns_observed": 6096600,
+          "maximum_collision_apply_time_ns_last": 1833100,
+          "maximum_collision_apply_time_ns_observed": 4587700,
+          "maximum_mesh_job_time_ns_observed": 96571400,
+          "maximum_pending_chunk_replacements": 764,
+          "maximum_pending_chunk_retirements": 2571,
+          "maximum_queued_collision": 1,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 33335700,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 760,
+          "maximum_staged_render_resources": 395,
+          "samples": 135
+        },
+        "causal_trace": {
+          "dropped_event_count": 0,
+          "event_count": 2335,
+          "final": true,
+          "native_complete": true,
+          "native_event_count": 105792,
+          "observer": {
+            "capture_time_us_maximum": 27975,
+            "capture_time_us_mean": 905.172162740899,
+            "capture_time_us_total": 2113577,
+            "pipeline_capture_time_us_maximum": 27918,
+            "pipeline_capture_time_us_total": 2030858,
+            "pipeline_snapshot_count": 405
+          },
+          "ok": true,
+          "path": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game-accepted-baseline\\.godot\\world_transvoxel_captures\\cpu_b2_causal_trace\\traces\\trace_on_01.json",
+          "payload_bytes": 27579308,
+          "reason": "scenario_complete",
+          "serialization_probe_us": 2101924,
+          "write_us": 82100
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 6096600,
+          "maximum_single_apply_ns": 4587700,
+          "ok": true,
+          "soft_bound_ns": 8837700
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": 2,
+          "authority_commit_ms": 37.523,
+          "collision_generation_after": 6332,
+          "collision_ready_censored": false,
+          "collision_ready_frames_after_commit": 620,
+          "collision_ready_ms_after_commit": 10387.53,
+          "collision_required": true,
+          "commit_frame_time_ms": {
+            "maximum": 27.168,
+            "over_16_67_ms": 1,
+            "over_33_3_ms": 0,
+            "p50": 10.355,
+            "p95": 27.168,
+            "p99": 27.168,
+            "samples": 2
+          },
+          "edit_position": {
+            "x": 560.990905761719,
+            "y": 39.134880065918,
+            "z": 560.0
+          },
+          "generation_after": 6332,
+          "generation_before": 5956,
+          "generation_changed_frames_after_commit": 1,
+          "interaction_accepted": true,
+          "interaction_call_ms": 3.13,
+          "interaction_ray_hit": true,
+          "interaction_reason": "raycast_hit",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "physics_collision",
+          "logical_collision_ready_frames_after_commit": 1,
+          "logical_visual_ready_frames_after_commit": 10,
+          "measurement_complete": true,
+          "physics_target_found": true,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "physics_target_wait_frames": 0,
+          "physics_target_wait_ms": 0.0,
+          "ready_frame_time_ms": {
+            "maximum": 75.472,
+            "over_16_67_ms": 92,
+            "over_33_3_ms": 1,
+            "p50": 16.666,
+            "p95": 17.108,
+            "p99": 18.452,
+            "samples": 620
+          },
+          "ready_observation_window_frames": 620,
+          "ready_observation_window_ms": 10387.53,
+          "relocation_to_collision_ready_lower_bound_ms": 10425.053,
+          "relocation_to_collision_ready_ms": 10425.053,
+          "relocation_to_visual_ready_lower_bound_ms": 10425.053,
+          "relocation_to_visual_ready_ms": 10425.053,
+          "render_generation_after": 6332,
+          "resource_generation_api": true,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": 0,
+          "visual_ready_censored": false,
+          "visual_ready_frames_after_commit": 620,
+          "visual_ready_ms_after_commit": 10387.53
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "frame_time_ms": {
+          "maximum": 75.472,
+          "over_16_67_ms": 425,
+          "over_33_3_ms": 8,
+          "p50": 16.666,
+          "p95": 18.243,
+          "p99": 28.364,
+          "samples": 2002
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": true,
+        "movement": {
+          "accepted_frames": 1015,
+          "blocked_frames": 5,
+          "blocked_ratio": 0.00490196078431373,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 3,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 564.005737304688,
+          "y": 41.614574432373,
+          "z": 563.74462890625
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 41.279,
+              "over_16_67_ms": 15,
+              "over_33_3_ms": 1,
+              "p50": 16.666,
+              "p95": 18.243,
+              "p99": 41.279,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 367.942443847656,
+              "y": 40.7117195129395,
+              "z": 367.772155761719
+            },
+            "frame_time_ms": {
+              "maximum": 51.425,
+              "over_16_67_ms": 51,
+              "over_33_3_ms": 1,
+              "p50": 16.665,
+              "p95": 17.373,
+              "p99": 33.041,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 95.9653244018555
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 30.991,
+              "over_16_67_ms": 17,
+              "over_33_3_ms": 0,
+              "p50": 16.663,
+              "p95": 18.668,
+              "p99": 30.991,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.068908691406,
+              "y": 42.0692176818848,
+              "z": 299.898620605469
+            },
+            "frame_time_ms": {
+              "maximum": 35.001,
+              "over_16_67_ms": 55,
+              "over_33_3_ms": 1,
+              "p50": 16.665,
+              "p95": 20.563,
+              "p99": 31.327,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 367.942443847656,
+              "y": 40.7117195129395,
+              "z": 367.772155761719
+            },
+            "travel_distance": 95.9972763061523
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 16.689,
+              "over_16_67_ms": 6,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.675,
+              "p99": 16.689,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 556.010009765625,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "frame_time_ms": {
+              "maximum": 32.627,
+              "over_16_67_ms": 28,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 21.789,
+              "p99": 28.291,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.068908691406,
+              "y": 42.0692176818848,
+              "z": 299.898620605469
+            },
+            "travel_distance": 255.947616577148
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 19.949,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 16.739,
+              "p99": 19.949,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.009643554688,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "frame_time_ms": {
+              "maximum": 33.197,
+              "over_16_67_ms": 32,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 23.072,
+              "p99": 27.233,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 556.010009765625,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "travel_distance": 256.000366210938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 33.559,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 1,
+              "p50": 16.665,
+              "p95": 16.7,
+              "p99": 33.559,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 555.777526855469
+            },
+            "frame_time_ms": {
+              "maximum": 38.336,
+              "over_16_67_ms": 27,
+              "over_33_3_ms": 2,
+              "p50": 16.666,
+              "p95": 19.185,
+              "p99": 33.455,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.009643554688,
+              "y": 43.8955879211426,
+              "z": 299.917572021484
+            },
+            "travel_distance": 255.873809814453
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 26.276,
+              "over_16_67_ms": 5,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 18.67,
+              "p99": 26.276,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 299.777160644531
+            },
+            "frame_time_ms": {
+              "maximum": 28.209,
+              "over_16_67_ms": 24,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 19.909,
+              "p99": 27.787,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 555.777526855469
+            },
+            "travel_distance": 256.000366210938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 30.737,
+              "over_16_67_ms": 3,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.711,
+              "p99": 30.737,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 175,
+            "blocked_frames": 5,
+            "blocked_ratio": 0.0277777777777778,
+            "end_position": {
+              "x": 564.005737304688,
+              "y": 41.614574432373,
+              "z": 563.74462890625
+            },
+            "frame_time_ms": {
+              "maximum": 33.444,
+              "over_16_67_ms": 41,
+              "over_33_3_ms": 1,
+              "p50": 16.666,
+              "p95": 19.2,
+              "p99": 33.097,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 3,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.063232421875,
+              "y": 46.5583572387695,
+              "z": 299.777160644531
+            },
+            "travel_distance": 373.321441650391
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 31.951,
+              "over_16_67_ms": 13,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.675,
+              "p99": 31.951,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "route_net_displacement": 373.176361083984,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 172,
+          "collision_apply_frame_items_maximum_end": 66,
+          "collision_apply_frame_time_ns_maximum_end": 6096600,
+          "collision_apply_frame_time_ns_total": 1442758800,
+          "collision_apply_time_ns_maximum_end": 4587700,
+          "collision_apply_time_ns_total": 1442758800,
+          "collision_viewer_updates": 104,
+          "mesh_job_time_ns_maximum_end": 96571400,
+          "sample_job_time_ns_maximum_end": 33335700,
+          "viewer_updates": 166
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        }
+      }
+    ]
+  }
+}

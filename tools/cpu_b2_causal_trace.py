@@ -173,7 +173,11 @@ def causal_attribution(trace: dict[str, Any]) -> tuple[dict[str, Any], list[dict
     ]
     blocker = blockers[0] if blockers else None
     batch = batches[0] if batches else None
-    causal_slice.extend(visibility_events)
+    decisive_visibility_events = [
+        event for event in (blocker, blockers[-1] if blockers else None, batch)
+        if event is not None
+    ]
+    causal_slice.extend(decisive_visibility_events)
     downstream_exact = [{
         "kind": event.get("kind"),
         "elapsed_us": int(event.get("elapsed_us", -1)),
@@ -233,6 +237,87 @@ def causal_attribution(trace: dict[str, Any]) -> tuple[dict[str, Any], list[dict
             "The trace did not establish the complete edit-to-visibility chain."
         ),
     }, sorted(causal_slice, key=lambda event: int(event.get("elapsed_ns", 0))))
+
+
+def movement_attribution(trace: dict[str, Any]) -> dict[str, Any]:
+    downstream_events = [event for event in trace["events"] if isinstance(event, dict)]
+    moving_frames = [
+        event for event in downstream_events
+        if event.get("kind") == "physics_frame"
+        and float(event.get("movement", {}).get("requested_speed", 0.0)) > 0.0
+    ]
+    blocked_frames = [
+        event for event in moving_frames
+        if event.get("movement", {}).get("accepted") is False
+    ]
+    sampled_blocked = [
+        event for event in blocked_frames
+        if isinstance(event.get("pipeline", {}).get("metrics"), dict)
+    ]
+    metric_names = (
+        "collision_required_not_ready_chunk_records",
+        "pending_chunk_replacements",
+        "blocked_pending_chunk_replacements",
+        "scheduler_queued_jobs",
+        "storage_queued_requests",
+        "pending_chunk_retirements",
+    )
+    blocked_samples = []
+    for event in sampled_blocked:
+        metrics = event["pipeline"]["metrics"]
+        blocked_samples.append({
+            "frame": int(event["frame"]),
+            "phase": str(event.get("phase", "")),
+            "frame_ms": float(event.get("frame_us", 0)) / 1000.0,
+            "metrics": {name: int(metrics.get(name, -1)) for name in metric_names},
+        })
+    largest_frame = max(moving_frames, key=lambda event: int(event.get("frame_us", 0)))
+    largest_metrics = largest_frame.get("pipeline", {}).get("metrics", {})
+    complete = (
+        bool(blocked_frames)
+        and bool(sampled_blocked)
+        and all(
+            int(event["pipeline"]["metrics"].get(
+                "collision_required_not_ready_chunk_records", 0
+            )) > 0
+            and int(event["pipeline"]["metrics"].get(
+                "blocked_pending_chunk_replacements", 0
+            )) > 0
+            for event in sampled_blocked
+        )
+    )
+    return {
+        "complete": complete,
+        "classification": (
+            "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG"
+            if complete else "UNATTRIBUTED"
+        ),
+        "movement_frames": len(moving_frames),
+        "blocked_movement_frames": len(blocked_frames),
+        "sampled_blocked_movement_frames": len(sampled_blocked),
+        "blocked_samples": blocked_samples,
+        "largest_movement_frame": {
+            "frame": int(largest_frame["frame"]),
+            "phase": str(largest_frame.get("phase", "")),
+            "frame_ms": float(largest_frame.get("frame_us", 0)) / 1000.0,
+            "movement_accepted": bool(largest_frame["movement"].get("accepted")),
+            "metrics": {
+                name: int(largest_metrics.get(name, -1)) for name in metric_names
+            } if largest_metrics else {},
+        },
+        "finding": (
+            "Observed movement rejection is the production player's collision-"
+            "readiness gate while relocation has a large not-ready collision and "
+            "replacement backlog. The largest movement-frame hitch was accepted, "
+            "so frame-time spikes remain a separate CPU-B3 target."
+            if complete else
+            "The trace did not retain enough blocked movement context."
+        ),
+        "claim_boundary": (
+            "This run attributes observed movement rejection, not every source of "
+            "flight frame-time variance."
+        ),
+    }
 
 
 def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
@@ -327,6 +412,88 @@ def pair_comparison(
     return output
 
 
+def write_causal_slices(
+    output: pathlib.Path,
+    trace_paths: list[str],
+    causal_slices: list[list[dict[str, Any]]],
+) -> list[str]:
+    slice_paths = []
+    for index, events in enumerate(causal_slices, start=1):
+        slice_path = output.parent / f"causal_slice_{index:02d}.json"
+        slice_path.write_text(json.dumps({
+            "schema": "world_transvoxel.cpu_b2_causal_slice.v1",
+            "source_trace": trace_paths[index - 1],
+            "events": events,
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        slice_paths.append(slice_path.name)
+    return slice_paths
+
+
+def reanalyze_existing(project: pathlib.Path, output: pathlib.Path) -> int:
+    report = load_object(output)
+    trace_contract = report.get("trace_contract")
+    trace_paths = trace_contract.get("trace_paths") if isinstance(trace_contract, dict) else None
+    if not isinstance(trace_paths, list) or not trace_paths:
+        raise RuntimeError("existing CPU-B2 report has no trace paths")
+    traces = [load_object(project / str(path)) for path in trace_paths]
+    summaries = [summarize_trace(trace) for trace in traces]
+    causal_runs = []
+    causal_slices = []
+    movement_runs = []
+    for trace in traces:
+        causal_run, causal_slice = causal_attribution(trace)
+        causal_runs.append(causal_run)
+        causal_slices.append(causal_slice)
+        movement_runs.append(movement_attribution(trace))
+    traces_complete = all(item["complete"] for item in summaries)
+    causal_complete = all(item["complete"] for item in causal_runs)
+    movement_complete = all(item["complete"] for item in movement_runs)
+    report["schema"] = SCHEMA
+    report["status"] = "PASS" if (
+        traces_complete and causal_complete and movement_complete
+    ) else "FAIL"
+    report["trace_contract"]["summaries"] = summaries
+    report["trace_contract"]["traces_complete"] = traces_complete
+    report["causal_attribution"] = {
+        "complete": causal_complete,
+        "classification": (
+            "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION"
+            if causal_complete else "UNATTRIBUTED"
+        ),
+        "runs": causal_runs,
+    }
+    report["movement_attribution"] = {
+        "complete": movement_complete,
+        "classification": (
+            "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG"
+            if movement_complete else "UNATTRIBUTED"
+        ),
+        "runs": movement_runs,
+    }
+    report["claim_boundaries"] = {
+        "authoritative_for": [
+            "event availability and order on the Godot 4.7 CPU-B1 route",
+            "bounded trace retention and explicit loss accounting",
+            "observed trace overhead on this machine and route",
+            "causal attribution of delayed first-edit visibility on this route",
+            "causal attribution of observed collision-gated movement rejection",
+        ],
+        "not_authoritative_for": [
+            "performance remediation",
+            "complete attribution of flight frame-time spikes",
+            "universal hardware overhead",
+            "GPU architecture selection",
+            "CPU or whole-system watts",
+        ],
+    }
+    report["trace_contract"]["retained_causal_slices"] = write_causal_slices(
+        output, [str(path) for path in trace_paths], causal_slices
+    )
+    output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"WT_CPU_B2_REANALYZE_{report['status']} output={output}")
+    return 0 if report["status"] == "PASS" else 1
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--godot", help="Path to the Godot 4.7 executable.")
@@ -336,6 +503,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--collision-prediction", type=float, default=24.0)
     parser.add_argument("--procedural-generation-workers", type=int, default=2)
     parser.add_argument("--output", help="Qualification JSON output path.")
+    parser.add_argument("--reanalyze-existing", action="store_true")
     args = parser.parse_args(argv)
     if args.pairs < 1:
         raise RuntimeError("--pairs must be at least 1")
@@ -343,6 +511,10 @@ def main(argv: list[str]) -> int:
         raise RuntimeError("CPU-B2 permits one or two terrain workers")
 
     project = pathlib.Path(args.project).resolve()
+    if args.reanalyze_existing:
+        if not args.output:
+            raise RuntimeError("--reanalyze-existing requires --output")
+        return reanalyze_existing(project, pathlib.Path(args.output).resolve())
     godot = integration_quality.find_godot(args.godot)
     affinity = psutil.Process().cpu_affinity()
     if affinity != [0, 1, 2]:
@@ -361,6 +533,7 @@ def main(argv: list[str]) -> int:
     on_exec: list[dict[str, Any]] = []
     trace_summaries: list[dict[str, Any]] = []
     trace_attributions: list[dict[str, Any]] = []
+    movement_attributions: list[dict[str, Any]] = []
     causal_slices: list[list[dict[str, Any]]] = []
     trace_paths: list[str] = []
     for index in range(1, args.pairs + 1):
@@ -385,16 +558,22 @@ def main(argv: list[str]) -> int:
         trace_summaries.append(summarize_trace(trace))
         attribution, causal_slice = causal_attribution(trace)
         trace_attributions.append(attribution)
+        movement_attributions.append(movement_attribution(trace))
         causal_slices.append(causal_slice)
         trace_paths.append(str(trace_path.relative_to(project)).replace("\\", "/"))
 
     pin = load_object(project / "AUTHORITY_HOTFIX_PIN.json")
     traces_complete = all(item["complete"] for item in trace_summaries)
     attributions_complete = all(item["complete"] for item in trace_attributions)
+    movement_attributions_complete = all(
+        item["complete"] for item in movement_attributions
+    )
     report = {
         "schema": SCHEMA,
         "date": "2026-08-13",
-        "status": "PASS" if traces_complete and attributions_complete else "FAIL",
+        "status": "PASS" if (
+            traces_complete and attributions_complete and movement_attributions_complete
+        ) else "FAIL",
         "milestone": "CPU-B2",
         "purpose": "real-time causal terrain pipeline trace qualification",
         "provenance": baseline._provenance(project, godot, affinity),
@@ -420,8 +599,19 @@ def main(argv: list[str]) -> int:
         },
         "causal_attribution": {
             "complete": attributions_complete,
-            "classification": "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION",
+            "classification": (
+                "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION"
+                if attributions_complete else "UNATTRIBUTED"
+            ),
             "runs": trace_attributions,
+        },
+        "movement_attribution": {
+            "complete": movement_attributions_complete,
+            "classification": (
+                "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG"
+                if movement_attributions_complete else "UNATTRIBUTED"
+            ),
+            "runs": movement_attributions,
         },
         "performance_comparison": pair_comparison(off_runs, on_runs, off_exec, on_exec),
         "trace_off": {"runs": off_runs, "executions": off_exec},
@@ -432,9 +622,11 @@ def main(argv: list[str]) -> int:
                 "bounded trace retention and explicit loss accounting",
                 "observed trace overhead on this machine and route",
                 "causal attribution of delayed first-edit visibility on this route",
+                "causal attribution of observed collision-gated movement rejection",
             ],
             "not_authoritative_for": [
                 "performance remediation",
+                "complete attribution of flight frame-time spikes",
                 "universal hardware overhead",
                 "GPU architecture selection",
                 "CPU or whole-system watts",
@@ -443,16 +635,9 @@ def main(argv: list[str]) -> int:
     }
     output = pathlib.Path(args.output).resolve() if args.output else capture_dir / "qualification.json"
     output.parent.mkdir(parents=True, exist_ok=True)
-    slice_paths = []
-    for index, events in enumerate(causal_slices, start=1):
-        slice_path = output.parent / f"causal_slice_{index:02d}.json"
-        slice_path.write_text(json.dumps({
-            "schema": "world_transvoxel.cpu_b2_causal_slice.v1",
-            "source_trace": trace_paths[index - 1],
-            "events": events,
-        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        slice_paths.append(slice_path.name)
-    report["trace_contract"]["retained_causal_slices"] = slice_paths
+    report["trace_contract"]["retained_causal_slices"] = write_causal_slices(
+        output, trace_paths, causal_slices
+    )
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"WT_CPU_B2_{report['status']} pairs={args.pairs} output={output}")
     return 0 if report["status"] == "PASS" else 1
