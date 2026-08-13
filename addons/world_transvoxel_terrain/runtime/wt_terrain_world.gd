@@ -233,6 +233,36 @@ func get_api_generation() -> int:
 func get_runtime_metrics() -> Dictionary:
 	return RuntimeAudit.get_runtime_metrics(_backend_terrain)
 
+
+func begin_cpu_causal_trace() -> bool:
+	if _backend_terrain == null or not _backend_terrain.has_method(
+		"begin_cpu_causal_trace"
+	):
+		return false
+	return bool(_backend_terrain.call("begin_cpu_causal_trace"))
+
+
+func get_cpu_causal_trace_events(
+	first_sequence: int,
+	maximum_events: int
+) -> Dictionary:
+	if _backend_terrain == null or not _backend_terrain.has_method(
+		"get_cpu_causal_trace_events"
+	):
+		return {"valid": false}
+	return Dictionary(_backend_terrain.call(
+		"get_cpu_causal_trace_events",
+		first_sequence,
+		maximum_events
+	))
+
+
+func end_cpu_causal_trace() -> void:
+	if _backend_terrain != null and _backend_terrain.has_method(
+		"end_cpu_causal_trace"
+	):
+		_backend_terrain.call("end_cpu_causal_trace")
+
 func is_cold_idle() -> bool:
 	return RuntimeAudit.is_cold_idle(get_runtime_metrics())
 

@@ -2171,6 +2171,8 @@ func _human_artifact_targeted_summary_has_mismatch(diagnostics: Array) -> bool:
 
 
 func _start_human_cpu_causal_trace() -> void:
+	if human_visual_capture_mode == "runtime_baseline_gate":
+		return
 	if cpu_causal_trace_output_path.is_empty() or cpu_causal_trace != null:
 		return
 	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
