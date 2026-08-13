@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import pathlib
 import statistics
@@ -17,7 +18,7 @@ import p0_runtime_baseline as baseline
 import p2_production_integration_game_quality as integration_quality
 
 
-SCHEMA = "world_transvoxel.cpu_b2_qualification.v2"
+SCHEMA = "world_transvoxel.cpu_b2_qualification.v3"
 TRACE_SCHEMA = "world_transvoxel.cpu_causal_trace.v2"
 CAUSAL_EDIT_READY_WAIT_FRAMES = 1800
 REQUIRED_NATIVE_KINDS = {
@@ -38,6 +39,9 @@ REQUIRED_NATIVE_KINDS = {
     "mesh_started",
     "mesh_finished",
     "mesh_completion_consumed",
+    "transition_mesh_started",
+    "transition_mesh_finished",
+    "transition_mesh_completion_consumed",
     "publication_queued",
     "publication_popped",
     "frontend_publication_processed",
@@ -95,6 +99,82 @@ def event_identity(event: dict[str, Any]) -> tuple[int, int, int, int, int] | No
 
 def event_elapsed_ms(event: dict[str, Any], origin_ns: int) -> float:
     return (int(event["elapsed_ns"]) - origin_ns) / 1_000_000.0
+
+
+def transition_attribution(trace: dict[str, Any]) -> dict[str, Any]:
+    native_events = [
+        event for event in trace["native"]["events"] if isinstance(event, dict)
+    ]
+    started = [
+        event for event in native_events
+        if event.get("kind") == "transition_mesh_started"
+    ]
+    finished = [
+        event for event in native_events
+        if event.get("kind") == "transition_mesh_finished"
+    ]
+    consumed = [
+        event for event in native_events
+        if event.get("kind") == "transition_mesh_completion_consumed"
+    ]
+
+    def job_key(event: dict[str, Any]) -> tuple[int, ...] | None:
+        identity = event_identity(event)
+        if identity is None:
+            return None
+        return (*identity, int(event.get("cause_id", -1)), int(event.get("auxiliary", -1)))
+
+    def completion_key(event: dict[str, Any]) -> tuple[int, ...] | None:
+        identity = event_identity(event)
+        if identity is None:
+            return None
+        return (*identity, int(event.get("auxiliary", -1)))
+
+    started_jobs = Counter(key for event in started if (key := job_key(event)) is not None)
+    finished_jobs = Counter(key for event in finished if (key := job_key(event)) is not None)
+    successful_finished_completions = Counter(
+        key for event in finished
+        if int(event.get("status", -1)) == 0
+        and (key := completion_key(event)) is not None
+    )
+    consumed_completions = Counter(
+        key for event in consumed if (key := completion_key(event)) is not None
+    )
+    masks = sorted({
+        int(event.get("auxiliary", -1)) for event in [*started, *finished, *consumed]
+    })
+    invalid_masks = [mask for mask in masks if mask < 1 or mask > 0x3F]
+    unsuccessful_finishes = sum(
+        1 for event in finished if int(event.get("status", -1)) != 0
+    )
+    unmatched_consumptions = consumed_completions - successful_finished_completions
+    complete = (
+        bool(started)
+        and bool(finished)
+        and bool(consumed)
+        and started_jobs == finished_jobs
+        and not unmatched_consumptions
+        and not invalid_masks
+    )
+    return {
+        "complete": complete,
+        "classification": (
+            "EXPLICIT_TRANSITION_MESH_CHAIN_CONFIRMED" if complete else "UNATTRIBUTED"
+        ),
+        "started_event_count": len(started),
+        "finished_event_count": len(finished),
+        "completion_consumed_event_count": len(consumed),
+        "transition_masks": masks,
+        "invalid_transition_masks": invalid_masks,
+        "unmatched_started_jobs": sum((started_jobs - finished_jobs).values()),
+        "unmatched_finished_jobs": sum((finished_jobs - started_jobs).values()),
+        "unmatched_completion_consumptions": sum(unmatched_consumptions.values()),
+        "unsuccessful_finished_jobs": unsuccessful_finishes,
+        "claim_boundary": (
+            "This proves explicit transition-mask meshing work traversed the measured "
+            "CPU route; it does not infer transition correctness from aggregate counters."
+        ),
+    }
 
 
 def causal_attribution(trace: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -329,7 +409,8 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("CPU-B2 native trace stream is missing")
     kinds = {str(event.get("kind")) for event in events if isinstance(event, dict)}
     missing = sorted(REQUIRED_NATIVE_KINDS - kinds)
-    complete = native.get("complete") is True and not missing
+    transition = transition_attribution(trace)
+    complete = native.get("complete") is True and not missing and transition["complete"]
     downstream_events = trace.get("events")
     if not isinstance(downstream_events, list):
         raise RuntimeError("CPU-B2 downstream trace stream is missing")
@@ -341,6 +422,7 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "complete": complete,
         "missing_native_event_kinds": missing,
         "native_event_kinds": sorted(kinds),
+        "transition_attribution": transition,
         "native_event_count": len(events),
         "native_source_overwrite_count": int(native.get("source_overwrite_count", -1)),
         "native_consumer_gap_event_count": int(native.get("consumer_gap_event_count", -1)),
@@ -440,17 +522,20 @@ def reanalyze_existing(project: pathlib.Path, output: pathlib.Path) -> int:
     causal_runs = []
     causal_slices = []
     movement_runs = []
+    transition_runs = []
     for trace in traces:
         causal_run, causal_slice = causal_attribution(trace)
         causal_runs.append(causal_run)
         causal_slices.append(causal_slice)
         movement_runs.append(movement_attribution(trace))
+        transition_runs.append(transition_attribution(trace))
     traces_complete = all(item["complete"] for item in summaries)
     causal_complete = all(item["complete"] for item in causal_runs)
     movement_complete = all(item["complete"] for item in movement_runs)
+    transition_complete = all(item["complete"] for item in transition_runs)
     report["schema"] = SCHEMA
     report["status"] = "PASS" if (
-        traces_complete and causal_complete and movement_complete
+        traces_complete and causal_complete and movement_complete and transition_complete
     ) else "FAIL"
     report["trace_contract"]["summaries"] = summaries
     report["trace_contract"]["traces_complete"] = traces_complete
@@ -470,6 +555,14 @@ def reanalyze_existing(project: pathlib.Path, output: pathlib.Path) -> int:
         ),
         "runs": movement_runs,
     }
+    report["transition_attribution"] = {
+        "complete": transition_complete,
+        "classification": (
+            "EXPLICIT_TRANSITION_MESH_CHAIN_CONFIRMED"
+            if transition_complete else "UNATTRIBUTED"
+        ),
+        "runs": transition_runs,
+    }
     report["claim_boundaries"] = {
         "authoritative_for": [
             "event availability and order on the Godot 4.7 CPU-B1 route",
@@ -477,6 +570,7 @@ def reanalyze_existing(project: pathlib.Path, output: pathlib.Path) -> int:
             "observed trace overhead on this machine and route",
             "causal attribution of delayed first-edit visibility on this route",
             "causal attribution of observed collision-gated movement rejection",
+            "explicit transition-mask mesh work on the measured CPU route",
         ],
         "not_authoritative_for": [
             "performance remediation",
@@ -534,6 +628,7 @@ def main(argv: list[str]) -> int:
     trace_summaries: list[dict[str, Any]] = []
     trace_attributions: list[dict[str, Any]] = []
     movement_attributions: list[dict[str, Any]] = []
+    transition_attributions: list[dict[str, Any]] = []
     causal_slices: list[list[dict[str, Any]]] = []
     trace_paths: list[str] = []
     for index in range(1, args.pairs + 1):
@@ -559,6 +654,7 @@ def main(argv: list[str]) -> int:
         attribution, causal_slice = causal_attribution(trace)
         trace_attributions.append(attribution)
         movement_attributions.append(movement_attribution(trace))
+        transition_attributions.append(transition_attribution(trace))
         causal_slices.append(causal_slice)
         trace_paths.append(str(trace_path.relative_to(project)).replace("\\", "/"))
 
@@ -568,11 +664,17 @@ def main(argv: list[str]) -> int:
     movement_attributions_complete = all(
         item["complete"] for item in movement_attributions
     )
+    transition_attributions_complete = all(
+        item["complete"] for item in transition_attributions
+    )
     report = {
         "schema": SCHEMA,
         "date": "2026-08-13",
         "status": "PASS" if (
-            traces_complete and attributions_complete and movement_attributions_complete
+            traces_complete
+            and attributions_complete
+            and movement_attributions_complete
+            and transition_attributions_complete
         ) else "FAIL",
         "milestone": "CPU-B2",
         "purpose": "real-time causal terrain pipeline trace qualification",
@@ -613,6 +715,14 @@ def main(argv: list[str]) -> int:
             ),
             "runs": movement_attributions,
         },
+        "transition_attribution": {
+            "complete": transition_attributions_complete,
+            "classification": (
+                "EXPLICIT_TRANSITION_MESH_CHAIN_CONFIRMED"
+                if transition_attributions_complete else "UNATTRIBUTED"
+            ),
+            "runs": transition_attributions,
+        },
         "performance_comparison": pair_comparison(off_runs, on_runs, off_exec, on_exec),
         "trace_off": {"runs": off_runs, "executions": off_exec},
         "trace_on": {"runs": on_runs, "executions": on_exec},
@@ -623,6 +733,7 @@ def main(argv: list[str]) -> int:
                 "observed trace overhead on this machine and route",
                 "causal attribution of delayed first-edit visibility on this route",
                 "causal attribution of observed collision-gated movement rejection",
+                "explicit transition-mask mesh work on the measured CPU route",
             ],
             "not_authoritative_for": [
                 "performance remediation",

@@ -4,16 +4,16 @@
   "base_tqp54_pin": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "2714ea8b25f588f244a96eacea16ca2f10b856af",
-    "addon_tree": "38d987a68e1a7f5f5043da7d790dab49cfed20ee",
-    "package_digest_sha256": "7ad9c353ab8a0d9ae6102b90a600cc41d978b37439fde7aa1844e6fd54a88895",
+    "commit": "2510b01c06129e86717f6e267f00864fe7abb6dd",
+    "addon_tree": "18312654a3426340a6fabbf3521d12b337bc30fe",
+    "package_digest_sha256": "b26ed689b55c02f926a2e1484f5fb693bf30d41abe6f3a4bebc3adc67fbc6706",
     "files": 177,
     "fallback": false,
     "generated_runtime": [
       {
         "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
-        "bytes": 2381824,
-        "sha256": "583ced55e408a90f2929acf8d0eb9fa5976e5af1f151b7c05ae2a9aed8700ffc"
+        "bytes": 2382848,
+        "sha256": "994ae25878f2fd0d6c6dd0314b4ca367ab127dc1d8689aecd93b0f346a004e95"
       },
       {
         "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
@@ -22,7 +22,7 @@
       }
     ]
   },
-  "scope": "cross-LOD edit replacement publication, exact-mask transition remeshing, and observation-only bounded CPU causal tracing through visibility staging",
+  "scope": "cross-LOD edit replacement publication, exact-mask transition remeshing, and observation-only bounded CPU causal tracing through visibility staging and explicit transition mesh work",
   "performance_scope": "CPU_CAUSAL_TRACE_REQUIRES_PAIRED_OVERHEAD_QUALIFICATION",
-  "evidence": "docs/evidence/authority_2714ea8/qualification.json"
+  "evidence": "docs/evidence/authority_2510b01/qualification.json"
 }
