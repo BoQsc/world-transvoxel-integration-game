@@ -4,25 +4,25 @@
   "base_tqp54_pin": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "a5a9ea4f07a131b46a319b452d3036b85272008c",
-    "addon_tree": "3b9f0bd8cdcc5b90e59dc744bf79da47690295d0",
-    "package_digest_sha256": "9e77bd7dc9ef6e4119a314403c06f104b3d50b0e2adede7bb870d2d26ce0397f",
-    "files": 179,
+    "commit": "aab30996f242285649bf4160b71eb6cbe58ada29",
+    "addon_tree": "b7b52514752007b4ba7bb838cff8a2ba51c26712",
+    "package_digest_sha256": "d58169cd8549f57508c35e3146c24c348f9f2bed5280a1d65d421201411564ff",
+    "files": 180,
     "fallback": false,
     "generated_runtime": [
       {
         "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
-        "bytes": 2393600,
-        "sha256": "0e909204faeb6e75b1bb6d6d64f88cb81d24eacd8bbffa9358de5d8f820488bc"
+        "bytes": 2399744,
+        "sha256": "70048640e2a65c89875ff87976ceafa1a07f74a253c489f01524df073f267600"
       },
       {
         "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
-        "bytes": 2280448,
-        "sha256": "06c87c0403ded7a539576d119515085d7bc22607e8ff446a342b42226495f390"
+        "bytes": 2286080,
+        "sha256": "50094e98fa1020ed3cc981451eb2376eb4e5c153cd22c82733dda87cd64df185"
       }
     ]
   },
-  "scope": "CPU-B3 regional visibility publication for fully ready complete cross-LOD replacement components, retaining exact-mask transition remeshing and bounded causal tracing",
+  "scope": "CPU-B3 exact regional visibility publication with matching-generation coverage priority, retaining complete cross-LOD coverage, exact-mask transition remeshing, and bounded causal tracing",
   "performance_scope": "CPU_B3_TRACE_OFF_AB_PENDING",
   "evidence": "docs/evidence/cpu_b3_regional_publication_20260813/qualification.json"
 }
