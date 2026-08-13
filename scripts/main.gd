@@ -20,6 +20,7 @@ const MaterialApplicator := preload("res://addons/world_transvoxel_gameworld/mat
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
 const CpuCausalTrace := preload("res://scripts/wt_cpu_causal_trace.gd")
+const CpuB3aLodOpeningCapture := preload("res://scripts/wt_cpu_b3a_lod_opening_capture.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
@@ -113,6 +114,7 @@ var last_tunnel_summary := {}
 var last_streaming_fly_summary := {}
 var last_fly_collision_stress_summary := {}
 var last_runtime_baseline_summary := {}
+var last_cpu_b3a_lod_opening_summary := {}
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -2865,8 +2867,9 @@ func _human_artifact_render_ray_hits(backend: Node, sky_pixel_rays: Array) -> Ar
 		var direction := _vector3_from_summary(ray.get("direction", {})).normalized()
 		if direction.length_squared() == 0.0:
 			continue
-		var max_distance := float(ray.get("max_distance", 512.0))
-		if bool(ray.get("physics_hit", false)) and ray.has("hit_distance"):
+		var max_distance := float(ray.get("render_max_distance", ray.get("max_distance", 512.0)))
+		if not ray.has("render_max_distance") and \
+				bool(ray.get("physics_hit", false)) and ray.has("hit_distance"):
 			max_distance = minf(max_distance, float(ray.get("hit_distance", max_distance)) + 1.0)
 		var report := {
 			"index": int(ray.get("index", reports.size())),
@@ -4460,6 +4463,26 @@ func _capture_human_visual() -> void:
 			return
 	elif human_visual_capture_mode == "post_edit_streaming_fly_gap_gate":
 		if not await _run_post_edit_streaming_fly_gap_gate():
+			return
+	elif human_visual_capture_mode == "cpu_b3a_lod_opening_capture":
+		var cpu_b3a_capture = CpuB3aLodOpeningCapture.new()
+		last_cpu_b3a_lod_opening_summary = await cpu_b3a_capture.run(
+			self,
+			game_world,
+			player,
+			selected_profile,
+			human_visual_capture_path,
+			cpu_causal_trace
+		)
+		print(
+			"WT_CPU_B3A_LOD_OPENING_SUMMARY ",
+			JSON.stringify(last_cpu_b3a_lod_opening_summary)
+		)
+		if not bool(last_cpu_b3a_lod_opening_summary.get("ok", false)):
+			_fail(
+				"CPU-B3A LOD opening capture failed structurally: %s" %
+					JSON.stringify(last_cpu_b3a_lod_opening_summary)
+			)
 			return
 	else:
 		if _capture_requires_interaction_inspection():
