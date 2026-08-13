@@ -4,25 +4,25 @@
   "base_tqp54_pin": "4f1fdb59e3c6200c8f823b99027b2d3f15563858",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "82e8419868a7a100697b404667deec845fd83169",
-    "addon_tree": "d5aa7b196c8494063d008347161b3e365728ea80",
-    "package_digest_sha256": "75f10f2d314ddfbbb3f164d2562ad0c1725fb4b58232678acc72d7b9d8ee6f32",
+    "commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "addon_tree": "8394bf0cfc757142e6ea3748c81dafef532c9c3e",
+    "package_digest_sha256": "f47f744569e33481dbeaa72e4506d3ea718996f0addd8595a42e59a2a2cca790",
     "files": 180,
     "fallback": false,
     "generated_runtime": [
       {
         "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
-        "bytes": 2165248,
-        "sha256": "e78e6cd50c257139663ec716104969af116c789533eb0acb2e315d8ae98c0bd7"
+        "bytes": 2401280,
+        "sha256": "95cce4e56ca7fcdd022a4fa164a677edff430c2796ba373857ef7e2f3c7008fc"
       },
       {
         "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
-        "bytes": 2091520,
-        "sha256": "32c96c7062fc1b59fc3ca23e72b87b76fe169505c811a0b1b3d0feec23e938ad"
+        "bytes": 2287616,
+        "sha256": "857d5abfdde2ddd8b2a418515045b4bc9dc8be24a5aeb85557c86d2a85aa13ee"
       }
     ]
   },
-  "scope": "CPU-B3 exact regional visibility publication for edits and viewer LOD swaps with bounded batched matching-generation coverage priority, retaining complete cross-LOD coverage, exact-mask transition remeshing, and bounded causal tracing",
+  "scope": "CPU-B3 exact regional visibility publication with bounded batched matching-generation coverage priority, retaining complete cross-LOD coverage, exact-mask transition remeshing, and bounded causal tracing",
   "performance_scope": "CPU_B3_TRACE_OFF_AB_PENDING",
   "evidence": "docs/evidence/cpu_b3_regional_publication_20260813/qualification.json"
 }
