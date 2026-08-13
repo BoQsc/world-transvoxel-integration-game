@@ -19,6 +19,7 @@ import p2_production_integration_game_quality as integration_quality
 
 SCHEMA = "world_transvoxel.cpu_b2_qualification.v2"
 TRACE_SCHEMA = "world_transvoxel.cpu_causal_trace.v2"
+CAUSAL_EDIT_READY_WAIT_FRAMES = 1800
 REQUIRED_NATIVE_KINDS = {
     "trace_started",
     "trace_stopped",
@@ -367,12 +368,14 @@ def main(argv: list[str]) -> int:
             godot, project, capture_dir, index, args.collision_radius,
             args.collision_prediction, args.procedural_generation_workers,
             stem_prefix="trace_off",
+            edit_ready_wait_frames=CAUSAL_EDIT_READY_WAIT_FRAMES,
         )
         trace_path = trace_dir / f"trace_on_{index:02d}.json"
         on_run, on_execution = baseline._run_measurement(
             godot, project, capture_dir, index, args.collision_radius,
             args.collision_prediction, args.procedural_generation_workers,
             causal_trace_path=trace_path, stem_prefix="trace_on",
+            edit_ready_wait_frames=CAUSAL_EDIT_READY_WAIT_FRAMES,
         )
         off_runs.append(off_run)
         on_runs.append(on_run)
@@ -404,6 +407,7 @@ def main(argv: list[str]) -> int:
             "collision_prediction_distance": args.collision_prediction,
             "procedural_generation_workers": args.procedural_generation_workers,
             "logical_cpu_affinity": affinity,
+            "edit_ready_observation_frames": CAUSAL_EDIT_READY_WAIT_FRAMES,
         },
         "trace_contract": {
             "schema": TRACE_SCHEMA,

@@ -32,12 +32,15 @@ func run(
 	game_world: Node,
 	player: CharacterBody3D,
 	selected_profile: StringName,
-	causal_trace_output_path: String = ""
+	causal_trace_output_path: String = "",
+	edit_ready_wait_frames: int = EDIT_READY_WAIT_FRAMES
 ) -> Dictionary:
 	if host == null or game_world == null or player == null:
 		return _structural_failure("host_game_world_or_player_unavailable")
 	if selected_profile != FOUR_BIOME_WORLD_PROFILE:
 		return _structural_failure("runtime_baseline_requires_g23")
+	if edit_ready_wait_frames < EDIT_READY_WAIT_FRAMES:
+		return _structural_failure("edit_ready_wait_below_baseline")
 	var terrain_world: Node = game_world.call("get_terrain_world")
 	if terrain_world == null:
 		return _structural_failure("terrain_world_unavailable")
@@ -155,7 +158,8 @@ func run(
 			"position": _vector3_summary(player.global_position),
 		}, true)
 	var edit_summary := await _run_single_edit_measurement(
-		host, game_world, terrain_world, player, clock, backlog
+		host, game_world, terrain_world, player, clock, backlog,
+		edit_ready_wait_frames
 	)
 	var runtime_metrics_end: Dictionary = terrain_world.call("get_runtime_metrics")
 	var movement_summary := _summarize_movement(phases)
@@ -431,7 +435,8 @@ func _run_single_edit_measurement(
 	terrain_world: Node,
 	player: CharacterBody3D,
 	clock: Dictionary,
-	backlog: Dictionary
+	backlog: Dictionary,
+	edit_ready_wait_frames: int
 ) -> Dictionary:
 	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
@@ -535,7 +540,7 @@ func _run_single_edit_measurement(
 	var collision_ready_recorded := false
 	_trace_begin_phase("exact_publication_wait", "edit:submission:1", true)
 	if commit_frame >= 0:
-		for frame in range(EDIT_READY_WAIT_FRAMES + 1):
+		for frame in range(edit_ready_wait_frames + 1):
 			var state: RefCounted = terrain_world.call("query_chunk_state", expected_chunk, 0)
 			if state != null:
 				var observed_generation := _chunk_generation(state)
@@ -596,7 +601,7 @@ func _run_single_edit_measurement(
 					collision_ready_frame = logical_collision_ready_frame
 			if visual_ready_frame >= 0 and (collision_ready_frame >= 0 or not collision_required):
 				break
-			if frame == EDIT_READY_WAIT_FRAMES:
+			if frame == edit_ready_wait_frames:
 				break
 			if frame % 15 == 0:
 				_collect_backlog(game_world, terrain_world, backlog)

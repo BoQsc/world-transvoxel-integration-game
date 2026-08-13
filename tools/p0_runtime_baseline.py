@@ -79,6 +79,7 @@ def _run_measurement(
     procedural_generation_workers: int,
     causal_trace_path: pathlib.Path | None = None,
     stem_prefix: str = "run",
+    edit_ready_wait_frames: int | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
     capture_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{stem_prefix}_{index:02d}"
@@ -103,6 +104,13 @@ def _run_measurement(
         "--procedural-generation-workers",
         str(procedural_generation_workers),
     ]
+    if edit_ready_wait_frames is not None:
+        if edit_ready_wait_frames < 900:
+            raise RuntimeError("edit readiness observation cannot be below baseline")
+        command.extend([
+            "--runtime-baseline-edit-ready-wait-frames",
+            str(edit_ready_wait_frames),
+        ])
     if causal_trace_path is not None:
         causal_trace_path.parent.mkdir(parents=True, exist_ok=True)
         command.extend(["--cpu-causal-trace-output", str(causal_trace_path)])

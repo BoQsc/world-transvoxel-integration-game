@@ -74,6 +74,7 @@ var runtime_collision_apply_deadline_us_override := -1
 var player_collision_invoker_radius_chunks_override := -1
 var player_collision_prediction_distance_override := -1.0
 var procedural_generation_worker_count_override := -1
+var runtime_baseline_edit_ready_wait_frames := 900
 var cpu_causal_trace_output_path := ""
 var cpu_causal_trace: RefCounted
 var lod_movement_direct_only := false
@@ -148,6 +149,9 @@ func _ready() -> void:
 	)
 	procedural_generation_worker_count_override = int(
 		_arg_value(args, "--procedural-generation-workers", "-1")
+	)
+	runtime_baseline_edit_ready_wait_frames = int(
+		_arg_value(args, "--runtime-baseline-edit-ready-wait-frames", "900")
 	)
 	cpu_causal_trace_output_path = _arg_value(
 		args, "--cpu-causal-trace-output", ""
@@ -4438,7 +4442,8 @@ func _capture_human_visual() -> void:
 			game_world,
 			player,
 			selected_profile,
-			cpu_causal_trace_output_path
+			cpu_causal_trace_output_path,
+			runtime_baseline_edit_ready_wait_frames
 		)
 		print("WT_RUNTIME_BASELINE_SUMMARY ", JSON.stringify(last_runtime_baseline_summary))
 		if not bool(last_runtime_baseline_summary.get("ok", false)):
