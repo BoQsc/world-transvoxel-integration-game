@@ -77,9 +77,11 @@ def _run_measurement(
     collision_radius: int,
     collision_prediction: float,
     procedural_generation_workers: int,
+    causal_trace_path: pathlib.Path | None = None,
+    stem_prefix: str = "run",
 ) -> tuple[dict[str, object], dict[str, object]]:
     capture_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"run_{index:02d}"
+    stem = f"{stem_prefix}_{index:02d}"
     capture_path = capture_dir / f"{stem}.png"
     command = [
         str(godot),
@@ -101,6 +103,9 @@ def _run_measurement(
         "--procedural-generation-workers",
         str(procedural_generation_workers),
     ]
+    if causal_trace_path is not None:
+        causal_trace_path.parent.mkdir(parents=True, exist_ok=True)
+        command.extend(["--cpu-causal-trace-output", str(causal_trace_path)])
     stdout_path = capture_dir / f"{stem}.stdout.log"
     stderr_path = capture_dir / f"{stem}.stderr.log"
     started = time.perf_counter()
