@@ -119,3 +119,22 @@ The fail-closed order is CPU-B3A temporary-opening capture, CPU-B3B flight
 attribution, CPU-B3C exact component-ownership audit, CPU-B3D at most one newly
 trace-proven standard remedy with full regressions, then CPU-B3E repeat
 exhaustion review. CPU-B3 remains in progress and TQP-58 remains blocked.
+
+## CPU-B3A bounded capture attempt
+
+Integration commit `ca9ce0f` adds a road-filtered CPU-B3A observer without
+changing terrain behavior. Its clean Godot 4.7.1 run under logical CPU affinity
+`[0, 1, 2]` retained 72,723 native lifecycle events with no gaps or drops. The
+528-frame route produced 32 dark candidate frames and 64 sampled rays; every
+candidate ray was excluded against the authoritative G23 road segments, and no
+road-clear temporary opening was reproduced.
+
+This is `IN_PROGRESS_EVENT_NOT_REPRODUCED`, not a pass and not evidence that the
+human-reported opening is gone. The observer now requires road-clear same-ray
+render absence, collision or authoritative density crossing, exact chunk state,
+and overlapping native lifecycle events before it can classify geometry,
+residency, retirement, visibility, or publication ordering. Images remain
+supporting evidence only. Its synchronous observer overhead also disqualifies
+the run as a performance baseline. Retained evidence is under
+`docs/evidence/cpu_b3a_lod_opening_20260813/`. CPU-B3B does not advance, and
+TQP-58 remains blocked.

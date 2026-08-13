@@ -1,0 +1,125 @@
+{
+  "schema": "world_transvoxel.cpu_b3a_lod_opening_retained_result.v1",
+  "date": "2026-08-13",
+  "milestone": "CPU-B3A",
+  "status": "IN_PROGRESS_EVENT_NOT_REPRODUCED",
+  "decision": "RETAIN_CAPTURE_CAPABILITY_AND_REPEAT_UNTIL_CAUSAL_EVENT_EXISTS",
+  "implementation_changed": false,
+  "terrain_behavior_changed": false,
+  "provenance": {
+    "integration_commit": "ca9ce0f42ae4cb411a54d0b6c84b6c9dc52332de",
+    "integration_tree": "0b4a016dda7503e0bd38b7938e15c5b5cbe67d24",
+    "integration_dirty": false,
+    "authority_commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "authority_addon_tree": "8394bf0cfc757142e6ea3748c81dafef532c9c3e",
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "logical_cpu_affinity": [0, 1, 2],
+    "fallback": false,
+    "stderr_bytes": 0
+  },
+  "capture_contract": {
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "route": "g23_road_filtered_snow_grass_pocket_v1",
+    "route_repetitions": 2,
+    "route_frames": 528,
+    "sample_cadence_frames": 4,
+    "sample_count": 132,
+    "minimum_viewer_route_road_centerline_clearance_cells": 132.941176470588,
+    "authored_road_surface_and_shoulder_limit_cells": 16.0,
+    "candidate_ray_road_exclusion_cells": 32.0,
+    "screenshots_are_authority": false,
+    "aggregate_queue_counts_are_authority": false,
+    "native_chunk_lifecycle_required": true,
+    "performance_baseline": false
+  },
+  "observation": {
+    "background_color_candidate_frames": 32,
+    "candidate_rays": 64,
+    "excluded_authored_road_rays": 64,
+    "road_clear_rendered_rays": 0,
+    "road_clear_direct_opening_rays": 0,
+    "classification": "BOUNDED_ROAD_FILTERED_ROUTE_NO_EVENT",
+    "maximum_pending_chunk_replacements": 249,
+    "maximum_pending_chunk_retirements": 648,
+    "maximum_pending_retirement_records_missing": 0,
+    "maximum_scheduler_queued_jobs": 247
+  },
+  "causal_trace": {
+    "schema": "world_transvoxel.cpu_causal_trace.v2",
+    "native_schema": "world_transvoxel.native_cpu_causal_trace.v1",
+    "native_complete": true,
+    "native_event_count": 72723,
+    "native_consumer_gap_event_count": 0,
+    "native_local_dropped_event_count": 0,
+    "native_source_overwrite_count": 7187,
+    "downstream_dropped_event_count": 0,
+    "native_event_kind_counts": {
+      "chunk_demand_accepted": 2338,
+      "collision_sink_applied": 8327,
+      "frontend_publication_processed": 15413,
+      "mesh_completion_consumed": 1230,
+      "mesh_finished": 1230,
+      "mesh_started": 1230,
+      "publication_popped": 15413,
+      "publication_queued": 15611,
+      "render_sink_applied": 1170,
+      "sample_finished": 1326,
+      "sample_started": 1326,
+      "storage_completion_consumed": 1381,
+      "storage_finished": 1382,
+      "storage_requested": 1382,
+      "storage_started": 1382,
+      "trace_started": 1,
+      "trace_stopped": 1,
+      "transition_mesh_completion_consumed": 231,
+      "transition_mesh_finished": 231,
+      "transition_mesh_started": 231,
+      "viewer_plan_applied": 271,
+      "viewer_plan_started": 271,
+      "visibility_batch_published": 1,
+      "visibility_replacement_ready": 1080,
+      "visibility_staging_blocked": 264
+    }
+  },
+  "observer": {
+    "sample_count": 132,
+    "capture_us_total": 10989253,
+    "capture_us_maximum": 101551,
+    "capture_us_mean": 83251.9166666667,
+    "performance_claim_allowed": false
+  },
+  "artifacts": [
+    {
+      "path": "docs/evidence/cpu_b3a_lod_opening_20260813/native_trace.json.gz",
+      "sha256": "d9891506622089b940a9ef5176534204e310d739198015eb3ba5c50af863c055",
+      "bytes": 939114,
+      "uncompressed_sha256": "3d05a58a8da918d754c55e04e1c28afc883011edd1decceb1bb70e19ffe84fe3"
+    },
+    {
+      "path": "docs/evidence/cpu_b3a_lod_opening_20260813/capture_and_classification.json.gz",
+      "sha256": "c184883e23bb3b24c3c6d207284f867086455107857adf5778546c78a571e903",
+      "bytes": 49705,
+      "uncompressed_sha256": "a93a4c3041a6a9415dc09caa064d43877aefaaeba6881e176ef42b76596d5a54"
+    },
+    {
+      "path": "docs/evidence/cpu_b3a_lod_opening_20260813/supporting_authored_road_candidate.png",
+      "sha256": "c771e51ce111a3fdd96a403558182a714a1f1521dcd81149de19f0c84d9eb00c",
+      "bytes": 1774450,
+      "role": "supporting_only_all_sampled_dark_rays_excluded_as_authored_road"
+    }
+  ],
+  "claim_boundaries": [
+    "The retained human TEMPORARY_LOD_SEE_THROUGH_SLICE observation is not revoked or reclassified as correct behavior.",
+    "No road-clear temporary LOD opening was reproduced by this bounded route; this is not proof that the defect is absent.",
+    "All sampled dark candidate rays landed within the authoritative road exclusion, so road imagery did not determine the LOD-opening result.",
+    "Images are supporting evidence only; a positive classification requires road-clear same-ray render absence, collision or authoritative density crossing, exact chunk generations, and overlapping native lifecycle events.",
+    "The native source ring wrapped 7187 already-consumed events; consumer gaps, local drops, and downstream drops are zero, so the retained local trace is complete.",
+    "The observer overhead disallows frame-time, throughput, or performance-baseline claims from this capture.",
+    "CPU-B3A remains in progress, CPU-B3B does not advance, TQP-58 remains blocked, and no GPU architecture is selected."
+  ],
+  "ordered_next_work": [
+    "Run the retained observer during the next exact human reproduction and preserve the 240-frame post-event window.",
+    "Classify the first road-clear event as geometry, residency/readiness, retirement, visibility, or publication ordering from exact chunk and native lifecycle evidence.",
+    "Advance to CPU-B3B only after CPU-B3A has a complete causal classification or a formally revised exit criterion supported by repeated bounded evidence."
+  ]
+}
