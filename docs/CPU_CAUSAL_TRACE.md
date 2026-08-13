@@ -99,3 +99,23 @@ responsiveness problems, and a smaller but noticeable first-edit delay after a
 long relocation. This completes the human-review step only. It does not qualify
 seamless temporal presentation, the CPU performance target, production release,
 CPU exhaustion, or GPU eligibility.
+
+## CPU-B3 independent exhaustion review
+
+`tools/cpu_b3_exhaustion_review.py` independently verifies the tagged human
+candidate, exact authority and package pins, retained source-report digests,
+automated target misses, causal boundaries, rejected experiment, and human
+release blockers. It changes no terrain implementation.
+
+The retained review is complete with decision
+`NOT_EXHAUSTED_ADDITIONAL_CPU_ATTRIBUTION_AND_REMEDIATION_REQUIRED`. This is not
+an unfinished review and not a GPU selection. CPU exhaustion fails because the
+temporary LOD opening lacks causal capture, flight frame-time variance remains
+only partially attributed, the retained edit path still waits `1988.3341 ms`
+after its sinks for a 267-replacement/31-retirement component, and the run does
+not prove CPU saturation while averaging 1.451 active cores with large queues.
+
+The fail-closed order is CPU-B3A temporary-opening capture, CPU-B3B flight
+attribution, CPU-B3C exact component-ownership audit, CPU-B3D at most one newly
+trace-proven standard remedy with full regressions, then CPU-B3E repeat
+exhaustion review. CPU-B3 remains in progress and TQP-58 remains blocked.

@@ -1,0 +1,103 @@
+{
+  "schema": "world_transvoxel.cpu_b3_exhaustion_review.v1",
+  "review_status": "COMPLETE",
+  "decision": "NOT_EXHAUSTED_ADDITIONAL_CPU_ATTRIBUTION_AND_REMEDIATION_REQUIRED",
+  "milestone": "CPU-B3",
+  "date": "2026-08-13",
+  "implementation_changed": false,
+  "cpu_b3_pass": false,
+  "tqp58_eligible": false,
+  "frozen_candidate": {
+    "human_tag": "human-accepted-cpu-b3-candidate-2026-08-13",
+    "human_commit": "bf59a98f51ada8cd9ef6fe1a71100984b87046c0",
+    "candidate_commit": "eb8a69c19801bb3e52837e3c565159827b560d3d",
+    "authority_commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "logical_cpu_affinity": [
+      0,
+      1,
+      2
+    ],
+    "fallback": false
+  },
+  "source_evidence": [
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/qualification.json",
+      "sha256": "c61d0a415b29d737667ab8d980185f96803f2524f1e0432cde3df4e9d7fe24ae"
+    },
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/selected_trace_off.json",
+      "sha256": "3addbdacbb5489c9092febb463cde30716dc0ec846952e91b4a0fd508a2d1d71"
+    },
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/selected_causal_pair.json",
+      "sha256": "c1b3f1fe3a73c1570b5a2ab53f9e0cd8049dd1f559d6d6c62c1a2864aaa937cd"
+    },
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/rejected_viewer_regional_trace_off.json",
+      "sha256": "cd8a3fb7267ec8250f74c97d9d92e54bbc364521bb820a72ce96e52e355f4b2b"
+    },
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/rejected_viewer_regional_causal_pair.json",
+      "sha256": "d61017ce81a0b1977ecf530ad87e20968ae44f834c5d68286c3dab2ff437d8a7"
+    },
+    {
+      "path": "docs/evidence/cpu_b3_regional_publication_20260813/human_review.json",
+      "sha256": "81142cdc1ac5f3ffeaccd5fc8e6d2ca6bf5e984433ed2eae3affcfc86f55da93"
+    }
+  ],
+  "exit_criteria": {
+    "correctness_authority_retained": true,
+    "trace_off_performance_target_pass": false,
+    "release_blocking_human_limitations_absent": false,
+    "all_material_bottlenecks_causally_attributed": false,
+    "all_trace_supported_standard_cpu_remedies_exhausted": false,
+    "independent_gpu_eligibility_established": false
+  },
+  "material_findings": [
+    {
+      "id": "TEMPORARY_LOD_SEE_THROUGH_SLICE",
+      "state": "UNATTRIBUTED_RELEASE_BLOCKER",
+      "basis": "Human review observed a temporary opening, but no retained causal trace or geometry/residency classification covers the event.",
+      "required_next": "Capture the opening with an exact marker and bounded trace, then distinguish missing geometry from residency, retirement, visibility, or publication ordering before changing policy."
+    },
+    {
+      "id": "FLIGHT_RESPONSIVENESS",
+      "state": "PARTIALLY_ATTRIBUTED_RELEASE_BLOCKER",
+      "basis": "Collision-gated movement rejection is attributed during relocation backlog, but retained evidence explicitly excludes complete attribution of flight frame-time spikes.",
+      "required_next": "Run a focused trace-off/trace-on flight capture that separates input latency, frame hitches, collision readiness, demand admission, and queue growth."
+    },
+    {
+      "id": "RELOCATION_FIRST_EDIT_DELAY",
+      "state": "ATTRIBUTED_REMEDY_CLASS_NOT_EXHAUSTED",
+      "basis": "The selected edit completes both sinks before a 1988.3341 ms wait for a 267-replacement/31-retirement publication component; the broad viewer-region remedy was rejected, but component scope and superseded-plan handling have not been exhausted by one-variable evidence.",
+      "required_next": "Audit exact component membership and superseded viewer-plan ownership, then test at most one bounded trace-proven lifecycle remedy without independently publishing ordinary viewer regions."
+    },
+    {
+      "id": "CPU_CAPACITY_BASIS",
+      "state": "NO_SATURATION_OR_EXHAUSTION_PROOF",
+      "basis": "The retained candidate averages 1.451 active cores while median maximum scheduler queue and pending replacements are 774 and 783. This indicates dependency, admission, or waiting behavior; it does not prove useful CPU parallelism is exhausted.",
+      "required_next": "Attribute queue wait and worker-idle intervals before changing worker count or selecting a GPU backend."
+    }
+  ],
+  "rejected_shortcuts": [
+    "declare CPU exhausted because performance targets remain missed",
+    "treat human acceptance with known limitations as production acceptance",
+    "repeat the reverted broad viewer-region publication experiment",
+    "increase workers beyond the three-logical-CPU boundary",
+    "select GPU architecture before the remaining defects are attributed"
+  ],
+  "ordered_next_work": [
+    "CPU-B3A temporary LOD opening causal capture and classification",
+    "CPU-B3B flight frame-time and movement responsiveness attribution",
+    "CPU-B3C exact regional publication-component ownership audit",
+    "CPU-B3D at most one newly trace-proven standard CPU remedy with full A/B correctness and human regression",
+    "CPU-B3E repeat independent exhaustion review"
+  ],
+  "claim_boundaries": [
+    "This is a completed independent review with a NOT_EXHAUSTED decision, not an incomplete review.",
+    "The result does not revoke the retained correctness hotfix or human candidate acceptance.",
+    "The result does not qualify production temporal seamlessness or performance.",
+    "CPU-B3 remains in progress, TQP-58 remains blocked, and no GPU architecture is selected."
+  ],
+  "consistency_failures": []
+}
