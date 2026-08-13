@@ -190,7 +190,9 @@ func note_movement(
 ) -> void:
 	if not is_active():
 		return
-	var changed := _last_movement_accepted == null or accepted != _last_movement_accepted
+	var changed: bool = (
+		_last_movement_accepted == null or accepted != _last_movement_accepted
+	)
 	_movement_note = {
 		"accepted": accepted,
 		"requested_velocity": _vector3_summary(requested_velocity),
