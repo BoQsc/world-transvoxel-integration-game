@@ -89,3 +89,13 @@ The retained evidence is under
 `docs/evidence/cpu_b3_regional_publication_20260813/`. CPU-B3 is not complete:
 human regression review and an independent CPU exhaustion decision remain.
 TQP-58 is still blocked, and no GPU architecture is selected.
+
+The exact retained package subsequently received human regression status
+`ACCEPTED_WITH_KNOWN_LIMITATIONS`. Extended flight, relocation, landing, and
+post-relocation digging did not reveal a new rejection-level correctness
+failure. The review did retain three release-blocking observations: a temporary
+see-through LOD slice that corrected after several seconds, residual flight
+responsiveness problems, and a smaller but noticeable first-edit delay after a
+long relocation. This completes the human-review step only. It does not qualify
+seamless temporal presentation, the CPU performance target, production release,
+CPU exhaustion, or GPU eligibility.

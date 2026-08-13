@@ -1,0 +1,53 @@
+{
+  "schema": "world_transvoxel.cpu_b3_human_review.v1",
+  "status": "ACCEPTED_WITH_KNOWN_LIMITATIONS",
+  "milestone": "CPU-B3",
+  "date": "2026-08-13",
+  "tested_package": {
+    "integration_commit": "6bd1e7f11229e25fd5965856e0b3b38b80335554",
+    "candidate_commit": "eb8a69c19801bb3e52837e3c565159827b560d3d",
+    "authority_commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "material": "production_texture_array",
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "logical_cpu_affinity": [0, 1, 2],
+    "cpu_causal_trace_enabled": false,
+    "fallback": false
+  },
+  "reviewed_workflow": [
+    "ground movement",
+    "extended flight and relocation",
+    "landing after relocation",
+    "digging after long flight",
+    "LOD refinement and replacement"
+  ],
+  "human_result": "Fine overall for continued development and later backend investigation; no newly observed rejection-level correctness failure.",
+  "known_limitations": [
+    {
+      "id": "TEMPORARY_LOD_SEE_THROUGH_SLICE",
+      "observation": "A small see-through terrain slice appeared while LOD content was still loading and was replaced by correct terrain after a few seconds.",
+      "classification": "OPEN_TEMPORAL_VISUAL_DEFECT",
+      "release_blocking": true
+    },
+    {
+      "id": "RESIDUAL_FLIGHT_RESPONSIVENESS",
+      "observation": "The previously known flight responsiveness problems remain observable.",
+      "classification": "OPEN_PERFORMANCE_DEFECT",
+      "release_blocking": true
+    },
+    {
+      "id": "RELOCATION_FIRST_EDIT_DELAY",
+      "observation": "Digging after a long flight to another area still has a smaller but noticeable initial delay.",
+      "classification": "OPEN_PERFORMANCE_DEFECT",
+      "release_blocking": true
+    }
+  ],
+  "claim_boundaries": [
+    "Human regression review is complete for this exact candidate package.",
+    "Acceptance permits continued qualification work; it is not a production release acceptance.",
+    "The temporary LOD opening is not reclassified as correct Transvoxel behavior.",
+    "The CPU performance target remains missed.",
+    "Independent CPU exhaustion review remains incomplete.",
+    "TQP-58 remains blocked and no GPU architecture is selected."
+  ]
+}
