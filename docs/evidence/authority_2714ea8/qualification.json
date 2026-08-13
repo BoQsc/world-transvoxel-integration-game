@@ -1,0 +1,45 @@
+{
+  "schema": "world_transvoxel.integration.authority_hotfix_qualification.v1",
+  "date": "2026-08-13",
+  "status": "ACCEPTED_CORRECTNESS_HOTFIX",
+  "release_claim": false,
+  "authority": {
+    "repository": "world-transvoxel",
+    "base_commit": "483ed739712e9a72b551966b0379c46679adc089",
+    "commit": "2714ea8b25f588f244a96eacea16ca2f10b856af",
+    "addon_tree": "38d987a68e1a7f5f5043da7d790dab49cfed20ee",
+    "package_digest_sha256": "7ad9c353ab8a0d9ae6102b90a600cc41d978b37439fde7aa1844e6fd54a88895",
+    "debug_binary_sha256": "583ced55e408a90f2929acf8d0eb9fa5976e5af1f151b7c05ae2a9aed8700ffc",
+    "release_binary_sha256": "5bfe00cde1ea6b0db597bc390ae2865d95fbfd18571f5b2beca5cb6346667274",
+    "scope": "observation-only visibility replacement readiness, staging blockers, and final batch publication"
+  },
+  "correctness_inheritance": {
+    "source": "docs/evidence/authority_483ed73/qualification.json",
+    "inherited_scope": "f30818b terrain corrections and the bounded CPU causal trace",
+    "behavioral_changes_outside_observation": false,
+    "fallback_added": false
+  },
+  "environment": {
+    "logical_cpu_affinity": [0, 1, 2],
+    "maximum_parallel_build_jobs": 3
+  },
+  "native_validation": {
+    "debug_build": "PASS",
+    "release_build": "PASS",
+    "causal_trace_contract_debug_release": "PASS",
+    "m3_application_debug_release": "PASS",
+    "m5_async_storage_debug_release": "PASS",
+    "m5_page_meshing_runtime_debug_release": "PASS",
+    "production_lifecycle_debug_release": "PASS",
+    "production_streaming_debug_release": "PASS",
+    "production_lod_streaming_debug_release": "PASS"
+  },
+  "decision": {
+    "apply_authority_package": true,
+    "trace_disabled_by_default": true,
+    "terrain_policy_changed": false,
+    "fallback_added": false,
+    "performance_claim": false,
+    "next_gate": "paired CPU-B2 trace must directly attribute the delayed edit visibility"
+  }
+}

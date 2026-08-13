@@ -17,7 +17,7 @@ import p0_runtime_baseline as baseline
 import p2_production_integration_game_quality as integration_quality
 
 
-SCHEMA = "world_transvoxel.cpu_b2_qualification.v1"
+SCHEMA = "world_transvoxel.cpu_b2_qualification.v2"
 TRACE_SCHEMA = "world_transvoxel.cpu_causal_trace.v2"
 REQUIRED_NATIVE_KINDS = {
     "trace_started",
@@ -42,6 +42,27 @@ REQUIRED_NATIVE_KINDS = {
     "frontend_publication_processed",
     "render_sink_applied",
     "collision_sink_applied",
+    "visibility_replacement_ready",
+    "visibility_staging_blocked",
+    "visibility_batch_published",
+}
+
+EDIT_REPLACEMENT_KINDS = {
+    "storage_requested",
+    "storage_started",
+    "storage_finished",
+    "storage_completion_consumed",
+    "sample_started",
+    "sample_finished",
+    "mesh_started",
+    "mesh_finished",
+    "mesh_completion_consumed",
+    "publication_queued",
+    "publication_popped",
+    "frontend_publication_processed",
+    "render_sink_applied",
+    "collision_sink_applied",
+    "visibility_replacement_ready",
 }
 
 
@@ -60,6 +81,157 @@ def relative_delta(traced: float, untraced: float) -> float | None:
     if untraced == 0.0:
         return None
     return (traced - untraced) / untraced
+
+
+def event_identity(event: dict[str, Any]) -> tuple[int, int, int, int, int] | None:
+    if event.get("has_chunk") is not True:
+        return None
+    return tuple(
+        int(event[name])
+        for name in ("chunk_x", "chunk_y", "chunk_z", "chunk_lod", "generation")
+    )
+
+
+def event_elapsed_ms(event: dict[str, Any], origin_ns: int) -> float:
+    return (int(event["elapsed_ns"]) - origin_ns) / 1_000_000.0
+
+
+def causal_attribution(trace: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    native = trace["native"]
+    native_events = [event for event in native["events"] if isinstance(event, dict)]
+    downstream_events = [event for event in trace["events"] if isinstance(event, dict)]
+    edit_events = [event for event in native_events if event.get("kind") == "edit_submitted"]
+    if len(edit_events) != 1:
+        return ({
+            "complete": False,
+            "classification": "UNATTRIBUTED",
+            "failure": f"expected one native edit submission, found {len(edit_events)}",
+        }, edit_events)
+
+    edit = edit_events[0]
+    edit_ns = int(edit["elapsed_ns"])
+    edit_cause = int(edit["cause_id"])
+    demands = [
+        event for event in native_events
+        if event.get("kind") == "chunk_demand_accepted"
+        and int(event.get("cause_id", -1)) == edit_cause
+        and int(event.get("auxiliary", -1)) == 1
+    ]
+    replacement_identities = {
+        identity for identity in (event_identity(event) for event in demands)
+        if identity is not None
+    }
+    replacement_reports: list[dict[str, Any]] = []
+    causal_slice = [edit, *demands]
+    all_replacements_complete = bool(replacement_identities)
+    latest_sink_ns = edit_ns
+    latest_ready_ns = edit_ns
+    for identity in sorted(replacement_identities):
+        events = [
+            event for event in native_events
+            if event_identity(event) == identity
+            and int(event["elapsed_ns"]) >= edit_ns
+        ]
+        kinds = {str(event.get("kind")) for event in events}
+        missing = sorted(EDIT_REPLACEMENT_KINDS - kinds)
+        all_replacements_complete = all_replacements_complete and not missing
+        stages: dict[str, list[float]] = {}
+        for event in events:
+            kind = str(event.get("kind"))
+            if kind in EDIT_REPLACEMENT_KINDS:
+                stages.setdefault(kind, []).append(event_elapsed_ms(event, edit_ns))
+                causal_slice.append(event)
+            if kind in {"render_sink_applied", "collision_sink_applied"}:
+                latest_sink_ns = max(latest_sink_ns, int(event["elapsed_ns"]))
+            if kind == "visibility_replacement_ready":
+                latest_ready_ns = max(latest_ready_ns, int(event["elapsed_ns"]))
+        replacement_reports.append({
+            "chunk": {
+                "x": identity[0], "y": identity[1], "z": identity[2],
+                "lod": identity[3], "generation": identity[4],
+            },
+            "complete": not missing,
+            "missing_event_kinds": missing,
+            "stage_elapsed_ms": stages,
+        })
+
+    visibility_events = [
+        event for event in native_events
+        if str(event.get("kind", "")).startswith("visibility_")
+        and int(event["elapsed_ns"]) >= edit_ns
+    ]
+    blockers = [
+        event for event in visibility_events
+        if event.get("kind") == "visibility_staging_blocked"
+        and int(event["elapsed_ns"]) >= latest_ready_ns
+    ]
+    batches = [
+        event for event in visibility_events
+        if event.get("kind") == "visibility_batch_published"
+        and int(event["elapsed_ns"]) >= latest_ready_ns
+    ]
+    blocker = blockers[0] if blockers else None
+    batch = batches[0] if batches else None
+    causal_slice.extend(visibility_events)
+    downstream_exact = [{
+        "kind": event.get("kind"),
+        "elapsed_us": int(event.get("elapsed_us", -1)),
+        "frame": int(event.get("frame", -1)),
+        "cause_id": event.get("cause_id"),
+        "payload": event.get("payload"),
+    } for event in downstream_events
+        if event.get("kind") in {"exact_render_published", "exact_collision_published"}
+    ]
+    causal_slice.extend(downstream_exact)
+
+    blocker_is_global = (
+        blocker is not None
+        and int(blocker.get("cause_id", 0)) > len(replacement_identities)
+    )
+    complete = (
+        all_replacements_complete
+        and blocker_is_global
+        and batch is not None
+        and bool(downstream_exact)
+    )
+    last_sink_ms = (latest_sink_ns - edit_ns) / 1_000_000.0
+    last_ready_ms = (latest_ready_ns - edit_ns) / 1_000_000.0
+    batch_ms = event_elapsed_ms(batch, edit_ns) if batch is not None else None
+    return ({
+        "complete": complete,
+        "classification": (
+            "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION"
+            if complete else "UNATTRIBUTED"
+        ),
+        "edit_cause_id": edit_cause,
+        "edit_replacement_count": len(replacement_identities),
+        "all_edit_replacement_pipelines_complete": all_replacements_complete,
+        "edit_replacements": replacement_reports,
+        "last_edit_replacement_sink_elapsed_ms": last_sink_ms,
+        "last_edit_replacement_ready_elapsed_ms": last_ready_ms,
+        "first_global_blocker_after_ready": None if blocker is None else {
+            "elapsed_ms": event_elapsed_ms(blocker, edit_ns),
+            "pending_chunk_replacements": int(blocker["cause_id"]),
+            "pending_chunk_retirements": int(blocker["auxiliary"]),
+            "pending_render_retirements": int(blocker["status"]),
+        },
+        "first_visibility_batch_after_ready": None if batch is None else {
+            "elapsed_ms": batch_ms,
+            "staged_render_records": int(batch["cause_id"]),
+            "staged_collision_records": int(batch["auxiliary"]),
+        },
+        "visibility_wait_after_last_sink_ms": (
+            None if batch_ms is None else batch_ms - last_sink_ms
+        ),
+        "exact_publication_events": downstream_exact,
+        "finding": (
+            "Edited chunks completed storage, sampling, meshing, publication, and "
+            "both Godot sinks before a relocation-wide replacement set cleared; "
+            "the conservative global visibility batch was the observed delay."
+            if complete else
+            "The trace did not establish the complete edit-to-visibility chain."
+        ),
+    }, sorted(causal_slice, key=lambda event: int(event.get("elapsed_ns", 0))))
 
 
 def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
@@ -187,6 +359,8 @@ def main(argv: list[str]) -> int:
     off_exec: list[dict[str, Any]] = []
     on_exec: list[dict[str, Any]] = []
     trace_summaries: list[dict[str, Any]] = []
+    trace_attributions: list[dict[str, Any]] = []
+    causal_slices: list[list[dict[str, Any]]] = []
     trace_paths: list[str] = []
     for index in range(1, args.pairs + 1):
         off_run, off_execution = baseline._run_measurement(
@@ -206,14 +380,18 @@ def main(argv: list[str]) -> int:
         on_exec.append(on_execution)
         trace = load_object(trace_path)
         trace_summaries.append(summarize_trace(trace))
+        attribution, causal_slice = causal_attribution(trace)
+        trace_attributions.append(attribution)
+        causal_slices.append(causal_slice)
         trace_paths.append(str(trace_path.relative_to(project)).replace("\\", "/"))
 
     pin = load_object(project / "AUTHORITY_HOTFIX_PIN.json")
     traces_complete = all(item["complete"] for item in trace_summaries)
+    attributions_complete = all(item["complete"] for item in trace_attributions)
     report = {
         "schema": SCHEMA,
         "date": "2026-08-13",
-        "status": "PASS" if traces_complete else "FAIL",
+        "status": "PASS" if traces_complete and attributions_complete else "FAIL",
         "milestone": "CPU-B2",
         "purpose": "real-time causal terrain pipeline trace qualification",
         "provenance": baseline._provenance(project, godot, affinity),
@@ -236,6 +414,11 @@ def main(argv: list[str]) -> int:
             "trace_paths": trace_paths,
             "summaries": trace_summaries,
         },
+        "causal_attribution": {
+            "complete": attributions_complete,
+            "classification": "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION",
+            "runs": trace_attributions,
+        },
         "performance_comparison": pair_comparison(off_runs, on_runs, off_exec, on_exec),
         "trace_off": {"runs": off_runs, "executions": off_exec},
         "trace_on": {"runs": on_runs, "executions": on_exec},
@@ -244,6 +427,7 @@ def main(argv: list[str]) -> int:
                 "event availability and order on the Godot 4.7 CPU-B1 route",
                 "bounded trace retention and explicit loss accounting",
                 "observed trace overhead on this machine and route",
+                "causal attribution of delayed first-edit visibility on this route",
             ],
             "not_authoritative_for": [
                 "performance remediation",
@@ -255,6 +439,16 @@ def main(argv: list[str]) -> int:
     }
     output = pathlib.Path(args.output).resolve() if args.output else capture_dir / "qualification.json"
     output.parent.mkdir(parents=True, exist_ok=True)
+    slice_paths = []
+    for index, events in enumerate(causal_slices, start=1):
+        slice_path = output.parent / f"causal_slice_{index:02d}.json"
+        slice_path.write_text(json.dumps({
+            "schema": "world_transvoxel.cpu_b2_causal_slice.v1",
+            "source_trace": trace_paths[index - 1],
+            "events": events,
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        slice_paths.append(slice_path.name)
+    report["trace_contract"]["retained_causal_slices"] = slice_paths
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"WT_CPU_B2_{report['status']} pairs={args.pairs} output={output}")
     return 0 if report["status"] == "PASS" else 1
