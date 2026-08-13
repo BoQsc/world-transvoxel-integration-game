@@ -1,0 +1,2056 @@
+{
+  "aggregates": {
+    "authority_commit_frames": {
+      "maximum": 2.0,
+      "median": 2.0,
+      "minimum": 1.0,
+      "values": [
+        1.0,
+        2.0,
+        2.0
+      ]
+    },
+    "authority_commit_ms": {
+      "maximum": 33.374,
+      "median": 33.344,
+      "minimum": 16.585,
+      "values": [
+        16.585,
+        33.374,
+        33.344
+      ]
+    },
+    "average_active_cores": {
+      "censored_count": 0,
+      "maximum": 1.5080352380804412,
+      "median": 1.4513778952139094,
+      "minimum": 1.3487701122735394,
+      "observed_count": 3,
+      "values": [
+        1.3487701122735394,
+        1.5080352380804412,
+        1.4513778952139094
+      ]
+    },
+    "blocked_frames": {
+      "maximum": 38.0,
+      "median": 11.0,
+      "minimum": 3.0,
+      "values": [
+        38.0,
+        3.0,
+        11.0
+      ]
+    },
+    "collision_apply_frame_deadline_overruns": {
+      "maximum": 140.0,
+      "median": 135.0,
+      "minimum": 114.0,
+      "values": [
+        114.0,
+        135.0,
+        140.0
+      ]
+    },
+    "collision_ready_frames_after_commit": {
+      "maximum": 339.0,
+      "median": 227.0,
+      "minimum": 157.0,
+      "values": [
+        339.0,
+        157.0,
+        227.0
+      ]
+    },
+    "frame_maximum_ms": {
+      "maximum": 52.307,
+      "median": 51.242,
+      "minimum": 43.415,
+      "values": [
+        52.307,
+        51.242,
+        43.415
+      ]
+    },
+    "frame_p95_ms": {
+      "maximum": 18.141,
+      "median": 17.819,
+      "minimum": 17.362,
+      "values": [
+        18.141,
+        17.819,
+        17.362
+      ]
+    },
+    "frame_p99_ms": {
+      "maximum": 26.633,
+      "median": 25.397,
+      "minimum": 24.06,
+      "values": [
+        24.06,
+        26.633,
+        25.397
+      ]
+    },
+    "maximum_collision_apply_frame_items_observed": {
+      "maximum": 65.0,
+      "median": 63.0,
+      "minimum": 59.0,
+      "values": [
+        59.0,
+        63.0,
+        65.0
+      ]
+    },
+    "maximum_collision_apply_frame_time_ms_observed": {
+      "maximum": 7.1477,
+      "median": 7.1165,
+      "minimum": 6.5581,
+      "values": [
+        6.5581,
+        7.1477,
+        7.1165
+      ]
+    },
+    "maximum_collision_apply_time_ms_observed": {
+      "maximum": 6.5555,
+      "median": 4.3689,
+      "minimum": 4.1353,
+      "values": [
+        6.5555,
+        4.1353,
+        4.3689
+      ]
+    },
+    "maximum_consecutive_blocked_frames": {
+      "maximum": 7.0,
+      "median": 3.0,
+      "minimum": 3.0,
+      "values": [
+        7.0,
+        3.0,
+        3.0
+      ]
+    },
+    "maximum_mesh_job_time_ms_observed": {
+      "maximum": 126.6126,
+      "median": 114.5029,
+      "minimum": 103.5385,
+      "values": [
+        114.5029,
+        103.5385,
+        126.6126
+      ]
+    },
+    "maximum_pending_chunk_replacements": {
+      "maximum": 789.0,
+      "median": 783.0,
+      "minimum": 754.0,
+      "values": [
+        754.0,
+        789.0,
+        783.0
+      ]
+    },
+    "maximum_sample_job_time_ms_observed": {
+      "maximum": 72.9207,
+      "median": 35.1102,
+      "minimum": 33.5938,
+      "values": [
+        35.1102,
+        72.9207,
+        33.5938
+      ]
+    },
+    "maximum_scheduler_queued_jobs": {
+      "maximum": 788.0,
+      "median": 774.0,
+      "minimum": 732.0,
+      "values": [
+        732.0,
+        788.0,
+        774.0
+      ]
+    },
+    "peak_process_tree_rss_bytes": {
+      "censored_count": 0,
+      "maximum": 844324864.0,
+      "median": 838397952.0,
+      "minimum": 803840000.0,
+      "observed_count": 3,
+      "values": [
+        803840000.0,
+        838397952.0,
+        844324864.0
+      ]
+    },
+    "physics_target_wait_frames": {
+      "maximum": 54.0,
+      "median": 0.0,
+      "minimum": 0.0,
+      "values": [
+        54.0,
+        0.0,
+        0.0
+      ]
+    },
+    "physics_target_wait_ms": {
+      "maximum": 900.054,
+      "median": 0.0,
+      "minimum": 0.0,
+      "values": [
+        900.054,
+        0.0,
+        0.0
+      ]
+    },
+    "process_cpu_seconds": {
+      "censored_count": 0,
+      "maximum": 74.8125,
+      "median": 71.890625,
+      "minimum": 71.625,
+      "observed_count": 3,
+      "values": [
+        71.890625,
+        74.8125,
+        71.625
+      ]
+    },
+    "ready_observation_window_ms": {
+      "censored_count": 0,
+      "maximum": 5633.261,
+      "median": 3789.288,
+      "minimum": 2625.321,
+      "observed_count": 3,
+      "values": [
+        5633.261,
+        2625.321,
+        3789.288
+      ]
+    },
+    "relocation_to_collision_ready_lower_bound_ms": {
+      "maximum": 6549.9,
+      "median": 3822.632,
+      "minimum": 2658.695,
+      "values": [
+        6549.9,
+        2658.695,
+        3822.632
+      ]
+    },
+    "relocation_to_collision_ready_ms": {
+      "maximum": 6549.9,
+      "median": 3822.632,
+      "minimum": 2658.695,
+      "values": [
+        6549.9,
+        2658.695,
+        3822.632
+      ]
+    },
+    "relocation_to_visual_ready_lower_bound_ms": {
+      "maximum": 6549.9,
+      "median": 3822.632,
+      "minimum": 2658.695,
+      "values": [
+        6549.9,
+        2658.695,
+        3822.632
+      ]
+    },
+    "relocation_to_visual_ready_ms": {
+      "maximum": 6549.9,
+      "median": 3822.632,
+      "minimum": 2658.695,
+      "values": [
+        6549.9,
+        2658.695,
+        3822.632
+      ]
+    },
+    "visual_collision_divergence_frames": {
+      "maximum": 0.0,
+      "median": 0.0,
+      "minimum": 0.0,
+      "values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "visual_ready_frames_after_commit": {
+      "maximum": 339.0,
+      "median": 227.0,
+      "minimum": 157.0,
+      "values": [
+        339.0,
+        157.0,
+        227.0
+      ]
+    },
+    "wall_seconds": {
+      "censored_count": 0,
+      "maximum": 53.300873400003184,
+      "median": 49.60925189999398,
+      "minimum": 49.349656100035645,
+      "observed_count": 3,
+      "values": [
+        53.300873400003184,
+        49.60925189999398,
+        49.349656100035645
+      ]
+    }
+  },
+  "causal_attribution_status": "UNRESOLVED_REQUIRES_REAL_TIME_PIPELINE_TRACE",
+  "claim_boundaries": {
+    "authoritative_for": [
+      "Godot 4.7 editor/debug human-equivalent g23 flight frame behavior",
+      "first carve readiness after fixed post-flight relocation",
+      "three-logical-CPU comparison before optimization"
+    ],
+    "not_authoritative_for": [
+      "release-export runtime performance",
+      "CPU or whole-system watts",
+      "root-cause attribution",
+      "GPU architecture selection",
+      "universal hardware performance"
+    ]
+  },
+  "collision_invoker_radius_chunks": 2,
+  "collision_prediction_distance": 24.0,
+  "correctness_status": "RETAINED_FROM_PINNED_REVIEWED_BASELINE",
+  "executions": [
+    {
+      "acceptance_failures": [
+        "route_net_displacement",
+        "blocked_movement_frames",
+        "physics_target_wait",
+        "visual_ready_wait",
+        "collision_ready_wait"
+      ],
+      "average_active_cores": 1.3487701122735394,
+      "command": [
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+        "--path",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate",
+        "--",
+        "--p2-profile",
+        "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "--human-visual-capture",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate\\.godot\\world_transvoxel_captures\\p0_runtime_baseline\\run_01.png",
+        "--human-visual-capture-mode",
+        "runtime_baseline_gate",
+        "--human-visual-capture-wait-frames",
+        "180",
+        "--player-collision-invoker-radius-chunks",
+        "2",
+        "--player-collision-prediction-distance",
+        "24.0",
+        "--procedural-generation-workers",
+        "2"
+      ],
+      "godot_returncode": 1,
+      "measurement_complete": true,
+      "peak_process_tree_rss_bytes": 803840000,
+      "process_cpu_seconds": 71.890625,
+      "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "run": 1,
+      "stderr_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_01.stderr.log",
+      "stdout_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_01.stdout.log",
+      "target_status": "MEASURED_TARGET_MISS",
+      "wall_seconds": 53.300873400003184
+    },
+    {
+      "acceptance_failures": [
+        "visual_ready_wait",
+        "collision_ready_wait"
+      ],
+      "average_active_cores": 1.5080352380804412,
+      "command": [
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+        "--path",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate",
+        "--",
+        "--p2-profile",
+        "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "--human-visual-capture",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate\\.godot\\world_transvoxel_captures\\p0_runtime_baseline\\run_02.png",
+        "--human-visual-capture-mode",
+        "runtime_baseline_gate",
+        "--human-visual-capture-wait-frames",
+        "180",
+        "--player-collision-invoker-radius-chunks",
+        "2",
+        "--player-collision-prediction-distance",
+        "24.0",
+        "--procedural-generation-workers",
+        "2"
+      ],
+      "godot_returncode": 1,
+      "measurement_complete": true,
+      "peak_process_tree_rss_bytes": 838397952,
+      "process_cpu_seconds": 74.8125,
+      "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "run": 2,
+      "stderr_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_02.stderr.log",
+      "stdout_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_02.stdout.log",
+      "target_status": "MEASURED_TARGET_MISS",
+      "wall_seconds": 49.60925189999398
+    },
+    {
+      "acceptance_failures": [
+        "visual_ready_wait",
+        "collision_ready_wait"
+      ],
+      "average_active_cores": 1.4513778952139094,
+      "command": [
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+        "--path",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate",
+        "--",
+        "--p2-profile",
+        "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "--human-visual-capture",
+        "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-cpu-b3-candidate\\.godot\\world_transvoxel_captures\\p0_runtime_baseline\\run_03.png",
+        "--human-visual-capture-mode",
+        "runtime_baseline_gate",
+        "--human-visual-capture-wait-frames",
+        "180",
+        "--player-collision-invoker-radius-chunks",
+        "2",
+        "--player-collision-prediction-distance",
+        "24.0",
+        "--procedural-generation-workers",
+        "2"
+      ],
+      "godot_returncode": 1,
+      "measurement_complete": true,
+      "peak_process_tree_rss_bytes": 844324864,
+      "process_cpu_seconds": 71.625,
+      "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "run": 3,
+      "stderr_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_03.stderr.log",
+      "stdout_log": ".godot/world_transvoxel_captures/p0_runtime_baseline/run_03.stdout.log",
+      "target_status": "MEASURED_TARGET_MISS",
+      "wall_seconds": 49.349656100035645
+    }
+  ],
+  "mode": "runtime_baseline_gate",
+  "observed_target_failures": [
+    "blocked_movement_frames",
+    "collision_ready_wait",
+    "physics_target_wait",
+    "route_net_displacement",
+    "visual_ready_wait"
+  ],
+  "optimization_status": "BLOCKED_PENDING_CAUSAL_ATTRIBUTION",
+  "procedural_generation_workers": 2,
+  "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+  "provenance": {
+    "authority_addon_tree": "8394bf0cfc757142e6ea3748c81dafef532c9c3e",
+    "authority_commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "authority_package_digest_sha256": "f47f744569e33481dbeaa72e4506d3ea718996f0addd8595a42e59a2a2cca790",
+    "debug_binary_sha256": "95cce4e56ca7fcdd022a4fa164a677edff430c2796ba373857ef7e2f3c7008fc",
+    "godot_executable": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+    "integration_commit": "eb8a69c19801bb3e52837e3c565159827b560d3d",
+    "integration_repository": "world-transvoxel-integration-game",
+    "integration_tree": "a565c28cb870f46c89b8f44dabedf5ba067a05ca",
+    "logical_cpu_affinity": [
+      0,
+      1,
+      2
+    ],
+    "logical_cpu_count": 4,
+    "measurement_contract": "authoritative_cpu_human_baseline_v1",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "power_source": {
+      "available": true,
+      "battery_percent": 100,
+      "plugged_in": true,
+      "watts_available": false
+    },
+    "processor": "Intel64 Family 6 Model 158 Stepping 9, GenuineIntel",
+    "release_binary_sha256": "857d5abfdde2ddd8b2a418515045b4bc9dc8be24a5aeb85557c86d2a85aa13ee",
+    "runtime_kind": "godot_editor_debug"
+  },
+  "route_contract": {
+    "edit_operation": "carve",
+    "fast_speed": 128.0,
+    "fixed_post_flight_edit_position": {
+      "x": 560.0,
+      "y": 74.0,
+      "z": 560.0
+    },
+    "movement_frames_per_run": 1020,
+    "normal_speed": 32.0
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "acceptance": {
+        "failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "physics_target_wait",
+          "visual_ready_wait",
+          "collision_ready_wait"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "backlog": {
+        "maximum_collision_apply_frame_items_observed": 59,
+        "maximum_collision_apply_frame_time_ns_observed": 6558100,
+        "maximum_collision_apply_time_ns_last": 4192800,
+        "maximum_collision_apply_time_ns_observed": 6555500,
+        "maximum_mesh_job_time_ns_observed": 114502900,
+        "maximum_pending_chunk_replacements": 754,
+        "maximum_pending_chunk_retirements": 2371,
+        "maximum_queued_collision": 0,
+        "maximum_queued_render": 0,
+        "maximum_sample_job_time_ns_observed": 35110200,
+        "maximum_scheduler_queued_completions": 0,
+        "maximum_scheduler_queued_jobs": 732,
+        "maximum_staged_render_resources": 212,
+        "samples": 120
+      },
+      "causal_trace": {
+        "enabled": false
+      },
+      "collision_apply_frame_budget": {
+        "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+        "deadline_ns": 4000000,
+        "maximum_frame_apply_ns": 6558100,
+        "maximum_single_apply_ns": 6555500,
+        "ok": true,
+        "soft_bound_ns": 10805500
+      },
+      "collision_invoker_radius_chunks": 2,
+      "collision_prediction_distance": 24.0,
+      "edit": {
+        "authority_commit_frames": 1,
+        "authority_commit_ms": 16.585,
+        "collision_generation_after": 5829,
+        "collision_ready_censored": false,
+        "collision_ready_frames_after_commit": 339,
+        "collision_ready_ms_after_commit": 5633.261,
+        "collision_required": true,
+        "commit_frame_time_ms": {
+          "maximum": 16.585,
+          "over_16_67_ms": 0,
+          "over_33_3_ms": 0,
+          "p50": 16.585,
+          "p95": 16.585,
+          "p99": 16.585,
+          "samples": 1
+        },
+        "edit_position": {
+          "x": 560.990905761719,
+          "y": 39.134880065918,
+          "z": 560.0
+        },
+        "generation_after": 5829,
+        "generation_before": 5625,
+        "generation_changed_frames_after_commit": 1,
+        "interaction_accepted": true,
+        "interaction_call_ms": 1.964,
+        "interaction_ray_hit": true,
+        "interaction_reason": "raycast_hit",
+        "interaction_render_mesh_hit": false,
+        "interaction_target_source": "physics_collision",
+        "logical_collision_ready_frames_after_commit": 1,
+        "logical_visual_ready_frames_after_commit": 114,
+        "measurement_complete": true,
+        "physics_target_found": true,
+        "physics_target_wait_frame_time_ms": {
+          "maximum": 24.555,
+          "over_16_67_ms": 22,
+          "over_33_3_ms": 0,
+          "p50": 16.652,
+          "p95": 18.227,
+          "p99": 24.555,
+          "samples": 54
+        },
+        "physics_target_wait_frames": 54,
+        "physics_target_wait_ms": 900.054,
+        "ready_frame_time_ms": {
+          "maximum": 52.307,
+          "over_16_67_ms": 122,
+          "over_33_3_ms": 3,
+          "p50": 16.665,
+          "p95": 18.733,
+          "p99": 27.14,
+          "samples": 339
+        },
+        "ready_observation_window_frames": 339,
+        "ready_observation_window_ms": 5633.261,
+        "relocation_to_collision_ready_lower_bound_ms": 6549.9,
+        "relocation_to_collision_ready_ms": 6549.9,
+        "relocation_to_visual_ready_lower_bound_ms": 6549.9,
+        "relocation_to_visual_ready_ms": 6549.9,
+        "render_generation_after": 5829,
+        "resource_generation_api": true,
+        "staged_render_generation_after": 0,
+        "target_chunk": {
+          "x": 35,
+          "y": 2,
+          "z": 35
+        },
+        "visual_collision_divergence_frames": 0,
+        "visual_ready_censored": false,
+        "visual_ready_frames_after_commit": 339,
+        "visual_ready_ms_after_commit": 5633.261
+      },
+      "enabled": true,
+      "end_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "fast_speed": 128.0,
+      "fixed_post_flight_edit_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "frame_time_ms": {
+        "maximum": 52.307,
+        "over_16_67_ms": 770,
+        "over_33_3_ms": 5,
+        "p50": 16.666,
+        "p95": 18.141,
+        "p99": 24.06,
+        "samples": 1774
+      },
+      "implementation": "g23_p0_runtime_baseline_v3",
+      "measurement_complete": true,
+      "movement": {
+        "accepted_frames": 982,
+        "blocked_frames": 38,
+        "blocked_ratio": 0.0372549019607843,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 7,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "movement_end_position": {
+        "x": 528.272155761719,
+        "y": 43.0570068359375,
+        "z": 511.061065673828
+      },
+      "normal_speed": 32.0,
+      "ok": false,
+      "phases": [
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 43.928,
+            "over_16_67_ms": 30,
+            "over_33_3_ms": 1,
+            "p50": 16.67,
+            "p95": 20.606,
+            "p99": 43.928,
+            "samples": 60
+          },
+          "frames": 60,
+          "kind": "stop",
+          "label": "warmup",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "frame_time_ms": {
+            "maximum": 39.415,
+            "over_16_67_ms": 79,
+            "over_33_3_ms": 1,
+            "p50": 16.662,
+            "p95": 18.446,
+            "p99": 24.06,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 300.0,
+            "y": 41.0312652587891,
+            "z": 300.0
+          },
+          "travel_distance": 95.9653244018555
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 16.793,
+            "over_16_67_ms": 18,
+            "over_33_3_ms": 0,
+            "p50": 16.661,
+            "p95": 16.748,
+            "p99": 16.793,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "normal_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "frame_time_ms": {
+            "maximum": 24.811,
+            "over_16_67_ms": 68,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 16.77,
+            "p99": 19.367,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "travel_distance": 95.9972763061523
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 18.369,
+            "over_16_67_ms": 23,
+            "over_33_3_ms": 0,
+            "p50": 16.671,
+            "p95": 17.904,
+            "p99": 18.369,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 556.010009765625,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 24.205,
+            "over_16_67_ms": 59,
+            "over_33_3_ms": 0,
+            "p50": 16.669,
+            "p95": 17.628,
+            "p99": 22.196,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "travel_distance": 255.947616577148
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 18.364,
+            "over_16_67_ms": 13,
+            "over_33_3_ms": 0,
+            "p50": 16.663,
+            "p95": 17.965,
+            "p99": 18.364,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 119,
+          "blocked_frames": 1,
+          "blocked_ratio": 0.00833333333333333,
+          "end_position": {
+            "x": 302.142974853516,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 29.545,
+            "over_16_67_ms": 56,
+            "over_33_3_ms": 0,
+            "p50": 16.664,
+            "p95": 17.733,
+            "p99": 18.506,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_return",
+          "maximum_consecutive_blocked_frames": 1,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 556.010009765625,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 253.867034912109
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 20.049,
+            "over_16_67_ms": 14,
+            "over_33_3_ms": 0,
+            "p50": 16.67,
+            "p95": 18.163,
+            "p99": 20.049,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 113,
+          "blocked_frames": 7,
+          "blocked_ratio": 0.0583333333333333,
+          "end_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 540.859802246094
+          },
+          "frame_time_ms": {
+            "maximum": 28.959,
+            "over_16_67_ms": 54,
+            "over_33_3_ms": 0,
+            "p50": 16.66,
+            "p95": 18.113,
+            "p99": 18.495,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_outbound",
+          "maximum_consecutive_blocked_frames": 4,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.142974853516,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 240.954345703125
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 17.413,
+            "over_16_67_ms": 17,
+            "over_33_3_ms": 0,
+            "p50": 16.689,
+            "p95": 17.165,
+            "p99": 17.413,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 284.859649658203
+          },
+          "frame_time_ms": {
+            "maximum": 24.518,
+            "over_16_67_ms": 57,
+            "over_33_3_ms": 0,
+            "p50": 16.666,
+            "p95": 17.103,
+            "p99": 20.102,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 540.859802246094
+          },
+          "travel_distance": 256.000152587891
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 17.873,
+            "over_16_67_ms": 13,
+            "over_33_3_ms": 0,
+            "p50": 16.668,
+            "p95": 16.843,
+            "p99": 17.873,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 150,
+          "blocked_frames": 30,
+          "blocked_ratio": 0.166666666666667,
+          "end_position": {
+            "x": 528.272155761719,
+            "y": 43.0570068359375,
+            "z": 511.061065673828
+          },
+          "frame_time_ms": {
+            "maximum": 25.893,
+            "over_16_67_ms": 85,
+            "over_33_3_ms": 0,
+            "p50": 16.666,
+            "p95": 18.105,
+            "p99": 25.405,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "fast_diagonal_outbound",
+          "maximum_consecutive_blocked_frames": 7,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 284.859649658203
+          },
+          "travel_distance": 319.856109619141
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 18.104,
+            "over_16_67_ms": 40,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 17.623,
+            "p99": 18.104,
+            "samples": 90
+          },
+          "frames": 90,
+          "kind": "stop",
+          "label": "pre_edit_stop",
+          "rejected_zero_motion_frames": 0
+        }
+      ],
+      "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+      "route_net_displacement": 310.900390625,
+      "runtime_metric_delta": {
+        "collision_apply_frame_deadline_overruns": 114,
+        "collision_apply_frame_items_maximum_end": 59,
+        "collision_apply_frame_time_ns_maximum_end": 6558100,
+        "collision_apply_frame_time_ns_total": 988538300,
+        "collision_apply_time_ns_maximum_end": 6555500,
+        "collision_apply_time_ns_total": 988538300,
+        "collision_viewer_updates": 79,
+        "mesh_job_time_ns_maximum_end": 114502900,
+        "sample_job_time_ns_maximum_end": 35110200,
+        "viewer_updates": 119
+      },
+      "start_position": {
+        "x": 300.0,
+        "y": 41.0312652587891,
+        "z": 300.0
+      }
+    },
+    {
+      "acceptance": {
+        "failures": [
+          "visual_ready_wait",
+          "collision_ready_wait"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "backlog": {
+        "maximum_collision_apply_frame_items_observed": 63,
+        "maximum_collision_apply_frame_time_ns_observed": 7147700,
+        "maximum_collision_apply_time_ns_last": 1501700,
+        "maximum_collision_apply_time_ns_observed": 4135300,
+        "maximum_mesh_job_time_ns_observed": 103538500,
+        "maximum_pending_chunk_replacements": 789,
+        "maximum_pending_chunk_retirements": 2513,
+        "maximum_queued_collision": 0,
+        "maximum_queued_render": 0,
+        "maximum_sample_job_time_ns_observed": 72920700,
+        "maximum_scheduler_queued_completions": 0,
+        "maximum_scheduler_queued_jobs": 788,
+        "maximum_staged_render_resources": 262,
+        "samples": 104
+      },
+      "causal_trace": {
+        "enabled": false
+      },
+      "collision_apply_frame_budget": {
+        "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+        "deadline_ns": 4000000,
+        "maximum_frame_apply_ns": 7147700,
+        "maximum_single_apply_ns": 4135300,
+        "ok": true,
+        "soft_bound_ns": 8385300
+      },
+      "collision_invoker_radius_chunks": 2,
+      "collision_prediction_distance": 24.0,
+      "edit": {
+        "authority_commit_frames": 2,
+        "authority_commit_ms": 33.374,
+        "collision_generation_after": 6214,
+        "collision_ready_censored": false,
+        "collision_ready_frames_after_commit": 157,
+        "collision_ready_ms_after_commit": 2625.321,
+        "collision_required": true,
+        "commit_frame_time_ms": {
+          "maximum": 16.74,
+          "over_16_67_ms": 1,
+          "over_33_3_ms": 0,
+          "p50": 16.634,
+          "p95": 16.74,
+          "p99": 16.74,
+          "samples": 2
+        },
+        "edit_position": {
+          "x": 560.990905761719,
+          "y": 39.134880065918,
+          "z": 560.0
+        },
+        "generation_after": 6214,
+        "generation_before": 5847,
+        "generation_changed_frames_after_commit": 1,
+        "interaction_accepted": true,
+        "interaction_call_ms": 1.058,
+        "interaction_ray_hit": true,
+        "interaction_reason": "raycast_hit",
+        "interaction_render_mesh_hit": false,
+        "interaction_target_source": "physics_collision",
+        "logical_collision_ready_frames_after_commit": 1,
+        "logical_visual_ready_frames_after_commit": 62,
+        "measurement_complete": true,
+        "physics_target_found": true,
+        "physics_target_wait_frame_time_ms": {
+          "maximum": 0.0,
+          "over_16_67_ms": 0,
+          "over_33_3_ms": 0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "samples": 0
+        },
+        "physics_target_wait_frames": 0,
+        "physics_target_wait_ms": 0.0,
+        "ready_frame_time_ms": {
+          "maximum": 26.633,
+          "over_16_67_ms": 42,
+          "over_33_3_ms": 0,
+          "p50": 16.665,
+          "p95": 16.731,
+          "p99": 25.556,
+          "samples": 157
+        },
+        "ready_observation_window_frames": 157,
+        "ready_observation_window_ms": 2625.321,
+        "relocation_to_collision_ready_lower_bound_ms": 2658.695,
+        "relocation_to_collision_ready_ms": 2658.695,
+        "relocation_to_visual_ready_lower_bound_ms": 2658.695,
+        "relocation_to_visual_ready_ms": 2658.695,
+        "render_generation_after": 6214,
+        "resource_generation_api": true,
+        "staged_render_generation_after": 0,
+        "target_chunk": {
+          "x": 35,
+          "y": 2,
+          "z": 35
+        },
+        "visual_collision_divergence_frames": 0,
+        "visual_ready_censored": false,
+        "visual_ready_frames_after_commit": 157,
+        "visual_ready_ms_after_commit": 2625.321
+      },
+      "enabled": true,
+      "end_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "fast_speed": 128.0,
+      "fixed_post_flight_edit_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "frame_time_ms": {
+        "maximum": 51.242,
+        "over_16_67_ms": 570,
+        "over_33_3_ms": 5,
+        "p50": 16.666,
+        "p95": 17.819,
+        "p99": 26.633,
+        "samples": 1539
+      },
+      "implementation": "g23_p0_runtime_baseline_v3",
+      "measurement_complete": true,
+      "movement": {
+        "accepted_frames": 1017,
+        "blocked_frames": 3,
+        "blocked_ratio": 0.00294117647058824,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 3,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "movement_end_position": {
+        "x": 567.0224609375,
+        "y": 41.5542411804199,
+        "z": 566.761352539063
+      },
+      "normal_speed": 32.0,
+      "ok": false,
+      "phases": [
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 51.242,
+            "over_16_67_ms": 18,
+            "over_33_3_ms": 2,
+            "p50": 16.664,
+            "p95": 16.745,
+            "p99": 51.242,
+            "samples": 60
+          },
+          "frames": 60,
+          "kind": "stop",
+          "label": "warmup",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "frame_time_ms": {
+            "maximum": 21.346,
+            "over_16_67_ms": 73,
+            "over_33_3_ms": 0,
+            "p50": 16.666,
+            "p95": 16.841,
+            "p99": 17.466,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 300.0,
+            "y": 41.0312652587891,
+            "z": 300.0
+          },
+          "travel_distance": 95.9653244018555
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 16.795,
+            "over_16_67_ms": 18,
+            "over_33_3_ms": 0,
+            "p50": 16.664,
+            "p95": 16.751,
+            "p99": 16.795,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "normal_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "frame_time_ms": {
+            "maximum": 20.747,
+            "over_16_67_ms": 85,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 18.132,
+            "p99": 20.32,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "travel_distance": 95.9972763061523
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 20.542,
+            "over_16_67_ms": 21,
+            "over_33_3_ms": 0,
+            "p50": 16.67,
+            "p95": 18.126,
+            "p99": 20.542,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 556.010009765625,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 29.217,
+            "over_16_67_ms": 55,
+            "over_33_3_ms": 0,
+            "p50": 16.656,
+            "p95": 18.305,
+            "p99": 24.789,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "travel_distance": 255.947616577148
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 34.334,
+            "over_16_67_ms": 18,
+            "over_33_3_ms": 1,
+            "p50": 16.738,
+            "p95": 25.666,
+            "p99": 34.334,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.009643554688,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 31.987,
+            "over_16_67_ms": 45,
+            "over_33_3_ms": 0,
+            "p50": 16.665,
+            "p95": 23.701,
+            "p99": 29.125,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 556.010009765625,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 256.000366210938
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 33.913,
+            "over_16_67_ms": 9,
+            "over_33_3_ms": 1,
+            "p50": 16.665,
+            "p95": 31.177,
+            "p99": 33.913,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.063232421875,
+            "y": 46.5583572387695,
+            "z": 555.777526855469
+          },
+          "frame_time_ms": {
+            "maximum": 28.544,
+            "over_16_67_ms": 38,
+            "over_33_3_ms": 0,
+            "p50": 16.665,
+            "p95": 17.74,
+            "p99": 27.358,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.009643554688,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 255.873809814453
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 21.522,
+            "over_16_67_ms": 6,
+            "over_33_3_ms": 0,
+            "p50": 16.666,
+            "p95": 18.55,
+            "p99": 21.522,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.063232421875,
+            "y": 46.5583572387695,
+            "z": 299.777160644531
+          },
+          "frame_time_ms": {
+            "maximum": 41.994,
+            "over_16_67_ms": 28,
+            "over_33_3_ms": 1,
+            "p50": 16.666,
+            "p95": 16.858,
+            "p99": 32.506,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.063232421875,
+            "y": 46.5583572387695,
+            "z": 555.777526855469
+          },
+          "travel_distance": 256.000366210938
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 17.059,
+            "over_16_67_ms": 5,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 16.705,
+            "p99": 17.059,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 177,
+          "blocked_frames": 3,
+          "blocked_ratio": 0.0166666666666667,
+          "end_position": {
+            "x": 567.0224609375,
+            "y": 41.5542411804199,
+            "z": 566.761352539063
+          },
+          "frame_time_ms": {
+            "maximum": 22.743,
+            "over_16_67_ms": 69,
+            "over_33_3_ms": 0,
+            "p50": 16.665,
+            "p95": 16.749,
+            "p99": 22.612,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "fast_diagonal_outbound",
+          "maximum_consecutive_blocked_frames": 3,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.063232421875,
+            "y": 46.5583572387695,
+            "z": 299.777160644531
+          },
+          "travel_distance": 377.588165283203
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 30.959,
+            "over_16_67_ms": 39,
+            "over_33_3_ms": 0,
+            "p50": 16.664,
+            "p95": 16.788,
+            "p99": 30.959,
+            "samples": 90
+          },
+          "frames": 90,
+          "kind": "stop",
+          "label": "pre_edit_stop",
+          "rejected_zero_motion_frames": 0
+        }
+      ],
+      "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+      "route_net_displacement": 377.442535400391,
+      "runtime_metric_delta": {
+        "collision_apply_frame_deadline_overruns": 135,
+        "collision_apply_frame_items_maximum_end": 63,
+        "collision_apply_frame_time_ns_maximum_end": 7147700,
+        "collision_apply_frame_time_ns_total": 1173223400,
+        "collision_apply_time_ns_maximum_end": 4135300,
+        "collision_apply_time_ns_total": 1173223400,
+        "collision_viewer_updates": 93,
+        "mesh_job_time_ns_maximum_end": 103538500,
+        "sample_job_time_ns_maximum_end": 72920700,
+        "viewer_updates": 157
+      },
+      "start_position": {
+        "x": 300.0,
+        "y": 41.0312652587891,
+        "z": 300.0
+      }
+    },
+    {
+      "acceptance": {
+        "failures": [
+          "visual_ready_wait",
+          "collision_ready_wait"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "backlog": {
+        "maximum_collision_apply_frame_items_observed": 65,
+        "maximum_collision_apply_frame_time_ns_observed": 7116500,
+        "maximum_collision_apply_time_ns_last": 3457700,
+        "maximum_collision_apply_time_ns_observed": 4368900,
+        "maximum_mesh_job_time_ns_observed": 126612600,
+        "maximum_pending_chunk_replacements": 783,
+        "maximum_pending_chunk_retirements": 2457,
+        "maximum_queued_collision": 4,
+        "maximum_queued_render": 0,
+        "maximum_sample_job_time_ns_observed": 33593800,
+        "maximum_scheduler_queued_completions": 0,
+        "maximum_scheduler_queued_jobs": 774,
+        "maximum_staged_render_resources": 265,
+        "samples": 109
+      },
+      "causal_trace": {
+        "enabled": false
+      },
+      "collision_apply_frame_budget": {
+        "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+        "deadline_ns": 4000000,
+        "maximum_frame_apply_ns": 7116500,
+        "maximum_single_apply_ns": 4368900,
+        "ok": true,
+        "soft_bound_ns": 8618900
+      },
+      "collision_invoker_radius_chunks": 2,
+      "collision_prediction_distance": 24.0,
+      "edit": {
+        "authority_commit_frames": 2,
+        "authority_commit_ms": 33.344,
+        "collision_generation_after": 6105,
+        "collision_ready_censored": false,
+        "collision_ready_frames_after_commit": 227,
+        "collision_ready_ms_after_commit": 3789.288,
+        "collision_required": true,
+        "commit_frame_time_ms": {
+          "maximum": 16.675,
+          "over_16_67_ms": 1,
+          "over_33_3_ms": 0,
+          "p50": 16.669,
+          "p95": 16.675,
+          "p99": 16.675,
+          "samples": 2
+        },
+        "edit_position": {
+          "x": 560.990905761719,
+          "y": 39.134880065918,
+          "z": 560.0
+        },
+        "generation_after": 6105,
+        "generation_before": 5730,
+        "generation_changed_frames_after_commit": 1,
+        "interaction_accepted": true,
+        "interaction_call_ms": 1.313,
+        "interaction_ray_hit": true,
+        "interaction_reason": "raycast_hit",
+        "interaction_render_mesh_hit": false,
+        "interaction_target_source": "physics_collision",
+        "logical_collision_ready_frames_after_commit": 1,
+        "logical_visual_ready_frames_after_commit": 80,
+        "measurement_complete": true,
+        "physics_target_found": true,
+        "physics_target_wait_frame_time_ms": {
+          "maximum": 0.0,
+          "over_16_67_ms": 0,
+          "over_33_3_ms": 0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "samples": 0
+        },
+        "physics_target_wait_frames": 0,
+        "physics_target_wait_ms": 0.0,
+        "ready_frame_time_ms": {
+          "maximum": 33.952,
+          "over_16_67_ms": 72,
+          "over_33_3_ms": 1,
+          "p50": 16.666,
+          "p95": 18.137,
+          "p99": 27.009,
+          "samples": 227
+        },
+        "ready_observation_window_frames": 227,
+        "ready_observation_window_ms": 3789.288,
+        "relocation_to_collision_ready_lower_bound_ms": 3822.632,
+        "relocation_to_collision_ready_ms": 3822.632,
+        "relocation_to_visual_ready_lower_bound_ms": 3822.632,
+        "relocation_to_visual_ready_ms": 3822.632,
+        "render_generation_after": 6105,
+        "resource_generation_api": true,
+        "staged_render_generation_after": 0,
+        "target_chunk": {
+          "x": 35,
+          "y": 2,
+          "z": 35
+        },
+        "visual_collision_divergence_frames": 0,
+        "visual_ready_censored": false,
+        "visual_ready_frames_after_commit": 227,
+        "visual_ready_ms_after_commit": 3789.288
+      },
+      "enabled": true,
+      "end_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "fast_speed": 128.0,
+      "fixed_post_flight_edit_position": {
+        "x": 560.0,
+        "y": 74.0,
+        "z": 560.0
+      },
+      "frame_time_ms": {
+        "maximum": 43.415,
+        "over_16_67_ms": 528,
+        "over_33_3_ms": 8,
+        "p50": 16.666,
+        "p95": 17.362,
+        "p99": 25.397,
+        "samples": 1609
+      },
+      "implementation": "g23_p0_runtime_baseline_v3",
+      "measurement_complete": true,
+      "movement": {
+        "accepted_frames": 1009,
+        "blocked_frames": 11,
+        "blocked_ratio": 0.0107843137254902,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 3,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "movement_end_position": {
+        "x": 564.568237304688,
+        "y": 41.7375373840332,
+        "z": 562.2548828125
+      },
+      "normal_speed": 32.0,
+      "ok": false,
+      "phases": [
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 34.671,
+            "over_16_67_ms": 30,
+            "over_33_3_ms": 1,
+            "p50": 16.667,
+            "p95": 18.427,
+            "p99": 34.671,
+            "samples": 60
+          },
+          "frames": 60,
+          "kind": "stop",
+          "label": "warmup",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "frame_time_ms": {
+            "maximum": 41.499,
+            "over_16_67_ms": 58,
+            "over_33_3_ms": 1,
+            "p50": 16.666,
+            "p95": 17.858,
+            "p99": 33.167,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 300.0,
+            "y": 41.0312652587891,
+            "z": 300.0
+          },
+          "travel_distance": 95.9653244018555
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 16.805,
+            "over_16_67_ms": 8,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 16.677,
+            "p99": 16.805,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "normal_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 180,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "frame_time_ms": {
+            "maximum": 35.994,
+            "over_16_67_ms": 62,
+            "over_33_3_ms": 2,
+            "p50": 16.666,
+            "p95": 16.926,
+            "p99": 33.338,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "normal_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 32.0,
+          "start_position": {
+            "x": 367.942443847656,
+            "y": 40.7117195129395,
+            "z": 367.772155761719
+          },
+          "travel_distance": 95.9972763061523
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 43.415,
+            "over_16_67_ms": 13,
+            "over_33_3_ms": 1,
+            "p50": 16.665,
+            "p95": 16.795,
+            "p99": 43.415,
+            "samples": 45
+          },
+          "frames": 45,
+          "kind": "stop",
+          "label": "return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 118,
+          "blocked_frames": 2,
+          "blocked_ratio": 0.0166666666666667,
+          "end_position": {
+            "x": 551.743286132813,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 19.537,
+            "over_16_67_ms": 54,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 16.836,
+            "p99": 17.665,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_outbound",
+          "maximum_consecutive_blocked_frames": 2,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 300.068908691406,
+            "y": 42.0692176818848,
+            "z": 299.898620605469
+          },
+          "travel_distance": 251.680999755859
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 30.414,
+            "over_16_67_ms": 14,
+            "over_33_3_ms": 0,
+            "p50": 16.664,
+            "p95": 17.215,
+            "p99": 30.414,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 117,
+          "blocked_frames": 3,
+          "blocked_ratio": 0.025,
+          "end_position": {
+            "x": 302.142974853516,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "frame_time_ms": {
+            "maximum": 30.385,
+            "over_16_67_ms": 46,
+            "over_33_3_ms": 0,
+            "p50": 16.665,
+            "p95": 16.767,
+            "p99": 17.998,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_x_return",
+          "maximum_consecutive_blocked_frames": 3,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 551.743286132813,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 249.600311279297
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 17.873,
+            "over_16_67_ms": 15,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 17.567,
+            "p99": 17.873,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_x_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 555.793334960938
+          },
+          "frame_time_ms": {
+            "maximum": 17.66,
+            "over_16_67_ms": 43,
+            "over_33_3_ms": 0,
+            "p50": 16.665,
+            "p95": 17.503,
+            "p99": 17.636,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_outbound",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.142974853516,
+            "y": 43.8955879211426,
+            "z": 299.917572021484
+          },
+          "travel_distance": 255.887161254883
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 17.526,
+            "over_16_67_ms": 13,
+            "over_33_3_ms": 0,
+            "p50": 16.668,
+            "p95": 17.467,
+            "p99": 17.526,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_outbound_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 120,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "end_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 299.79296875
+          },
+          "frame_time_ms": {
+            "maximum": 19.458,
+            "over_16_67_ms": 34,
+            "over_33_3_ms": 0,
+            "p50": 16.667,
+            "p95": 16.86,
+            "p99": 17.979,
+            "samples": 120
+          },
+          "frames": 120,
+          "kind": "movement",
+          "label": "fast_z_return",
+          "maximum_consecutive_blocked_frames": 0,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 555.793334960938
+          },
+          "travel_distance": 256.000366210938
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 33.631,
+            "over_16_67_ms": 6,
+            "over_33_3_ms": 1,
+            "p50": 16.666,
+            "p95": 16.683,
+            "p99": 33.631,
+            "samples": 30
+          },
+          "frames": 30,
+          "kind": "stop",
+          "label": "fast_z_return_stop",
+          "rejected_zero_motion_frames": 0
+        },
+        {
+          "accepted_frames": 174,
+          "blocked_frames": 6,
+          "blocked_ratio": 0.0333333333333333,
+          "end_position": {
+            "x": 564.568237304688,
+            "y": 41.7375373840332,
+            "z": 562.2548828125
+          },
+          "frame_time_ms": {
+            "maximum": 35.391,
+            "over_16_67_ms": 38,
+            "over_33_3_ms": 1,
+            "p50": 16.666,
+            "p95": 16.729,
+            "p99": 25.397,
+            "samples": 180
+          },
+          "frames": 180,
+          "kind": "movement",
+          "label": "fast_diagonal_outbound",
+          "maximum_consecutive_blocked_frames": 3,
+          "requested_speed": 128.0,
+          "start_position": {
+            "x": 302.152130126953,
+            "y": 46.3112602233887,
+            "z": 299.79296875
+          },
+          "travel_distance": 371.173004150391
+        },
+        {
+          "drift_distance": 0.0,
+          "frame_time_ms": {
+            "maximum": 26.199,
+            "over_16_67_ms": 21,
+            "over_33_3_ms": 0,
+            "p50": 16.666,
+            "p95": 16.95,
+            "p99": 26.199,
+            "samples": 90
+          },
+          "frames": 90,
+          "kind": "stop",
+          "label": "pre_edit_stop",
+          "rejected_zero_motion_frames": 0
+        }
+      ],
+      "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+      "route_net_displacement": 372.524444580078,
+      "runtime_metric_delta": {
+        "collision_apply_frame_deadline_overruns": 140,
+        "collision_apply_frame_items_maximum_end": 65,
+        "collision_apply_frame_time_ns_maximum_end": 7116500,
+        "collision_apply_frame_time_ns_total": 1192673100,
+        "collision_apply_time_ns_maximum_end": 4368900,
+        "collision_apply_time_ns_total": 1192673100,
+        "collision_viewer_updates": 96,
+        "mesh_job_time_ns_maximum_end": 126612600,
+        "sample_job_time_ns_maximum_end": 33593800,
+        "viewer_updates": 159
+      },
+      "start_position": {
+        "x": 300.0,
+        "y": 41.0312652587891,
+        "z": 300.0
+      }
+    }
+  ],
+  "schema": "world_transvoxel_authoritative_cpu_human_baseline_v1",
+  "status": "MEASURED_TARGET_MISS",
+  "tqp58_gpu_decision_status": "BLOCKED_PENDING_CAUSAL_ATTRIBUTION"
+}

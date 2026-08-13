@@ -65,3 +65,27 @@ frame-time overhead. Tracing remains disabled by default, and traced latency is
 not the performance baseline. Both halves remained measured target misses.
 CPU-B3 must address one proven factor at a time and use trace-off A/B
 measurements for performance decisions.
+
+## CPU-B3 retained result
+
+CPU-B3 authority commit `a8bba83` retains exact cross-LOD edit-region
+publication and batches matching-generation coverage priority requests. Godot
+4.7.1 debug and release atomicity tests observed zero mixed render/collision
+ownership frames and the expected eight-replacement/one-retirement swap. The
+production streaming and LOD hashes remain unchanged.
+
+Three trace-off runs improved median relocation-to-exact-visibility readiness
+from CPU-B1's `13206.199 ms` to `3822.632 ms`. This remains a measured target
+miss. Median blocked frames were `11`, median maximum consecutive blocked frames
+were `3`, and median frame p99 was `25.397 ms`.
+
+One later experiment allowed ordinary viewer LOD swaps to use the same regional
+release path. It was rejected and reverted. It reduced edit post-sink wait to
+`5.807 ms`, but emitted 65 regional publications and 1,181 priority requests in
+one trace. Its three trace-off runs regressed median readiness to `5101.907 ms`,
+blocked frames to `236`, and maximum consecutive blocked frames to `63`.
+
+The retained evidence is under
+`docs/evidence/cpu_b3_regional_publication_20260813/`. CPU-B3 is not complete:
+human regression review and an independent CPU exhaustion decision remain.
+TQP-58 is still blocked, and no GPU architecture is selected.

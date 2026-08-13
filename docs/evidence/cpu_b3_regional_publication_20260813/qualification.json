@@ -1,0 +1,98 @@
+{
+  "schema": "world_transvoxel.cpu_b3_qualification.v1",
+  "status": "ACCEPTED_CORRECTNESS_HOTFIX",
+  "milestone": "CPU-B3",
+  "date": "2026-08-13",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+    "addon_tree": "8394bf0cfc757142e6ea3748c81dafef532c9c3e",
+    "fallback": false
+  },
+  "integration": {
+    "repository": "world-transvoxel-integration-game",
+    "candidate_commit": "eb8a69c19801bb3e52837e3c565159827b560d3d",
+    "accepted_baseline_unchanged": true
+  },
+  "execution_boundary": {
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "logical_cpu_affinity": [0, 1, 2],
+    "procedural_generation_workers": 2,
+    "trace_off_runs": 3
+  },
+  "selected_change": {
+    "scope": "Exact cross-LOD edit-region publication with one bounded batch of matching-generation coverage priority requests.",
+    "correctness": {
+      "godot_debug_mixed_ownership_frames": 0,
+      "godot_release_mixed_ownership_frames": 0,
+      "regional_replacements": 8,
+      "regional_retirements": 1,
+      "production_streaming_hash": "39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b",
+      "production_lod_streaming_hash": "7c9071d1c31da0397e48db0338c299b8bf923dbb0e80448ae11cf049c3c0d2fb",
+      "visual_collision_divergence_frames_maximum": 0
+    },
+    "trace_off_medians": {
+      "relocation_to_visual_ready_ms": 3822.632,
+      "relocation_to_collision_ready_ms": 3822.632,
+      "frame_p99_ms": 25.397,
+      "frame_maximum_ms": 51.242,
+      "blocked_frames": 11,
+      "maximum_consecutive_blocked_frames": 3,
+      "maximum_pending_chunk_replacements": 783,
+      "maximum_scheduler_queued_jobs": 774,
+      "average_active_cores": 1.4513778952139094
+    },
+    "performance_status": "MEASURED_TARGET_MISS",
+    "causal_observation": {
+      "edit_replacement_pipelines_complete": true,
+      "last_edit_replacement_sink_ms": 1167.6322,
+      "regional_publication_ms": 3155.9663,
+      "post_sink_wait_ms": 1988.3341,
+      "publication_component_replacements": 267,
+      "publication_component_retirements": 31,
+      "coverage_priority_requests": 207,
+      "coverage_priority_applied": 206
+    }
+  },
+  "rejected_experiment": {
+    "authority_commit": "82e8419868a7a100697b404667deec845fd83169",
+    "integration_commit": "e23e0c2",
+    "change": "Permit ordinary viewer LOD replacements to publish as exact regional components.",
+    "reason": "The experiment improved edit publication after sink completion but multiplied viewer-region activations and materially regressed collision-gated traversal.",
+    "trace_off_medians": {
+      "relocation_to_visual_ready_ms": 5101.907,
+      "relocation_to_collision_ready_ms": 5101.907,
+      "frame_p99_ms": 26.299,
+      "frame_maximum_ms": 67.9,
+      "blocked_frames": 236,
+      "maximum_consecutive_blocked_frames": 63,
+      "physics_target_wait_ms": 2885.357,
+      "maximum_pending_chunk_replacements": 672,
+      "maximum_scheduler_queued_jobs": 669,
+      "average_active_cores": 1.1912190575693518
+    },
+    "causal_observation": {
+      "edit_post_sink_wait_ms": 5.8072,
+      "regional_publications_observed": 65,
+      "coverage_priority_requests": 1181,
+      "coverage_priority_applied": 1168,
+      "first_blocker_replacements": 452,
+      "first_blocker_retirements": 1613
+    },
+    "reverted": true
+  },
+  "claim_boundaries": [
+    "This accepts a correctness hotfix, not the CPU performance target.",
+    "The selected candidate still misses relocation readiness and traversal targets.",
+    "The rejected viewer-region experiment is not part of the retained package.",
+    "Human regression review is not yet complete.",
+    "CPU exhaustion is not yet independently established.",
+    "TQP-58 remains blocked and no GPU architecture is selected."
+  ],
+  "retained_reports": [
+    "selected_trace_off.json",
+    "selected_causal_pair.json",
+    "rejected_viewer_regional_trace_off.json",
+    "rejected_viewer_regional_causal_pair.json"
+  ]
+}
