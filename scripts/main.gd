@@ -19,6 +19,7 @@ const StorageProfile := preload("res://addons/world_transvoxel_terrain/storage/w
 const MaterialApplicator := preload("res://addons/world_transvoxel_gameworld/material/wt_game_terrain_material_applicator.gd")
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
+const CpuCausalTrace := preload("res://scripts/wt_cpu_causal_trace.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
@@ -73,6 +74,8 @@ var runtime_collision_apply_deadline_us_override := -1
 var player_collision_invoker_radius_chunks_override := -1
 var player_collision_prediction_distance_override := -1.0
 var procedural_generation_worker_count_override := -1
+var cpu_causal_trace_output_path := ""
+var cpu_causal_trace: RefCounted
 var lod_movement_direct_only := false
 var lod_movement_operation_limit := -1
 var lod_movement_gap_only_probe := false
@@ -146,6 +149,9 @@ func _ready() -> void:
 	procedural_generation_worker_count_override = int(
 		_arg_value(args, "--procedural-generation-workers", "-1")
 	)
+	cpu_causal_trace_output_path = _arg_value(
+		args, "--cpu-causal-trace-output", ""
+	)
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
 	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
 	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
@@ -184,6 +190,8 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		window_has_focus = false
 		_update_frame_rate_policy(true)
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_finalize_human_cpu_causal_trace("window_close")
 
 
 func _input(event: InputEvent) -> void:
@@ -377,6 +385,7 @@ func _start_profile() -> void:
 				return
 		game_world.human_input_enabled = true
 		player.call("set_human_input_enabled", true)
+		_start_human_cpu_causal_trace()
 		if not human_visual_capture_path.is_empty():
 			call_deferred("_capture_human_visual")
 	if autonomous:
@@ -2161,6 +2170,62 @@ func _human_artifact_targeted_summary_has_mismatch(diagnostics: Array) -> bool:
 	return false
 
 
+func _start_human_cpu_causal_trace() -> void:
+	if cpu_causal_trace_output_path.is_empty() or cpu_causal_trace != null:
+		return
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null or player == null:
+		push_error("WT_CPU_CAUSAL_TRACE_START_FAIL terrain_world_or_player_missing")
+		return
+	cpu_causal_trace = CpuCausalTrace.new()
+	if not bool(cpu_causal_trace.call(
+		"start", self, game_world, terrain_world, player,
+		cpu_causal_trace_output_path, "human_cpu_b2"
+	)):
+		push_error(
+			"WT_CPU_CAUSAL_TRACE_START_FAIL %s" % str(
+				cpu_causal_trace.call("get_start_error")
+			)
+		)
+		cpu_causal_trace = null
+		return
+	player.call("set_cpu_causal_trace", cpu_causal_trace)
+	if game_world.has_method("set_cpu_causal_trace"):
+		game_world.call("set_cpu_causal_trace", cpu_causal_trace)
+	cpu_causal_trace.call(
+		"begin_phase", "human_playtest", "human:session:1", false
+	)
+	print("WT_CPU_CAUSAL_TRACE_STARTED ", cpu_causal_trace_output_path)
+
+
+func _snapshot_human_cpu_causal_trace(reason: String) -> Dictionary:
+	if cpu_causal_trace == null or not bool(cpu_causal_trace.call("is_active")):
+		return {"ok": false, "enabled": false}
+	cpu_causal_trace.call("record", &"human_marker", {
+		"reason": reason,
+		"player_position": _vector3_summary(player.global_position),
+		"last_interaction": player.call("get_last_interaction_summary"),
+	}, true)
+	var marker_path := cpu_causal_trace_output_path
+	var extension_index := marker_path.rfind(".")
+	if extension_index >= 0:
+		marker_path = marker_path.substr(0, extension_index)
+	marker_path += "_marker_%03d.json" % human_artifact_mark_index
+	var result: Dictionary = cpu_causal_trace.call(
+		"write_snapshot", marker_path, reason
+	)
+	print("WT_CPU_CAUSAL_TRACE_MARKER ", JSON.stringify(result))
+	return result
+
+
+func _finalize_human_cpu_causal_trace(reason: String) -> Dictionary:
+	if cpu_causal_trace == null or not bool(cpu_causal_trace.call("is_active")):
+		return {"ok": false, "enabled": false}
+	var result: Dictionary = cpu_causal_trace.call("finalize", reason)
+	print("WT_CPU_CAUSAL_TRACE_FINAL ", JSON.stringify(result))
+	return result
+
+
 func _write_human_artifact_live_replay_result(result: Dictionary) -> String:
 	var root := _human_artifact_capture_root().path_join("live_replays")
 	DirAccess.make_dir_recursive_absolute(root)
@@ -2401,6 +2466,9 @@ func _capture_human_artifact_mark(source: String) -> bool:
 	var marker_id := _human_artifact_marker_id(source)
 	var screenshot_path := root.path_join("%s.png" % marker_id)
 	var json_path := root.path_join("%s.json" % marker_id)
+	var causal_trace_snapshot := _snapshot_human_cpu_causal_trace(
+		"artifact_mark_%s" % marker_id
+	)
 	var image_error := ERR_UNAVAILABLE
 	var sky_summary := {"available": false, "reason": "viewport_image_unavailable"}
 	if DisplayServer.get_name() != "headless":
@@ -2466,6 +2534,7 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"mesh_quality_warning_precise_probe_count": mesh_quality_warning_precise_probes.size(),
 		"mesh_quality_warning_precise_probes": mesh_quality_warning_precise_probes,
 		"precise_probes": precise_probes,
+		"cpu_causal_trace": causal_trace_snapshot,
 	}
 	last_human_artifact_mark_summary = summary.duplicate(true)
 	var file := FileAccess.open(json_path, FileAccess.WRITE)
@@ -4366,7 +4435,8 @@ func _capture_human_visual() -> void:
 			self,
 			game_world,
 			player,
-			selected_profile
+			selected_profile,
+			cpu_causal_trace_output_path
 		)
 		print("WT_RUNTIME_BASELINE_SUMMARY ", JSON.stringify(last_runtime_baseline_summary))
 		if not bool(last_runtime_baseline_summary.get("ok", false)):

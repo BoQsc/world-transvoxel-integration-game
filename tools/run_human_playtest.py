@@ -111,6 +111,17 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--human-playtest-preset", args.preset])
     if inspect_marker is not None:
         command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
+    if args.cpu_causal_trace:
+        trace_path = (
+            pathlib.Path(args.cpu_causal_trace_output).resolve()
+            if args.cpu_causal_trace_output
+            else project
+            / ".godot"
+            / "world_transvoxel_captures"
+            / "cpu_causal_trace"
+            / "latest_human_trace.json"
+        )
+        command.extend(["--cpu-causal-trace-output", str(trace_path)])
     return command
 
 
@@ -175,7 +186,18 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Print the command without launching Godot.",
     )
+    parser.add_argument(
+        "--cpu-causal-trace",
+        action="store_true",
+        help="Enable the bounded CPU-B2 causal trace for this human session.",
+    )
+    parser.add_argument(
+        "--cpu-causal-trace-output",
+        help="Optional CPU-B2 trace JSON path; implies --cpu-causal-trace.",
+    )
     args = parser.parse_args(argv)
+    if args.cpu_causal_trace_output:
+        args.cpu_causal_trace = True
     if args.latest:
         args.profile = LATEST_HUMAN_PROFILE
         args.material = LATEST_HUMAN_MATERIAL

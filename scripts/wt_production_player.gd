@@ -35,6 +35,8 @@ var _walk_motion_mode := CharacterBody3D.MOTION_MODE_GROUNDED
 var _walk_collision_state_saved := false
 var _interaction_attempt_count := 0
 var selected_place_material_index := 3
+var cpu_causal_trace: RefCounted
+var cpu_causal_trace_last_tick_us := 0
 var _last_interaction_summary := {
 	"attempt": 0,
 	"mode": "",
@@ -52,6 +54,11 @@ func set_human_input_enabled(enabled: bool) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func set_cpu_causal_trace(trace: RefCounted) -> void:
+	cpu_causal_trace = trace
+	cpu_causal_trace_last_tick_us = Time.get_ticks_usec()
 
 
 func autonomous_translate(delta: Vector3) -> bool:
@@ -137,6 +144,37 @@ func submit_edit_input(mode_name: StringName, center: Vector3, ray_hit: bool = f
 	if game_world == null or not game_world.has_method("submit_sphere_edit"):
 		_record_interaction(mode_name, ray_hit, false, "game_world_unavailable", center)
 		return false
+	if cpu_causal_trace != null and bool(cpu_causal_trace.call("is_active")):
+		var target_chunk := Vector3i(
+			floori(center.x / 16.0),
+			floori(center.y / 16.0),
+			floori(center.z / 16.0)
+		)
+		var generation_before := 0
+		var terrain_world: Node = game_world.call("get_terrain_world")
+		if terrain_world != null:
+			var state: RefCounted = terrain_world.call(
+				"query_chunk_state", target_chunk, 0
+			)
+			if state != null and state.has_method("get_generation"):
+				generation_before = int(state.call("get_generation"))
+		cpu_causal_trace.call(
+			"begin_phase", "human_edit", "human:edit:%d" % (
+				_interaction_attempt_count + 1
+			), true
+		)
+		cpu_causal_trace.call(
+			"set_target_chunk", target_chunk, 0, generation_before
+		)
+		cpu_causal_trace.call("record", &"human_edit_input", {
+			"mode": str(mode_name),
+			"center": {"x": center.x, "y": center.y, "z": center.z},
+			"ray_hit": ray_hit,
+			"target_chunk": {
+				"x": target_chunk.x, "y": target_chunk.y, "z": target_chunk.z,
+			},
+			"generation_before": generation_before,
+		}, true)
 	var material_id := -1 if mode_name == &"carve" else _selected_place_material_id()
 	var accepted := bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
 	_record_interaction(mode_name, ray_hit, accepted, "raycast_hit" if ray_hit and accepted else ("direct_center" if accepted else "edit_rejected"), center)
@@ -173,6 +211,7 @@ func _physics_process(delta: float) -> void:
 	_move_with_streaming_collision(delta)
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
+	_capture_cpu_causal_trace_frame()
 
 
 func _physics_process_fly(delta: float) -> void:
@@ -202,9 +241,12 @@ func _physics_process_fly(delta: float) -> void:
 	_move_with_streaming_collision(delta)
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
+	_capture_cpu_causal_trace_frame()
 
 
 func _move_with_streaming_collision(delta: float) -> bool:
+	var requested_velocity := velocity
+	var position_before := global_position
 	if game_world != null and \
 			game_world.has_method("is_player_collision_ready_at") and \
 			not bool(game_world.call(
@@ -212,9 +254,37 @@ func _move_with_streaming_collision(delta: float) -> bool:
 				global_position + velocity * delta
 			)):
 		velocity = Vector3.ZERO
+		_note_cpu_causal_trace_movement(
+			false, requested_velocity, position_before, global_position
+		)
 		return false
 	move_and_slide()
+	_note_cpu_causal_trace_movement(
+		true, requested_velocity, position_before, global_position
+	)
 	return true
+
+
+func _note_cpu_causal_trace_movement(
+	accepted: bool,
+	requested_velocity: Vector3,
+	position_before: Vector3,
+	position_after: Vector3
+) -> void:
+	if cpu_causal_trace != null and bool(cpu_causal_trace.call("is_active")):
+		cpu_causal_trace.call(
+			"note_movement", accepted, requested_velocity,
+			position_before, position_after
+		)
+
+
+func _capture_cpu_causal_trace_frame() -> void:
+	if cpu_causal_trace == null or not bool(cpu_causal_trace.call("is_active")):
+		return
+	var now_us := Time.get_ticks_usec()
+	var elapsed_us := maxi(0, now_us - cpu_causal_trace_last_tick_us)
+	cpu_causal_trace_last_tick_us = now_us
+	cpu_causal_trace.call("capture_physics_frame", elapsed_us)
 
 
 func _unhandled_input(event: InputEvent) -> void:

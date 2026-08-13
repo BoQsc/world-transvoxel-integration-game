@@ -86,6 +86,7 @@ var _edit_failure_count := 0
 var _last_edit_committed_revision := 0
 var _last_edit_failure_error := "ok"
 var _streaming_burst_frames_remaining := 0
+var _cpu_causal_trace: RefCounted
 
 
 func configure_game_world(
@@ -108,6 +109,10 @@ func configure_game_world(
 	_viewer_maximum_lod = viewer_maximum_lod
 	_expected_resource_count = expected_resource_count
 	_player_start_position = player_start_position
+
+
+func set_cpu_causal_trace(trace: RefCounted) -> void:
+	_cpu_causal_trace = trace
 
 
 func setup_standard_world() -> Node:
@@ -191,6 +196,13 @@ func update_player_viewer(force: bool = false) -> bool:
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
+	_trace_event(&"viewer_submitted", {
+		"role": "visual_player",
+		"viewer_id": _player_viewer_id,
+		"revision": _viewer_revision,
+		"position": _vector3_summary(position),
+		"force": force,
+	})
 	if not _update_player_collision_invoker(position, force):
 		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
@@ -260,6 +272,14 @@ func submit_sphere_edit(
 		}
 		return _fail("failed to add edit operation")
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	_trace_event(&"edit_submission_requested", {
+		"submission_index": _edit_submission_count,
+		"mode": str(mode_name),
+		"center": _vector3_summary(center),
+		"radius": radius,
+		"material_id": material_id,
+		"before_world_revision": before_revision,
+	}, true)
 	var accepted := bool(terrain_world.call("submit_edit_batch", batch, 56056))
 	if accepted:
 		_edit_accept_count += 1
@@ -277,6 +297,7 @@ func submit_sphere_edit(
 	}
 	if not accepted:
 		_last_error = str(_last_edit_summary.get("error", "edit rejected"))
+	_trace_event(&"edit_submission_result", _last_edit_summary, true)
 	return accepted
 
 
@@ -375,6 +396,24 @@ func get_last_error() -> String:
 
 func get_last_edit_summary() -> Dictionary:
 	return _last_edit_summary
+
+
+func get_causal_trace_context() -> Dictionary:
+	return {
+		"viewer_revision": _viewer_revision,
+		"player_viewer_updates": _accepted_player_viewer_updates,
+		"predictive_viewer_updates": _accepted_predictive_viewer_updates,
+		"focus_viewer_updates": _accepted_focus_viewer_updates,
+		"collision_viewer_updates": _accepted_collision_viewer_updates,
+		"coalesced_player_viewer_updates": _coalesced_player_viewer_updates,
+		"last_player_viewer_position": _vector3_summary(_last_player_viewer_position),
+		"last_collision_viewer_position": _vector3_summary(_last_collision_viewer_position),
+		"edit_submission_count": _edit_submission_count,
+		"edit_accept_count": _edit_accept_count,
+		"edit_commit_count": _edit_commit_count,
+		"edit_failure_count": _edit_failure_count,
+		"last_edit_committed_revision": _last_edit_committed_revision,
+	}
 
 
 func get_last_settle_summary() -> Dictionary:
@@ -856,6 +895,10 @@ func _on_terrain_edit_committed(world_revision: int) -> void:
 	_edit_commit_count += 1
 	_last_edit_committed_revision = world_revision
 	_last_edit_failure_error = "ok"
+	_trace_event(&"authority_commit_signal", {
+		"world_revision": world_revision,
+		"edit_commit_count": _edit_commit_count,
+	}, true)
 	_begin_edit_burst()
 
 
@@ -863,6 +906,10 @@ func _on_terrain_edit_failed(error: String) -> void:
 	_edit_failure_count += 1
 	_last_edit_failure_error = error
 	_last_error = error
+	_trace_event(&"authority_edit_failed", {
+		"error": error,
+		"edit_failure_count": _edit_failure_count,
+	}, true)
 
 
 func _submit_initial_viewers() -> bool:
@@ -920,6 +967,13 @@ func _update_predictive_player_viewer(
 		return _fail("predictive player viewer update failed: %s" % _terrain_world_error())
 	_last_predictive_viewer_position = predicted_position
 	_accepted_predictive_viewer_updates += 1
+	_trace_event(&"viewer_submitted", {
+		"role": "visual_predictive",
+		"viewer_id": _player_predictive_viewer_id,
+		"revision": _viewer_revision,
+		"position": _vector3_summary(predicted_position),
+		"force": force,
+	})
 	return true
 
 
@@ -968,6 +1022,13 @@ func _submit_player_collision_invoker(
 		return _fail("player collision viewer update failed: %s" % _terrain_world_error())
 	_last_collision_viewer_position = invoker_position
 	_accepted_collision_viewer_updates += 1
+	_trace_event(&"viewer_submitted", {
+		"role": "collision_player",
+		"viewer_id": _player_collision_viewer_id,
+		"revision": _viewer_revision,
+		"position": _vector3_summary(invoker_position),
+		"force": force,
+	})
 	_begin_streaming_burst()
 	return true
 
@@ -1016,6 +1077,12 @@ func _collision_invoker_chunk(position: Vector3) -> Vector3i:
 	)
 
 
+func _vector3_summary(value: Vector3) -> Dictionary:
+	if is_inf(value.x) or is_inf(value.y) or is_inf(value.z):
+		return {"available": false}
+	return {"available": true, "x": value.x, "y": value.y, "z": value.z}
+
+
 func _update_focus_player_viewer(force: bool) -> bool:
 	if not player_focus_viewer_enabled or player_focus_viewer_distance <= 0.0:
 		return true
@@ -1032,6 +1099,13 @@ func _update_focus_player_viewer(force: bool) -> bool:
 		return _fail("focus player viewer update failed: %s" % _terrain_world_error())
 	_last_focus_viewer_position = focus_position
 	_accepted_focus_viewer_updates += 1
+	_trace_event(&"viewer_submitted", {
+		"role": "visual_focus",
+		"viewer_id": _player_focus_viewer_id,
+		"revision": _viewer_revision,
+		"position": _vector3_summary(focus_position),
+		"force": force,
+	})
 	return true
 
 
@@ -1055,6 +1129,19 @@ func _operation_mode(mode_name: StringName) -> int:
 			return EditOperation.Mode.RESTORE_TO_BASE
 		_:
 			return EditOperation.Mode.CARVE
+
+
+func _trace_event(
+	kind: StringName,
+	payload: Dictionary = {},
+	include_pipeline: bool = false
+) -> void:
+	if _cpu_causal_trace != null and bool(
+		_cpu_causal_trace.call("is_active")
+	):
+		_cpu_causal_trace.call(
+			"record", kind, payload, include_pipeline
+		)
 
 
 func _fail(message: String) -> bool:

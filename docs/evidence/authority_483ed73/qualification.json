@@ -1,0 +1,50 @@
+{
+  "schema": "world_transvoxel.integration.authority_hotfix_qualification.v1",
+  "date": "2026-08-13",
+  "status": "ACCEPTED_CORRECTNESS_HOTFIX",
+  "release_claim": false,
+  "authority": {
+    "repository": "world-transvoxel",
+    "base_commit": "f30818b9ce0f0b3f9ddb75726db5522d97167404",
+    "commit": "483ed739712e9a72b551966b0379c46679adc089",
+    "addon_tree": "8f1b55ce08a1076f0c9150dea706353bb97094ee",
+    "package_digest_sha256": "ffbc6649d3f48a1ebab73133e9932e8e5e775fca8ded1595b4d26e797c5ba8d8",
+    "debug_binary_sha256": "50da898234f7d853c0b6d312f8f388c4b67e66a93d4d04af733e2c9ad87df71c",
+    "release_binary_sha256": "3e73ecab9cffe3f204f9a7ec3375011744e5f44a44dd049ef628ee179575f9cc",
+    "scope": "f30818b correctness plus an observation-only bounded CPU causal trace"
+  },
+  "correctness_inheritance": {
+    "source": "docs/evidence/authority_f30818b/qualification.json",
+    "inherited_scope": "cross-LOD edit publication and exact-mask transition remeshing",
+    "behavioral_changes_outside_observation": false,
+    "fallback_added": false
+  },
+  "environment": {
+    "godot": "4.7.1.stable.steam.a13da4feb",
+    "logical_cpu_affinity": [0, 1, 2]
+  },
+  "native_validation": {
+    "debug_build": "PASS",
+    "release_build": "PASS",
+    "causal_trace_contract_debug": "PASS",
+    "causal_trace_contract_release": "PASS",
+    "m3_application_debug_release": "PASS",
+    "m5_async_storage_debug_release": "PASS",
+    "m5_page_meshing_runtime_debug_release": "PASS",
+    "production_lifecycle_debug_release": "PASS",
+    "production_streaming_debug_release": "PASS",
+    "production_lod_streaming_debug_release": "PASS"
+  },
+  "known_baseline_findings": {
+    "page_transition_hash": "65d54a1208db2e8f",
+    "page_meshing_runtime_hash": "8b5ff82841e41cbf58e524582465555ac713375a3b1ea05293ee312684c47ae6",
+    "classification": "pre-existing expected-hash mismatches reproduced on clean f30818b"
+  },
+  "decision": {
+    "apply_authority_package": true,
+    "trace_disabled_by_default": true,
+    "fallback_added": false,
+    "performance_claim": false,
+    "performance_qualification_required": "paired traced and untraced CPU-B2 runs"
+  }
+}

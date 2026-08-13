@@ -24,12 +24,15 @@ const MAXIMUM_VISUAL_READY_FRAMES_AFTER_COMMIT := 15
 const MAXIMUM_COLLISION_READY_FRAMES_AFTER_COMMIT := 15
 const MAXIMUM_VISUAL_COLLISION_DIVERGENCE_FRAMES := 8
 
+var _causal_trace: RefCounted
+
 
 func run(
 	host: Node,
 	game_world: Node,
 	player: CharacterBody3D,
-	selected_profile: StringName
+	selected_profile: StringName,
+	causal_trace_output_path: String = ""
 ) -> Dictionary:
 	if host == null or game_world == null or player == null:
 		return _structural_failure("host_game_world_or_player_unavailable")
@@ -38,6 +41,20 @@ func run(
 	var terrain_world: Node = game_world.call("get_terrain_world")
 	if terrain_world == null:
 		return _structural_failure("terrain_world_unavailable")
+	if not causal_trace_output_path.is_empty():
+		var TraceScript := load("res://scripts/wt_cpu_causal_trace.gd")
+		_causal_trace = TraceScript.new()
+		if not bool(_causal_trace.call(
+			"start", host, game_world, terrain_world, player,
+			causal_trace_output_path, "deterministic_cpu_b2"
+		)):
+			return _structural_failure(
+				"causal_trace_start_failed:%s" % str(
+					_causal_trace.call("get_start_error")
+				)
+			)
+		if game_world.has_method("set_cpu_causal_trace"):
+			game_world.call("set_cpu_causal_trace", _causal_trace)
 
 	if player.has_method("set_human_input_enabled"):
 		player.call("set_human_input_enabled", false)
@@ -123,10 +140,20 @@ func run(
 	))
 
 	var movement_end_position := player.global_position
+	_trace_record(&"relocation_requested", {
+		"from": _vector3_summary(movement_end_position),
+		"to": _vector3_summary(FIXED_POST_FLIGHT_EDIT_POSITION),
+	}, true)
 	player.global_position = FIXED_POST_FLIGHT_EDIT_POSITION
 	player.velocity = Vector3.ZERO
 	if game_world.has_method("update_player_viewer"):
-		game_world.call("update_player_viewer", true)
+		var relocation_viewer_accepted := bool(
+			game_world.call("update_player_viewer", true)
+		)
+		_trace_record(&"relocation_viewer_submitted", {
+			"accepted": relocation_viewer_accepted,
+			"position": _vector3_summary(player.global_position),
+		}, true)
 	var edit_summary := await _run_single_edit_measurement(
 		host, game_world, terrain_world, player, clock, backlog
 	)
@@ -202,6 +229,13 @@ func run(
 		divergence_frames > MAXIMUM_VISUAL_COLLISION_DIVERGENCE_FRAMES
 	):
 		acceptance_failures.append("visual_collision_divergence")
+	var causal_trace_summary := {"enabled": false}
+	if _causal_trace != null:
+		causal_trace_summary = _causal_trace.call("finalize", "scenario_complete")
+		if not bool(causal_trace_summary.get("ok", false)):
+			acceptance_failures.append("causal_trace_finalize")
+		elif not bool(causal_trace_summary.get("native_complete", false)):
+			acceptance_failures.append("causal_trace_native_incomplete")
 	var acceptance_ok := measurement_complete and acceptance_failures.is_empty()
 
 	return {
@@ -230,6 +264,7 @@ func run(
 		"edit": edit_summary,
 		"frame_time_ms": frame_time_summary,
 		"backlog": backlog,
+		"causal_trace": causal_trace_summary,
 		"acceptance": {
 			"ok": acceptance_ok,
 			"failures": acceptance_failures,
@@ -304,6 +339,7 @@ func _run_movement_phase(
 	motion_velocity: Vector3,
 	frame_count: int
 ) -> Dictionary:
+	_trace_begin_phase(label, "movement:%s" % label, false)
 	var start_position := player.global_position
 	var accepted_frames := 0
 	var blocked_frames := 0
@@ -311,11 +347,15 @@ func _run_movement_phase(
 	var maximum_blocked_run := 0
 	var frame_us := []
 	for frame in range(frame_count):
+		var position_before := player.global_position
 		var accepted := bool(player.call(
 			"autonomous_move_with_streaming_collision",
 			motion_velocity,
 			host.get_physics_process_delta_time()
 		))
+		_trace_note_movement(
+			accepted, motion_velocity, position_before, player.global_position
+		)
 		if accepted:
 			accepted_frames += 1
 			current_blocked_run = 0
@@ -354,15 +394,20 @@ func _run_stop_phase(
 	label: String,
 	frame_count: int
 ) -> Dictionary:
+	_trace_begin_phase(label, "stop:%s" % label, false)
 	var start_position := player.global_position
 	var rejected_zero_motion_frames := 0
 	var frame_us := []
 	for frame in range(frame_count):
+		var position_before := player.global_position
 		var accepted := bool(player.call(
 			"autonomous_move_with_streaming_collision",
 			Vector3.ZERO,
 			host.get_physics_process_delta_time()
 		))
+		_trace_note_movement(
+			accepted, Vector3.ZERO, position_before, player.global_position
+		)
 		if not accepted:
 			rejected_zero_motion_frames += 1
 		if game_world.has_method("update_player_viewer"):
@@ -399,6 +444,7 @@ func _run_single_edit_measurement(
 	if not bool(player.call("autonomous_look_at", target_guess)):
 		return {"measurement_complete": false, "error": "camera_look_at_failed"}
 
+	_trace_begin_phase("edit_target_wait", "edit:target_acquisition", true)
 	var physics_target_wait_frames := 0
 	var physics_hit := {}
 	var target_wait_frame_us := []
@@ -417,27 +463,54 @@ func _run_single_edit_measurement(
 		target_wait_frame_us.append(await _next_physics_frame(host, clock))
 
 	var expected_edit_position: Vector3 = physics_hit.get("position", target_guess)
+	_trace_record(&"edit_target_acquired", {
+		"found": not physics_hit.is_empty(),
+		"wait_frames": physics_target_wait_frames,
+		"position": _vector3_summary(expected_edit_position),
+	}, true)
 	var expected_chunk := _chunk_coordinate(expected_edit_position)
 	var state_before: RefCounted = terrain_world.call("query_chunk_state", expected_chunk, 0)
 	var generation_before := _chunk_generation(state_before)
+	if _causal_trace != null:
+		_causal_trace.call(
+			"set_target_chunk", expected_chunk, 0, generation_before
+		)
 	var revision_before := int(terrain_world.call("get_backend_world_revision"))
+	_trace_begin_phase("edit_submit", "edit:submission:1", true)
 	var interaction_start_us := Time.get_ticks_usec()
 	var interaction_accepted := bool(player.call("autonomous_submit_interaction", &"carve"))
 	var interaction_call_us := Time.get_ticks_usec() - interaction_start_us
 	var interaction: Dictionary = player.call("get_last_interaction_summary")
+	_trace_record(&"edit_submitted", {
+		"accepted": interaction_accepted,
+		"call_us": interaction_call_us,
+		"revision_before": revision_before,
+		"interaction": interaction,
+	}, true)
 	var edit_position: Vector3 = interaction.get("position", expected_edit_position)
 	var edited_chunk := _chunk_coordinate(edit_position)
 	if edited_chunk != expected_chunk:
 		expected_chunk = edited_chunk
 		state_before = terrain_world.call("query_chunk_state", expected_chunk, 0)
 		generation_before = _chunk_generation(state_before)
+		if _causal_trace != null:
+			_causal_trace.call(
+				"set_target_chunk", expected_chunk, 0, generation_before
+			)
 
 	var commit_frame := -1
 	var commit_frame_us := []
+	_trace_begin_phase("authority_commit_wait", "edit:submission:1", true)
 	if interaction_accepted:
 		for frame in range(EDIT_COMMIT_WAIT_FRAMES + 1):
 			if int(terrain_world.call("get_backend_world_revision")) > revision_before:
 				commit_frame = frame
+				_trace_record(&"authority_commit_observed", {
+					"wait_frames": frame,
+					"world_revision": int(
+						terrain_world.call("get_backend_world_revision")
+					),
+				}, true)
 				break
 			if frame == EDIT_COMMIT_WAIT_FRAMES:
 				break
@@ -457,6 +530,10 @@ func _run_single_edit_measurement(
 	var final_render_generation := 0
 	var final_staged_render_generation := 0
 	var final_collision_generation := 0
+	var generation_change_recorded := false
+	var visual_ready_recorded := false
+	var collision_ready_recorded := false
+	_trace_begin_phase("exact_publication_wait", "edit:submission:1", true)
 	if commit_frame >= 0:
 		for frame in range(EDIT_READY_WAIT_FRAMES + 1):
 			var state: RefCounted = terrain_world.call("query_chunk_state", expected_chunk, 0)
@@ -470,6 +547,12 @@ func _run_single_edit_measurement(
 				var generation_changed := final_generation > generation_before
 				if generation_changed and generation_ready_frame < 0:
 					generation_ready_frame = frame
+				if generation_changed and not generation_change_recorded:
+					generation_change_recorded = true
+					_trace_record(&"target_generation_changed", {
+						"frame_after_commit": frame,
+						"generation": final_generation,
+					}, true)
 				if state.has_method("is_collision_required"):
 					collision_required = bool(state.call("is_collision_required"))
 				if generation_changed and logical_visual_ready_frame < 0 and \
@@ -493,9 +576,21 @@ func _run_single_edit_measurement(
 					if generation_changed and visual_ready_frame < 0 and \
 							final_render_generation == final_generation:
 						visual_ready_frame = frame
+						if not visual_ready_recorded:
+							visual_ready_recorded = true
+							_trace_record(&"exact_render_published", {
+								"frame_after_commit": frame,
+								"generation": final_generation,
+							}, true)
 					if generation_changed and collision_ready_frame < 0 and \
 							final_collision_generation == final_generation:
 						collision_ready_frame = frame
+						if not collision_ready_recorded:
+							collision_ready_recorded = true
+							_trace_record(&"exact_collision_published", {
+								"frame_after_commit": frame,
+								"generation": final_generation,
+							}, true)
 				else:
 					visual_ready_frame = logical_visual_ready_frame
 					collision_ready_frame = logical_collision_ready_frame
@@ -608,7 +703,36 @@ func _next_physics_frame(host: Node, clock: Dictionary) -> int:
 	clock["last_tick_us"] = now_us
 	var all_frame_us: Array = clock["all_frame_us"]
 	all_frame_us.append(elapsed_us)
+	if _causal_trace != null:
+		_causal_trace.call("capture_physics_frame", elapsed_us)
 	return elapsed_us
+
+
+func _trace_begin_phase(label: String, cause_id: String, detail: bool) -> void:
+	if _causal_trace != null:
+		_causal_trace.call("begin_phase", label, cause_id, detail)
+
+
+func _trace_record(
+	kind: StringName,
+	payload: Dictionary = {},
+	include_pipeline: bool = false
+) -> void:
+	if _causal_trace != null:
+		_causal_trace.call("record", kind, payload, include_pipeline)
+
+
+func _trace_note_movement(
+	accepted: bool,
+	requested_velocity: Vector3,
+	position_before: Vector3,
+	position_after: Vector3
+) -> void:
+	if _causal_trace != null:
+		_causal_trace.call(
+			"note_movement", accepted, requested_velocity,
+			position_before, position_after
+		)
 
 
 func _collect_backlog(
