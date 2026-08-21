@@ -997,7 +997,7 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	elif profile_id == FOUR_BIOME_WORLD_PROFILE:
 		generation.seed = 19023
 		generation.procedural_preset_id = &"four_biomes_lakes_caves_roads"
-		generation.source_revision = 190326
+		generation.source_revision = 190327
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
@@ -9778,6 +9778,12 @@ func _apply_capture_camera_mode() -> void:
 			player.call("set_fly_mode_enabled", true)
 			capture_position = Vector3(650.0, 220.0, 30.0)
 			capture_target = Vector3(650.0, 23.5, 700.0)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
+		"water_gravel_lake_shore":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(940.0, 55.0, 1435.0)
+			capture_target = Vector3(835.0, 14.5, 1375.0)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		"biome_snow_ridge":
