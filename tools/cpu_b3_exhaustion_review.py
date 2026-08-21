@@ -19,6 +19,14 @@ HUMAN_TAG = "human-accepted-cpu-b3-candidate-2026-08-13"
 HUMAN_COMMIT = "bf59a98f51ada8cd9ef6fe1a71100984b87046c0"
 AUTHORITY_COMMIT = "a8bba838a8860ba30bdb79887ad66ba17028ad18"
 CANDIDATE_COMMIT = "eb8a69c19801bb3e52837e3c565159827b560d3d"
+EVIDENCE_LINE_ENDINGS = {
+    "qualification.json": "lf",
+    "selected_trace_off.json": "crlf",
+    "selected_causal_pair.json": "crlf",
+    "rejected_viewer_regional_trace_off.json": "crlf",
+    "rejected_viewer_regional_causal_pair.json": "crlf",
+    "human_review.json": "lf",
+}
 
 
 def load_object(name: str) -> dict[str, Any]:
@@ -29,7 +37,17 @@ def load_object(name: str) -> dict[str, Any]:
 
 
 def sha256(name: str) -> str:
-    return hashlib.sha256((EVIDENCE_DIR / name).read_bytes()).hexdigest()
+    data = (EVIDENCE_DIR / name).read_bytes()
+    lf_data = data.replace(b"\r\n", b"\n")
+    # Four generated reports were retained from their original Windows CRLF
+    # bytes, while review documents were retained as LF. Reconstruct that
+    # explicit historical policy after Git checks the same text out either way.
+    canonical = (
+        lf_data.replace(b"\n", b"\r\n")
+        if EVIDENCE_LINE_ENDINGS[name] == "crlf"
+        else lf_data
+    )
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def tagged_commit(tag: str) -> str:
