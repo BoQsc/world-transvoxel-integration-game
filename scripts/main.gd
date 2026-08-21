@@ -10,6 +10,9 @@ const FOUR_BIOME_WORLD_PROFILE := &"g23_four_biomes_lakes_mountains_roads_2k_256
 const FLAT_PROFILE := &"flat_baseline"
 const STATIC_WATER_MATERIAL_ID := 9
 const ASPHALT_MATERIAL_ID := 10
+const PROCEDURAL_LAKE_CENTER := Vector3(650.0, 23.5, 700.0)
+const PROCEDURAL_LAKE_SHORE_CARVE_CENTER := Vector3(874.0, 20.0, 700.0)
+const PROCEDURAL_LAKE_SHORE_CARVE_RADIUS := 14.0
 const DEFAULT_HUMAN_PROFILE := FLAT_PROFILE
 const DEFAULT_AUTONOMOUS_PROFILE := COMPACT_PROFILE
 const GameWorldNode := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
@@ -4626,16 +4629,23 @@ func _capture_human_visual() -> void:
 		if human_visual_capture_mode == "static_water_basin":
 			if not await _save_static_water_volume_captures():
 				return
+		elif human_visual_capture_mode == "procedural_lake_volume":
+			if not await _save_procedural_lake_volume_captures():
+				return
 		for _frame in range(30):
 			await get_tree().process_frame
 	last_watertightness_summary = _collect_watertightness_summary()
 	var capture_written := false
+	var capture_error := ERR_UNAVAILABLE
 	var viewport_texture := get_viewport().get_texture() if DisplayServer.get_name() != "headless" else null
 	if viewport_texture != null:
 		var image := viewport_texture.get_image()
 		if image != null and not human_visual_capture_path.is_empty():
-			image.save_png(human_visual_capture_path)
-			capture_written = true
+			var absolute_capture_path := ProjectSettings.globalize_path(human_visual_capture_path)
+			capture_error = DirAccess.make_dir_recursive_absolute(absolute_capture_path.get_base_dir())
+			if capture_error == OK:
+				capture_error = image.save_png(absolute_capture_path)
+			capture_written = capture_error == OK
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var presentation: Dictionary = _presentation_summary()
 	var watertightness_acceptance := _watertightness_acceptance_summary(last_watertightness_summary)
@@ -4729,7 +4739,15 @@ func _capture_human_visual() -> void:
 		"static_water_visual": last_static_water_visual_summary,
 		"capture_path": human_visual_capture_path,
 		"capture_written": capture_written,
+		"capture_error": capture_error,
 	}))
+	if not human_visual_capture_path.is_empty() and not capture_written:
+		push_error("WT_VISUAL_CAPTURE_WRITE_FAIL: %s error=%d" % [
+			human_visual_capture_path,
+			capture_error,
+		])
+		get_tree().quit(1)
+		return
 	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
@@ -4750,6 +4768,7 @@ func _capture_requires_interaction_inspection() -> bool:
 		human_visual_capture_mode == "edit_tunnel_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_transient_crawl_gate" or \
 		human_visual_capture_mode == "edit_tunnel_upward_lod_gate" or \
+		human_visual_capture_mode == "procedural_lake_volume" or \
 		human_visual_capture_mode == "interaction_near" or \
 		human_visual_capture_mode == "interaction_far" or \
 		human_visual_capture_mode == "interaction_aerial"
@@ -4830,6 +4849,8 @@ func _apply_interaction_inspection_edits() -> bool:
 		return await _run_tunnel_upward_lod_gate(terrain_world)
 	if human_visual_capture_mode == "edit_stability_gate":
 		return await _run_edit_stability_gate(terrain_world)
+	if human_visual_capture_mode == "procedural_lake_volume":
+		return await _run_procedural_lake_volume_inspection(terrain_world)
 	if _capture_requires_sequential_interaction_edits():
 		return await _apply_sequential_interaction_inspection_edits(terrain_world)
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
@@ -8748,9 +8769,151 @@ func _save_lod_movement_gate_captures() -> bool:
 	return true
 
 
+func _run_procedural_lake_volume_inspection(terrain_world: Node) -> bool:
+	if selected_profile != FOUR_BIOME_WORLD_PROFILE:
+		_fail("procedural lake volume inspection requires the four-biome world")
+		return false
+	player.call("set_fly_mode_enabled", true)
+	await _set_capture_camera_pose_with_wait(
+		Vector3(835.0, 58.0, 660.0), PROCEDURAL_LAKE_SHORE_CARVE_CENTER, 24
+	)
+	if not await _wait_for_current_profile_settled("before procedural lake shoreline carve"):
+		return false
+	var carve = EditOperation.new()
+	carve.mode = EditOperation.Mode.CARVE
+	carve.brush_shape = EditOperation.BrushShape.SPHERE
+	carve.center = PROCEDURAL_LAKE_SHORE_CARVE_CENTER
+	carve.radius = PROCEDURAL_LAKE_SHORE_CARVE_RADIUS
+	carve.strength = 1.0
+	carve.density_value = 1.0
+	var batch = EditBatch.new()
+	if not batch.add_operation(carve):
+		_fail("procedural lake shoreline carve is invalid")
+		return false
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	if not bool(terrain_world.call("submit_edit_batch", batch, 9910)):
+		_fail("procedural lake shoreline carve rejected: %s" % str(terrain_world.call("get_last_error")))
+		return false
+	if not await game_world.wait_for_world_revision(before_revision + 1):
+		_fail("procedural lake shoreline carve did not commit")
+		return false
+	if not await _wait_for_current_profile_settled("after procedural lake shoreline carve"):
+		return false
+	var wet_sample := await _query_authoritative_sample_summary(
+		terrain_world, Vector3i(874, 20, 700), "procedural lake revealed water"
+	)
+	var dry_sample := await _query_authoritative_sample_summary(
+		terrain_world, Vector3i(884, 20, 700), "procedural lake dry side"
+	)
+	var above_sample := await _query_authoritative_sample_summary(
+		terrain_world, Vector3i(874, 26, 700), "procedural lake above surface"
+	)
+	if not bool(wet_sample.get("ok", false)) or \
+			float(wet_sample.get("density", 0.0)) <= 0.0 or \
+			int(wet_sample.get("material", -1)) != STATIC_WATER_MATERIAL_ID:
+		_fail("shoreline carve did not reveal existing procedural water: %s" % JSON.stringify(wet_sample))
+		return false
+	for dry_probe in [dry_sample, above_sample]:
+		if not bool(dry_probe.get("ok", false)) or \
+				float(dry_probe.get("density", 0.0)) <= 0.0 or \
+				int(dry_probe.get("material", -1)) == STATIC_WATER_MATERIAL_ID:
+			_fail("procedural lake escaped its original signed field: %s" % JSON.stringify(dry_probe))
+			return false
+	if material_applicator != null:
+		material_applicator.call("apply_materials_now")
+	interaction_inspection_operation_count = 1
+	interaction_inspection_applied = true
+	last_static_water_visual_summary = {
+		"enabled": true,
+		"ok": true,
+		"source": "procedural_secondary_density",
+		"water_geometry": "unmodified_transvoxel_payload",
+		"water_operations": 0,
+		"terrain_carve_operations": 1,
+		"lake_center": {
+			"x": PROCEDURAL_LAKE_CENTER.x,
+			"y": PROCEDURAL_LAKE_CENTER.y,
+			"z": PROCEDURAL_LAKE_CENTER.z,
+		},
+		"shoreline_carve_center": {
+			"x": PROCEDURAL_LAKE_SHORE_CARVE_CENTER.x,
+			"y": PROCEDURAL_LAKE_SHORE_CARVE_CENTER.y,
+			"z": PROCEDURAL_LAKE_SHORE_CARVE_CENTER.z,
+		},
+		"shoreline_carve_radius": PROCEDURAL_LAKE_SHORE_CARVE_RADIUS,
+		"revealed_water_sample": wet_sample,
+		"dry_side_sample": dry_sample,
+		"above_surface_sample": above_sample,
+	}
+	return true
+
+
+func _save_procedural_lake_volume_captures() -> bool:
+	if human_visual_capture_path.is_empty() or DisplayServer.get_name() == "headless":
+		return true
+	var absolute_base_path := ProjectSettings.globalize_path(human_visual_capture_path)
+	var directory_error := DirAccess.make_dir_recursive_absolute(absolute_base_path.get_base_dir())
+	if directory_error != OK:
+		_fail("failed to create procedural lake capture directory")
+		return false
+	player.call("set_fly_mode_enabled", true)
+	var views := [
+		{
+			"label": "shore_overview",
+			"position": Vector3(835.0, 58.0, 660.0),
+			"target": PROCEDURAL_LAKE_SHORE_CARVE_CENTER,
+		},
+		{
+			"label": "shore_dry_side",
+			"position": Vector3(883.0, 20.0, 700.0),
+			"target": Vector3(872.0, 20.0, 700.0),
+		},
+		{
+			"label": "shore_inside_water",
+			"position": Vector3(876.0, 20.0, 700.0),
+			"target": Vector3(885.0, 20.0, 700.0),
+		},
+		{
+			"label": "shore_below_surface",
+			"position": Vector3(883.0, 13.0, 700.0),
+			"target": Vector3(873.0, 18.0, 700.0),
+		},
+	]
+	for view in views:
+		await _set_capture_camera_pose_with_wait(
+			view["position"], view["target"], 24
+		)
+		var label := str(view["label"])
+		if not await _wait_for_current_profile_settled(
+			"before procedural lake %s capture" % label
+		):
+			return false
+		for _frame in range(12):
+			await get_tree().process_frame
+		var output_path := ProjectSettings.globalize_path(
+			_capture_variant_path(label)
+		)
+		var image := get_viewport().get_texture().get_image()
+		var error := image.save_png(output_path)
+		if error != OK:
+			_fail("failed to save procedural lake %s capture" % label)
+			return false
+	await _set_capture_camera_pose_with_wait(
+		Vector3(835.0, 58.0, 660.0), PROCEDURAL_LAKE_SHORE_CARVE_CENTER, 24
+	)
+	if not await _wait_for_current_profile_settled("before procedural lake final capture"):
+		return false
+	return true
+
+
 func _save_static_water_volume_captures() -> bool:
 	if human_visual_capture_path.is_empty() or DisplayServer.get_name() == "headless":
 		return true
+	var absolute_base_path := ProjectSettings.globalize_path(human_visual_capture_path)
+	var directory_error := DirAccess.make_dir_recursive_absolute(absolute_base_path.get_base_dir())
+	if directory_error != OK:
+		_fail("failed to create static water capture directory")
+		return false
 	if static_water_volume_radius <= 0.0:
 		_fail("static water volume capture has no probe volume")
 		return false
@@ -8795,7 +8958,7 @@ func _save_static_water_volume_captures() -> bool:
 		await _set_capture_camera_pose_with_wait(
 			view["position"], view["target"], 18
 		)
-		var output_path := _capture_variant_path(str(view["label"]))
+		var output_path := ProjectSettings.globalize_path(_capture_variant_path(str(view["label"])))
 		var image := get_viewport().get_texture().get_image()
 		var error := image.save_png(output_path)
 		if error != OK:
@@ -9537,7 +9700,8 @@ func _watertightness_probe_radius() -> float:
 
 
 func _collect_watertightness_summary() -> Dictionary:
-	if not _capture_requires_interaction_inspection():
+	if not _capture_requires_interaction_inspection() or \
+			human_visual_capture_mode == "procedural_lake_volume":
 		return {
 			"enabled": false,
 			"ok": true,
@@ -9573,7 +9737,8 @@ func _apply_capture_camera_mode() -> void:
 	if camera == null:
 		return
 	camera.far = 5000.0
-	if human_visual_capture_mode == "static_water_basin":
+	if human_visual_capture_mode == "static_water_basin" or \
+			human_visual_capture_mode == "procedural_lake_volume":
 		camera.current = true
 		camera.make_current()
 		return

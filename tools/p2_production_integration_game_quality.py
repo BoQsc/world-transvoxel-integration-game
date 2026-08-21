@@ -48,6 +48,7 @@ VISUAL_MODE_CHOICES = DEFAULT_VISUAL_MODES + (
     "biome_surface",
     "water_lake_near",
     "water_lake_far",
+    "procedural_lake_volume",
     "biome_snow_ridge",
     "road_network",
     "road_edge_near",
@@ -250,6 +251,18 @@ def run_visual_capture_summary(
 
     summary = parse_visual_summary(completed.stdout, mode)
     validate_visual_summary(summary, capture_path, profile)
+    if mode == "procedural_lake_volume":
+        for label in (
+            "shore_overview",
+            "shore_dry_side",
+            "shore_inside_water",
+            "shore_below_surface",
+        ):
+            variant = capture_path.with_name(f"{capture_path.stem}_{label}.png")
+            if not variant.is_file() or variant.stat().st_size < 10_000:
+                raise RuntimeError(
+                    f"procedural lake volume capture was not written: {variant}"
+                )
     return capture_path, summary
 
 
@@ -388,6 +401,47 @@ def validate_visual_summary(
             f"{summary!r}"
         )
     mode = str(summary.get("mode", ""))
+    if mode == "procedural_lake_volume":
+        water = summary.get("static_water_visual")
+        if not isinstance(water, dict):
+            raise RuntimeError(
+                f"procedural lake volume summary is missing: {summary!r}"
+            )
+        required_water = {
+            "ok": True,
+            "source": "procedural_secondary_density",
+            "water_geometry": "unmodified_transvoxel_payload",
+            "water_operations": 0,
+            "terrain_carve_operations": 1,
+        }
+        for key, expected in required_water.items():
+            if water.get(key) != expected:
+                raise RuntimeError(
+                    f"procedural lake field {key} expected {expected!r}, "
+                    f"got {water.get(key)!r}: {water!r}"
+                )
+        revealed = water.get("revealed_water_sample")
+        dry_side = water.get("dry_side_sample")
+        above = water.get("above_surface_sample")
+        if (
+            not isinstance(revealed, dict)
+            or revealed.get("ok") is not True
+            or int(revealed.get("material", -1)) != 9
+            or float(revealed.get("density", 0.0)) <= 0.0
+        ):
+            raise RuntimeError(
+                f"procedural lake revealed-water sample failed: {revealed!r}"
+            )
+        for label, sample in (("dry side", dry_side), ("above surface", above)):
+            if (
+                not isinstance(sample, dict)
+                or sample.get("ok") is not True
+                or int(sample.get("material", -1)) == 9
+                or float(sample.get("density", 0.0)) <= 0.0
+            ):
+                raise RuntimeError(
+                    f"procedural lake {label} sample failed: {sample!r}"
+                )
     minimums = {
         "runtime_demand_capacity_per_viewer": 8192,
         "active_chunk_records": 64,
