@@ -35,6 +35,13 @@ native mesh defects.
 experiment after the same scene passes the single-sided visual/topology gates. It
 is not the default human playtest or production validation material.
 
+The game-specific static-water material also uses `cull_back`. Authored water is
+stored and meshed as a closed volume, but an exterior transparent pass must not
+shade its rear or lower boundary through the front boundary. This presentation
+policy does not remove volume geometry or change water authority. Rendering the
+view from inside water requires a separate underwater presentation pass rather
+than making the exterior material double-sided.
+
 ## Production terrain texture mapping policy
 
 Production terrain textures must use world-space triplanar projection on native
