@@ -21,6 +21,7 @@ const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
 const CpuCausalTrace := preload("res://scripts/wt_cpu_causal_trace.gd")
 const CpuB3aLodOpeningCapture := preload("res://scripts/wt_cpu_b3a_lod_opening_capture.gd")
+const StaticWaterVisualProbe := preload("res://scripts/wt_static_water_visual_probe.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
@@ -118,6 +119,10 @@ var last_streaming_fly_summary := {}
 var last_fly_collision_stress_summary := {}
 var last_runtime_baseline_summary := {}
 var last_cpu_b3a_lod_opening_summary := {}
+var last_static_water_visual_summary := {"enabled": false, "ok": true}
+var static_water_basin_center := Vector3.ZERO
+var static_water_volume_center := Vector3.ZERO
+var static_water_volume_radius := 0.0
 var edit_persistence_operations: Array = []
 var authoritative_sample_batches := {}
 var authoritative_sample_failures := {}
@@ -4319,6 +4324,7 @@ func _apply_human_static_water_basin() -> bool:
 		_fail("static water basin terrain world unavailable")
 		return false
 	var basin_center := player.global_position + Vector3(28.0, 8.0, 0.0)
+	static_water_basin_center = basin_center
 	# Keep the carved and constructed surfaces far enough from tangency that the
 	# remaining rim has representable topology at every retained terrain LOD.
 	# Radius 22 at offset 19 preserves the original cavity floor while giving
@@ -4358,6 +4364,8 @@ func _apply_human_static_water_basin() -> bool:
 	exposed_volume.radius = 8.0
 	exposed_volume.material_id = STATIC_WATER_MATERIAL_ID
 	exposed_volume.density_value = 1.0
+	static_water_volume_center = exposed_volume.center
+	static_water_volume_radius = exposed_volume.radius
 	var batch = EditBatch.new()
 	if not batch.add_operation(foundation) or not batch.add_operation(carve) or \
 			not batch.add_operation(water) or not batch.add_operation(exposed_volume):
@@ -4414,6 +4422,30 @@ func _apply_human_static_water_basin() -> bool:
 		if not bool(material_summary.get("native_water_material_override", false)):
 			_fail("static water material override is not active: %s" % str(material_summary))
 			return false
+	var backend: Node = terrain_world.call("get_backend_terrain")
+	last_static_water_visual_summary = StaticWaterVisualProbe.collect(
+		backend, static_water_volume_center, static_water_volume_radius
+	)
+	last_static_water_visual_summary["enabled"] = true
+	print(
+		"WT_STATIC_WATER_VISUAL_PROBE ",
+		JSON.stringify(last_static_water_visual_summary)
+	)
+	if not bool(last_static_water_visual_summary.get("ok", false)):
+		_fail(
+			"static water visual mesh unavailable: %s" %
+				JSON.stringify(last_static_water_visual_summary)
+		)
+		return false
+	if not bool(last_static_water_visual_summary.get("coherent_winding", false)) or \
+			not bool(last_static_water_visual_summary.get("closed_edge_topology", false)) or \
+			int(last_static_water_visual_summary.get("degenerate_faces", 0)) != 0 or \
+			float(last_static_water_visual_summary.get("maximum_edge_length", INF)) > 2.0:
+		_fail(
+			"static water visual mesh failed topology authority: %s" %
+				JSON.stringify(last_static_water_visual_summary)
+		)
+		return false
 	interaction_inspection_applied = true
 	interaction_inspection_operation_count = 4
 	return true
@@ -4591,6 +4623,9 @@ func _capture_human_visual() -> void:
 			if not await _apply_interaction_inspection_edits():
 				return
 		await _apply_capture_camera_mode()
+		if human_visual_capture_mode == "static_water_basin":
+			if not await _save_static_water_volume_captures():
+				return
 		for _frame in range(30):
 			await get_tree().process_frame
 	last_watertightness_summary = _collect_watertightness_summary()
@@ -4691,6 +4726,7 @@ func _capture_human_visual() -> void:
 		"streaming_fly": _streaming_fly_summary(),
 		"fly_collision_stress": _fly_collision_stress_summary(),
 		"runtime_baseline": _runtime_baseline_summary(),
+		"static_water_visual": last_static_water_visual_summary,
 		"capture_path": human_visual_capture_path,
 		"capture_written": capture_written,
 	}))
@@ -8709,6 +8745,67 @@ func _save_lod_movement_gate_captures() -> bool:
 		if error != OK:
 			_fail("failed to save LOD movement %s capture to %s" % [label, output_path])
 			return false
+	return true
+
+
+func _save_static_water_volume_captures() -> bool:
+	if human_visual_capture_path.is_empty() or DisplayServer.get_name() == "headless":
+		return true
+	if static_water_volume_radius <= 0.0:
+		_fail("static water volume capture has no probe volume")
+		return false
+	var views := [
+		{
+			"label": "volume_outside",
+			"position": static_water_volume_center + Vector3(-18.0, 12.0, 24.0),
+			"target": static_water_volume_center,
+		},
+		{
+			"label": "volume_below",
+			"position": static_water_volume_center + Vector3(-6.0, -19.0, 10.0),
+			"target": static_water_volume_center,
+		},
+		{
+			"label": "volume_boundary",
+			"position": static_water_volume_center + Vector3(0.0, 0.0, 9.5),
+			"target": static_water_volume_center,
+		},
+		{
+			"label": "volume_inside",
+			"position": static_water_volume_center,
+			"target": static_water_volume_center + Vector3.RIGHT,
+		},
+		{
+			"label": "basin_above",
+			"position": static_water_basin_center + Vector3(-24.0, 30.0, 30.0),
+			"target": static_water_basin_center + Vector3(0.0, 4.0, 0.0),
+		},
+		{
+			"label": "basin_boundary",
+			"position": static_water_basin_center + Vector3(0.0, 7.0, 0.0),
+			"target": static_water_basin_center + Vector3(8.0, 5.0, 0.0),
+		},
+		{
+			"label": "basin_inside",
+			"position": static_water_basin_center,
+			"target": static_water_basin_center + Vector3.RIGHT,
+		},
+	]
+	for view in views:
+		await _set_capture_camera_pose_with_wait(
+			view["position"], view["target"], 18
+		)
+		var output_path := _capture_variant_path(str(view["label"]))
+		var image := get_viewport().get_texture().get_image()
+		var error := image.save_png(output_path)
+		if error != OK:
+			_fail("failed to save static water %s capture" % str(view["label"]))
+			return false
+	await _set_capture_camera_pose_with_wait(
+		static_water_basin_center + Vector3(-18.0, 40.0, 38.0),
+		static_water_basin_center + Vector3(18.0, 8.0, 0.0),
+		18
+	)
 	return true
 
 
