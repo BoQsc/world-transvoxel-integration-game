@@ -30,5 +30,6 @@ The terrain-addon Godot 4.7 contract test covers profile metadata, exact native
 argument dispatch, invalid configuration rejection, and fail-closed behavior
 against a legacy backend.
 
-Exact authority and terrain-contract commits, addon trees, package hashes, and
-runtime DLL hashes are recorded in `BOTTOM_BOUNDARY_PIN.json`.
+Exact boundary and terrain-contract commits are recorded in
+`BOTTOM_BOUNDARY_PIN.json`. The currently consumed binary artifact and DLL
+hashes are recorded once in `WORLD_TRANSVOXEL_RUNTIME_PIN.json`.

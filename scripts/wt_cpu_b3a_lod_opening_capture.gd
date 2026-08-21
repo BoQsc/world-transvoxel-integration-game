@@ -264,7 +264,7 @@ func _road_free_route() -> Array:
 func _route_exclusion_contract() -> Dictionary:
 	return {
 		"road_field": "wt_expansive_road_segments",
-		"road_segment_source": "addons/world_transvoxel/src/storage/wt_procedural_road_field.cpp",
+		"road_segment_source": "world-transvoxel:addons/world_transvoxel/src/storage/wt_procedural_road_field.cpp",
 		"minimum_viewer_route_road_centerline_clearance_cells": 132.94117647058812,
 		"road_surface_and_shoulder_limit_cells": 16.0,
 		"minimum_clearance_multiple": 8.308823529411757,

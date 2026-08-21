@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""Synchronize vendored terrain packages with their standalone authorities."""
+"""Synchronize downstream packages with their standalone authorities.
+
+The terrain addon is synchronized as source. The native World Transvoxel
+authority is synchronized as a strict binary runtime artifact; its C++ source
+remains exclusively in the authority repository.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import pathlib
 import shutil
 import subprocess
 import sys
+
+import world_transvoxel_runtime_artifact as runtime_artifact
 
 
 IGNORED_NAMES = {"__pycache__"}
@@ -49,6 +57,14 @@ def containing_repository(path: pathlib.Path) -> pathlib.Path:
         if (candidate / ".git").exists():
             return candidate
     raise RuntimeError("Git repository not found for %s" % path)
+
+
+def repository_head(path: pathlib.Path) -> str:
+    repository = containing_repository(path)
+    return subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
 
 
 def tracked_package_files(root: pathlib.Path) -> dict[pathlib.PurePosixPath, pathlib.Path]:
@@ -102,6 +118,12 @@ def source_package_files(root: pathlib.Path) -> dict[pathlib.PurePosixPath, path
     return result
 
 
+def authority_runtime_files(
+    root: pathlib.Path,
+) -> dict[pathlib.PurePosixPath, pathlib.Path]:
+    return runtime_artifact.files(root)
+
+
 def digest(path: pathlib.Path) -> str:
     value = hashlib.sha256()
     value.update(canonical_bytes(path))
@@ -130,7 +152,13 @@ def package_digest(files: dict[pathlib.PurePosixPath, pathlib.Path]) -> str:
 
 
 def differences(source: pathlib.Path, target: pathlib.Path) -> tuple[list[str], list[str], list[str]]:
-    source_files = source_package_files(source)
+    return selected_differences(source_package_files(source), target)
+
+
+def selected_differences(
+    source_files: dict[pathlib.PurePosixPath, pathlib.Path],
+    target: pathlib.Path,
+) -> tuple[list[str], list[str], list[str]]:
     target_files = package_files(target)
     missing = sorted(str(path) for path in source_files.keys() - target_files.keys())
     extra = sorted(str(path) for path in target_files.keys() - source_files.keys())
@@ -143,7 +171,13 @@ def differences(source: pathlib.Path, target: pathlib.Path) -> tuple[list[str], 
 
 
 def synchronize(source: pathlib.Path, target: pathlib.Path) -> None:
-    source_files = source_package_files(source)
+    synchronize_selected(source_package_files(source), target)
+
+
+def synchronize_selected(
+    source_files: dict[pathlib.PurePosixPath, pathlib.Path],
+    target: pathlib.Path,
+) -> None:
     target_files = package_files(target)
     for relative in sorted(target_files.keys() - source_files.keys()):
         target_files[relative].unlink()
@@ -168,41 +202,80 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-source", type=pathlib.Path, default=default_source())
     parser.add_argument("--authority-source", type=pathlib.Path, default=default_authority_source())
+    parser.add_argument(
+        "--package",
+        choices=("authority", "candidate", "all"),
+        default="authority",
+        help="Package to synchronize; native authority runtime is the safe default.",
+    )
+    parser.add_argument(
+        "--allow-unpinned-authority",
+        action="store_true",
+        help="Allow an intentional artifact refresh before updating the runtime pin.",
+    )
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     packages = {
         "candidate": (
             args.candidate_source.resolve(),
             (repo_root() / "addons" / "world_transvoxel_terrain").resolve(),
+            source_package_files,
         ),
         "authority": (
             args.authority_source.resolve(),
             (repo_root() / "addons" / "world_transvoxel").resolve(),
+            authority_runtime_files,
         ),
     }
-    for label, (source, target) in packages.items():
+    package_results: dict[
+        str, dict[pathlib.PurePosixPath, pathlib.Path]
+    ] = {}
+    for label, (source, target, select_files) in packages.items():
+        if args.package != "all" and label != args.package:
+            continue
         expected_target = (repo_root() / "addons" / target.name).resolve()
         if target != expected_target or target.parent != (repo_root() / "addons").resolve():
             raise RuntimeError("refusing unexpected %s target: %s" % (label, target))
-        if not source.is_dir() or not (source / "plugin.cfg").is_file():
+        identity_file = "plugin.cfg" if label == "candidate" else "world_transvoxel.gdextension"
+        if not source.is_dir() or not (source / identity_file).is_file():
             raise RuntimeError("%s source is not an addon: %s" % (label, source))
+        if label == "authority" and not args.allow_unpinned_authority:
+            pin = json.loads(
+                (repo_root() / "WORLD_TRANSVOXEL_RUNTIME_PIN.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            expected_commit = str(pin.get("authority", {}).get("commit", ""))
+            actual_commit = repository_head(source)
+            if actual_commit != expected_commit:
+                raise RuntimeError(
+                    "authority source is not the active runtime pin: "
+                    "%s != %s; pass --allow-unpinned-authority only for an "
+                    "intentional refresh" % (actual_commit, expected_commit)
+                )
+        selected = select_files(source)
         if args.apply:
-            synchronize(source, target)
-        missing, extra, changed = differences(source, target)
+            synchronize_selected(selected, target)
+        missing, extra, changed = selected_differences(selected, target)
         if missing or extra or changed:
-            print("WT_TQP54_PACKAGE_SYNC_FAIL package=%s missing=%d extra=%d changed=%d" % (
+            print("WT_AUTHORITY_PACKAGE_SYNC_FAIL package=%s missing=%d extra=%d changed=%d" % (
                 label, len(missing), len(extra), len(changed)
             ))
             for category, values in (("missing", missing), ("extra", extra), ("changed", changed)):
                 for value in values:
                     print("%s: %s" % (category, value))
             return 1
-    print("WT_TQP54_PACKAGE_SYNC_PASS candidate_files=%d authority_files=%d candidate_digest=%s authority_digest=%s" % (
-        len(source_package_files(packages["candidate"][0])),
-        len(source_package_files(packages["authority"][0])),
-        package_digest(source_package_files(packages["candidate"][0])),
-        package_digest(source_package_files(packages["authority"][0])),
-    ))
+        package_results[label] = selected
+    summaries = [
+        "%s_files=%d %s_digest=%s" % (
+            label,
+            len(files),
+            label,
+            package_digest(files),
+        )
+        for label, files in sorted(package_results.items())
+    ]
+    print("WT_AUTHORITY_PACKAGE_SYNC_PASS " + " ".join(summaries))
     return 0
 
 

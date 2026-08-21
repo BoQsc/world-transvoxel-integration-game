@@ -3,6 +3,13 @@
 This repository is the current human-playable production integration game for
 the World Transvoxel addon stack.
 
+The native dependency is binary-only in this repository. `world-transvoxel`
+owns all native C++ source and builds; this game carries only the exact pinned
+DLL/runtime metadata and required notices described in
+[docs/WORLD_TRANSVOXEL_RUNTIME_ARTIFACT.md](docs/WORLD_TRANSVOXEL_RUNTIME_ARTIFACT.md).
+`WORLD_TRANSVOXEL_RUNTIME_PIN.json` is the current dependency identity. Copied
+native source and fallback implementations are forbidden.
+
 Current Terrain 1.0 release closure is controlled by
 [TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). That file is the
 authoritative checklist: it defines required gates, accepted non-goals, current
@@ -29,7 +36,7 @@ pins. See [docs/TQP54_DOWNSTREAM_INTEGRATION_MIGRATION.md](docs/TQP54_DOWNSTREAM
 and `TQP54_PACKAGE_PIN.json`. This is an integration qualification, not a final
 Terrain 1.0 release claim.
 
-`AUTHORITY_HOTFIX_PIN.json` layers the qualified `f30818b` correctness package
+The historical `AUTHORITY_HOTFIX_PIN.json` layers the qualified `f30818b` correctness package
 over the retained TQP-54 authority base. It prevents edited fine
 render/collision ownership from appearing beneath an old coarse LOD owner and
 requires staged exact-mask remeshing for transition-mask changes. It does not

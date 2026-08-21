@@ -2,38 +2,41 @@
 extends RefCounted
 class_name WtTerrainDependencyStatus
 
-const WORLD_TRANSVOXEL_PLUGIN_CFG := "res://addons/world_transvoxel/plugin.cfg"
+const WORLD_TRANSVOXEL_EXTENSION_DESCRIPTOR := \
+	"res://addons/world_transvoxel/world_transvoxel.gdextension"
+const WORLD_TRANSVOXEL_TERRAIN_CLASS := &"WorldTransvoxelTerrain"
 
 
 func get_status() -> Dictionary:
-	var installed := FileAccess.file_exists(WORLD_TRANSVOXEL_PLUGIN_CFG)
+	var descriptor_exists := FileAccess.file_exists(WORLD_TRANSVOXEL_EXTENSION_DESCRIPTOR)
+	var class_exists := ClassDB.class_exists(WORLD_TRANSVOXEL_TERRAIN_CLASS)
+	var installed := descriptor_exists and class_exists
 	var version := ""
-	var name := ""
-	var load_error := OK
-
-	if installed:
-		var config := ConfigFile.new()
-		load_error = config.load(WORLD_TRANSVOXEL_PLUGIN_CFG)
-		if load_error == OK:
-			name = str(config.get_value("plugin", "name", ""))
-			version = str(config.get_value("plugin", "version", ""))
+	if class_exists:
+		var terrain = ClassDB.instantiate(WORLD_TRANSVOXEL_TERRAIN_CLASS)
+		if terrain != null:
+			if terrain.has_method("get_addon_version"):
+				version = str(terrain.call("get_addon_version"))
+			terrain.free()
 
 	return {
 		"dependency": "world-transvoxel",
 		"installed": installed,
-		"plugin_cfg": WORLD_TRANSVOXEL_PLUGIN_CFG,
-		"name": name,
+		"extension_descriptor": WORLD_TRANSVOXEL_EXTENSION_DESCRIPTOR,
+		"descriptor_exists": descriptor_exists,
+		"terrain_class": WORLD_TRANSVOXEL_TERRAIN_CLASS,
+		"terrain_class_exists": class_exists,
+		"name": "World Transvoxel",
 		"version": version,
-		"load_error": load_error,
-		"message": _message(installed, load_error, version),
+		"message": _message(descriptor_exists, class_exists, version),
 	}
 
 
-func _message(installed: bool, load_error: int, version: String) -> String:
-	if not installed:
-		return "world-transvoxel addon is not installed in this project"
-	if load_error != OK:
-		return "world-transvoxel plugin.cfg exists but could not be parsed"
+func _message(descriptor_exists: bool, class_exists: bool, version: String) -> String:
+	if not descriptor_exists:
+		return "world-transvoxel runtime artifact is not installed in this project"
+	if not class_exists:
+		return "world-transvoxel descriptor exists but its terrain class is unavailable"
 	if version.is_empty():
-		return "world-transvoxel addon is installed with unknown version"
-	return "world-transvoxel addon is installed: %s" % version
+		return "world-transvoxel runtime is installed with unknown version"
+	return "world-transvoxel runtime is installed: %s" % version

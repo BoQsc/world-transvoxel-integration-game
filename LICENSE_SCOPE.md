@@ -6,8 +6,11 @@ documentation in this repository are licensed under the Zero-Clause BSD license
 
 The repository also contains material under separate terms:
 
-- `addons/world_transvoxel/thirdparty/transvoxel_mit/` is MIT-licensed and
-  retains Eric Lengyel's copyright and permission notice in its `LICENSE` file.
+- The binary-only `addons/world_transvoxel/` runtime artifact incorporates the
+  MIT-licensed Transvoxel implementation. Its copyright, permission, and
+  provenance notices are retained under
+  `addons/world_transvoxel/thirdparty/transvoxel_mit/`; native source remains in
+  the standalone `world-transvoxel` authority repository.
 - `addons/world_transvoxel/LICENSE_SCOPE.md` and
   `addons/world_transvoxel_terrain/LICENSE_SCOPE.md` define the license
   boundaries of those bundled addons.

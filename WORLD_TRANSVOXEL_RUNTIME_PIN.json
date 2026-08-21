@@ -1,0 +1,41 @@
+{
+  "schema": "world_transvoxel.integration.runtime_pin.v1",
+  "status": "ACTIVE",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "86a4251d54f3da639481ad78b163934efb3a3f28",
+    "addon_tree": "ac9de58053214d88092a511c54a1686857e7cbbd",
+    "native_source_tree": "9e2ad2c41382a885ab62a97b9d553a7be88fa331",
+    "fallback": false
+  },
+  "runtime_artifact": {
+    "layout": "binary_consumer_v1",
+    "native_source_included": false,
+    "binary_build_commit": "11b1c453abdb0f8b0d41cf1ca937fb8ce1419ad1",
+    "digest_sha256": "d994f1e641ae45ac30ebb620e2d12145d32282293847596fd96882e9bd8fa0b4",
+    "files": [
+      "LICENSE_SCOPE.md",
+      "OPERATING_LIMITS.md",
+      "PUBLIC_API.md",
+      "README.md",
+      "thirdparty/transvoxel_mit/LICENSE",
+      "thirdparty/transvoxel_mit/UPSTREAM.md",
+      "world_transvoxel.gdextension",
+      "world_transvoxel.gdextension.uid",
+      "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+      "bin/world_transvoxel.windows.template_release.x86_64.dll"
+    ],
+    "binaries": [
+      {
+        "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bytes": 2408448,
+        "sha256": "a578470d4985c49d2dda2fff7db49af0825fb217522f79d2ca77b7addb0d93e4"
+      },
+      {
+        "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+        "bytes": 2292736,
+        "sha256": "eaacd151fcbdd6f2526fe9786c34ef26510711a88025dbb9cddee365fe9369d8"
+      }
+    ]
+  }
+}

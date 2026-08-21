@@ -73,7 +73,7 @@ def prepare_fixture() -> None:
                 'config/features=PackedStringArray("4.7", "Forward Plus")',
                 "",
                 "[editor_plugins]",
-                'enabled=PackedStringArray("res://addons/world_transvoxel/plugin.cfg", "res://addons/world_transvoxel_terrain/plugin.cfg", "res://addons/world_transvoxel_gameworld/plugin.cfg")',
+                'enabled=PackedStringArray("res://addons/world_transvoxel_terrain/plugin.cfg", "res://addons/world_transvoxel_gameworld/plugin.cfg")',
                 "",
             ]
         ),

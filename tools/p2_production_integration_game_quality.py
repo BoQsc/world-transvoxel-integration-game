@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 import godot_import_assets
+import validate_world_transvoxel_runtime_artifact
 
 
 DEFAULT_PROFILES = ("g19_compact_2k_on_demand", "flat_baseline")
@@ -82,20 +83,13 @@ DEFAULT_CAPTURE_ROOT_NAME = "world_transvoxel_captures"
 MATERIAL_SHADER_RELATIVE_PATH = pathlib.Path(
     "addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader"
 )
-RENDER_SINK_RELATIVE_PATH = pathlib.Path(
-    "addons/world_transvoxel/src/render/wt_godot_render_sink.cpp"
-)
-
-
 def repo_root() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parents[1]
 
 
 def verify_material_boundary_shader_contract(project: pathlib.Path) -> None:
     shader_path = project / MATERIAL_SHADER_RELATIVE_PATH
-    render_sink_path = project / RENDER_SINK_RELATIVE_PATH
     shader_source = shader_path.read_text(encoding="utf-8")
-    render_sink_source = render_sink_path.read_text(encoding="utf-8")
     required_shader_fragments = (
         "generated_material_weights_low = CUSTOM0;",
         "generated_material_weights_high = CUSTOM1;",
@@ -136,29 +130,13 @@ def verify_material_boundary_shader_contract(project: pathlib.Path) -> None:
             "material boundary shader still contains triangle-categorical "
             f"selection: present={present_forbidden!r} path={shader_path}"
         )
-    required_sink_fragments = (
-        "material_weight_slot(std::uint16_t material)",
-        "godot::PackedByteArray generated_material_weights_low;",
-        "godot::PackedByteArray authored_material_weights_high;",
-        "arrays[godot::Mesh::ARRAY_CUSTOM0] = generated_material_weights_low;",
-        "arrays[godot::Mesh::ARRAY_CUSTOM1] = generated_material_weights_high;",
-        "arrays[godot::Mesh::ARRAY_CUSTOM2] = authored_material_weights_low;",
-        "arrays[godot::Mesh::ARRAY_CUSTOM3] = authored_material_weights_high;",
-    )
-    missing_sink = [
-        fragment
-        for fragment in required_sink_fragments
-        if fragment not in render_sink_source
-    ]
-    if missing_sink:
-        raise RuntimeError(
-            "render sink explicit material-weight payload is incomplete: "
-            f"missing={missing_sink!r} path={render_sink_path}"
-        )
+    runtime_pin = validate_world_transvoxel_runtime_artifact.validate(project)
     print(
         "WT_MATERIAL_BOUNDARY_SHADER_CONTRACT_PASS "
         "model=generated_authored_eight_weight_layers_v1 "
-        "flat_triangle_selection=0 exterior_surface=1 ore=1 road=1 authored=1"
+        "flat_triangle_selection=0 exterior_surface=1 ore=1 road=1 authored=1 "
+        f"runtime_artifact={runtime_pin['runtime_artifact']['digest_sha256']} "
+        "downstream_native_source_inspection=0"
     )
 
 

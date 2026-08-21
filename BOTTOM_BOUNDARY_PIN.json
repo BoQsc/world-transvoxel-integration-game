@@ -1,6 +1,7 @@
 {
   "schema": "world_transvoxel.integration.bottom_boundary_pin.v1",
   "status": "CANDIDATE_HUMAN_VALIDATION_PENDING",
+  "runtime_pin": "WORLD_TRANSVOXEL_RUNTIME_PIN.json",
   "base_authority_pin": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
   "authority": {
     "repository": "world-transvoxel",
@@ -24,9 +25,10 @@
   },
   "terrain_contract": {
     "repository": "world-transvoxel-terrain",
-    "commit": "2b23213a972119046b65be680b9a367b2568c33f",
-    "addon_tree": "58822ceb0af443a6c4a7c1c4885042e15117cfd1",
+    "commit": "3e4e47ebfd6b4f0fb692bc8791297293de98cff3",
+    "addon_tree": "f4d452cfec41d74f215e29cf388fb69c944a2f36",
     "integrated_paths": [
+      "api/wt_terrain_dependency_status.gd",
       "generation/wt_terrain_generation_profile.gd",
       "material/wt_terrain_material_profile.gd",
       "runtime/wt_terrain_generation_backend.gd"
