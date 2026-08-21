@@ -238,20 +238,24 @@ func _physics_process_fly(delta: float) -> void:
 	if Input.is_key_pressed(KEY_SHIFT):
 		speed *= fly_fast_multiplier
 	velocity = direction * speed
-	_move_with_streaming_collision(delta)
+	_move_with_streaming_collision(delta, true)
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 	_capture_cpu_causal_trace_frame()
 
 
-func _move_with_streaming_collision(delta: float) -> bool:
+func _move_with_streaming_collision(
+	delta: float,
+	allow_outside_vertical_volume: bool = false
+) -> bool:
 	var requested_velocity := velocity
 	var position_before := global_position
 	if game_world != null and \
 			game_world.has_method("is_player_collision_ready_at") and \
 			not bool(game_world.call(
 				"is_player_collision_ready_at",
-				global_position + velocity * delta
+				global_position + velocity * delta,
+				allow_outside_vertical_volume
 			)):
 		velocity = Vector3.ZERO
 		_note_cpu_causal_trace_movement(

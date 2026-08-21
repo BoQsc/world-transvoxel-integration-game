@@ -1043,8 +1043,13 @@ func _player_collision_prediction_distance() -> float:
 	)
 
 
-func is_player_collision_ready_at(position: Vector3) -> bool:
+func is_player_collision_ready_at(
+	position: Vector3,
+	allow_outside_vertical_volume: bool = false
+) -> bool:
 	if not player_collision_invoker_enabled:
+		return true
+	if allow_outside_vertical_volume and _is_outside_vertical_volume(position):
 		return true
 	if _player != null:
 		var player_position: Vector3 = _player.global_position
@@ -1065,6 +1070,21 @@ func is_player_collision_ready_at(position: Vector3) -> bool:
 	return state != null and \
 		bool(state.call("is_collision_required")) and \
 		bool(state.call("is_collision_ready"))
+
+
+func _is_outside_vertical_volume(position: Vector3) -> bool:
+	if _generation_profile == null:
+		return false
+	var chunk_count_y := int(_generation_profile.get("world_chunk_count_y"))
+	if chunk_count_y <= 0:
+		return false
+	var minimum_y := float(
+		int(_generation_profile.get("world_chunk_origin_y"))
+	) * COLLISION_INVOKER_CHUNK_EXTENT
+	var maximum_y := minimum_y + (
+		float(chunk_count_y) * COLLISION_INVOKER_CHUNK_EXTENT
+	)
+	return position.y < minimum_y or position.y >= maximum_y
 
 
 func _collision_invoker_chunk(position: Vector3) -> Vector3i:

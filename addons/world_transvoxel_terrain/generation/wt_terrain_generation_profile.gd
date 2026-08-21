@@ -8,6 +8,12 @@ enum SourceMode {
 	BAKED_WORLD,
 }
 
+enum BottomBoundaryPolicy {
+	OPEN,
+	SEALED,
+	BEDROCK,
+}
+
 const UNDERGROUND_MODEL := "density_volume_vertical_strata_v1"
 const MATERIAL_STRATA_MODEL := "standard_density_depth_material_strata_v1"
 const MATERIAL_PALETTE_VERSION := "world_transvoxel_material_palette_v1"
@@ -21,7 +27,7 @@ const STANDARD_MATERIAL_MEANINGS := {
 	3: "gravel_surface_biome",
 	4: "shallow_surface_sand_or_player_fill",
 	5: "snow_surface_biome",
-	7: "reserved_mid_depth_rock",
+	7: "non_carvable_bedrock_boundary",
 	8: "deep_ore_patch",
 	10: "shallow_asphalt_road",
 }
@@ -37,6 +43,8 @@ const STANDARD_MATERIAL_MEANINGS := {
 @export_range(-4096, 4096, 1) var world_chunk_origin_y: int = 0
 @export_range(1, 4096, 1) var world_chunk_count_z: int = 128
 @export var source_revision: int = 190001
+@export var bottom_boundary_policy: BottomBoundaryPolicy = BottomBoundaryPolicy.OPEN
+@export_range(0, 65535, 1) var bottom_boundary_thickness_cells: int = 0
 
 
 func get_contract_summary() -> Dictionary:
@@ -63,4 +71,8 @@ func get_contract_summary() -> Dictionary:
 		"vertical_cells": world_chunk_count_y * 16,
 		"world_chunk_count_z": world_chunk_count_z,
 		"source_revision": source_revision,
+		"bottom_boundary_policy": BottomBoundaryPolicy.keys()[bottom_boundary_policy],
+		"bottom_boundary_thickness_cells": bottom_boundary_thickness_cells,
+		"bottom_boundary_top_cell": world_chunk_origin_y * 16 + bottom_boundary_thickness_cells,
+		"bottom_boundary_non_carvable": bottom_boundary_policy != BottomBoundaryPolicy.OPEN,
 	}

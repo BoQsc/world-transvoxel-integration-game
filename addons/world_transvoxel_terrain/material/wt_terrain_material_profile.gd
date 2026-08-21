@@ -18,7 +18,7 @@ const DEFAULT_STANDARD_TEXTURE_RESOLUTION := 512
 @export_range(16, 512, 1) var standard_texture_resolution: int = DEFAULT_STANDARD_TEXTURE_RESOLUTION
 @export var production_texture_slots: Array[StringName] = [&"albedo", &"normal", &"roughness_orm"]
 @export var sample_material_names: Array[StringName] = [
-	&"deep_stone", &"grass", &"gravel", &"sand", &"snow", &"reserved_rock", &"ore", &"asphalt"
+	&"deep_stone", &"grass", &"gravel", &"sand", &"snow", &"bedrock", &"ore", &"asphalt"
 ]
 @export var mapping_policy: StringName = &"world_space_triplanar_ready"
 @export var blending_policy: StringName = &"native_generated_and_authored_eight_weight_layers"

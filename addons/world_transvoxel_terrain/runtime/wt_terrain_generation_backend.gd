@@ -28,6 +28,23 @@ static func start_backend_world(
 	var chunk_count_y := int(generation_profile.get("world_chunk_count_y"))
 	var chunk_origin_y := int(generation_profile.get("world_chunk_origin_y"))
 	var chunk_count_z := int(generation_profile.get("world_chunk_count_z"))
+	var bottom_boundary_policy := _profile_int(
+		generation_profile, "bottom_boundary_policy", 0
+	)
+	var bottom_boundary_thickness_cells := _profile_int(
+		generation_profile, "bottom_boundary_thickness_cells", 0
+	)
+	var boundary_error := _bottom_boundary_configuration_error(
+		source_mode,
+		chunk_count_y,
+		bottom_boundary_policy,
+		bottom_boundary_thickness_cells
+	)
+	if not boundary_error.is_empty():
+		return {
+			"started": false,
+			"error": boundary_error,
+		}
 	if source_mode == "FLAT":
 		if backend_terrain.has_method("start_flat_world_with_vertical_origin"):
 			return {
@@ -59,6 +76,30 @@ static func start_backend_world(
 		}
 	if source_mode == "DETERMINISTIC_REFERENCE":
 		var procedural_preset_id := _procedural_preset_id(generation_profile)
+		if backend_terrain.has_method(
+			"start_procedural_world_preset_with_vertical_origin_and_bottom_boundary"
+		):
+			return {
+				"started": bool(backend_terrain.call(
+					"start_procedural_world_preset_with_vertical_origin_and_bottom_boundary",
+					chunk_count_x,
+					chunk_count_y,
+					chunk_origin_y,
+					chunk_count_z,
+					int(generation_profile.get("seed")),
+					int(generation_profile.get("source_revision")),
+					procedural_preset_id,
+					bottom_boundary_policy,
+					bottom_boundary_thickness_cells,
+					object_root
+				)),
+				"error": "",
+			}
+		if bottom_boundary_policy != 0:
+			return {
+				"started": false,
+				"error": "backend terrain lacks authoritative bottom-boundary support",
+			}
 		if backend_terrain.has_method("start_procedural_world_preset_with_vertical_origin"):
 			return {
 				"started": bool(backend_terrain.call(
@@ -138,6 +179,29 @@ static func _procedural_preset_id(generation_profile: Resource) -> String:
 		return "mountain_reference"
 	var preset_id := str(generation_profile.get("procedural_preset_id"))
 	return preset_id if not preset_id.is_empty() else "mountain_reference"
+
+
+static func _bottom_boundary_configuration_error(
+	source_mode: String,
+	chunk_count_y: int,
+	policy: int,
+	thickness_cells: int
+) -> String:
+	if policy < 0 or policy > 2:
+		return "bottom boundary policy is invalid"
+	if policy == 0:
+		return "" if thickness_cells == 0 else "open bottom boundary must have zero thickness"
+	if source_mode != "DETERMINISTIC_REFERENCE":
+		return "bottom boundary policy requires deterministic native generation"
+	if thickness_cells <= 0 or thickness_cells > chunk_count_y * 16:
+		return "bottom boundary thickness is outside the vertical world volume"
+	return ""
+
+
+static func _profile_int(resource: Resource, property_name: String, fallback: int) -> int:
+	if resource == null or not _resource_has_property(resource, property_name):
+		return fallback
+	return int(resource.get(property_name))
 
 
 static func _resource_has_property(resource: Resource, property_name: String) -> bool:

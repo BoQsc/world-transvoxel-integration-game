@@ -44,6 +44,7 @@ var telemetry_label: Label
 var launch_command_label: Label
 var test_context_label: Label
 var controls_hint_label: Label
+var human_position_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
 var loading_overlay: CanvasLayer
@@ -86,6 +87,8 @@ var expected_resources := 25
 var expected_max_resources := 81
 var expected_maximum_lod := 1
 var edit_point := Vector3.ZERO
+var human_vertical_minimum_y := 0.0
+var human_vertical_maximum_y := 0.0
 var world_environment: WorldEnvironment
 var environment_resource: Environment
 var sun_light: DirectionalLight3D
@@ -269,6 +272,13 @@ func _human_play_is_active() -> bool:
 
 func _start_profile() -> void:
 	var settings := _profile_settings(selected_profile)
+	var generation_profile := _generation_profile(selected_profile)
+	human_vertical_minimum_y = float(
+		int(generation_profile.get("world_chunk_origin_y")) * 16
+	)
+	human_vertical_maximum_y = human_vertical_minimum_y + float(
+		int(generation_profile.get("world_chunk_count_y")) * 16
+	)
 	if runtime_render_apply_budget_override >= 0:
 		settings["runtime_render_apply_budget"] = runtime_render_apply_budget_override
 	if runtime_collision_apply_budget_override >= 0:
@@ -345,7 +355,7 @@ func _start_profile() -> void:
 	player.human_command_target = self
 	game_world.configure_game_world(
 		selected_profile,
-		_generation_profile(selected_profile),
+		generation_profile,
 		_storage_profile(selected_profile),
 		settings["viewers"],
 		int(settings["radius"]),
@@ -648,6 +658,7 @@ func _build_hud() -> void:
 	if not autonomous:
 		_build_human_test_context_label(canvas)
 		_build_human_controls_hint_label(canvas)
+		_build_human_position_label(canvas)
 		_build_human_launch_command_label(canvas)
 	_build_loading_overlay()
 	if not autonomous:
@@ -715,6 +726,25 @@ func _build_human_controls_hint_label(canvas: CanvasLayer) -> void:
 	controls_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_style_human_static_label(controls_hint_label)
 	canvas.add_child(controls_hint_label)
+
+
+func _build_human_position_label(canvas: CanvasLayer) -> void:
+	human_position_label = Label.new()
+	human_position_label.name = "HumanPositionLabel"
+	human_position_label.text = "PLAYER Y -- | CHUNK Y -- | VOLUME --"
+	human_position_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	human_position_label.offset_left = -310.0
+	human_position_label.offset_top = 38.0
+	human_position_label.offset_right = 310.0
+	human_position_label.offset_bottom = 66.0
+	human_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	human_position_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	human_position_label.add_theme_font_size_override("font_size", 16)
+	human_position_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.92))
+	human_position_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	human_position_label.add_theme_constant_override("shadow_offset_x", 2)
+	human_position_label.add_theme_constant_override("shadow_offset_y", 2)
+	canvas.add_child(human_position_label)
 
 
 func _style_human_static_label(label: Label) -> void:
@@ -959,12 +989,14 @@ func _generation_profile(profile_id: StringName) -> Resource:
 	elif profile_id == FOUR_BIOME_WORLD_PROFILE:
 		generation.seed = 19023
 		generation.procedural_preset_id = &"four_biomes_lakes_caves_roads"
-		generation.source_revision = 190325
+		generation.source_revision = 190326
 		generation.world_chunk_count_x = 128
 		generation.world_chunk_count_y = 16
 		generation.world_chunk_origin_y = -8
 		generation.world_chunk_count_z = 128
 		generation.source_mode = GenerationProfile.SourceMode.DETERMINISTIC_REFERENCE
+		generation.bottom_boundary_policy = GenerationProfile.BottomBoundaryPolicy.BEDROCK
+		generation.bottom_boundary_thickness_cells = 16
 	return generation
 
 
@@ -4228,6 +4260,27 @@ func _update_human_dynamic_labels() -> void:
 	if test_context_label.text != next_line:
 		human_test_context_line = next_line
 		test_context_label.text = human_test_context_line
+	_update_human_position_label()
+
+
+func _update_human_position_label() -> void:
+	if human_position_label == null or player == null:
+		return
+	var position_y := player.global_position.y
+	var inside_volume := position_y >= human_vertical_minimum_y and \
+		position_y < human_vertical_maximum_y
+	human_position_label.text = \
+		"PLAYER Y %.1f | CHUNK Y %d | VOLUME %.0f..%.0f | %s" % [
+			position_y,
+			floori(position_y / 16.0),
+			human_vertical_minimum_y,
+			human_vertical_maximum_y,
+			"INSIDE" if inside_volume else "OUTSIDE",
+		]
+	human_position_label.add_theme_color_override(
+		"font_color",
+		Color(1.0, 1.0, 1.0, 0.92) if inside_volume else Color(1.0, 0.72, 0.25, 1.0)
+	)
 
 
 func _quote_command_arg(value: String) -> String:

@@ -1,0 +1,46 @@
+{
+  "schema": "world_transvoxel.integration.bottom_boundary_pin.v1",
+  "status": "CANDIDATE_HUMAN_VALIDATION_PENDING",
+  "base_authority_pin": "a8bba838a8860ba30bdb79887ad66ba17028ad18",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "11b1c453abdb0f8b0d41cf1ca937fb8ce1419ad1",
+    "addon_tree": "d17d2dd30744f42e44431e566125436e8de27d0e",
+    "package_digest_sha256": "a307b4d7264a791bb77ccc137fe5daa24b41f1f708ae1a568d64a7795bf69186",
+    "files": 180,
+    "fallback": false,
+    "generated_runtime": [
+      {
+        "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bytes": 2408448,
+        "sha256": "a578470d4985c49d2dda2fff7db49af0825fb217522f79d2ca77b7addb0d93e4"
+      },
+      {
+        "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+        "bytes": 2292736,
+        "sha256": "eaacd151fcbdd6f2526fe9786c34ef26510711a88025dbb9cddee365fe9369d8"
+      }
+    ]
+  },
+  "terrain_contract": {
+    "repository": "world-transvoxel-terrain",
+    "commit": "2b23213a972119046b65be680b9a367b2568c33f",
+    "addon_tree": "58822ceb0af443a6c4a7c1c4885042e15117cfd1",
+    "integrated_paths": [
+      "generation/wt_terrain_generation_profile.gd",
+      "material/wt_terrain_material_profile.gd",
+      "runtime/wt_terrain_generation_backend.gd"
+    ]
+  },
+  "production_profile": {
+    "id": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "source_revision": 190326,
+    "dimensions_cells": [2048, 256, 2048],
+    "vertical_range_cells": [-128, 128],
+    "bottom_boundary_policy": "BEDROCK",
+    "bottom_boundary_thickness_cells": 16,
+    "bottom_boundary_top_cell": -112,
+    "material_id": 7,
+    "non_carvable": true
+  }
+}

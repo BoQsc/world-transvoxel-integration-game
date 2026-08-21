@@ -3,6 +3,9 @@ extends SceneTree
 const GameWorldNode := preload(
 	"res://addons/world_transvoxel_gameworld/wt_game_world_node.gd"
 )
+const GenerationProfile := preload(
+	"res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd"
+)
 
 
 class FakeTerrainWorld:
@@ -74,9 +77,14 @@ func _initialize() -> void:
 
 func _run_test() -> void:
 	var game_world := GameWorldNode.new()
+	var generation_profile = GenerationProfile.new()
+	generation_profile.world_chunk_count_x = 128
+	generation_profile.world_chunk_count_y = 16
+	generation_profile.world_chunk_origin_y = -8
+	generation_profile.world_chunk_count_z = 128
 	game_world.configure_game_world(
 		&"viewer_freshness_test",
-		null,
+		generation_profile,
 		null,
 		[],
 		2,
@@ -195,6 +203,15 @@ func _run_test() -> void:
 	var accepted_updates := int(game_world.get("_accepted_player_viewer_updates"))
 	if accepted_updates != 2:
 		_fail("accepted player viewer count mismatch: %d" % accepted_updates)
+		return
+	if not game_world.is_player_collision_ready_at(Vector3(0.0, 128.0, 0.0), true):
+		_fail("inspection flight was blocked above the finite vertical volume")
+		return
+	if game_world.is_player_collision_ready_at(Vector3(0.0, 128.0, 0.0), false):
+		_fail("walking bypassed collision readiness above the finite vertical volume")
+		return
+	if game_world.is_player_collision_ready_at(Vector3.ZERO, true):
+		_fail("inspection flight bypassed collision readiness inside the vertical volume")
 		return
 	print("WT_GAMEWORLD_VIEWER_FRESHNESS_PASS updates=2 collision_updates=%d debt=1" % \
 		reference_scene.collision_viewer_updates.size())

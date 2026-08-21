@@ -576,7 +576,7 @@ func _production_texture_array(resolution: int, slot: StringName) -> Texture2DAr
 		Color(0.36, 0.35, 0.33, 1.0), # 3 gravel
 		Color(0.56, 0.49, 0.35, 1.0), # 4 sand / player fill
 		Color(0.68, 0.70, 0.66, 1.0), # 5 snow
-		Color(0.31, 0.32, 0.31, 1.0), # 7 mid rock
+		Color(0.16, 0.19, 0.22, 1.0), # 7 bedrock
 		Color(0.48, 0.29, 0.13, 1.0), # 8 ore patch
 		Color(0.09, 0.10, 0.11, 1.0), # 10 asphalt
 	]
@@ -651,7 +651,7 @@ func _authored_albedo_candidates(tile: int) -> Array[String]:
 		4:
 			names = ["snow_albedo", "snow_diff"]
 		5:
-			names = ["mid_rock_albedo", "rock_albedo", "rock_diff"]
+			names = ["bedrock_albedo"]
 		6:
 			names = ["ore_patch_albedo", "ore_albedo", "ore_diff"]
 		_:
@@ -676,7 +676,7 @@ func _material_layer_name(tile: int) -> String:
 		4:
 			return "snow"
 		5:
-			return "mid_rock"
+			return "bedrock"
 		6:
 			return "ore_patch"
 		_:
@@ -693,6 +693,10 @@ func _production_albedo_texel(base: Color, tile: int, x: int, y: int) -> Color:
 		scale *= 0.88 + 0.20 * coarse
 	elif tile == 4:
 		scale *= 0.96 + 0.05 * fine
+	elif tile == 5:
+		scale *= 0.82 + 0.12 * coarse
+		if accent > 0.86:
+			base = Color(0.34, 0.38, 0.42, 1.0)
 	elif tile == 6:
 		scale *= 0.78 + 0.22 * fine
 		if accent > 0.74:
