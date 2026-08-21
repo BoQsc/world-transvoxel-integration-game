@@ -18,6 +18,8 @@ const BACKEND_EDIT_METHODS := [
 	"paint_material_box",
 	"place_material_volume_sphere",
 	"place_material_volume_box",
+	"place_static_water_sphere",
+	"place_static_water_box",
 ]
 
 var _last_error: String = "ok"
@@ -128,7 +130,7 @@ func _apply_operation(transaction: Object, operation: Resource) -> int:
 			return density_count + paint_count if paint_count > 0 else 0
 		&"paint":
 			return _apply_paint(transaction, shape, operation)
-		&"place_volume":
+		&"place_volume", &"place_static_water":
 			return _apply_volume_material(transaction, shape, operation)
 		&"restore_to_base":
 			var restore_count := _apply_density(

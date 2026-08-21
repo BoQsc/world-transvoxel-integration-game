@@ -1,6 +1,6 @@
 extends CharacterBody3D
 
-const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8, 10]
+const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8, 10, 9]
 const PLACE_MATERIAL_NAMES := [
 	"deep_stone",
 	"grass",
@@ -10,6 +10,7 @@ const PLACE_MATERIAL_NAMES := [
 	"mid_rock",
 	"ore_patch",
 	"asphalt",
+	"static_water",
 ]
 
 @export var human_input_enabled: bool = true
@@ -92,6 +93,7 @@ func get_selected_material_summary() -> Dictionary:
 		"slot_count": PLACE_MATERIAL_IDS.size(),
 		"material_id": _selected_place_material_id(),
 		"material_name": _selected_place_material_name(),
+		"place_mode": str(_selected_place_mode()),
 	}
 
 
@@ -345,9 +347,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_submit_interaction(&"carve")
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			_submit_interaction(&"construct")
+			_submit_interaction(_selected_place_mode())
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
-			_submit_interaction(&"paint")
+			if _selected_place_material_id() == 9:
+				_record_interaction(
+					&"paint", false, false,
+					"static_water_cannot_paint_terrain", edit_point
+				)
+			else:
+				_submit_interaction(&"paint")
 
 
 func _interaction_point() -> Vector3:
@@ -709,6 +717,10 @@ func _selected_place_material_name() -> String:
 	return str(PLACE_MATERIAL_NAMES[clampi(selected_place_material_index, 0, PLACE_MATERIAL_NAMES.size() - 1)])
 
 
+func _selected_place_mode() -> StringName:
+	return &"place_static_water" if _selected_place_material_id() == 9 else &"construct"
+
+
 func _set_selected_place_material_index(slot_index: int) -> void:
 	selected_place_material_index = clampi(slot_index, 0, PLACE_MATERIAL_IDS.size() - 1)
 	print("human_place_material=%d:%s" % [_selected_place_material_id(), _selected_place_material_name()])
@@ -735,6 +747,8 @@ func _material_slot_from_key(event: InputEventKey) -> int:
 			return 6
 		KEY_8, KEY_KP_8:
 			return 7
+		KEY_9, KEY_KP_9:
+			return 8
 		_:
 			return -1
 

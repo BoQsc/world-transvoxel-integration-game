@@ -176,7 +176,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig | RMB place selected | MMB paint selected | 1-8 select material | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
+	human_controls_hint_line = "controls: LMB dig | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -1772,6 +1772,14 @@ func _verify_player_material_selection_contract(terrain_world: Node) -> bool:
 	var asphalt_selected: Dictionary = player.call("get_selected_material_summary")
 	if int(asphalt_selected.get("material_id", -1)) != ASPHALT_MATERIAL_ID:
 		_fail("player material selection did not switch to asphalt: %s" % JSON.stringify(asphalt_selected))
+		return false
+	if not bool(player.call("set_selected_material_id", STATIC_WATER_MATERIAL_ID)):
+		_fail("player rejected static water selection")
+		return false
+	var water_selected: Dictionary = player.call("get_selected_material_summary")
+	if int(water_selected.get("material_id", -1)) != STATIC_WATER_MATERIAL_ID or \
+			str(water_selected.get("place_mode", "")) != "place_static_water":
+		_fail("player static water selection did not choose water placement: %s" % JSON.stringify(water_selected))
 		return false
 	if not bool(player.call("set_selected_material_id", 4)):
 		_fail("player rejected restoring default sand material selection")
@@ -4335,7 +4343,7 @@ func _apply_human_static_water_basin() -> bool:
 	carve.strength = 1.0
 	carve.density_value = 1.0
 	var water = EditOperation.new()
-	water.mode = EditOperation.Mode.PLACE_VOLUME
+	water.mode = EditOperation.Mode.PLACE_STATIC_WATER
 	water.brush_shape = EditOperation.BrushShape.BOX
 	# The fill level belongs to the basin, independently of cavity placement.
 	water.center = basin_center + Vector3(0.0, 2.0, 0.0)
@@ -4352,6 +4360,23 @@ func _apply_human_static_water_basin() -> bool:
 		return false
 	if not await game_world.wait_for_world_revision(before_revision + 1):
 		_fail("static water basin edit did not commit")
+		return false
+	var basin_summary: Dictionary = terrain_world.call("get_last_edit_submission_summary")
+	var basin_operations: Array = basin_summary.get("operation_summaries", [])
+	if basin_operations.size() != 3 or \
+			str(Dictionary(basin_operations[2]).get("operation", "")) != "place_static_water":
+		_fail("static water basin did not use the authoritative water operation: %s" % str(basin_summary))
+		return false
+	var water_point := Vector3i(
+		roundi(water.center.x), roundi(water.center.y), roundi(water.center.z)
+	)
+	var water_sample := await _query_authoritative_sample_summary(
+		terrain_world, water_point, "static water basin center"
+	)
+	if not bool(water_sample.get("ok", false)) or \
+			float(water_sample.get("density", 0.0)) <= 0.0 or \
+			int(water_sample.get("material", -1)) != STATIC_WATER_MATERIAL_ID:
+		_fail("static water basin center is not exposed water: %s" % JSON.stringify(water_sample))
 		return false
 	player.call("set_fly_mode_enabled", true)
 	await _set_capture_camera_pose(
@@ -9216,6 +9241,8 @@ func _edit_mode(mode_name: StringName) -> int:
 			return EditOperation.Mode.FILL
 		&"paint":
 			return EditOperation.Mode.PAINT
+		&"place_static_water":
+			return EditOperation.Mode.PLACE_STATIC_WATER
 		&"restore_to_base":
 			return EditOperation.Mode.RESTORE_TO_BASE
 		_:
