@@ -1168,6 +1168,8 @@ func _operation_mode(mode_name: StringName) -> int:
 			return EditOperation.Mode.PAINT
 		&"place_static_water":
 			return EditOperation.Mode.PLACE_STATIC_WATER
+		&"remove_static_water":
+			return EditOperation.Mode.REMOVE_STATIC_WATER
 		&"restore_to_base":
 			return EditOperation.Mode.RESTORE_TO_BASE
 		_:

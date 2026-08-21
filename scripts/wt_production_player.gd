@@ -94,6 +94,7 @@ func get_selected_material_summary() -> Dictionary:
 		"material_id": _selected_place_material_id(),
 		"material_name": _selected_place_material_name(),
 		"place_mode": str(_selected_place_mode()),
+		"remove_mode": str(_selected_remove_mode()),
 	}
 
 
@@ -355,7 +356,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			_submit_interaction(&"carve")
+			_submit_interaction(_selected_remove_mode())
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			_submit_interaction(_selected_place_mode())
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
@@ -729,6 +730,10 @@ func _selected_place_material_name() -> String:
 
 func _selected_place_mode() -> StringName:
 	return &"place_static_water" if _selected_place_material_id() == 9 else &"construct"
+
+
+func _selected_remove_mode() -> StringName:
+	return &"remove_static_water" if _selected_place_material_id() == 9 else &"carve"
 
 
 func _set_selected_place_material_index(slot_index: int) -> void:

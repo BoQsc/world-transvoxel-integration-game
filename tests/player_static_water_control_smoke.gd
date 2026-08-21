@@ -45,7 +45,8 @@ func _initialize() -> void:
 	var selected := player.get_selected_material_summary()
 	if int(selected.get("slot", 0)) != 9 or \
 			str(selected.get("material_name", "")) != "static_water" or \
-			str(selected.get("place_mode", "")) != "place_static_water":
+			str(selected.get("place_mode", "")) != "place_static_water" or \
+			str(selected.get("remove_mode", "")) != "remove_static_water":
 		_fail("static-water selection summary is incorrect: %s" % str(selected))
 		return
 	if not player.submit_edit_input(
@@ -57,7 +58,16 @@ func _initialize() -> void:
 			game_world.submitted_material_id != 9:
 		_fail("player emitted the wrong water command")
 		return
-	print("%s slot=9 mode=place_static_water material=9" % MARKER)
+	if not player.submit_edit_input(
+		&"remove_static_water", Vector3(4.0, 8.0, 12.0), true
+	):
+		_fail("player static-water removal submission was rejected")
+		return
+	if game_world.submitted_mode != &"remove_static_water" or \
+			game_world.submitted_material_id != 9:
+		_fail("player emitted terrain carve instead of water removal")
+		return
+	print("%s slot=9 place=place_static_water remove=remove_static_water material=9" % MARKER)
 	quit(0)
 
 

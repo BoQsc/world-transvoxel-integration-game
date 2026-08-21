@@ -10,6 +10,7 @@ enum Mode {
 	RESTORE_TO_BASE,
 	PLACE_VOLUME,
 	PLACE_STATIC_WATER,
+	REMOVE_STATIC_WATER,
 }
 enum BrushShape { SPHERE, BOX, CAPSULE, PLANE }
 
@@ -42,6 +43,8 @@ func get_mode_name() -> StringName:
 			return &"place_volume"
 		Mode.PLACE_STATIC_WATER:
 			return &"place_static_water"
+		Mode.REMOVE_STATIC_WATER:
+			return &"remove_static_water"
 		_:
 			return &"unknown"
 
@@ -62,7 +65,8 @@ func get_brush_shape_name() -> StringName:
 
 func requires_material() -> bool:
 	return mode == Mode.CONSTRUCT or mode == Mode.FILL or mode == Mode.PAINT or \
-		mode == Mode.PLACE_VOLUME or mode == Mode.PLACE_STATIC_WATER
+		mode == Mode.PLACE_VOLUME or mode == Mode.PLACE_STATIC_WATER or \
+		mode == Mode.REMOVE_STATIC_WATER
 
 
 func is_restore_to_base() -> bool:
@@ -95,7 +99,8 @@ func get_validation_error() -> String:
 		return "non-restore edit operation density_value must not be zero"
 	if requires_material() and material_id <= 0:
 		return "construct, fill, and paint operations require a positive material_id"
-	if mode == Mode.PLACE_STATIC_WATER and material_id != 9:
+	if (mode == Mode.PLACE_STATIC_WATER or mode == Mode.REMOVE_STATIC_WATER) and \
+			material_id != 9:
 		return "static water operations require material_id 9"
 	if brush_shape == BrushShape.BOX or brush_shape == BrushShape.CAPSULE:
 		if box_extents.x <= 0.0 or box_extents.y <= 0.0 or box_extents.z <= 0.0:

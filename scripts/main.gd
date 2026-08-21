@@ -184,7 +184,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
+	human_controls_hint_line = "controls: LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -1786,7 +1786,8 @@ func _verify_player_material_selection_contract(terrain_world: Node) -> bool:
 		return false
 	var water_selected: Dictionary = player.call("get_selected_material_summary")
 	if int(water_selected.get("material_id", -1)) != STATIC_WATER_MATERIAL_ID or \
-			str(water_selected.get("place_mode", "")) != "place_static_water":
+			str(water_selected.get("place_mode", "")) != "place_static_water" or \
+			str(water_selected.get("remove_mode", "")) != "remove_static_water":
 		_fail("player static water selection did not choose water placement: %s" % JSON.stringify(water_selected))
 		return false
 	if not bool(player.call("set_selected_material_id", 4)):
@@ -9527,6 +9528,8 @@ func _edit_mode(mode_name: StringName) -> int:
 			return EditOperation.Mode.PAINT
 		&"place_static_water":
 			return EditOperation.Mode.PLACE_STATIC_WATER
+		&"remove_static_water":
+			return EditOperation.Mode.REMOVE_STATIC_WATER
 		&"restore_to_base":
 			return EditOperation.Mode.RESTORE_TO_BASE
 		_:
