@@ -201,9 +201,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_D):
 		direction.x += 1.0
 	direction = direction.normalized()
-	var world_direction := (global_transform.basis * direction)
-	world_direction.y = 0.0
-	world_direction = world_direction.normalized()
+	var world_direction := _walking_world_direction(direction)
 	velocity.x = world_direction.x * move_speed
 	velocity.z = world_direction.z * move_speed
 	if not is_on_floor():
@@ -214,6 +212,18 @@ func _physics_process(delta: float) -> void:
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 	_capture_cpu_causal_trace_frame()
+
+
+func _walking_world_direction(local_direction: Vector3) -> Vector3:
+	if local_direction.length_squared() <= 0.000001:
+		return Vector3.ZERO
+	var movement_basis := global_transform.basis
+	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera != null:
+		movement_basis = camera.global_transform.basis
+	var world_direction := movement_basis * local_direction
+	world_direction.y = 0.0
+	return world_direction.normalized()
 
 
 func _physics_process_fly(delta: float) -> void:
