@@ -10,6 +10,13 @@ DLL/runtime metadata and required notices described in
 `WORLD_TRANSVOXEL_RUNTIME_PIN.json` is the current dependency identity. Copied
 native source and fallback implementations are forbidden.
 
+The integration terrain package is currently an accepted compatibility
+snapshot for that pinned native runtime. It must not be refreshed automatically
+from the newer standalone `world-transvoxel-terrain` line, which targets a
+different `world-transvoxel` history. The exact boundary and the required
+reconciliation procedure are documented in
+[docs/TERRAIN_DEPENDENCY_BOUNDARY.md](docs/TERRAIN_DEPENDENCY_BOUNDARY.md).
+
 Current Terrain 1.0 release closure is controlled by
 [TERRAIN_1_0_CANDIDATE.md](TERRAIN_1_0_CANDIDATE.md). That file is the
 authoritative checklist: it defines required gates, accepted non-goals, current

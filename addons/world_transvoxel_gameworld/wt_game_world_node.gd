@@ -3,7 +3,7 @@ extends Node3D
 const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
 const COLLISION_INVOKER_CHUNK_EXTENT := 16.0
-const ReferenceScene := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.tscn")
+const RuntimeScene := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 
@@ -118,12 +118,12 @@ func set_cpu_causal_trace(trace: RefCounted) -> void:
 func setup_standard_world() -> Node:
 	if _reference_scene != null:
 		return _reference_scene
-	_reference_scene = ReferenceScene.instantiate()
+	_reference_scene = RuntimeScene.instantiate()
 	_reference_scene.name = "WtGameWorldTerrain"
 	add_child(_reference_scene)
-	if _reference_scene.has_method("set_debug_overlay_enabled"):
-		_reference_scene.call("set_debug_overlay_enabled", debug_overlay_enabled)
-	_reference_scene.ensure_reference_defaults()
+	if not bool(_reference_scene.call("ensure_runtime_defaults")):
+		_fail("production terrain runtime defaults are unavailable")
+		return null
 	_apply_profiles()
 	_connect_terrain_world_signals()
 	return _reference_scene
@@ -147,8 +147,9 @@ func attach_player(player: Node, start_position: Vector3) -> void:
 
 
 func start_world() -> bool:
-	setup_standard_world()
-	if not _reference_scene.start_reference_backend_world():
+	if setup_standard_world() == null:
+		return false
+	if not bool(_reference_scene.call("start_runtime_world")):
 		return _fail("backend start failed: %s" % _terrain_world_error())
 	if not await _wait_for_world_state("running"):
 		return _fail("terrain world did not reach running state: state=%s error=%s timeout_frames=%d" % [
@@ -172,6 +173,20 @@ func start_world() -> bool:
 	return true
 
 
+func stop_world() -> bool:
+	if _reference_scene == null:
+		return true
+	if not bool(_reference_scene.call("stop_runtime_world")):
+		return _fail("backend stop failed: %s" % _terrain_world_error())
+	if not await _wait_for_world_state("stopped"):
+		return _fail("terrain world did not reach stopped state: state=%s error=%s timeout_frames=%d" % [
+			_terrain_world_state(),
+			_terrain_world_error(),
+			startup_world_state_timeout_frames,
+		])
+	return true
+
+
 func update_player_viewer(force: bool = false) -> bool:
 	if not player_driven_viewer_enabled or _reference_scene == null or _player == null:
 		return false
@@ -191,7 +206,7 @@ func update_player_viewer(force: bool = false) -> bool:
 	# can commit an edit against collision-only demand before visual demand arrives.
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_reference_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
+		"update_runtime_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
 	_last_player_viewer_position = position
@@ -381,6 +396,11 @@ func wait_for_edit_commits(target_count: int) -> bool:
 
 
 func get_reference_scene() -> Node:
+	# Compatibility alias for older integration diagnostics.
+	return _reference_scene
+
+
+func get_runtime_scene() -> Node:
 	return _reference_scene
 
 
@@ -430,6 +450,7 @@ func get_game_world_summary() -> Dictionary:
 		"api_version": API_VERSION,
 		"profile_id": str(_profile_id),
 		"standard_world_node": true,
+		"terrain_scene": "production_runtime",
 		"terrain_node_ready": _reference_scene != null and terrain_world != null,
 		"player_attached": _player != null,
 		"player_human_input_enabled": _player != null and bool(_player.get("human_input_enabled")),
@@ -918,7 +939,7 @@ func _submit_initial_viewers() -> bool:
 	# player moves.
 	var viewer_id := 2 if player_driven_viewer_enabled else 1
 	for position in _viewer_positions:
-		if not bool(_reference_scene.call("update_reference_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, _viewer_maximum_lod)):
+		if not bool(_reference_scene.call("update_runtime_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, _viewer_maximum_lod)):
 			return _fail("initial viewer update failed: %s" % _terrain_world_error())
 		viewer_id += 1
 	return viewer_id > (2 if player_driven_viewer_enabled else 1)
@@ -962,7 +983,7 @@ func _update_predictive_player_viewer(
 		return true
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_reference_viewer", _player_predictive_viewer_id, _viewer_revision, predicted_position, _viewer_radius_chunks, _viewer_maximum_lod
+		"update_runtime_viewer", _player_predictive_viewer_id, _viewer_revision, predicted_position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("predictive player viewer update failed: %s" % _terrain_world_error())
 	_last_predictive_viewer_position = predicted_position
@@ -1013,7 +1034,7 @@ func _submit_player_collision_invoker(
 		return true
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_reference_collision_viewer",
+		"update_runtime_collision_viewer",
 		_player_collision_viewer_id,
 		_viewer_revision,
 		invoker_position,
@@ -1114,7 +1135,7 @@ func _update_focus_player_viewer(force: bool) -> bool:
 		return true
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_reference_viewer", _player_focus_viewer_id, _viewer_revision, focus_position, _viewer_radius_chunks, _viewer_maximum_lod
+		"update_runtime_viewer", _player_focus_viewer_id, _viewer_revision, focus_position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("focus player viewer update failed: %s" % _terrain_world_error())
 	_last_focus_viewer_position = focus_position

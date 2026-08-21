@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.gd" id="1_runtime"]
+[ext_resource type="Script" path="res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd" id="2_world"]
+
+[node name="WtTerrainRuntimeScene" type="Node3D"]
+script = ExtResource("1_runtime")
+
+[node name="TerrainWorld" type="Node3D" parent="."]
+script = ExtResource("2_world")

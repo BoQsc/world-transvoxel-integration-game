@@ -213,8 +213,29 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Allow an intentional artifact refresh before updating the runtime pin.",
     )
+    parser.add_argument(
+        "--allow-candidate-refresh",
+        action="store_true",
+        help=(
+            "Allow replacing the accepted integration terrain compatibility "
+            "snapshot from the standalone candidate. This requires explicit "
+            "authority-lineage reconciliation and full requalification."
+        ),
+    )
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
+    if (
+        args.apply
+        and args.package in ("candidate", "all")
+        and not args.allow_candidate_refresh
+    ):
+        raise RuntimeError(
+            "candidate refresh is disabled: the accepted integration terrain "
+            "package is a c66-compatible snapshot, while the standalone "
+            "candidate targets a different world-transvoxel authority lineage; "
+            "pass --allow-candidate-refresh only after explicit lineage "
+            "reconciliation and before full downstream requalification"
+        )
     packages = {
         "candidate": (
             args.candidate_source.resolve(),
