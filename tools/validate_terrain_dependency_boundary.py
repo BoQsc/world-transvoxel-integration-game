@@ -9,7 +9,7 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ACCEPTED_AUTHORITY = "77dcf3982b62145ddf98ae51ebd42428cac2697d"
+ACCEPTED_AUTHORITY = "132a72c52c2e0ad6e60305012bd13c2a3142b576"
 COMPATIBILITY_BASE = "4f1fdb59e3c6200c8f823b99027b2d3f15563858"
 RUNTIME_SCENE = (
     ROOT
@@ -142,7 +142,7 @@ def main() -> int:
     require(documentation.is_file(), "dependency boundary document is missing")
     print(
         "WT_TERRAIN_DEPENDENCY_BOUNDARY_PASS "
-        "authority=77dcf398 compatibility_base=4f1fdb5 "
+        "authority=132a72c compatibility_base=4f1fdb5 "
         "runtime_scene=production native_source=0 fallback=false "
         "direct_backend_paths=%d" % len(direct_backend_paths)
     )

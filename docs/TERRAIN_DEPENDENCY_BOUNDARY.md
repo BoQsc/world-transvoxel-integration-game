@@ -8,7 +8,7 @@ The production integration game currently uses this dependency chain:
 world-transvoxel-integration-game
   -> world_transvoxel_gameworld
   -> integration-owned world_transvoxel_terrain compatibility snapshot
-  -> pinned binary world_transvoxel runtime at 77dcf3982b62145ddf98ae51ebd42428cac2697d
+  -> pinned binary world_transvoxel runtime at 132a72c52c2e0ad6e60305012bd13c2a3142b576
 ```
 
 `world-transvoxel` remains the sole native density, material, meshing,
@@ -24,11 +24,11 @@ available for diagnostics, but are not production dependencies.
 
 The terrain package first integrated here requires authority revision
 `4f1fdb59e3c6200c8f823b99027b2d3f15563858`. The accepted native runtime at
-`77dcf3982b62145ddf98ae51ebd42428cac2697d` descends from that revision.
+`132a72c52c2e0ad6e60305012bd13c2a3142b576` descends from that revision.
 
 The current standalone `world-transvoxel-terrain` release-candidate line pins
 authority revision `269871299974c250379028d88b9a9c3086507f52`. That authority
-line and the accepted `77dcf398` line diverge after `4f1fdb5`; neither candidate
+line and the accepted `132a72c` line diverge after `4f1fdb5`; neither candidate
 package can therefore be treated as a drop-in replacement for the other.
 
 Consequently, the directory `addons/world_transvoxel_terrain` in this game is
@@ -86,4 +86,4 @@ following:
    baseline.
 
 Until that sequence passes, this repository continues from its accepted
-`77dcf398` compatibility line.
+`132a72c` compatibility line.

@@ -4345,13 +4345,22 @@ func _apply_human_static_water_basin() -> bool:
 	var water = EditOperation.new()
 	water.mode = EditOperation.Mode.PLACE_STATIC_WATER
 	water.brush_shape = EditOperation.BrushShape.BOX
-	# The fill level belongs to the basin, independently of cavity placement.
-	water.center = basin_center + Vector3(0.0, 2.0, 0.0)
-	water.box_extents = Vector3(18.0, 4.0, 18.0)
+	# Keep the free surface at the original level while extending the authored
+	# volume into solid terrain, which depth-occludes its lower boundary.
+	water.center = basin_center + Vector3(0.0, -6.0, 0.0)
+	water.box_extents = Vector3(18.0, 12.0, 18.0)
 	water.material_id = STATIC_WATER_MATERIAL_ID
 	water.density_value = 1.0
+	var exposed_volume = EditOperation.new()
+	exposed_volume.mode = EditOperation.Mode.PLACE_STATIC_WATER
+	exposed_volume.brush_shape = EditOperation.BrushShape.SPHERE
+	exposed_volume.center = basin_center + Vector3(40.0, 14.0, 0.0)
+	exposed_volume.radius = 8.0
+	exposed_volume.material_id = STATIC_WATER_MATERIAL_ID
+	exposed_volume.density_value = 1.0
 	var batch = EditBatch.new()
-	if not batch.add_operation(foundation) or not batch.add_operation(carve) or not batch.add_operation(water):
+	if not batch.add_operation(foundation) or not batch.add_operation(carve) or \
+			not batch.add_operation(water) or not batch.add_operation(exposed_volume):
 		_fail("static water basin operations are invalid")
 		return false
 	var before_revision := int(terrain_world.call("get_backend_world_revision"))
@@ -4363,12 +4372,15 @@ func _apply_human_static_water_basin() -> bool:
 		return false
 	var basin_summary: Dictionary = terrain_world.call("get_last_edit_submission_summary")
 	var basin_operations: Array = basin_summary.get("operation_summaries", [])
-	if basin_operations.size() != 3 or \
-			str(Dictionary(basin_operations[2]).get("operation", "")) != "place_static_water":
+	if basin_operations.size() != 4 or \
+			str(Dictionary(basin_operations[2]).get("operation", "")) != "place_static_water" or \
+			str(Dictionary(basin_operations[3]).get("operation", "")) != "place_static_water":
 		_fail("static water basin did not use the authoritative water operation: %s" % str(basin_summary))
 		return false
 	var water_point := Vector3i(
-		roundi(water.center.x), roundi(water.center.y), roundi(water.center.z)
+		roundi(water.center.x),
+		roundi(water.center.y + water.box_extents.y - 1.0),
+		roundi(water.center.z)
 	)
 	var water_sample := await _query_authoritative_sample_summary(
 		terrain_world, water_point, "static water basin center"
@@ -4378,10 +4390,22 @@ func _apply_human_static_water_basin() -> bool:
 			int(water_sample.get("material", -1)) != STATIC_WATER_MATERIAL_ID:
 		_fail("static water basin center is not exposed water: %s" % JSON.stringify(water_sample))
 		return false
+	var volume_point := Vector3i(
+		roundi(exposed_volume.center.x), roundi(exposed_volume.center.y),
+		roundi(exposed_volume.center.z)
+	)
+	var volume_sample := await _query_authoritative_sample_summary(
+		terrain_world, volume_point, "exposed static water volume center"
+	)
+	if not bool(volume_sample.get("ok", false)) or \
+			float(volume_sample.get("density", 0.0)) <= 0.0 or \
+			int(volume_sample.get("material", -1)) != STATIC_WATER_MATERIAL_ID:
+		_fail("exposed static water volume is not authoritative: %s" % JSON.stringify(volume_sample))
+		return false
 	player.call("set_fly_mode_enabled", true)
 	await _set_capture_camera_pose(
-		basin_center + Vector3(-22.0, 42.0, 28.0),
-		basin_center + Vector3(0.0, 7.0, 0.0)
+		basin_center + Vector3(-18.0, 40.0, 38.0),
+		basin_center + Vector3(18.0, 8.0, 0.0)
 	)
 	if not await _wait_for_current_profile_settled("static water basin"):
 		return false
@@ -4391,7 +4415,7 @@ func _apply_human_static_water_basin() -> bool:
 			_fail("static water material override is not active: %s" % str(material_summary))
 			return false
 	interaction_inspection_applied = true
-	interaction_inspection_operation_count = 3
+	interaction_inspection_operation_count = 4
 	return true
 
 
