@@ -185,8 +185,11 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             native.append(event)
 
         add("chunk_demand_accepted", 2800.0)
+        add("readiness_repair_generation_created", 2995.0)
+        native[-1]["auxiliary"] = 1
         add("visibility_coverage_priority_requested", 3010.0)
-        add("visibility_coverage_priority_applied", 3020.0)
+        add("visibility_coverage_priority_outcome", 3020.0)
+        native[-1]["status"] = 3
         add("sample_started", 3030.0)
         add("sample_finished", 3031.0, 1.0)
         add("mesh_started", 3060.0)
@@ -234,7 +237,24 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(result["terminal_controller_complete_path_count"], 1)
         self.assertEqual(
             result["terminal_controller_generation_origin_counts"],
-            {"VIEWER_DEMAND": 1},
+            {"READINESS_REPAIR_STAGED": 1},
+        )
+        path = result["paths"][0]
+        self.assertTrue(path["explicit_generation_origin_retained"])
+        self.assertFalse(path["priority_apply_retained"])
+        self.assertTrue(path["priority_outcome_retained"])
+        self.assertEqual(
+            path["priority_outcome_classification"],
+            "PAGE_GENERATION_STALE",
+        )
+        self.assertTrue(path["priority_scheduler_applied"])
+        self.assertEqual(
+            result["terminal_controller_priority_outcome_counts"],
+            {"PAGE_GENERATION_STALE": 1},
+        )
+        self.assertEqual(
+            result["terminal_controller_priority_scheduler_applied_path_count"],
+            1,
         )
         self.assertEqual(
             result["overall_dominant"]["classification"],

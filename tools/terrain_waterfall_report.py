@@ -55,10 +55,22 @@ STAGE_BY_KIND = {
     "visibility_batch_published": "visibility",
     "visibility_coverage_priority_requested": "visibility",
     "visibility_coverage_priority_applied": "visibility",
+    "visibility_coverage_priority_outcome": "visibility",
     "visibility_region_replacement_member": "visibility",
     "visibility_region_retirement_member": "visibility",
     "visibility_region_desired_snapshot": "visibility",
+    "transition_remesh_generation_created": "visibility",
+    "readiness_repair_generation_created": "visibility",
 }
+
+PRIORITY_OUTCOME_BY_STATUS = {
+    0: "APPLIED",
+    1: "SCHEDULER_GENERATION_STALE",
+    2: "SCHEDULER_REPRIORITIZE_FAILED",
+    3: "PAGE_GENERATION_STALE",
+    4: "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND",
+}
+SCHEDULER_APPLIED_PRIORITY_OUTCOMES = {0, 3, 4}
 
 PIPELINE_ORDER = (
     "viewer",
@@ -1023,7 +1035,20 @@ def publication_blocker_critical_path_analysis(
             int(expect_chunk.get("elapsed_ns", 0))
             if expect_chunk is not None else 0
         )
-        if demand is not None and int(demand.get("auxiliary", 0)) == 1:
+        transition_origin = first_event("transition_remesh_generation_created")
+        repair_origin = first_event("readiness_repair_generation_created")
+        explicit_origin = transition_origin or repair_origin
+        explicit_origin_ns = (
+            int(explicit_origin.get("elapsed_ns", 0))
+            if explicit_origin is not None else 0
+        )
+        if transition_origin is not None:
+            generation_origin = "TRANSITION_REMESH"
+        elif repair_origin is not None and int(repair_origin.get("auxiliary", 0)) == 1:
+            generation_origin = "READINESS_REPAIR_STAGED"
+        elif repair_origin is not None:
+            generation_origin = "READINESS_REPAIR_UNSTAGED"
+        elif demand is not None and int(demand.get("auxiliary", 0)) == 1:
             generation_origin = "EDIT_REPLACEMENT_DEMAND"
         elif demand is not None:
             generation_origin = "VIEWER_DEMAND"
@@ -1045,6 +1070,31 @@ def publication_blocker_critical_path_analysis(
         priority_applied_ns = (
             int(priority_applied.get("elapsed_ns", 0))
             if priority_applied is not None else 0
+        )
+        priority_outcome = first_event(
+            "visibility_coverage_priority_outcome",
+            priority_requested_ns or origin_ns,
+        )
+        priority_outcome_ns = (
+            int(priority_outcome.get("elapsed_ns", 0))
+            if priority_outcome is not None else 0
+        )
+        priority_outcome_status = (
+            int(priority_outcome.get("status", -1))
+            if priority_outcome is not None else None
+        )
+        priority_outcome_classification = (
+            PRIORITY_OUTCOME_BY_STATUS.get(
+                priority_outcome_status,
+                "UNKNOWN_STATUS_%d" % priority_outcome_status,
+            )
+            if priority_outcome_status is not None else
+            "OUTCOME_NOT_RETAINED"
+        )
+        priority_scheduler_applied = (
+            priority_outcome_status in SCHEDULER_APPLIED_PRIORITY_OUTCOMES
+            if priority_outcome_status is not None else
+            priority_applied is not None
         )
         sample_started = first_event("sample_started", demand_ns)
         sample_started_ns = (
@@ -1161,12 +1211,16 @@ def publication_blocker_critical_path_analysis(
              if elapsed_ns > 0),
             default=0,
         )
-        priority_boundary_ns = priority_applied_ns or priority_requested_ns
+        priority_boundary_ns = (
+            priority_applied_ns
+            or (priority_outcome_ns if priority_scheduler_applied else 0)
+            or priority_requested_ns
+        )
         if priority_boundary_ns > 0 and first_pipeline_ns > 0:
             add_segment(
                 (
                     "PRIORITY_TO_PIPELINE_START"
-                    if priority_applied_ns > 0 else
+                    if priority_scheduler_applied else
                     "PRIORITY_REQUEST_TO_PIPELINE_START"
                 ),
                 first_pipeline_ns - priority_boundary_ns,
@@ -1282,7 +1336,12 @@ def publication_blocker_critical_path_analysis(
             "complete": required_events_present,
             "demand_origin_retained": demand is not None,
             "generation_origin_classification": generation_origin,
+            "explicit_generation_origin_retained": explicit_origin is not None,
             "priority_apply_retained": priority_applied is not None,
+            "priority_outcome_retained": priority_outcome is not None,
+            "priority_outcome_status": priority_outcome_status,
+            "priority_outcome_classification": priority_outcome_classification,
+            "priority_scheduler_applied": priority_scheduler_applied,
             "viewer_plan_origin": (
                 int(demand.get("cause_id", 0)) if demand is not None else None
             ),
@@ -1292,9 +1351,13 @@ def publication_blocker_critical_path_analysis(
             ),
             "demand_from_edit_ms": from_edit_ms(demand_ns),
             "expect_chunk_from_edit_ms": from_edit_ms(expect_chunk_ns),
+            "explicit_generation_origin_from_edit_ms": from_edit_ms(
+                explicit_origin_ns
+            ),
             "stages_from_edit_ms": {
                 "priority_requested": from_edit_ms(priority_requested_ns),
                 "priority_applied": from_edit_ms(priority_applied_ns),
+                "priority_outcome": from_edit_ms(priority_outcome_ns),
                 "sample_started": from_edit_ms(sample_started_ns),
                 "sample_finished": from_edit_ms(sample_finished_ns),
                 "storage_requested": from_edit_ms(storage_requested_ns),
@@ -1342,6 +1405,12 @@ def publication_blocker_critical_path_analysis(
     terminal_priority_apply_count = sum(
         path["priority_apply_retained"] for path in terminal_paths
     )
+    terminal_priority_outcome_count = sum(
+        path["priority_outcome_retained"] for path in terminal_paths
+    )
+    terminal_priority_scheduler_applied_count = sum(
+        path["priority_scheduler_applied"] for path in terminal_paths
+    )
     sampled_paths = [
         path for path in paths if path["sampled_observation_count"] > 0
     ]
@@ -1354,6 +1423,10 @@ def publication_blocker_critical_path_analysis(
     )
     terminal_origin_counts = Counter(
         str(path["generation_origin_classification"])
+        for path in terminal_paths
+    )
+    terminal_priority_outcome_counts = Counter(
+        str(path["priority_outcome_classification"])
         for path in terminal_paths
     )
     terminal_overall_dominant = max(
@@ -1386,12 +1459,19 @@ def publication_blocker_critical_path_analysis(
         "terminal_controller_complete_path_count": terminal_complete_count,
         "terminal_controller_demand_origin_path_count": terminal_demand_origin_count,
         "terminal_controller_priority_apply_path_count": terminal_priority_apply_count,
+        "terminal_controller_priority_outcome_path_count": terminal_priority_outcome_count,
+        "terminal_controller_priority_scheduler_applied_path_count": (
+            terminal_priority_scheduler_applied_count
+        ),
         "dominant_segment_counts": dict(sorted(dominant_counts.items())),
         "terminal_controller_dominant_segment_counts": dict(sorted(
             terminal_dominant_counts.items()
         )),
         "terminal_controller_generation_origin_counts": dict(sorted(
             terminal_origin_counts.items()
+        )),
+        "terminal_controller_priority_outcome_counts": dict(sorted(
+            terminal_priority_outcome_counts.items()
         )),
         "terminal_controller_overall_dominant": (
             {
@@ -1412,9 +1492,11 @@ def publication_blocker_critical_path_analysis(
             "Terminal controllers come from the exact cohort member with the last "
             "retained visibility-readiness event before publication. Complete path "
             "means required sinks and readiness are retained; demand origin and "
-            "priority application are reported independently because replacement "
-            "generations can enter through other authority lifecycle paths. Sampled "
-            "paths remain cadence-bounded and can include a preceding cohort."
+            "priority outcomes are reported independently because replacement "
+            "generations can enter through viewer demand, transition remesh, or "
+            "readiness repair paths. A scheduler-applied outcome does not claim that "
+            "the page runtime still owned the same generation. Sampled paths remain "
+            "cadence-bounded and can include a preceding cohort."
         ),
     }
 
