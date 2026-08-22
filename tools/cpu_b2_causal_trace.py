@@ -660,7 +660,7 @@ def main(argv: list[str]) -> int:
         causal_slices.append(causal_slice)
         trace_paths.append(str(trace_path.relative_to(project)).replace("\\", "/"))
 
-    pin = load_object(project / "AUTHORITY_HOTFIX_PIN.json")
+    pin = load_object(project / "WORLD_TRANSVOXEL_RUNTIME_PIN.json")
     traces_complete = all(item["complete"] for item in trace_summaries)
     attributions_complete = all(item["complete"] for item in trace_attributions)
     movement_attributions_complete = all(

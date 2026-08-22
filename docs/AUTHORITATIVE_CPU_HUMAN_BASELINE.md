@@ -19,7 +19,7 @@ and incorrect configuration still fail closed.
 - exact logical CPU affinity `[0, 1, 2]`;
 - two procedural generation workers;
 - collision invoker radius two chunks and 24 m prediction;
-- authority and binary identity from `AUTHORITY_HOTFIX_PIN.json`;
+- authority and binary identity from `WORLD_TRANSVOXEL_RUNTIME_PIN.json`;
 - fresh storage for every run.
 
 The deterministic route exercises normal diagonal flight, normal return,

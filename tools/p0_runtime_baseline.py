@@ -201,7 +201,9 @@ def _provenance(
     godot: pathlib.Path,
     affinity: list[int],
 ) -> dict[str, object]:
-    pin = json.loads((project / "AUTHORITY_HOTFIX_PIN.json").read_text(encoding="utf-8"))
+    pin = json.loads(
+        (project / "WORLD_TRANSVOXEL_RUNTIME_PIN.json").read_text(encoding="utf-8")
+    )
     debug_binary = project / "addons/world_transvoxel/bin/world_transvoxel.windows.template_debug.x86_64.dll"
     release_binary = project / "addons/world_transvoxel/bin/world_transvoxel.windows.template_release.x86_64.dll"
     return {
@@ -211,7 +213,9 @@ def _provenance(
         "measurement_contract": "authoritative_cpu_human_baseline_v1",
         "authority_commit": pin["authority"]["commit"],
         "authority_addon_tree": pin["authority"]["addon_tree"],
-        "authority_package_digest_sha256": pin["authority"]["package_digest_sha256"],
+        "authority_runtime_artifact_digest_sha256": pin["runtime_artifact"][
+            "digest_sha256"
+        ],
         "debug_binary_sha256": _sha256(debug_binary),
         "release_binary_sha256": _sha256(release_binary),
         "godot_executable": str(godot),

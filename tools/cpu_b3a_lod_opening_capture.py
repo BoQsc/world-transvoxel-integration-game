@@ -324,7 +324,9 @@ def _provenance(
     capture: dict[str, Any],
     trace_path: pathlib.Path,
 ) -> dict[str, Any]:
-    pin = json.loads((project / "AUTHORITY_HOTFIX_PIN.json").read_text(encoding="utf-8"))
+    pin = json.loads(
+        (project / "WORLD_TRANSVOXEL_RUNTIME_PIN.json").read_text(encoding="utf-8")
+    )
     report_path = pathlib.Path(str(capture["report_path"]))
     return {
         "integration_commit": _git(project, "rev-parse", "HEAD"),

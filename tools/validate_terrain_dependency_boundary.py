@@ -9,7 +9,7 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ACCEPTED_AUTHORITY = "b57aba9b0ebf76da420391d8eacc1e1f6585c530"
+ACCEPTED_AUTHORITY = "9115b56e425a2e0b7b445eeb3a9ff35a0501e05b"
 COMPATIBILITY_BASE = "4f1fdb59e3c6200c8f823b99027b2d3f15563858"
 RUNTIME_SCENE = (
     ROOT
