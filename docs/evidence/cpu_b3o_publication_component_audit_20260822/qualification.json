@@ -1,0 +1,69 @@
+{
+  "schema": "world_transvoxel.cpu_b3o_publication_component_audit.v1",
+  "date": "2026-08-22",
+  "status": "CURRENT_POLICY_COMPONENTS_PROVEN_MINIMAL",
+  "authority_commit": "b57aba9b0ebf76da420391d8eacc1e1f6585c530",
+  "runtime_artifact_commit": "9ec3b42",
+  "analyzer_commit": "b7abf1d",
+  "logical_cpu_affinity": [0, 1, 2],
+  "route": {
+    "trace_integrity_complete": true,
+    "required_route_covered": true,
+    "flight_distance": 536.0058141350745,
+    "blocked_flight_frames": 0,
+    "relocated_edit_count": 2
+  },
+  "process_usage": {
+    "average_active_logical_cores": 1.4453547008547012,
+    "process_cpu_percent_p95": 252.71500000000003,
+    "saturated_sample_fraction": 0.04700854700854701,
+    "trace_on_release_baseline": false
+  },
+  "edits": [
+    {
+      "mode": "carve",
+      "pipeline_completion_ms": 4776.0097,
+      "replacement_count": 428,
+      "retirement_count": 125,
+      "component_count": 1,
+      "component_size": 553,
+      "overlap_edge_count": 923,
+      "unsafe_lod_boundary_edge_count": 545,
+      "isolated_node_count": 0,
+      "overlapping_replacement_pair_count": 0,
+      "duplicate_role_key_count": 0,
+      "uncovered_retirement_count": 0,
+      "classification": "MINIMAL_UNDER_AUTHORITY_COMPONENT_RULE"
+    },
+    {
+      "mode": "construct",
+      "pipeline_completion_ms": 4292.4181,
+      "replacement_count": 462,
+      "retirement_count": 185,
+      "component_count": 1,
+      "component_size": 647,
+      "overlap_edge_count": 1123,
+      "unsafe_lod_boundary_edge_count": 610,
+      "isolated_node_count": 0,
+      "overlapping_replacement_pair_count": 0,
+      "duplicate_role_key_count": 0,
+      "uncovered_retirement_count": 0,
+      "classification": "MINIMAL_UNDER_AUTHORITY_COMPONENT_RULE"
+    }
+  ],
+  "raw_evidence": {
+    "trace_bytes": 38472997,
+    "trace_sha256": "94110a1df9f245354f11730253fe3faaa025e64b95ab0e3be4bf63d82c60c8bc",
+    "report_bytes": 790467,
+    "report_sha256": "ba22301cc03ac1e2da164f19ee0a87dfc3f2579ff0e385285fe60f74de4ec73c",
+    "usage_bytes": 47913,
+    "usage_sha256": "e1ea514eeb84936f18340f1a45216d43bbf054e9bcf8724bd6c92e5094e48e39"
+  },
+  "decision": {
+    "classification": "COHORT_SPLIT_NOT_JUSTIFIED_UNIFIED_CPU_EXECUTOR_NEXT",
+    "change_atomic_publication": false,
+    "gpu_architecture_selected": false,
+    "next_milestone": "BOUNDED_UNIFIED_WORK_CONSERVING_CPU_EXECUTOR"
+  },
+  "claim_boundary": "Minimality is proven under the current authority overlap, complete-coverage, and one-level LOD-neighbor rule. Global publication optimality and alternative multi-wave architectures are not proven."
+}
