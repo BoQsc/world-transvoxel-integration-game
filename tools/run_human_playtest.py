@@ -126,8 +126,6 @@ def build_command(args: argparse.Namespace) -> list[str]:
         )
         if args.terrain_waterfall_autonomous:
             command.append("--terrain-waterfall-autonomous-route")
-        if args.terrain_waterfall_relocation_prewarm_candidate:
-            command.append("--terrain-waterfall-relocation-prewarm-candidate")
     elif args.cpu_causal_trace:
         trace_path = (
             pathlib.Path(args.cpu_causal_trace_output).resolve()
@@ -376,21 +374,7 @@ def main(argv: list[str]) -> int:
             "construction route, then close and analyze it."
         ),
     )
-    parser.add_argument(
-        "--terrain-waterfall-relocation-prewarm-candidate",
-        action="store_true",
-        help=(
-            "Enable the bounded relocation visibility-prewarm candidate only in "
-            "the deterministic autonomous terrain-waterfall route."
-        ),
-    )
     args = parser.parse_args(argv)
-    if args.terrain_waterfall_relocation_prewarm_candidate and not \
-            args.terrain_waterfall_autonomous:
-        parser.error(
-            "--terrain-waterfall-relocation-prewarm-candidate requires "
-            "--terrain-waterfall-autonomous"
-        )
     if args.cpu_causal_trace_output:
         args.cpu_causal_trace = True
     if args.latest:

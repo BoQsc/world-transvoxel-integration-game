@@ -5,11 +5,6 @@ var _player: CharacterBody3D
 var _game_world: Node
 var _terrain_world: Node
 var _trace: RefCounted
-var _relocation_prewarm_enabled := false
-var _relocation_prewarm_requests: Array = []
-var _relocation_prewarm_error := ""
-
-const RELOCATION_PREWARM_MAXIMUM_RECORDS := 16
 
 
 func run(
@@ -17,16 +12,12 @@ func run(
 	player: CharacterBody3D,
 	game_world: Node,
 	trace: RefCounted,
-	profile: StringName,
-	relocation_prewarm_enabled: bool = false
+	profile: StringName
 ) -> Dictionary:
 	_host = host
 	_player = player
 	_game_world = game_world
 	_trace = trace
-	_relocation_prewarm_enabled = relocation_prewarm_enabled
-	_relocation_prewarm_requests = []
-	_relocation_prewarm_error = ""
 	if _host == null or _player == null or _game_world == null or _trace == null:
 		return {"ok": false, "error": "required_runtime_missing"}
 	_terrain_world = _game_world.call("get_terrain_world")
@@ -37,11 +28,6 @@ func run(
 		"profile": str(profile),
 		"legs": [],
 		"edits": [],
-		"relocation_prewarm": {
-			"enabled": _relocation_prewarm_enabled,
-			"maximum_records_per_request": RELOCATION_PREWARM_MAXIMUM_RECORDS,
-			"requests": _relocation_prewarm_requests,
-		},
 	}
 	route["legs"].append(await _flight_leg(
 		"flight_ascend", Vector3.UP * 16.0, 90
@@ -52,9 +38,6 @@ func run(
 		480
 	))
 	var carve_surface := await _wait_for_surface()
-	if not _relocation_prewarm_error.is_empty():
-		route["error"] = _relocation_prewarm_error
-		return {"ok": false, "route": route}
 	if is_inf(carve_surface.x):
 		route["error"] = "carve_surface_unavailable"
 		return {"ok": false, "route": route}
@@ -71,9 +54,6 @@ func run(
 		480
 	))
 	var construct_surface := await _wait_for_surface()
-	if not _relocation_prewarm_error.is_empty():
-		route["error"] = _relocation_prewarm_error
-		return {"ok": false, "route": route}
 	if is_inf(construct_surface.x):
 		route["error"] = "construct_surface_unavailable"
 		return {"ok": false, "route": route}
@@ -138,30 +118,10 @@ func _wait_for_surface() -> Vector3:
 			_player.global_position = target + Vector3(0.0, 2.0, 0.0)
 			_player.velocity = Vector3.ZERO
 			_player.call("set_fly_mode_enabled", false)
-			if _relocation_prewarm_enabled:
-				_request_relocation_visibility_prewarm()
 			_game_world.call("update_player_viewer", true)
 			return target
 		await _capture_wait_frame()
 	return Vector3(INF, INF, INF)
-
-
-func _request_relocation_visibility_prewarm() -> void:
-	var position := _player.global_position
-	var accepted := bool(_terrain_world.call(
-		"request_relocation_visibility_prewarm",
-		position,
-		RELOCATION_PREWARM_MAXIMUM_RECORDS
-	))
-	var request := {
-		"accepted": accepted,
-		"position": _vector3_summary(position),
-		"maximum_records": RELOCATION_PREWARM_MAXIMUM_RECORDS,
-	}
-	_relocation_prewarm_requests.append(request)
-	_trace.call("record", &"relocation_visibility_prewarm_requested", request, true)
-	if not accepted:
-		_relocation_prewarm_error = "relocation_visibility_prewarm_rejected"
 
 
 func _find_collision_surface_near(points: Array) -> Vector3:
