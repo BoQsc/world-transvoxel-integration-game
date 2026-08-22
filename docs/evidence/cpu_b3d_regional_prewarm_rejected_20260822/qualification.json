@@ -1,0 +1,56 @@
+{
+  "schema": "world_transvoxel.cpu_b3d_regional_prewarm_rejection.v1",
+  "date": "2026-08-22",
+  "status": "REJECTED_EXPERIMENT",
+  "baseline_authority_commit": "4e53b6f3284ae6197818069483596135fdc5f18c",
+  "candidate_authority_commit": "095afe05eeb4361ebc65877e519b711247f12e18",
+  "revert_authority_commit": "72cfb30",
+  "restored_authority_tip": "72cfb300375bda990fc488b8fa6366e58fcb711f",
+  "logical_cpu_capacity": 3,
+  "route": {
+    "complete": true,
+    "trace_integrity_complete": true,
+    "has_long_flight": true,
+    "has_relocated_carve": true,
+    "has_relocated_construction": true
+  },
+  "baseline": {
+    "blocked_movement_frames": 0,
+    "blocked_flight_frames": 0,
+    "hitch_frames": 8,
+    "trace_on_frame_p99_ms": 33.17325,
+    "carve_pipeline_completion_ms": 4541.5981,
+    "carve_visibility_wait_ms": 2987.3597,
+    "carve_desired_ownership_exact": true,
+    "construct_pipeline_completion_ms": 4384.9491,
+    "construct_visibility_wait_ms": 4289.3048,
+    "construct_desired_ownership_exact": true
+  },
+  "candidate": {
+    "blocked_movement_frames": 150,
+    "blocked_flight_frames": 150,
+    "hitch_frames": 15,
+    "trace_on_frame_p99_ms": 33.24904,
+    "prewarm_batches": 260,
+    "prewarm_requests": 2283,
+    "carve_pipeline_completion_ms": 4128.0099,
+    "carve_visibility_wait_ms": 784.7132,
+    "carve_desired_ownership_exact": true,
+    "construct_pipeline_completion_ms": 4605.2606,
+    "construct_visibility_wait_ms": 1424.0058,
+    "construct_desired_ownership_exact": false,
+    "construct_ownership_classification": "DESIRED_SNAPSHOT_NOT_RETAINED"
+  },
+  "decision": {
+    "classification": "REJECT_BROAD_VIEWER_PLAN_PREWARM",
+    "retain_candidate": false,
+    "baseline_restored": true,
+    "gpu_architecture_selected": false,
+    "required_future_gates": [
+      "ZERO_BLOCKED_MOVEMENT",
+      "EXACT_LATEST_DRAINED_PLAN_OWNERSHIP",
+      "BOUNDED_NON_INTERACTIVE_PRIORITY_SCOPE"
+    ]
+  },
+  "claim_boundary": "Trace-on timing is diagnostic and not a release-performance baseline. Missing retained ownership evidence is not proof of terrain incorrectness, but it disqualifies this candidate from an authoritative exact-ownership claim."
+}
