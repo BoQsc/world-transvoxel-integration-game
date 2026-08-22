@@ -184,15 +184,58 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             })
             native.append(event)
 
+        def add_job(
+            kind: str,
+            elapsed_ms: float,
+            stage: str,
+            priority: int,
+            queue_depth: int,
+            jobs_ahead: int,
+            same_priority_ahead: int,
+        ) -> None:
+            add(kind, elapsed_ms)
+            native[-1].update({
+                "has_job_details": True,
+                "job_stage": stage,
+                "effective_priority": priority,
+                "job_sequence": len(native),
+                "has_queue_state": True,
+                "queue_depth_before": queue_depth,
+                "queue_depth_after": queue_depth,
+                "jobs_ahead": jobs_ahead,
+                "same_priority_jobs_ahead": same_priority_ahead,
+            })
+
         add("chunk_demand_accepted", 2800.0)
+        add_job("scheduler_job_queued", 2800.1, "sample", 12, 40, 30, 2)
         add("readiness_repair_generation_created", 2995.0)
         native[-1]["auxiliary"] = 1
         add("visibility_coverage_priority_requested", 3010.0)
         add("visibility_coverage_priority_outcome", 3020.0)
         native[-1]["status"] = 3
-        add("sample_started", 3030.0)
+        add_job(
+            "scheduler_job_priority_observed", 3020.1, "sample",
+            2147483647, 60, 20, 20,
+        )
+        add_job(
+            "scheduler_job_dequeued", 3030.0, "sample",
+            2147483647, 50, 0, 0,
+        )
+        add("sample_started", 3030.1)
+        add_job(
+            "page_meshing_ownership_established", 3030.2, "sample",
+            2147483647, 0, 0, 0,
+        )
         add("sample_finished", 3031.0, 1.0)
-        add("mesh_started", 3060.0)
+        add_job(
+            "scheduler_job_queued", 3031.0, "mesh",
+            2147483647, 128, 120, 120,
+        )
+        add_job(
+            "scheduler_job_dequeued", 3060.0, "mesh",
+            2147483647, 20, 0, 0,
+        )
+        add("mesh_started", 3060.1)
         add("mesh_finished", 3065.0, 5.0)
         add("mesh_completion_consumed", 3066.0)
         add("render_sink_applied", 3070.0)
@@ -256,9 +299,27 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             result["terminal_controller_priority_scheduler_applied_path_count"],
             1,
         )
+        self.assertTrue(path["scheduler_queue_path_complete"])
+        self.assertTrue(path["interactive_priority_at_mesh_admission"])
+        self.assertTrue(path["interactive_priority_at_mesh_dequeue"])
+        self.assertEqual(
+            path["scheduler_queue"]["mesh_admission"][
+                "same_priority_jobs_ahead"
+            ],
+            120,
+        )
+        self.assertEqual(path["scheduler_queue"]["mesh_residency_ms"], 29.0)
+        self.assertEqual(
+            result["terminal_controller_complete_scheduler_queue_path_count"],
+            1,
+        )
+        self.assertEqual(
+            result["terminal_controller_interactive_mesh_priority_path_count"],
+            1,
+        )
         self.assertEqual(
             result["overall_dominant"]["classification"],
-            "DEPENDENCIES_READY_TO_MESH",
+            "MESH_SCHEDULER_QUEUE",
         )
         self.assertEqual(result["overall_dominant"]["duration_ms"], 29.0)
 

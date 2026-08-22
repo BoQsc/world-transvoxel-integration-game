@@ -61,6 +61,10 @@ STAGE_BY_KIND = {
     "visibility_region_desired_snapshot": "visibility",
     "transition_remesh_generation_created": "visibility",
     "readiness_repair_generation_created": "visibility",
+    "scheduler_job_queued": "scheduler",
+    "scheduler_job_priority_observed": "scheduler",
+    "scheduler_job_dequeued": "scheduler",
+    "page_meshing_ownership_established": "sampling",
 }
 
 PRIORITY_OUTCOME_BY_STATUS = {
@@ -76,6 +80,7 @@ PIPELINE_ORDER = (
     "viewer",
     "authority",
     "demand",
+    "scheduler",
     "storage",
     "sampling",
     "meshing",
@@ -1025,6 +1030,17 @@ def publication_blocker_critical_path_analysis(
                 if int(event.get("elapsed_ns", -1)) >= after_ns
             ), None)
 
+        def first_job_event(
+            kind: str,
+            stage: str,
+            after_ns: int = 0,
+        ) -> dict[str, Any] | None:
+            return next((
+                event for event in by_kind.get(kind, [])
+                if str(event.get("job_stage", "")) == stage
+                and int(event.get("elapsed_ns", -1)) >= after_ns
+            ), None)
+
         demand = first_event("chunk_demand_accepted")
         demand_ns = int(demand.get("elapsed_ns", 0)) if demand is not None else 0
         expect_chunk = next((
@@ -1096,6 +1112,38 @@ def publication_blocker_critical_path_analysis(
             if priority_outcome_status is not None else
             priority_applied is not None
         )
+        sample_queued = first_job_event("scheduler_job_queued", "sample")
+        sample_queued_ns = (
+            int(sample_queued.get("elapsed_ns", 0))
+            if sample_queued is not None else 0
+        )
+        priority_observed = first_job_event(
+            "scheduler_job_priority_observed",
+            "sample",
+            priority_requested_ns or origin_ns,
+        )
+        priority_observed_ns = (
+            int(priority_observed.get("elapsed_ns", 0))
+            if priority_observed is not None else 0
+        )
+        sample_dequeued = first_job_event(
+            "scheduler_job_dequeued",
+            "sample",
+            sample_queued_ns,
+        )
+        sample_dequeued_ns = (
+            int(sample_dequeued.get("elapsed_ns", 0))
+            if sample_dequeued is not None else 0
+        )
+        page_ownership = first_job_event(
+            "page_meshing_ownership_established",
+            "sample",
+            sample_dequeued_ns,
+        )
+        page_ownership_ns = (
+            int(page_ownership.get("elapsed_ns", 0))
+            if page_ownership is not None else 0
+        )
         sample_started = first_event("sample_started", demand_ns)
         sample_started_ns = (
             int(sample_started.get("elapsed_ns", 0))
@@ -1134,6 +1182,24 @@ def publication_blocker_critical_path_analysis(
         ]
         dependencies_ready_ns = (
             max(dependency_boundaries) if dependency_boundaries else 0
+        )
+        mesh_queued = first_job_event(
+            "scheduler_job_queued",
+            "mesh",
+            dependencies_ready_ns,
+        )
+        mesh_queued_ns = (
+            int(mesh_queued.get("elapsed_ns", 0))
+            if mesh_queued is not None else 0
+        )
+        mesh_dequeued = first_job_event(
+            "scheduler_job_dequeued",
+            "mesh",
+            mesh_queued_ns,
+        )
+        mesh_dequeued_ns = (
+            int(mesh_dequeued.get("elapsed_ns", 0))
+            if mesh_dequeued is not None else 0
         )
         mesh_started = first_event("mesh_started", dependencies_ready_ns)
         mesh_started_ns = (
@@ -1186,6 +1252,31 @@ def publication_blocker_critical_path_analysis(
                 if event_ns > 0 else None
             )
 
+        def queue_event_summary(
+            event: dict[str, Any] | None,
+        ) -> dict[str, Any] | None:
+            if event is None:
+                return None
+            summary = {
+                "from_edit_ms": from_edit_ms(int(event.get("elapsed_ns", 0))),
+                "stage": str(event.get("job_stage", "unknown")),
+                "effective_priority": int(event.get("effective_priority", 0)),
+                "job_sequence": int(event.get("job_sequence", 0)),
+                "has_queue_state": bool(event.get("has_queue_state", False)),
+            }
+            if summary["has_queue_state"]:
+                summary.update({
+                    "queue_depth_before": int(
+                        event.get("queue_depth_before", 0)
+                    ),
+                    "queue_depth_after": int(event.get("queue_depth_after", 0)),
+                    "jobs_ahead": int(event.get("jobs_ahead", 0)),
+                    "same_priority_jobs_ahead": int(
+                        event.get("same_priority_jobs_ahead", 0)
+                    ),
+                })
+            return summary
+
         segments = []
 
         def add_segment(
@@ -1216,7 +1307,17 @@ def publication_blocker_critical_path_analysis(
             or (priority_outcome_ns if priority_scheduler_applied else 0)
             or priority_requested_ns
         )
-        if priority_boundary_ns > 0 and first_pipeline_ns > 0:
+        if priority_requested_ns > 0 and priority_observed_ns > 0:
+            add_segment(
+                "PRIORITY_REQUEST_TO_SCHEDULER_OBSERVATION",
+                priority_observed_ns - priority_requested_ns,
+            )
+        if priority_observed_ns > 0 and sample_dequeued_ns > 0:
+            add_segment(
+                "PRIORITY_OBSERVATION_TO_SAMPLE_DEQUEUE",
+                sample_dequeued_ns - priority_observed_ns,
+            )
+        elif priority_boundary_ns > 0 and first_pipeline_ns > 0:
             add_segment(
                 (
                     "PRIORITY_TO_PIPELINE_START"
@@ -1229,6 +1330,16 @@ def publication_blocker_critical_path_analysis(
             add_segment(
                 "EDIT_TO_PIPELINE_START",
                 first_pipeline_ns - origin_ns,
+            )
+        if sample_dequeued_ns > 0 and sample_started_ns > 0:
+            add_segment(
+                "SAMPLE_DEQUEUE_TO_START",
+                sample_started_ns - sample_dequeued_ns,
+            )
+        if sample_started_ns > 0 and page_ownership_ns > 0:
+            add_segment(
+                "SAMPLE_START_TO_PAGE_OWNERSHIP",
+                page_ownership_ns - sample_started_ns,
             )
         if sample_finished is not None:
             add_segment(
@@ -1252,7 +1363,22 @@ def publication_blocker_critical_path_analysis(
                 "STORAGE_COMPLETION_HANDOFF",
                 storage_consumed_ns - storage_finished_ns,
             )
-        if dependencies_ready_ns > 0 and mesh_started_ns > 0:
+        if dependencies_ready_ns > 0 and mesh_queued_ns > 0:
+            add_segment(
+                "DEPENDENCIES_READY_TO_MESH_QUEUE",
+                mesh_queued_ns - dependencies_ready_ns,
+            )
+        if mesh_queued_ns > 0 and mesh_dequeued_ns > 0:
+            add_segment(
+                "MESH_SCHEDULER_QUEUE",
+                mesh_dequeued_ns - mesh_queued_ns,
+            )
+        if mesh_dequeued_ns > 0 and mesh_started_ns > 0:
+            add_segment(
+                "MESH_DEQUEUE_TO_START",
+                mesh_started_ns - mesh_dequeued_ns,
+            )
+        elif dependencies_ready_ns > 0 and mesh_started_ns > 0:
             add_segment(
                 "DEPENDENCIES_READY_TO_MESH",
                 mesh_started_ns - dependencies_ready_ns,
@@ -1342,6 +1468,41 @@ def publication_blocker_critical_path_analysis(
             "priority_outcome_status": priority_outcome_status,
             "priority_outcome_classification": priority_outcome_classification,
             "priority_scheduler_applied": priority_scheduler_applied,
+            "scheduler_queue_path_complete": all(event is not None for event in (
+                sample_queued,
+                sample_dequeued,
+                page_ownership,
+                mesh_queued,
+                mesh_dequeued,
+            )),
+            "interactive_priority_at_sample_observation": (
+                int(priority_observed.get("effective_priority", 0)) == 2147483647
+                if priority_observed is not None else None
+            ),
+            "interactive_priority_at_mesh_admission": (
+                int(mesh_queued.get("effective_priority", 0)) == 2147483647
+                if mesh_queued is not None else None
+            ),
+            "interactive_priority_at_mesh_dequeue": (
+                int(mesh_dequeued.get("effective_priority", 0)) == 2147483647
+                if mesh_dequeued is not None else None
+            ),
+            "scheduler_queue": {
+                "sample_admission": queue_event_summary(sample_queued),
+                "priority_observation": queue_event_summary(priority_observed),
+                "sample_dequeue": queue_event_summary(sample_dequeued),
+                "page_ownership": queue_event_summary(page_ownership),
+                "mesh_admission": queue_event_summary(mesh_queued),
+                "mesh_dequeue": queue_event_summary(mesh_dequeued),
+                "sample_residency_ms": (
+                    (sample_dequeued_ns - sample_queued_ns) / 1_000_000.0
+                    if sample_queued_ns > 0 and sample_dequeued_ns > 0 else None
+                ),
+                "mesh_residency_ms": (
+                    (mesh_dequeued_ns - mesh_queued_ns) / 1_000_000.0
+                    if mesh_queued_ns > 0 and mesh_dequeued_ns > 0 else None
+                ),
+            },
             "viewer_plan_origin": (
                 int(demand.get("cause_id", 0)) if demand is not None else None
             ),
@@ -1358,6 +1519,10 @@ def publication_blocker_critical_path_analysis(
                 "priority_requested": from_edit_ms(priority_requested_ns),
                 "priority_applied": from_edit_ms(priority_applied_ns),
                 "priority_outcome": from_edit_ms(priority_outcome_ns),
+                "sample_queued": from_edit_ms(sample_queued_ns),
+                "priority_observed": from_edit_ms(priority_observed_ns),
+                "sample_dequeued": from_edit_ms(sample_dequeued_ns),
+                "page_ownership": from_edit_ms(page_ownership_ns),
                 "sample_started": from_edit_ms(sample_started_ns),
                 "sample_finished": from_edit_ms(sample_finished_ns),
                 "storage_requested": from_edit_ms(storage_requested_ns),
@@ -1365,6 +1530,8 @@ def publication_blocker_critical_path_analysis(
                 "storage_finished": from_edit_ms(storage_finished_ns),
                 "storage_consumed": from_edit_ms(storage_consumed_ns),
                 "dependencies_ready": from_edit_ms(dependencies_ready_ns),
+                "mesh_queued": from_edit_ms(mesh_queued_ns),
+                "mesh_dequeued": from_edit_ms(mesh_dequeued_ns),
                 "mesh_started": from_edit_ms(mesh_started_ns),
                 "mesh_finished": from_edit_ms(mesh_finished_ns),
                 "mesh_consumed": from_edit_ms(mesh_consumed_ns),
@@ -1410,6 +1577,14 @@ def publication_blocker_critical_path_analysis(
     )
     terminal_priority_scheduler_applied_count = sum(
         path["priority_scheduler_applied"] for path in terminal_paths
+    )
+    terminal_complete_queue_path_count = sum(
+        path["scheduler_queue_path_complete"] for path in terminal_paths
+    )
+    terminal_interactive_mesh_priority_count = sum(
+        path["interactive_priority_at_mesh_admission"] is True
+        and path["interactive_priority_at_mesh_dequeue"] is True
+        for path in terminal_paths
     )
     sampled_paths = [
         path for path in paths if path["sampled_observation_count"] > 0
@@ -1462,6 +1637,12 @@ def publication_blocker_critical_path_analysis(
         "terminal_controller_priority_outcome_path_count": terminal_priority_outcome_count,
         "terminal_controller_priority_scheduler_applied_path_count": (
             terminal_priority_scheduler_applied_count
+        ),
+        "terminal_controller_complete_scheduler_queue_path_count": (
+            terminal_complete_queue_path_count
+        ),
+        "terminal_controller_interactive_mesh_priority_path_count": (
+            terminal_interactive_mesh_priority_count
         ),
         "dominant_segment_counts": dict(sorted(dominant_counts.items())),
         "terminal_controller_dominant_segment_counts": dict(sorted(
