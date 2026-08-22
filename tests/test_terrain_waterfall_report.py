@@ -167,6 +167,81 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
 
 
 class TerrainWaterfallReportTest(unittest.TestCase):
+    def test_non_edit_publication_blocker_critical_path_is_attributed(self) -> None:
+        identity = (99, 2, 99, 0, 7)
+        native = []
+
+        def add(kind: str, elapsed_ms: float, duration_ms: float = 0.0) -> None:
+            event = native_event(
+                len(native), elapsed_ms, kind, chunk_x=identity[0],
+                duration_ms=duration_ms,
+            )
+            event.update({
+                "chunk_y": identity[1],
+                "chunk_z": identity[2],
+                "chunk_lod": identity[3],
+                "generation": identity[4],
+            })
+            native.append(event)
+
+        add("chunk_demand_accepted", 2800.0)
+        add("visibility_coverage_priority_requested", 3010.0)
+        add("visibility_coverage_priority_applied", 3020.0)
+        add("sample_started", 3030.0)
+        add("sample_finished", 3031.0, 1.0)
+        add("mesh_started", 3060.0)
+        add("mesh_finished", 3065.0, 5.0)
+        add("mesh_completion_consumed", 3066.0)
+        add("render_sink_applied", 3070.0)
+        add("collision_sink_applied", 3071.0)
+        add("visibility_replacement_ready", 3075.0)
+        batch = native_event(100, 3092.0, "visibility_batch_published")
+        blocker = {
+            "available": True,
+            "transitions": [{
+                "elapsed_from_request_ms": 9.0,
+                "key": {"x": 99, "y": 2, "z": 99, "lod": 0},
+                "generation": 7,
+                "reason": "visual_not_ready",
+                "relation": "other_replacement",
+            }],
+        }
+        publication = {
+            "replacement_members": [{
+                "x": 99,
+                "y": 2,
+                "z": 99,
+                "lod": 0,
+                "generation": 7,
+                "visual_required": True,
+                "collision_required": True,
+            }],
+        }
+        result = report.publication_blocker_critical_path_analysis(
+            native,
+            blocker,
+            publication,
+            3_000_000_000,
+            batch,
+        )
+        self.assertEqual(
+            result["classification"],
+            "EXACT_TERMINAL_CONTROLLER_PATHS_RETAINED",
+        )
+        self.assertEqual(result["non_edit_path_count"], 1)
+        self.assertEqual(result["complete_path_count"], 1)
+        self.assertEqual(result["terminal_controller_path_count"], 1)
+        self.assertEqual(result["terminal_controller_complete_path_count"], 1)
+        self.assertEqual(
+            result["terminal_controller_generation_origin_counts"],
+            {"VIEWER_DEMAND": 1},
+        )
+        self.assertEqual(
+            result["overall_dominant"]["classification"],
+            "DEPENDENCIES_READY_TO_MESH",
+        )
+        self.assertEqual(result["overall_dominant"]["duration_ms"], 29.0)
+
     def test_complete_human_session_is_analyzed(self) -> None:
         native = [native_event(0, 0.0, "trace_started")]
         first_chain = edit_chain(1, 3000.0, 10, 10)
@@ -293,6 +368,10 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(
             result["traces"][0]["edits"][1]["sampled_first_blocker"]["dominant_relation"],
             "edit_replacement",
+        )
+        self.assertIn(
+            "publication_blocker_critical_paths",
+            result["traces"][0]["edits"][0],
         )
         destination = result["traces"][0]["edits"][0][
             "pre_edit_destination_readiness"

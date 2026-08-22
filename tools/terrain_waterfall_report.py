@@ -914,6 +914,511 @@ def pre_edit_destination_readiness(
     }
 
 
+def publication_blocker_critical_path_analysis(
+    native_events: list[dict[str, Any]],
+    blocker: dict[str, Any],
+    publication: dict[str, Any],
+    origin_ns: int,
+    batch_event: dict[str, Any] | None,
+) -> dict[str, Any]:
+    transitions = blocker.get("transitions")
+    if batch_event is None or not isinstance(transitions, list) or not transitions:
+        return {
+            "available": False,
+            "classification": "BLOCKER_PATH_NOT_RETAINED",
+            "path_count": 0,
+        }
+    batch_ns = int(batch_event.get("elapsed_ns", origin_ns))
+    cohort_members = {}
+    for member in publication.get("replacement_members", []):
+        if not isinstance(member, dict):
+            continue
+        identity = tuple(
+            int(member.get(name, 0))
+            for name in ("x", "y", "z", "lod", "generation")
+        )
+        cohort_members[identity] = member
+
+    observed: dict[tuple[int, int, int, int, int], list[dict[str, Any]]] = {}
+    for transition in transitions:
+        if not isinstance(transition, dict):
+            continue
+        key = transition.get("key")
+        if not isinstance(key, dict):
+            continue
+        identity = (
+            int(key.get("x", 0)),
+            int(key.get("y", 0)),
+            int(key.get("z", 0)),
+            int(key.get("lod", 0)),
+            int(transition.get("generation", 0)),
+        )
+        observation = dict(transition)
+        observation["source"] = "sampled_first_blocker"
+        observed.setdefault(identity, []).append(observation)
+
+    ready_events_by_identity: dict[
+        tuple[int, int, int, int, int], list[dict[str, Any]]
+    ] = defaultdict(list)
+    for event in native_events:
+        if event.get("kind") != "visibility_replacement_ready" or \
+                int(event.get("elapsed_ns", -1)) > batch_ns:
+            continue
+        identity = native_identity(event)
+        if identity in cohort_members:
+            ready_events_by_identity[identity].append(event)
+    terminal_ready_ns = max(
+        (
+            int(event.get("elapsed_ns", 0))
+            for events in ready_events_by_identity.values()
+            for event in events
+        ),
+        default=0,
+    )
+    terminal_identities = {
+        identity for identity, events in ready_events_by_identity.items()
+        if any(
+            int(event.get("elapsed_ns", 0)) == terminal_ready_ns
+            for event in events
+        )
+    }
+    for identity in terminal_identities:
+        member = cohort_members[identity]
+        observed.setdefault(identity, []).append({
+            "elapsed_from_request_ms": (
+                terminal_ready_ns - origin_ns
+            ) / 1_000_000.0,
+            "reason": "terminal_readiness_controller",
+            "relation": str(member.get("relation", "non_edit_replacement")),
+            "source": "terminal_readiness_controller",
+        })
+
+    paths = []
+    for identity, observations in observed.items():
+        identity_events = sorted(
+            (
+                event for event in native_events
+                if int(event.get("elapsed_ns", -1)) <= batch_ns
+                and native_identity(event) == identity
+            ),
+            key=lambda event: int(event.get("elapsed_ns", 0)),
+        )
+        by_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for event in identity_events:
+            by_kind[str(event.get("kind", ""))].append(event)
+
+        def first_event(kind: str, after_ns: int = 0) -> dict[str, Any] | None:
+            return next((
+                event for event in by_kind.get(kind, [])
+                if int(event.get("elapsed_ns", -1)) >= after_ns
+            ), None)
+
+        demand = first_event("chunk_demand_accepted")
+        demand_ns = int(demand.get("elapsed_ns", 0)) if demand is not None else 0
+        expect_chunk = next((
+            event for event in by_kind.get("publication_queued", [])
+            if int(event.get("auxiliary", -1)) == 0
+        ), None)
+        expect_chunk_ns = (
+            int(expect_chunk.get("elapsed_ns", 0))
+            if expect_chunk is not None else 0
+        )
+        if demand is not None and int(demand.get("auxiliary", 0)) == 1:
+            generation_origin = "EDIT_REPLACEMENT_DEMAND"
+        elif demand is not None:
+            generation_origin = "VIEWER_DEMAND"
+        elif expect_chunk is not None:
+            generation_origin = "EXPECT_CHUNK_WITHOUT_DEMAND_EVENT"
+        else:
+            generation_origin = "GENERATION_ORIGIN_NOT_RETAINED"
+        priority_requested = first_event(
+            "visibility_coverage_priority_requested", origin_ns
+        )
+        priority_requested_ns = (
+            int(priority_requested.get("elapsed_ns", 0))
+            if priority_requested is not None else 0
+        )
+        priority_applied = first_event(
+            "visibility_coverage_priority_applied",
+            priority_requested_ns or origin_ns,
+        )
+        priority_applied_ns = (
+            int(priority_applied.get("elapsed_ns", 0))
+            if priority_applied is not None else 0
+        )
+        sample_started = first_event("sample_started", demand_ns)
+        sample_started_ns = (
+            int(sample_started.get("elapsed_ns", 0))
+            if sample_started is not None else 0
+        )
+        sample_finished = first_event("sample_finished", sample_started_ns)
+        sample_finished_ns = (
+            int(sample_finished.get("elapsed_ns", 0))
+            if sample_finished is not None else 0
+        )
+        storage_requested = first_event("storage_requested", demand_ns)
+        storage_requested_ns = (
+            int(storage_requested.get("elapsed_ns", 0))
+            if storage_requested is not None else 0
+        )
+        storage_started = first_event("storage_started", storage_requested_ns)
+        storage_started_ns = (
+            int(storage_started.get("elapsed_ns", 0))
+            if storage_started is not None else 0
+        )
+        storage_finished = first_event("storage_finished", storage_started_ns)
+        storage_finished_ns = (
+            int(storage_finished.get("elapsed_ns", 0))
+            if storage_finished is not None else 0
+        )
+        storage_consumed = first_event(
+            "storage_completion_consumed", storage_finished_ns
+        )
+        storage_consumed_ns = (
+            int(storage_consumed.get("elapsed_ns", 0))
+            if storage_consumed is not None else 0
+        )
+        dependency_boundaries = [
+            elapsed_ns for elapsed_ns in (sample_finished_ns, storage_consumed_ns)
+            if elapsed_ns > 0
+        ]
+        dependencies_ready_ns = (
+            max(dependency_boundaries) if dependency_boundaries else 0
+        )
+        mesh_started = first_event("mesh_started", dependencies_ready_ns)
+        mesh_started_ns = (
+            int(mesh_started.get("elapsed_ns", 0))
+            if mesh_started is not None else 0
+        )
+        mesh_finished = first_event("mesh_finished", mesh_started_ns)
+        mesh_finished_ns = (
+            int(mesh_finished.get("elapsed_ns", 0))
+            if mesh_finished is not None else 0
+        )
+        mesh_consumed = first_event("mesh_completion_consumed", mesh_finished_ns)
+        mesh_consumed_ns = (
+            int(mesh_consumed.get("elapsed_ns", 0))
+            if mesh_consumed is not None else mesh_finished_ns
+        )
+        render_applied = first_event("render_sink_applied", mesh_consumed_ns)
+        render_applied_ns = (
+            int(render_applied.get("elapsed_ns", 0))
+            if render_applied is not None else 0
+        )
+        collision_applied = first_event("collision_sink_applied", mesh_consumed_ns)
+        collision_applied_ns = (
+            int(collision_applied.get("elapsed_ns", 0))
+            if collision_applied is not None else 0
+        )
+        member = cohort_members.get(identity)
+        visual_required = (
+            bool(member.get("visual_required")) if member is not None else None
+        )
+        collision_required = (
+            bool(member.get("collision_required")) if member is not None else None
+        )
+        required_sink_boundaries = [
+            elapsed_ns for elapsed_ns, required in (
+                (render_applied_ns, visual_required),
+                (collision_applied_ns, collision_required),
+            )
+            if elapsed_ns > 0 and required is not False
+        ]
+        sinks_ready_ns = max(required_sink_boundaries) if required_sink_boundaries else 0
+        replacement_ready = first_event("visibility_replacement_ready", sinks_ready_ns)
+        replacement_ready_ns = (
+            int(replacement_ready.get("elapsed_ns", 0))
+            if replacement_ready is not None else 0
+        )
+        def from_edit_ms(event_ns: int) -> float | None:
+            return (
+                (event_ns - origin_ns) / 1_000_000.0
+                if event_ns > 0 else None
+            )
+
+        segments = []
+
+        def add_segment(
+            classification: str,
+            duration_ns: int,
+            segment_kind: str = "queue_or_handoff",
+        ) -> None:
+            if duration_ns < 0:
+                return
+            segments.append({
+                "classification": classification,
+                "kind": segment_kind,
+                "duration_ms": duration_ns / 1_000_000.0,
+            })
+
+        if priority_requested_ns > 0:
+            add_segment(
+                "EDIT_TO_PRIORITY_REQUEST",
+                priority_requested_ns - origin_ns,
+            )
+        first_pipeline_ns = min(
+            (elapsed_ns for elapsed_ns in (sample_started_ns, storage_requested_ns)
+             if elapsed_ns > 0),
+            default=0,
+        )
+        priority_boundary_ns = priority_applied_ns or priority_requested_ns
+        if priority_boundary_ns > 0 and first_pipeline_ns > 0:
+            add_segment(
+                (
+                    "PRIORITY_TO_PIPELINE_START"
+                    if priority_applied_ns > 0 else
+                    "PRIORITY_REQUEST_TO_PIPELINE_START"
+                ),
+                first_pipeline_ns - priority_boundary_ns,
+            )
+        elif first_pipeline_ns > origin_ns:
+            add_segment(
+                "EDIT_TO_PIPELINE_START",
+                first_pipeline_ns - origin_ns,
+            )
+        if sample_finished is not None:
+            add_segment(
+                "SAMPLE_WORK",
+                int(sample_finished.get("duration_ns", 0)),
+                "measured_work",
+            )
+        if storage_requested_ns > 0 and storage_started_ns > 0:
+            add_segment(
+                "STORAGE_QUEUE",
+                storage_started_ns - storage_requested_ns,
+            )
+        if storage_finished is not None:
+            add_segment(
+                "STORAGE_WORK",
+                int(storage_finished.get("duration_ns", 0)),
+                "measured_work",
+            )
+        if storage_finished_ns > 0 and storage_consumed_ns > 0:
+            add_segment(
+                "STORAGE_COMPLETION_HANDOFF",
+                storage_consumed_ns - storage_finished_ns,
+            )
+        if dependencies_ready_ns > 0 and mesh_started_ns > 0:
+            add_segment(
+                "DEPENDENCIES_READY_TO_MESH",
+                mesh_started_ns - dependencies_ready_ns,
+            )
+        if mesh_finished is not None:
+            add_segment(
+                "MESH_WORK",
+                int(mesh_finished.get("duration_ns", 0)),
+                "measured_work",
+            )
+        if mesh_finished_ns > 0 and mesh_consumed_ns > 0:
+            add_segment(
+                "MESH_COMPLETION_HANDOFF",
+                mesh_consumed_ns - mesh_finished_ns,
+            )
+        first_sink_ns = min(required_sink_boundaries, default=0)
+        if mesh_consumed_ns > 0 and first_sink_ns > 0:
+            add_segment(
+                "MESH_TO_FIRST_SINK",
+                first_sink_ns - mesh_consumed_ns,
+            )
+        if len(required_sink_boundaries) > 1:
+            add_segment(
+                "REQUIRED_SINK_SPAN",
+                max(required_sink_boundaries) - min(required_sink_boundaries),
+            )
+        if sinks_ready_ns > 0 and replacement_ready_ns > 0:
+            add_segment(
+                "SINKS_TO_VISIBILITY_READY",
+                replacement_ready_ns - sinks_ready_ns,
+            )
+        dominant_segment = max(
+            segments,
+            key=lambda segment: float(segment["duration_ms"]),
+            default={
+                "classification": "NO_COMPLETE_SEGMENT",
+                "kind": "unknown",
+                "duration_ms": 0.0,
+            },
+        )
+        required_events_present = (
+            replacement_ready is not None
+            and (
+                visual_required is not True
+                or (
+                    sample_finished is not None
+                    and mesh_finished is not None
+                    and render_applied is not None
+                )
+            )
+            and (collision_required is not True or collision_applied is not None)
+        )
+        sampled_observations = [
+            item for item in observations
+            if item.get("source") == "sampled_first_blocker"
+        ]
+        is_terminal_controller = identity in terminal_identities
+        paths.append({
+            "identity": {
+                "x": identity[0], "y": identity[1], "z": identity[2],
+                "lod": identity[3], "generation": identity[4],
+            },
+            "relation": str(
+                (sampled_observations[0] if sampled_observations else observations[0])
+                .get("relation", "unknown")
+            ),
+            "sampled_reason": (
+                str(sampled_observations[0].get("reason", "unknown"))
+                if sampled_observations else None
+            ),
+            "observation_count": len(observations),
+            "sampled_observation_count": len(sampled_observations),
+            "terminal_readiness_controller": is_terminal_controller,
+            "first_observed_from_edit_ms": min(
+                float(item.get("elapsed_from_request_ms", 0.0))
+                for item in observations
+            ),
+            "exact_cohort_member": member is not None,
+            "visual_required": visual_required,
+            "collision_required": collision_required,
+            "complete": required_events_present,
+            "demand_origin_retained": demand is not None,
+            "generation_origin_classification": generation_origin,
+            "priority_apply_retained": priority_applied is not None,
+            "viewer_plan_origin": (
+                int(demand.get("cause_id", 0)) if demand is not None else None
+            ),
+            "demand_before_edit_ms": (
+                (origin_ns - demand_ns) / 1_000_000.0
+                if demand_ns > 0 else None
+            ),
+            "demand_from_edit_ms": from_edit_ms(demand_ns),
+            "expect_chunk_from_edit_ms": from_edit_ms(expect_chunk_ns),
+            "stages_from_edit_ms": {
+                "priority_requested": from_edit_ms(priority_requested_ns),
+                "priority_applied": from_edit_ms(priority_applied_ns),
+                "sample_started": from_edit_ms(sample_started_ns),
+                "sample_finished": from_edit_ms(sample_finished_ns),
+                "storage_requested": from_edit_ms(storage_requested_ns),
+                "storage_started": from_edit_ms(storage_started_ns),
+                "storage_finished": from_edit_ms(storage_finished_ns),
+                "storage_consumed": from_edit_ms(storage_consumed_ns),
+                "dependencies_ready": from_edit_ms(dependencies_ready_ns),
+                "mesh_started": from_edit_ms(mesh_started_ns),
+                "mesh_finished": from_edit_ms(mesh_finished_ns),
+                "mesh_consumed": from_edit_ms(mesh_consumed_ns),
+                "render_applied": from_edit_ms(render_applied_ns),
+                "collision_applied": from_edit_ms(collision_applied_ns),
+                "visibility_ready": from_edit_ms(replacement_ready_ns),
+                "publication": from_edit_ms(batch_ns),
+            },
+            "segments": segments,
+            "dominant_segment": dominant_segment,
+            "ready_before_publication_ms": (
+                (batch_ns - replacement_ready_ns) / 1_000_000.0
+                if replacement_ready_ns > 0 else None
+            ),
+        })
+
+    dominant_counts = Counter(
+        str(path["dominant_segment"]["classification"])
+        for path in paths
+    )
+    overall_dominant = max(
+        (path for path in paths if path.get("dominant_segment")),
+        key=lambda path: float(path["dominant_segment"]["duration_ms"]),
+        default=None,
+    )
+    exact_path_count = sum(path["exact_cohort_member"] for path in paths)
+    complete_path_count = sum(path["complete"] for path in paths)
+    non_edit_path_count = sum(
+        path["relation"] == "other_replacement" for path in paths
+    )
+    terminal_paths = [
+        path for path in paths if path["terminal_readiness_controller"]
+    ]
+    terminal_complete_count = sum(path["complete"] for path in terminal_paths)
+    terminal_demand_origin_count = sum(
+        path["demand_origin_retained"] for path in terminal_paths
+    )
+    terminal_priority_apply_count = sum(
+        path["priority_apply_retained"] for path in terminal_paths
+    )
+    sampled_paths = [
+        path for path in paths if path["sampled_observation_count"] > 0
+    ]
+    unmatched_sampled_path_count = sum(
+        not path["exact_cohort_member"] for path in sampled_paths
+    )
+    terminal_dominant_counts = Counter(
+        str(path["dominant_segment"]["classification"])
+        for path in terminal_paths
+    )
+    terminal_origin_counts = Counter(
+        str(path["generation_origin_classification"])
+        for path in terminal_paths
+    )
+    terminal_overall_dominant = max(
+        terminal_paths,
+        key=lambda path: float(path["dominant_segment"]["duration_ms"]),
+        default=None,
+    )
+    if (
+        terminal_paths
+        and terminal_complete_count == len(terminal_paths)
+        and all(path["exact_cohort_member"] for path in terminal_paths)
+    ):
+        classification = "EXACT_TERMINAL_CONTROLLER_PATHS_RETAINED"
+    elif paths and exact_path_count == len(paths) and complete_path_count == len(paths):
+        classification = "EXACT_BLOCKER_CRITICAL_PATHS_RETAINED"
+    elif paths:
+        classification = "PARTIAL_BLOCKER_CRITICAL_PATHS_RETAINED"
+    else:
+        classification = "BLOCKER_PATH_NOT_RETAINED"
+    return {
+        "available": bool(paths),
+        "classification": classification,
+        "path_count": len(paths),
+        "complete_path_count": complete_path_count,
+        "exact_cohort_member_path_count": exact_path_count,
+        "non_edit_path_count": non_edit_path_count,
+        "sampled_path_count": len(sampled_paths),
+        "unmatched_sampled_path_count": unmatched_sampled_path_count,
+        "terminal_controller_path_count": len(terminal_paths),
+        "terminal_controller_complete_path_count": terminal_complete_count,
+        "terminal_controller_demand_origin_path_count": terminal_demand_origin_count,
+        "terminal_controller_priority_apply_path_count": terminal_priority_apply_count,
+        "dominant_segment_counts": dict(sorted(dominant_counts.items())),
+        "terminal_controller_dominant_segment_counts": dict(sorted(
+            terminal_dominant_counts.items()
+        )),
+        "terminal_controller_generation_origin_counts": dict(sorted(
+            terminal_origin_counts.items()
+        )),
+        "terminal_controller_overall_dominant": (
+            {
+                "identity": terminal_overall_dominant["identity"],
+                **terminal_overall_dominant["dominant_segment"],
+            }
+            if terminal_overall_dominant is not None else None
+        ),
+        "overall_dominant": (
+            {
+                "identity": overall_dominant["identity"],
+                **overall_dominant["dominant_segment"],
+            }
+            if overall_dominant is not None else None
+        ),
+        "paths": paths,
+        "claim_boundary": (
+            "Terminal controllers come from the exact cohort member with the last "
+            "retained visibility-readiness event before publication. Complete path "
+            "means required sinks and readiness are retained; demand origin and "
+            "priority application are reported independently because replacement "
+            "generations can enter through other authority lifecycle paths. Sampled "
+            "paths remain cadence-bounded and can include a preceding cohort."
+        ),
+    }
+
+
 def edit_analysis(
     downstream_events: list[dict[str, Any]], native_events: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -1078,6 +1583,13 @@ def edit_analysis(
             request,
             submission,
         )
+        blocker_critical_paths = publication_blocker_critical_path_analysis(
+            native_events,
+            blocker_analysis,
+            publication_analysis,
+            origin_ns,
+            batch_event,
+        )
         reports.append({
             "index": index + 1,
             "mode": str((request.get("payload") or {}).get("mode", "unknown")),
@@ -1120,6 +1632,7 @@ def edit_analysis(
                 "pending_render_retirements": int(blocker_event.get("status", 0)),
             },
             "sampled_first_blocker": blocker_analysis,
+            "publication_blocker_critical_paths": blocker_critical_paths,
             "pre_edit_destination_readiness": destination_readiness,
             "correlated_visibility_publication": publication_analysis,
             "dominant_wait": dominant_gap,
@@ -1459,6 +1972,7 @@ def summary_text(report: dict[str, Any]) -> str:
         for edit in trace["edits"]:
             edit_usage = edit.get("process_usage_during_pipeline", {})
             blocker = edit.get("sampled_first_blocker", {})
+            critical_paths = edit.get("publication_blocker_critical_paths", {})
             publication = edit.get("correlated_visibility_publication", {})
             destination = edit.get("pre_edit_destination_readiness", {})
             usage_text = "cpu-window=n/a"
@@ -1472,6 +1986,18 @@ def summary_text(report: dict[str, Any]) -> str:
                 blocker_text = "blocker={relation}/{reason}".format(
                     relation=blocker["dominant_relation"],
                     reason=blocker["dominant_reason"],
+                )
+            critical_text = "critical-path=n/a"
+            overall_critical = (
+                critical_paths.get("terminal_controller_overall_dominant")
+                or critical_paths.get("overall_dominant")
+            )
+            if critical_paths.get("available") and isinstance(overall_critical, dict):
+                critical_text = "critical-path={classification}/{duration:.3f}ms exact={exact}/{total}".format(
+                    classification=overall_critical["classification"],
+                    duration=float(overall_critical["duration_ms"]),
+                    exact=critical_paths["exact_cohort_member_path_count"],
+                    total=critical_paths["path_count"],
                 )
             publication_text = "publication=n/a"
             if publication.get("available"):
@@ -1496,7 +2022,7 @@ def summary_text(report: dict[str, Any]) -> str:
                     ),
                 )
             lines.append(
-                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage} {blocker} {publication} {destination}".format(
+                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage} {blocker} {critical} {publication} {destination}".format(
                     index=edit["index"],
                     mode=edit["mode"],
                     distance=(
@@ -1510,6 +2036,7 @@ def summary_text(report: dict[str, Any]) -> str:
                     dominant=edit["dominant_wait"]["stage"],
                     usage=usage_text,
                     blocker=blocker_text,
+                    critical=critical_text,
                     publication=publication_text,
                     destination=destination_text,
                 )
