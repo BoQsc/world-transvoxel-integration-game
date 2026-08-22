@@ -31,7 +31,7 @@ const MIB := 1024 * 1024
 @export_range(1, 2048, 1, "suffix:MiB") var render_mebibytes: int = 128
 @export_range(1, 65536, 1) var collision_entry_capacity: int = 64
 @export_range(1, 1024, 1, "suffix:MiB") var collision_mebibytes: int = 64
-@export_range(1, 1048576, 1) var trace_event_capacity: int = 65536
+@export_range(1, 262144, 1) var trace_event_capacity: int = 262144
 @export_range(1, 128, 1) var render_apply_budget: int = 4
 @export_range(1, 128, 1) var collision_apply_budget: int = 2
 @export_range(1, 33333, 1, "suffix:us") var collision_apply_deadline_us: int = 4000
@@ -144,7 +144,7 @@ func _match_common_defaults() -> void:
 	mesh_mebibytes = 128
 	render_mebibytes = 128
 	collision_mebibytes = 64
-	trace_event_capacity = 65536
+	trace_event_capacity = 262144
 	render_transition_frames = 0
 	shader_fade_parameter_enabled = false
 	global_coarse_lod_coverage = false

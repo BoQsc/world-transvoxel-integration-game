@@ -2,7 +2,7 @@ extends RefCounted
 
 const SCHEMA := "world_transvoxel.cpu_causal_trace.v2"
 const DEFAULT_CAPACITY := 8192
-const NATIVE_EVENT_CAPACITY := 131072
+const NATIVE_EVENT_CAPACITY := 262144
 const NATIVE_READ_BATCH := 4096
 const NATIVE_MAX_BATCHES_PER_DRAIN := 32
 const NORMAL_PIPELINE_CADENCE := 10
