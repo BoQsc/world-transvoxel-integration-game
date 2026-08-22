@@ -1,0 +1,61 @@
+{
+  "schema": "world_transvoxel.cpu_b3l_bounded_mesh_admission.v1",
+  "date": "2026-08-22",
+  "status": "CANDIDATE_REJECTED",
+  "authority_commit": "d15c4961427b2daf3053296b87af58834f15f01f",
+  "integration_base_commit": "afd664f",
+  "runtime_artifact_digest_sha256": "5be1fa97f010c8f2beb7bf8a3ec98eaa738957d7f21dc9232751a6c1ba090c03",
+  "logical_cpu_capacity": 3,
+  "meshing_worker_count": 2,
+  "mesh_waiting_admission_limit": 2,
+  "correctness": {
+    "trace_integrity_complete": true,
+    "native_event_count": 123952,
+    "native_local_dropped_events": 0,
+    "worker_mesh_start_finish_events": 5246,
+    "worker_events_with_meshing_role": 5246,
+    "maximum_worker_active_jobs": 2,
+    "maximum_worker_queued_jobs": 2,
+    "maximum_worker_queued_completions": 4,
+    "maximum_worker_queue_wait_ms": 280.0121,
+    "blocked_flight_frames": 0,
+    "destination_fully_ready_before_all_edits": true,
+    "publication_membership": "EXACT"
+  },
+  "performance": {
+    "duration_seconds": 34.590,
+    "frame_p99_ms": 65.182,
+    "frame_maximum_ms": 6140.109,
+    "carve_pipeline_ms": 3695.697,
+    "construct_pipeline_ms": 5275.971,
+    "average_active_logical_cores": 1.226,
+    "process_cpu_percent_p95": 221.5,
+    "saturated_sample_fraction": 0.004,
+    "carve_edit_saturated_fraction": 0.0,
+    "construct_edit_saturated_fraction": 0.0
+  },
+  "construction_terminal": {
+    "same_priority_jobs_ahead": 313,
+    "same_publication_region_jobs_ahead": 313,
+    "mesh_jobs_ahead": 152,
+    "sample_jobs_ahead": 161,
+    "priority_observation_to_sample_dequeue_ms": 1791.762,
+    "mesh_scheduler_queue_ms": 1931.350,
+    "queue_composition_exact": true
+  },
+  "raw_evidence": {
+    "trace_bytes": 42461235,
+    "trace_sha256": "12f900e9cf4680f0dc407d4fe1b62034410a67ed1ffa7802f4b18d9ccb855507",
+    "report_bytes": 773459,
+    "report_sha256": "b72254a0b40157e7d8607a1eb61fcef3e5677bb8bc24b25f84d882f0cb6071f2",
+    "usage_bytes": 51251,
+    "usage_sha256": "332340383e43ea788af1e5b46a65114d129c0b6601a3461b6106a74d47de19db"
+  },
+  "decision": {
+    "classification": "BOUNDED_ADMISSION_ALONE_REJECTED",
+    "accepted_meshing_worker_count": 0,
+    "gpu_architecture_selected": false,
+    "next_milestone": "WORK_CONSERVING_STAGE_AWARE_DISPATCH"
+  },
+  "claim_boundary": "Complete intrusive evidence proves the bounded queue and mixed-stage head-of-line mechanism. Trace-off acceptance is required if the final CPU candidate survives."
+}

@@ -121,6 +121,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	var metrics: Dictionary = pipeline.get("metrics", {})
 	_queues_label.text = (
 		"VIEW  updates %d  jobs %d  completions %d  plans %d open / %d latest\n" +
+		"MESH  workers %d  active %d  waiting %d  done %d  wait %.2f / %.2f ms\n" +
 		"STORE queued %d  active %d  done %d  last %.2f ms\n" +
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
@@ -132,6 +133,12 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("scheduler_queued_completions", 0)),
 		int(metrics.get("open_viewer_plan_publications", 0)),
 		int(metrics.get("latest_completed_viewer_plan_revision", 0)),
+		int(metrics.get("mesh_worker_count", 0)),
+		int(metrics.get("mesh_worker_active_jobs", 0)),
+		int(metrics.get("mesh_worker_queued_jobs", 0)),
+		int(metrics.get("mesh_worker_completed_jobs", 0)),
+		float(metrics.get("mesh_worker_queue_wait_ns_last", 0)) / 1000000.0,
+		float(metrics.get("mesh_worker_queue_wait_ns_maximum", 0)) / 1000000.0,
 		int(metrics.get("storage_queued_requests", 0)),
 		int(metrics.get("storage_active_requests", 0)),
 		int(metrics.get("storage_completed_requests", 0)),
@@ -189,6 +196,8 @@ func _classify_blocker(
 			if int(metrics.get("storage_active_requests", 0)) > 0 or \
 					int(metrics.get("storage_queued_requests", 0)) > 0:
 				return "edit target waiting on storage/generation"
+			if int(metrics.get("mesh_worker_queued_jobs", 0)) > 0:
+				return "edit target waiting in mesh worker queue"
 			if int(metrics.get("scheduler_queued_jobs", 0)) > 0:
 				return "edit target waiting on sample/mesh scheduler"
 			if int(metrics.get("queued_render", 0)) > 0:

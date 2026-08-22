@@ -23,6 +23,12 @@ class FakeTrace extends RefCounted:
 				"metrics": {
 					"viewer_updates": 12,
 					"scheduler_queued_jobs": 3,
+					"mesh_worker_count": 2,
+					"mesh_worker_active_jobs": 2,
+					"mesh_worker_queued_jobs": 2,
+					"mesh_worker_completed_jobs": 7,
+					"mesh_worker_queue_wait_ns_last": 2500000,
+					"mesh_worker_queue_wait_ns_maximum": 5000000,
 					"storage_active_requests": 1,
 					"page_awaiting_mesh_records": 2,
 					"queued_render": 1,
@@ -66,7 +72,9 @@ func _run_test() -> void:
 		_fail("HUD did not retain the trace destination")
 		return
 	var text := _collect_label_text(hud)
-	for expected in ["TERRAIN PIPELINE WATERFALL", "mesh_started", "waiting on storage"]:
+	for expected in [
+		"TERRAIN PIPELINE WATERFALL", "workers 2", "mesh_started", "waiting on storage",
+	]:
 		if not text.contains(expected):
 			_fail("HUD is missing expected live data: %s" % expected)
 			return
