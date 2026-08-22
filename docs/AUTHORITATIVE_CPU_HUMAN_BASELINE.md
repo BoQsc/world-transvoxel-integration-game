@@ -75,3 +75,15 @@ python -c "import psutil,runpy,sys; psutil.Process().cpu_affinity([0,1,2]); sys.
 
 The retained report belongs under
 `docs/evidence/authoritative_cpu_human_baseline_20260812/`.
+
+## Final CPU Closure
+
+This document remains the historical CPU-B1 measurement contract. CPU-B2 and
+CPU-B3 subsequently completed causal attribution, bounded CPU remediation,
+resource and ownership audits, full correctness regression, and final
+trace-off qualification. The superseding frozen result is
+`docs/evidence/cpu_final_authoritative_baseline_20260822/`.
+
+The final result remains a performance target miss but admits the measured
+TQP-58 architecture decision. It does not retroactively turn this baseline
+into a performance pass.

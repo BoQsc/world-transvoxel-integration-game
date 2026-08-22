@@ -1,0 +1,62 @@
+{
+  "schema": "world_transvoxel.gpu_architecture_decision.v1",
+  "date": "2026-08-23",
+  "milestone": "TQP-58",
+  "status": "PASS_DECISION_ONLY",
+  "cpu_reference": {
+    "authority_commit": "b35491948e126f6f660f64ad89532acbc50895bc",
+    "integration_causal_commit": "9518d303f895845efce8afea04e763f24dea695c",
+    "qualification": "../cpu_final_authoritative_baseline_20260822/qualification.json",
+    "retained_as_correctness_authority": true
+  },
+  "selected": {
+    "architecture": "GPU_FIELD_AND_TRANSVOXEL_MESH_CANDIDATE_WITH_CPU_CONTROL_AUTHORITY",
+    "gpu_first_scope": [
+      "density_gradient_material_field_evaluation",
+      "regular_cell_mesh_extraction",
+      "transition_cell_mesh_extraction",
+      "gpu_resident_candidate_mesh_buffers"
+    ],
+    "cpu_retained_scope": [
+      "world_state_and_storage",
+      "edit_transactions_and_revisions",
+      "desired_set_and_transition_mask_ownership",
+      "result_identity_and_stale_rejection",
+      "atomic_publication",
+      "persistence",
+      "targeted_collision_policy_and_initial_collision_generation"
+    ],
+    "silent_runtime_fallback": false,
+    "explicit_cpu_reference_mode": true
+  },
+  "rejected_or_deferred": {
+    "continue_unbounded_cpu_scheduler_experiments": "rejected_as_next_phase",
+    "full_gpu_terrain_authority": "rejected",
+    "gpu_collision_readback": "deferred_to_tqp62",
+    "gpu_storage_or_persistence": "out_of_scope"
+  },
+  "result_identity_contract": [
+    "page_key",
+    "lod",
+    "generation",
+    "source_revision",
+    "world_revision",
+    "transition_mask"
+  ],
+  "ordered_next_milestones": ["TQP-59", "TQP-60", "TQP-61", "TQP-62", "TQP-63", "TQP-64"],
+  "promotion_gates": [
+    "analytical_and_cpu_differential_field_correctness",
+    "regular_and_transition_topology_and_seam_equivalence",
+    "material_water_edit_and_bounds_equivalence",
+    "zero_stale_publication",
+    "zero_render_collision_ownership_divergence",
+    "material_frame_pacing_relocation_throughput_or_energy_benefit",
+    "cross_hardware_driver_api_memory_thermal_and_power_evidence"
+  ],
+  "power_boundary": {
+    "gpu_board": "measure_directly_when_available",
+    "cpu_package": "separate_trusted_sensor_required",
+    "whole_system": "separate_wall_or_platform_sensor_required"
+  },
+  "claim_boundary": "TQP-58 selects an architecture for candidate implementation. It does not qualify GPU correctness, performance, energy efficiency, or production release."
+}

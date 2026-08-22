@@ -143,3 +143,32 @@ supporting evidence only. Its synchronous observer overhead also disqualifies
 the run as a performance baseline. Retained evidence is under
 `docs/evidence/cpu_b3a_lod_opening_20260813/`. CPU-B3B does not advance, and
 TQP-58 remains blocked.
+
+## Final CPU-B3 Closure
+
+The paragraph above records the first bounded CPU-B3A attempt and is retained
+as history. Later CPU-B3A through CPU-B3Q work completed the missing opening,
+flight, component-ownership, queue, scheduler, resource, and source-structure
+audits. Narrow worker, admission, priority, stage-aware dispatch, and shared
+work-budget candidates were measured; regressing candidates were rejected and
+reverted.
+
+The final exact authority is `b35491948e126f6f660f64ad89532acbc50895bc`.
+All 62 current native executables pass in debug and release, all ten Godot 4.7.2
+integration smokes pass, resource ceilings pass, and the source validator has
+no hard failures. The final three-run trace-off profile remains
+`MEASURED_TARGET_MISS`, with median frame p99 `38.660 ms` and median relocation
+render/collision readiness `8692.049 ms`.
+
+The lossless `138608`-event causal run records zero gaps or drops. Edited chunks
+reach both sinks by `1474.252 ms`, but global visibility publishes at
+`7772.796 ms`. Storage has no queued request at the largest movement frame.
+The remaining material delay is therefore classified as serial CPU meshing
+feeding a conservative global visibility/replacement/collision backlog, while
+movement rejection remains the expected collision-readiness gate during that
+backlog.
+
+CPU-B3 is complete as a correctness, attribution, and bounded-standard-remedy
+program. CPU performance is not qualified. The exact record is under
+`docs/evidence/cpu_final_authoritative_baseline_20260822/`; TQP-58 is eligible
+and its decision is retained in `docs/GPU_ARCHITECTURE_DECISION.md`.

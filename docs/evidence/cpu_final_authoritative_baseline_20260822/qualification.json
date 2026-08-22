@@ -1,0 +1,90 @@
+{
+  "schema": "world_transvoxel.cpu_final_authoritative_baseline.v1",
+  "date": "2026-08-22",
+  "status": "PASS_CPU_REFERENCE_FROZEN_PERFORMANCE_TARGET_MISSED",
+  "authority": {
+    "commit": "b35491948e126f6f660f64ad89532acbc50895bc",
+    "addon_tree": "52d2d3f0c29f587fb4fe23489a15f74f1de478f6",
+    "native_source_tree": "6b6f20cbc8559cb54b8e5b8a3e3c41cd0a9fe303",
+    "runtime_artifact_sha256": "79f692d7b971b1c050ab603f8ee9fb569df5ed328b8dc93222c554324a1c3e9e",
+    "debug_dll_sha256": "39b84f014770252d14cae2d63bf41117ad01fced01482ca64dba87f077ced62d",
+    "release_dll_sha256": "c8d8a1d885c4c61bd3c3dc3c3e2b840767e5baee6a145151f84d7cd8ca7ce01c"
+  },
+  "integration": {
+    "trace_off_commit": "eceaa8759a84be66b33e2b571720374ab3ddc35f",
+    "causal_commit": "9518d303f895845efce8afea04e763f24dea695c"
+  },
+  "environment": {
+    "godot": "4.7.2",
+    "logical_cpu_affinity": [0, 1, 2],
+    "procedural_generation_workers": 2,
+    "runtime_meshing_workers": 0,
+    "fallback": false
+  },
+  "correctness": {
+    "native_debug_release_executables_passed": 62,
+    "godot_smoke_scripts_passed": 10,
+    "source_validator_hard_failures": 0,
+    "visual_collision_divergence": 0,
+    "transition_chain_complete": true,
+    "invalid_transition_masks": 0,
+    "resource_ceilings_pass": true
+  },
+  "trace_off": {
+    "runs": 3,
+    "status": "MEASURED_TARGET_MISS",
+    "aggregate_sha256": "7ae733dcd437466e40f14b690b0ca4ff9196af716cba3bf455c8693b1fd350a3",
+    "median": {
+      "frame_p95_ms": 32.691,
+      "frame_p99_ms": 38.66,
+      "relocation_visual_collision_ready_ms": 8692.049,
+      "blocked_movement_frames": 8,
+      "max_consecutive_blocked_frames": 4,
+      "max_mesh_job_ms": 72.5803,
+      "scheduler_max_queued_jobs": 745,
+      "max_pending_replacements": 739,
+      "collision_apply_deadline_overruns": 176,
+      "average_active_core_equivalents": 1.5344,
+      "peak_process_tree_rss_bytes": 846192640
+    },
+    "maximum": {
+      "blocked_movement_frames": 25,
+      "max_consecutive_blocked_frames": 7,
+      "max_mesh_job_ms": 98.6704,
+      "max_sample_job_ms": 42.0626,
+      "scheduler_max_queued_jobs": 752,
+      "max_pending_replacements": 756
+    }
+  },
+  "causal": {
+    "qualification_sha256": "6b4f24581f9625a7220ebe6df6e5f3eb6d370d38fcb23361e09d89c881cd8c63",
+    "causal_slice_sha256": "d6f8539f805f3cb3262445633c3f77720aecaaca0ae0411bf39e862662a676a0",
+    "full_trace_sha256": "fb5ea1ca8b7ffcc70d8fde1d53bfd9064f9ee5696a072b8365038c12f95cf652",
+    "native_events": 138608,
+    "source_overwrite": 0,
+    "local_dropped": 0,
+    "consumer_gaps": 0,
+    "downstream_dropped": 0,
+    "missing_event_kinds": [],
+    "edit_classification": "GLOBAL_VISIBILITY_STAGING_BARRIER_AFTER_RELOCATION",
+    "movement_classification": "COLLISION_READINESS_GATE_DURING_RELOCATION_BACKLOG",
+    "edited_required_chunks_last_sink_ms": 1474.252,
+    "last_edit_replacement_ready_ms": 1506.8255,
+    "first_visibility_batch_ms": 7772.796,
+    "visibility_wait_after_last_sink_ms": 6298.544,
+    "storage_queued_requests_at_largest_movement_frame": 0
+  },
+  "decision": {
+    "classification": "AUTHORITATIVE_CPU_BASELINE_FROZEN_PERFORMANCE_TARGET_MISSED_GPU_DECISION_READY",
+    "cpu_b3": "PASS",
+    "tqp58_eligible": true,
+    "gpu_backend_promoted": false
+  },
+  "claim_boundaries": [
+    "The CPU path remains the correctness authority and reference oracle.",
+    "The measured host misses player-facing frame pacing and relocation readiness targets.",
+    "No CPU-package, GPU-board, or whole-system watt target is qualified by this record.",
+    "No new human visual review is claimed for the exact final artifact.",
+    "This record admits an architecture decision; it does not qualify a GPU implementation."
+  ]
+}

@@ -55,13 +55,14 @@ integration pin because its three-CPU multi-site edit replacement latency did
 not qualify. See
 [docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md](docs/AUTHORITY_789AEA6_REPLACEMENT_QUALIFICATION.md).
 
-The current reviewed terrain is frozen as the CPU human-performance comparison
-baseline in
-[docs/AUTHORITATIVE_CPU_HUMAN_BASELINE.md](docs/AUTHORITATIVE_CPU_HUMAN_BASELINE.md).
-Known flight stutter and delayed first edit after relocation are retained as
-measured target misses. Optimization and the GPU architecture decision remain
-blocked until a real-time causal terrain-pipeline trace explains their order
-and cost.
+The current terrain is frozen as the final authoritative CPU correctness and
+performance-comparison baseline in
+[docs/evidence/cpu_final_authoritative_baseline_20260822/README.md](docs/evidence/cpu_final_authoritative_baseline_20260822/README.md).
+Known flight stutter and delayed first edit after relocation remain measured
+target misses. A lossless causal trace attributes the dominant delay to serial
+mesh work feeding a conservative global visibility/replacement/collision
+backlog. [TQP-58](docs/GPU_ARCHITECTURE_DECISION.md) therefore selects a
+bounded GPU field-and-meshing candidate while CPU control remains authoritative.
 
 ## Critical edited-terrain LOD boundary
 
