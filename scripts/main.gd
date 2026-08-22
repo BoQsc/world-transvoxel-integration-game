@@ -23,6 +23,8 @@ const MaterialApplicator := preload("res://addons/world_transvoxel_gameworld/mat
 const PlayerScript := preload("res://scripts/wt_production_player.gd")
 const RuntimeBaselineGate := preload("res://scripts/wt_runtime_baseline_gate.gd")
 const CpuCausalTrace := preload("res://scripts/wt_cpu_causal_trace.gd")
+const TerrainWaterfallHud := preload("res://scripts/wt_terrain_waterfall_hud.gd")
+const TerrainWaterfallRoute := preload("res://scripts/wt_terrain_waterfall_route.gd")
 const CpuB3aLodOpeningCapture := preload("res://scripts/wt_cpu_b3a_lod_opening_capture.gd")
 const StaticWaterVisualProbe := preload("res://scripts/wt_static_water_visual_probe.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
@@ -83,6 +85,12 @@ var procedural_generation_worker_count_override := -1
 var runtime_baseline_edit_ready_wait_frames := 900
 var cpu_causal_trace_output_path := ""
 var cpu_causal_trace: RefCounted
+var terrain_waterfall_requested := false
+var terrain_waterfall_smoke := false
+var terrain_waterfall_autonomous_route := false
+var terrain_waterfall_output_path := ""
+var terrain_waterfall_capture_index := 0
+var terrain_waterfall_hud: PanelContainer
 var lod_movement_direct_only := false
 var lod_movement_operation_limit := -1
 var lod_movement_gap_only_probe := false
@@ -169,6 +177,19 @@ func _ready() -> void:
 	cpu_causal_trace_output_path = _arg_value(
 		args, "--cpu-causal-trace-output", ""
 	)
+	terrain_waterfall_requested = args.has("--terrain-waterfall")
+	terrain_waterfall_smoke = args.has("--terrain-waterfall-smoke")
+	terrain_waterfall_autonomous_route = args.has(
+		"--terrain-waterfall-autonomous-route"
+	)
+	if terrain_waterfall_smoke or terrain_waterfall_autonomous_route:
+		terrain_waterfall_requested = true
+	terrain_waterfall_output_path = _arg_value(
+		args, "--terrain-waterfall-output", ""
+	)
+	if not terrain_waterfall_output_path.is_empty():
+		terrain_waterfall_requested = true
+		cpu_causal_trace_output_path = terrain_waterfall_output_path
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
 	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
 	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
@@ -177,6 +198,10 @@ func _ready() -> void:
 	var default_profile := str(DEFAULT_AUTONOMOUS_PROFILE if autonomous else DEFAULT_HUMAN_PROFILE)
 	selected_profile = StringName(_arg_value(args, "--p2-profile", default_profile))
 	playtest_profile_id = selected_profile
+	if terrain_waterfall_requested and cpu_causal_trace_output_path.is_empty():
+		cpu_causal_trace_output_path = _default_terrain_waterfall_output_path()
+	if terrain_waterfall_requested:
+		terrain_waterfall_output_path = cpu_causal_trace_output_path
 	_configure_human_artifact_marker_replay_context()
 	if not initial_human_material_mode.is_empty():
 		_set_human_material_mode_by_name(initial_human_material_mode)
@@ -410,6 +435,13 @@ func _start_profile() -> void:
 		game_world.human_input_enabled = true
 		player.call("set_human_input_enabled", true)
 		_start_human_cpu_causal_trace()
+		if terrain_waterfall_requested and cpu_causal_trace != null:
+			terrain_waterfall_capture_index = 1
+			_attach_terrain_waterfall_hud()
+			if terrain_waterfall_autonomous_route:
+				call_deferred("_run_terrain_waterfall_autonomous_route")
+			elif terrain_waterfall_smoke:
+				call_deferred("_run_terrain_waterfall_smoke")
 		if not human_visual_capture_path.is_empty():
 			call_deferred("_capture_human_visual")
 	if autonomous:
@@ -668,6 +700,7 @@ func _build_hud() -> void:
 		_build_human_controls_hint_label(canvas)
 		_build_human_position_label(canvas)
 		_build_human_launch_command_label(canvas)
+		_build_terrain_waterfall_hud(canvas)
 	_build_loading_overlay()
 	if not autonomous:
 		return
@@ -753,6 +786,11 @@ func _build_human_position_label(canvas: CanvasLayer) -> void:
 	human_position_label.add_theme_constant_override("shadow_offset_x", 2)
 	human_position_label.add_theme_constant_override("shadow_offset_y", 2)
 	canvas.add_child(human_position_label)
+
+
+func _build_terrain_waterfall_hud(canvas: CanvasLayer) -> void:
+	terrain_waterfall_hud = TerrainWaterfallHud.new()
+	canvas.add_child(terrain_waterfall_hud)
 
 
 func _style_human_static_label(label: Label) -> void:
@@ -1889,6 +1927,9 @@ func handle_human_command(command: StringName) -> bool:
 		&"cycle_material_mode":
 			_cycle_human_material_mode()
 			return true
+		&"toggle_terrain_waterfall":
+			_toggle_terrain_waterfall()
+			return true
 	return false
 
 
@@ -2223,6 +2264,143 @@ func _human_artifact_targeted_summary_has_mismatch(diagnostics: Array) -> bool:
 				not bool(comparison.get("exact_match", false)):
 			return true
 	return false
+
+
+func _default_terrain_waterfall_output_path() -> String:
+	var stamp := Time.get_datetime_string_from_system(false)
+	stamp = stamp.replace("-", "").replace(":", "").replace(" ", "_")
+	return "res://.godot/world_transvoxel_captures/terrain_waterfall/%s_%s_trace.json" % [
+		stamp, str(selected_profile),
+	]
+
+
+func _terrain_waterfall_capture_path(index: int) -> String:
+	var base_path := terrain_waterfall_output_path
+	if base_path.is_empty():
+		base_path = _default_terrain_waterfall_output_path()
+		terrain_waterfall_output_path = base_path
+	if index <= 1:
+		return base_path
+	var extension_index := base_path.rfind(".")
+	if extension_index < 0:
+		return "%s_%03d.json" % [base_path, index]
+	return "%s_%03d%s" % [
+		base_path.substr(0, extension_index), index,
+		base_path.substr(extension_index),
+	]
+
+
+func _attach_terrain_waterfall_hud() -> void:
+	if terrain_waterfall_hud == null or cpu_causal_trace == null:
+		return
+	terrain_waterfall_hud.call(
+		"attach_trace", cpu_causal_trace, cpu_causal_trace_output_path
+	)
+
+
+func _detach_terrain_waterfall_hud() -> void:
+	if terrain_waterfall_hud != null:
+		terrain_waterfall_hud.call("detach_trace")
+
+
+func _disconnect_human_cpu_causal_trace() -> void:
+	if player != null and player.has_method("set_cpu_causal_trace"):
+		player.call("set_cpu_causal_trace", null)
+	if game_world != null and game_world.has_method("set_cpu_causal_trace"):
+		game_world.call("set_cpu_causal_trace", null)
+	cpu_causal_trace = null
+
+
+func _toggle_terrain_waterfall() -> void:
+	if autonomous:
+		return
+	if cpu_causal_trace != null and bool(cpu_causal_trace.call("is_active")):
+		var result := _finalize_human_cpu_causal_trace("human_toggle_off")
+		print("WT_TERRAIN_WATERFALL_STOPPED ", JSON.stringify(result))
+		_disconnect_human_cpu_causal_trace()
+		_detach_terrain_waterfall_hud()
+		return
+	terrain_waterfall_requested = true
+	terrain_waterfall_capture_index += 1
+	cpu_causal_trace_output_path = _terrain_waterfall_capture_path(
+		terrain_waterfall_capture_index
+	)
+	_start_human_cpu_causal_trace()
+	if cpu_causal_trace == null:
+		return
+	_attach_terrain_waterfall_hud()
+	print("WT_TERRAIN_WATERFALL_STARTED ", cpu_causal_trace_output_path)
+
+
+func _run_terrain_waterfall_autonomous_route() -> void:
+	var runner: RefCounted = TerrainWaterfallRoute.new()
+	var result_value = await runner.call(
+		"run", self, player, game_world, cpu_causal_trace, selected_profile
+	)
+	if not result_value is Dictionary:
+		_finish_terrain_waterfall_autonomous_route(false, {
+			"error": "route_result_invalid",
+		})
+		return
+	var result: Dictionary = result_value
+	var route_value = result.get("route", result)
+	var route: Dictionary = route_value if route_value is Dictionary else {
+		"error": "route_payload_invalid",
+	}
+	_finish_terrain_waterfall_autonomous_route(
+		bool(result.get("ok", false)), route
+	)
+
+
+func _finish_terrain_waterfall_autonomous_route(
+	ok: bool,
+	route: Dictionary
+) -> void:
+	var result := _finalize_human_cpu_causal_trace(
+		"autonomous_route_complete" if ok else "autonomous_route_failed"
+	)
+	route["trace"] = result
+	if ok and bool(result.get("ok", false)) and \
+			bool(result.get("native_complete", false)):
+		print("WT_TERRAIN_WATERFALL_AUTONOMOUS_PASS ", JSON.stringify(route))
+		get_tree().quit(0)
+		return
+	push_error("WT_TERRAIN_WATERFALL_AUTONOMOUS_FAIL %s" % JSON.stringify(route))
+	get_tree().quit(1)
+
+
+func _run_terrain_waterfall_smoke() -> void:
+	for _frame in range(30):
+		await get_tree().physics_frame
+	if cpu_causal_trace == null or not bool(cpu_causal_trace.call("is_active")):
+		push_error("WT_TERRAIN_WATERFALL_RUNTIME_FAIL trace_not_active")
+		get_tree().quit(1)
+		return
+	var snapshot_value = cpu_causal_trace.call(
+		"get_live_waterfall_snapshot", 8, 4
+	)
+	if not snapshot_value is Dictionary or \
+			not bool(snapshot_value.get("active", false)) or \
+			not snapshot_value.has("pipeline"):
+		push_error("WT_TERRAIN_WATERFALL_RUNTIME_FAIL live_snapshot_invalid")
+		get_tree().quit(1)
+		return
+	var result := _finalize_human_cpu_causal_trace("runtime_smoke_complete")
+	if not bool(result.get("ok", false)) or \
+			not bool(result.get("native_complete", false)):
+		push_error(
+			"WT_TERRAIN_WATERFALL_RUNTIME_FAIL finalize=%s" %
+				JSON.stringify(result)
+		)
+		get_tree().quit(1)
+		return
+	print("WT_TERRAIN_WATERFALL_RUNTIME_PASS ", JSON.stringify({
+		"output": cpu_causal_trace_output_path,
+		"event_count": int(result.get("event_count", 0)),
+		"native_event_count": int(result.get("native_event_count", 0)),
+		"observer": result.get("observer", {}),
+	}))
+	get_tree().quit(0)
 
 
 func _start_human_cpu_causal_trace() -> void:

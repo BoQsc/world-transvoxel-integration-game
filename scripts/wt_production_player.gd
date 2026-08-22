@@ -75,6 +75,20 @@ func autonomous_move_with_streaming_collision(
 	return _move_with_streaming_collision(delta)
 
 
+func diagnostic_flight_step(
+	requested_velocity: Vector3,
+	delta: float = 1.0 / 60.0
+) -> bool:
+	if not fly_mode_enabled:
+		_set_fly_mode_enabled(true)
+	velocity = requested_velocity
+	var accepted := _move_with_streaming_collision(delta, true)
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", false)
+	_capture_cpu_causal_trace_frame()
+	return accepted
+
+
 func set_fly_mode_enabled(enabled: bool) -> void:
 	_set_fly_mode_enabled(enabled)
 
@@ -291,7 +305,8 @@ func _note_cpu_causal_trace_movement(
 	if cpu_causal_trace != null and bool(cpu_causal_trace.call("is_active")):
 		cpu_causal_trace.call(
 			"note_movement", accepted, requested_velocity,
-			position_before, position_after
+			position_before, position_after,
+			"fly" if fly_mode_enabled else "walk"
 		)
 
 
@@ -317,6 +332,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if human_command_armed and (event.keycode == KEY_F or event.physical_keycode == KEY_F):
 			human_command_armed = false
 			_set_fly_mode_enabled(not fly_mode_enabled)
+			return
+		if human_command_armed and (event.keycode == KEY_W or event.physical_keycode == KEY_W):
+			human_command_armed = false
+			_forward_human_command(&"toggle_terrain_waterfall")
 			return
 		if human_command_armed and (event.keycode == KEY_L or event.physical_keycode == KEY_L):
 			human_command_armed = false
@@ -711,6 +730,15 @@ func _set_fly_mode_enabled(enabled: bool) -> void:
 			_walk_collision_state_saved = false
 		if game_world != null and game_world.has_method("update_player_viewer"):
 			game_world.call("update_player_viewer", true)
+	if cpu_causal_trace != null and bool(cpu_causal_trace.call("is_active")):
+		cpu_causal_trace.call("record", &"human_flight_mode", {
+			"enabled": fly_mode_enabled,
+			"position": {
+				"x": global_position.x,
+				"y": global_position.y,
+				"z": global_position.z,
+			},
+		}, true)
 	print("human_fly_mode=%s" % ("on" if fly_mode_enabled else "off"))
 
 

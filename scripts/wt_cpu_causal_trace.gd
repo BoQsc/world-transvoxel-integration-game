@@ -62,8 +62,10 @@ var _event_count := 0
 var _next_sequence := 0
 var _dropped_events := 0
 var _started_us := 0
+var _started_unix_ms := 0
 var _last_frame_tick_us := 0
 var _frame := 0
+var _last_frame_us := 0
 var _phase := "unassigned"
 var _cause_id := ""
 var _detail_sampling := false
@@ -93,6 +95,7 @@ var _native_status := {}
 var _native_capture_time_us_total := 0
 var _native_capture_time_us_maximum := 0
 var _native_snapshot_count := 0
+var _last_live_capture_us := 0
 
 
 func start(
@@ -135,6 +138,7 @@ func start(
 	_native_slots.resize(NATIVE_EVENT_CAPACITY)
 	_native_session_started = true
 	_started_us = Time.get_ticks_usec()
+	_started_unix_ms = int(Time.get_unix_time_from_system() * 1000.0)
 	_last_frame_tick_us = _started_us
 	if not _drain_native_trace():
 		terrain_world.call("end_cpu_causal_trace")
@@ -186,7 +190,8 @@ func note_movement(
 	accepted: bool,
 	requested_velocity: Vector3,
 	position_before: Vector3,
-	position_after: Vector3
+	position_after: Vector3,
+	movement_mode: String = "walk"
 ) -> void:
 	if not is_active():
 		return
@@ -195,6 +200,7 @@ func note_movement(
 	)
 	_movement_note = {
 		"accepted": accepted,
+		"mode": movement_mode,
 		"requested_velocity": _vector3_summary(requested_velocity),
 		"requested_speed": requested_velocity.length(),
 		"position_before": _vector3_summary(position_before),
@@ -215,6 +221,7 @@ func capture_physics_frame(elapsed_us: int = -1) -> void:
 		elapsed_us = maxi(0, now_us - _last_frame_tick_us)
 	_last_frame_tick_us = now_us
 	_frame += 1
+	_last_frame_us = elapsed_us
 	var cadence := DETAIL_PIPELINE_CADENCE if _detail_sampling else NORMAL_PIPELINE_CADENCE
 	var include_pipeline := (
 		_force_pipeline_snapshot or
@@ -234,6 +241,36 @@ func capture_physics_frame(elapsed_us: int = -1) -> void:
 	_capture_time_us_total += capture_us
 	_capture_time_us_maximum = maxi(_capture_time_us_maximum, capture_us)
 	_append(event)
+
+
+func get_live_waterfall_snapshot(
+	maximum_native_events: int = 8,
+	maximum_downstream_events: int = 4
+) -> Dictionary:
+	if not is_active():
+		return {"active": false}
+	var capture_started := Time.get_ticks_usec()
+	var pipeline := _pipeline_snapshot()
+	var snapshot := {
+		"active": true,
+		"elapsed_us": maxi(0, Time.get_ticks_usec() - _started_us),
+		"frame": _frame,
+		"last_frame_us": _last_frame_us,
+		"phase": _phase,
+		"cause_id": _cause_id,
+		"movement": _movement_note.duplicate(true),
+		"pipeline": pipeline,
+		"recent_native_events": _tail_native_events(
+			clampi(maximum_native_events, 0, 64)
+		),
+		"recent_events": _tail_events(
+			clampi(maximum_downstream_events, 0, 32)
+		),
+		"observer": _observer_summary(),
+	}
+	_last_live_capture_us = maxi(0, Time.get_ticks_usec() - capture_started)
+	snapshot["last_live_capture_us"] = _last_live_capture_us
+	return snapshot
 
 
 func record(kind: StringName, payload: Dictionary = {}, include_pipeline: bool = false) -> void:
@@ -355,6 +392,16 @@ func _ordered_events() -> Array:
 	return output
 
 
+func _tail_events(maximum_events: int) -> Array:
+	var count := mini(maxi(0, maximum_events), _event_count)
+	var output := []
+	output.resize(count)
+	var start := (_write_index - count + _capacity) % _capacity
+	for index in range(count):
+		output[index] = _slots[(start + index) % _capacity]
+	return output
+
+
 func _drain_native_trace() -> bool:
 	if not _native_session_started or _native_read_failed:
 		return not _native_read_failed
@@ -440,6 +487,18 @@ func _ordered_native_events() -> Array:
 	return output
 
 
+func _tail_native_events(maximum_events: int) -> Array:
+	var count := mini(maxi(0, maximum_events), _native_event_count)
+	var output := []
+	output.resize(count)
+	var start := (
+		_native_write_index - count + NATIVE_EVENT_CAPACITY
+	) % NATIVE_EVENT_CAPACITY
+	for index in range(count):
+		output[index] = _native_slots[(start + index) % NATIVE_EVENT_CAPACITY]
+	return output
+
+
 func _native_status_summary() -> Dictionary:
 	return {
 		"read_failed": _native_read_failed,
@@ -498,6 +557,7 @@ func _write(output_path: String, reason: String, final: bool) -> Dictionary:
 		"reason": reason,
 		"final": final,
 		"started_ticks_us": _started_us,
+		"started_unix_ms": _started_unix_ms,
 		"duration_us": maxi(0, Time.get_ticks_usec() - _started_us),
 		"frame_count": _frame,
 		"event_capacity": _capacity,
@@ -553,6 +613,7 @@ func _observer_summary() -> Dictionary:
 		"pipeline_snapshot_count": _pipeline_snapshot_count,
 		"pipeline_capture_time_us_total": _pipeline_capture_time_us_total,
 		"pipeline_capture_time_us_maximum": _pipeline_capture_time_us_maximum,
+		"last_live_capture_us": _last_live_capture_us,
 	}
 
 

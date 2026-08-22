@@ -8,12 +8,16 @@ does not run validation gates or visual-capture automation.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+import time
 from typing import Any
+
+import psutil
 
 
 WINDOWS_STEAM_GODOT = pathlib.Path(
@@ -21,6 +25,7 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
 )
 LATEST_HUMAN_PROFILE = "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
 LATEST_HUMAN_MATERIAL = "production_texture_array"
+WATERFALL_SAMPLE_INTERVAL_SECONDS = 0.25
 
 
 def repo_root() -> pathlib.Path:
@@ -111,7 +116,17 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--human-playtest-preset", args.preset])
     if inspect_marker is not None:
         command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
-    if args.cpu_causal_trace:
+    if args.terrain_waterfall:
+        command.extend(
+            [
+                "--terrain-waterfall",
+                "--terrain-waterfall-output",
+                str(args.terrain_waterfall_trace_path),
+            ]
+        )
+        if args.terrain_waterfall_autonomous:
+            command.append("--terrain-waterfall-autonomous-route")
+    elif args.cpu_causal_trace:
         trace_path = (
             pathlib.Path(args.cpu_causal_trace_output).resolve()
             if args.cpu_causal_trace_output
@@ -123,6 +138,146 @@ def build_command(args: argparse.Namespace) -> list[str]:
         )
         command.extend(["--cpu-causal-trace-output", str(trace_path)])
     return command
+
+
+def waterfall_paths(
+    project: pathlib.Path, args: argparse.Namespace
+) -> dict[str, pathlib.Path]:
+    root = project / ".godot" / "world_transvoxel_captures" / "terrain_waterfall"
+    trace = (
+        pathlib.Path(args.terrain_waterfall_output).resolve()
+        if args.terrain_waterfall_output
+        else root / "latest_human_trace.json"
+    )
+    report = (
+        pathlib.Path(args.terrain_waterfall_report_output).resolve()
+        if args.terrain_waterfall_report_output
+        else root / "latest_human_report.json"
+    )
+    usage_stem = (
+        f"{trace.stem[:-6]}_usage"
+        if trace.stem.endswith("_trace")
+        else f"{trace.stem}_usage"
+    )
+    usage = trace.with_name(f"{usage_stem}.json")
+    summary = report.with_suffix(".txt")
+    return {"trace": trace, "report": report, "usage": usage, "summary": summary}
+
+
+def _write_usage_report(
+    path: pathlib.Path,
+    samples: list[dict[str, Any]],
+    affinity: list[int],
+    wall_seconds: float,
+    exit_code: int,
+    sampling_started_unix_seconds: float,
+    sampling_ended_unix_seconds: float,
+) -> None:
+    cpu_values = [float(sample["process_cpu_percent"]) for sample in samples]
+    rss_values = [int(sample["rss_bytes"]) for sample in samples]
+    payload = {
+        "schema": "world_transvoxel.terrain_waterfall_usage.v1",
+        "sample_interval_seconds": WATERFALL_SAMPLE_INTERVAL_SECONDS,
+        "logical_cpu_affinity": affinity,
+        "logical_cpu_capacity": len(affinity),
+        "wall_seconds": wall_seconds,
+        "sampling_started_unix_seconds": sampling_started_unix_seconds,
+        "sampling_ended_unix_seconds": sampling_ended_unix_seconds,
+        "exit_code": exit_code,
+        "sample_count": len(samples),
+        "process_cpu_percent_mean": (
+            sum(cpu_values) / len(cpu_values) if cpu_values else 0.0
+        ),
+        "process_cpu_percent_maximum": max(cpu_values, default=0.0),
+        "average_active_logical_cores": (
+            sum(cpu_values) / (100.0 * len(cpu_values)) if cpu_values else 0.0
+        ),
+        "rss_bytes_maximum": max(rss_values, default=0),
+        "samples": samples,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _waterfall_trace_paths(base: pathlib.Path) -> list[pathlib.Path]:
+    candidates = [base]
+    candidates.extend(sorted(base.parent.glob(f"{base.stem}_[0-9][0-9][0-9]{base.suffix}")))
+    return [path for path in candidates if path.is_file()]
+
+
+def run_waterfall_session(
+    command: list[str], project: pathlib.Path, paths: dict[str, pathlib.Path]
+) -> int:
+    for path in [paths["trace"], paths["usage"], paths["report"], paths["summary"]]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file():
+            path.unlink()
+    for path in paths["trace"].parent.glob(
+        f"{paths['trace'].stem}_[0-9][0-9][0-9]{paths['trace'].suffix}"
+    ):
+        path.unlink()
+
+    launcher = psutil.Process()
+    available_affinity = launcher.cpu_affinity()
+    affinity = available_affinity[:3]
+    if not affinity:
+        raise RuntimeError("terrain waterfall requires at least one logical CPU")
+    launcher.cpu_affinity(affinity)
+    try:
+        process = subprocess.Popen(command, cwd=project)
+    finally:
+        launcher.cpu_affinity(available_affinity)
+
+    measured = psutil.Process(process.pid)
+    measured.cpu_percent(None)
+    samples: list[dict[str, Any]] = []
+    sampling_started_unix_seconds = time.time()
+    started = time.perf_counter()
+    while process.poll() is None:
+        time.sleep(WATERFALL_SAMPLE_INTERVAL_SECONDS)
+        try:
+            memory = measured.memory_info()
+            samples.append(
+                {
+                    "elapsed_seconds": time.perf_counter() - started,
+                    "unix_time_seconds": time.time(),
+                    "process_cpu_percent": measured.cpu_percent(None),
+                    "rss_bytes": int(memory.rss),
+                    "thread_count": measured.num_threads(),
+                }
+            )
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            break
+    exit_code = process.wait()
+    wall_seconds = time.perf_counter() - started
+    _write_usage_report(
+        paths["usage"], samples, affinity, wall_seconds, exit_code,
+        sampling_started_unix_seconds, time.time(),
+    )
+
+    trace_paths = _waterfall_trace_paths(paths["trace"])
+    if trace_paths:
+        import terrain_waterfall_report
+
+        report = terrain_waterfall_report.build_session_report(
+            trace_paths, paths["usage"]
+        )
+        terrain_waterfall_report.write_report(
+            report, paths["report"], paths["summary"]
+        )
+        print(
+            "WT_TERRAIN_WATERFALL_REPORT "
+            f"decision={report['decision']['classification']} "
+            f"output={paths['report']}",
+            flush=True,
+        )
+    else:
+        print(
+            "WT_TERRAIN_WATERFALL_REPORT_MISSING_TRACE "
+            f"expected={paths['trace']}",
+            flush=True,
+        )
+    return exit_code
 
 
 def main(argv: list[str]) -> int:
@@ -195,6 +350,30 @@ def main(argv: list[str]) -> int:
         "--cpu-causal-trace-output",
         help="Optional CPU-B2 trace JSON path; implies --cpu-causal-trace.",
     )
+    parser.add_argument(
+        "--terrain-waterfall",
+        action="store_true",
+        help=(
+            "Enable the optional live terrain waterfall, retain its causal trace, "
+            "sample process usage on at most three logical CPUs, and write a report."
+        ),
+    )
+    parser.add_argument(
+        "--terrain-waterfall-output",
+        help="Optional raw terrain-waterfall trace JSON path.",
+    )
+    parser.add_argument(
+        "--terrain-waterfall-report-output",
+        help="Optional analyzed terrain-waterfall report JSON path.",
+    )
+    parser.add_argument(
+        "--terrain-waterfall-autonomous",
+        action="store_true",
+        help=(
+            "Run the deterministic two-leg flight, relocated carve, and relocated "
+            "construction route, then close and analyze it."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.cpu_causal_trace_output:
         args.cpu_causal_trace = True
@@ -202,11 +381,22 @@ def main(argv: list[str]) -> int:
         args.profile = LATEST_HUMAN_PROFILE
         args.material = LATEST_HUMAN_MATERIAL
 
+    project = pathlib.Path(args.project).resolve()
+    paths: dict[str, pathlib.Path] | None = None
+    if args.terrain_waterfall_output or args.terrain_waterfall_report_output or \
+            args.terrain_waterfall_autonomous:
+        args.terrain_waterfall = True
+    if args.terrain_waterfall:
+        paths = waterfall_paths(project, args)
+        args.terrain_waterfall_trace_path = paths["trace"]
+
     command = build_command(args)
     print(" ".join(command), flush=True)
     if args.print_only:
         return 0
-    return subprocess.call(command, cwd=pathlib.Path(args.project).resolve())
+    if paths is not None:
+        return run_waterfall_session(command, project, paths)
+    return subprocess.call(command, cwd=project)
 
 
 if __name__ == "__main__":

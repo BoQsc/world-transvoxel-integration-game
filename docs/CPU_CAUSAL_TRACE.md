@@ -33,6 +33,11 @@ same-affinity trace-off and trace-on runs with observer overhead reported.
 The qualifier retains a compact causal event slice beside its JSON report; the
 full rolling trace remains a local diagnostic artifact because it is large.
 
+The optional human-facing waterfall in `docs/TERRAIN_PIPELINE_WATERFALL.md`
+uses this same native stream. It adds a bounded live tail view and post-session
+classification; it is not a second terrain trace implementation and does not
+weaken the trace-off performance requirement.
+
 ## CPU-B2 retained result
 
 The retained paired route at integration commit `5c07dc6` and authority commit

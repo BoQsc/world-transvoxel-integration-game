@@ -246,6 +246,13 @@ root:
   `g21_rolling_hills_cave_2k_256_on_demand` with `production_texture_array`.
 - `Launch Latest Human Playtest.cmd` remains a compatibility shortcut for the
   current default trusted playtest.
+- `Launch Terrain Waterfall Playtest.cmd` runs the same trusted playtest with
+  the optional live causal HUD, three-logical-CPU usage sampling, and an
+  automatic post-session ordering report. See
+  `docs/TERRAIN_PIPELINE_WATERFALL.md`.
+- `Launch Terrain Waterfall Autonomous.cmd` repeats the long-flight, relocated
+  carve, and relocated construction observer route without changing terrain
+  scheduling.
 
 Keep these shortcuts pointed at the current trusted human playtests so manual
 testing does not drift to stale profile commands.
