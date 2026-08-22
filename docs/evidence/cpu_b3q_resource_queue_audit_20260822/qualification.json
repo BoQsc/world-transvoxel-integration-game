@@ -1,0 +1,79 @@
+{
+  "schema": "world_transvoxel.cpu_b3q_resource_queue_audit.v1",
+  "date": "2026-08-22",
+  "status": "RESOURCE_QUEUE_AUDIT_PASS_FINAL_FREEZE_BLOCKED",
+  "authority_commit": "9115b56e425a2e0b7b445eeb3a9ff35a0501e05b",
+  "integration_artifact_commit": "d7aab7e",
+  "runtime_artifact_digest_sha256": "bc1c743527089165ed0e6001f9063a00d1fdf9b00c1c149d7098752bf57ddfb7",
+  "logical_cpu_affinity": [0, 1, 2],
+  "config_contract": {
+    "procedural_generation_workers": 2,
+    "accepted_runtime_meshing_workers": 0,
+    "shared_cpu_work_budget": 0,
+    "fallback": false
+  },
+  "live_accounting": {
+    "page_cache": [
+      "encoded_entries",
+      "encoded_entry_capacity",
+      "encoded_resident_bytes",
+      "encoded_byte_capacity",
+      "decoded_entries",
+      "decoded_entry_capacity",
+      "decoded_resident_bytes",
+      "decoded_byte_capacity"
+    ],
+    "resource_cache": [
+      "mesh_entries",
+      "mesh_entry_capacity",
+      "mesh_resident_bytes",
+      "mesh_byte_capacity",
+      "render_entries",
+      "render_entry_capacity",
+      "render_resident_bytes",
+      "render_byte_capacity",
+      "collision_entries",
+      "collision_entry_capacity",
+      "collision_resident_bytes",
+      "collision_byte_capacity"
+    ],
+    "production_fixture_assertion": "every populated cache remains at or below both configured entry and byte ceilings"
+  },
+  "native_debug_release": {
+    "test_wt_m4_apply": "718299711f482dec5c606b31fefa61e6576d73f4226c0b84c5059e70031eded1",
+    "test_wt_m5_async_storage": "9aca3433346bf02392062fea7ffd5ee1edddda81b1245c844e642517f4b1517c",
+    "test_wt_m5_storage_cache": "11242330de654125c62e0311a0bc0c6eaf61ce55f92f4c39cd172e487f2c67a5",
+    "test_wt_m5_resource_cache": "ecf7cbc1ddb527fbcbde760e7c6bd7b016f44c10df1bc7fb51540c9012b1f7c3",
+    "test_wt_m5_page_meshing_runtime": "aa1a828204ad38c1d476286553af5f65e779cc0eccfe777c88db44b31f49f45d",
+    "test_wt_production_config": "4660a397afc2f73e9309eb8357d9b8c4ee1609eba6e51eaff223b751afd21e62",
+    "test_wt_production_streaming": "39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b",
+    "test_wt_production_lod_streaming": "7c9071d1c31da0397e48db0338c299b8bf923dbb0e80448ae11cf049c3c0d2fb",
+    "test_wt_m5_pipeline_budget": "PASS runs=1 warmup=1 pages=17 page_mesh_chunks=4 transition_chunks=1"
+  },
+  "godot_4_7_2_smokes": {
+    "runtime_artifact": "PASS",
+    "dependency_boundary": "PASS",
+    "production_gameworld_render_collision": "PASS",
+    "bottom_boundary_edit": "PASS"
+  },
+  "resource_conclusions": {
+    "storage_queue": "bounded with explicit rejection and stale completion handling",
+    "page_cache": "bounded by entry and byte capacities with live residency",
+    "resource_cache": "mesh, render, and collision residency bounded by entry and byte capacities",
+    "collision": "viewer-targeted with tested reactivation, continuity, priority, and coalescing",
+    "mesh_pipeline": "bounded backpressure, cancellation, invalidation, and missing-support handling pass",
+    "corrective_candidate_required": false
+  },
+  "remaining_freeze_blockers": [
+    "source hard limit: wt_page_meshing_runtime.cpp is 1444 lines (limit 900)",
+    "source hard limit: wt_world_snapshot_store.cpp is 905 lines (limit 900)",
+    "final trace-off and causal qualification has not yet run against this exact artifact",
+    "final human CPU qualification has not yet been recorded"
+  ],
+  "decision": {
+    "classification": "CONVENTIONAL_RESOURCE_OWNERSHIP_ACCEPTED",
+    "gpu_architecture_selected": false,
+    "next_milestone": "FINAL_CPU_SOURCE_AND_RUNTIME_QUALIFICATION"
+  },
+  "claim_boundary": "This proves bounded ownership and focused correctness on the fixed three-logical-CPU environment. It does not prove player-facing latency acceptance or universal performance."
+}
