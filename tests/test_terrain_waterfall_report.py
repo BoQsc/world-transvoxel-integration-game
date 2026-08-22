@@ -23,6 +23,7 @@ def native_event(
     chunk_x: int | None = None,
     duration_ms: float = 0.0,
     auxiliary: int = 0,
+    status: int = 0,
 ) -> dict:
     event = {
         "sequence": sequence,
@@ -32,7 +33,8 @@ def native_event(
         "thread_role": "runtime",
         "cause_id": cause,
         "auxiliary": auxiliary,
-        "status": 0,
+        "status": status,
+        "generation": 0,
         "has_chunk": chunk_x is not None,
     }
     if chunk_x is not None:
@@ -68,7 +70,6 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         ("collision_sink_applied", 78.0, 4.0),
         ("visibility_replacement_ready", 79.0, 0.0),
         ("visibility_staging_blocked", 80.0, 0.0),
-        ("visibility_batch_published", 92.0, 0.0),
     ]
     events = []
     for offset, (kind, delta, duration) in enumerate(kinds):
@@ -82,15 +83,71 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
             duration,
             1 if kind == "chunk_demand_accepted" else 0,
         ))
+    events.append(native_event(
+        sequence + len(kinds),
+        origin_ms + 82.0,
+        "visibility_region_replacement_member",
+        77,
+        chunk_x,
+        auxiliary=3,
+        status=1,
+    ))
+    events.append(native_event(
+        sequence + len(kinds) + 1,
+        origin_ms + 82.1,
+        "visibility_region_replacement_member",
+        77,
+        98,
+        auxiliary=3,
+        status=1,
+    ))
+    events.append(native_event(
+        sequence + len(kinds) + 2,
+        origin_ms + 82.2,
+        "visibility_region_replacement_member",
+        77,
+        99,
+        auxiliary=3,
+        status=1,
+    ))
+    events.append(native_event(
+        sequence + len(kinds) + 3,
+        origin_ms + 82.3,
+        "visibility_region_retirement_member",
+        77,
+        50,
+        auxiliary=3,
+        status=1,
+    ))
+    events.append(native_event(
+        sequence + len(kinds) + 4,
+        origin_ms + 84.0,
+        "visibility_coverage_priority_requested",
+        3,
+        99,
+        auxiliary=1,
+    ))
+    batch = native_event(
+        sequence + len(kinds) + 5,
+        origin_ms + 92.0,
+        "visibility_batch_published",
+        3,
+        auxiliary=1,
+        status=1,
+    )
+    batch["generation"] = 77
+    events.append(batch)
     return events
 
 
 class TerrainWaterfallReportTest(unittest.TestCase):
     def test_complete_human_session_is_analyzed(self) -> None:
         native = [native_event(0, 0.0, "trace_started")]
-        native.extend(edit_chain(1, 3000.0, 10, 10))
-        native.extend(edit_chain(22, 7000.0, 20, 20))
-        native.append(native_event(43, 9000.0, "trace_stopped"))
+        first_chain = edit_chain(1, 3000.0, 10, 10)
+        native.extend(first_chain)
+        second_chain = edit_chain(1 + len(first_chain), 7000.0, 20, 20)
+        native.extend(second_chain)
+        native.append(native_event(1 + len(first_chain) + len(second_chain), 9000.0, "trace_stopped"))
         frames = [
             {
                 "sequence": 0,
@@ -113,23 +170,43 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             },
             {
                 "sequence": 3,
-                "elapsed_us": 3095000,
+                "elapsed_us": 3090000,
                 "frame": 3,
                 "kind": "physics_frame",
                 "frame_us": 16000,
                 "player_position": {"x": 160, "y": 40, "z": 160},
                 "movement": {"mode": "walk", "accepted": True, "requested_speed": 0, "distance": 0},
-                "pipeline": {"target": {"present": True, "get_generation": 2, "get_render_generation": 2, "get_collision_generation": 2, "is_visual_ready": True, "is_collision_ready": True}, "metrics": {}},
+                "pipeline": {"target": {"present": True, "get_generation": 2, "get_render_generation": 2, "get_collision_generation": 2, "is_visual_ready": True, "is_collision_ready": True}, "metrics": {
+                    "blocked_pending_chunk_replacements": 2,
+                    "pending_chunk_replacements": 2,
+                    "first_blocked_replacement_key_x": 99,
+                    "first_blocked_replacement_key_y": 2,
+                    "first_blocked_replacement_key_z": 99,
+                    "first_blocked_replacement_key_lod": 0,
+                    "first_blocked_replacement_generation": 7,
+                    "first_blocked_replacement_visual_required": True,
+                    "first_blocked_replacement_visual_ready": False,
+                }},
             },
             {
                 "sequence": 5,
-                "elapsed_us": 7095000,
+                "elapsed_us": 7090000,
                 "frame": 4,
                 "kind": "physics_frame",
                 "frame_us": 16000,
                 "player_position": {"x": 320, "y": 40, "z": 320},
                 "movement": {"mode": "walk", "accepted": True, "requested_speed": 0, "distance": 0},
-                "pipeline": {"target": {"present": True, "get_generation": 4, "get_render_generation": 4, "get_collision_generation": 4, "is_visual_ready": True, "is_collision_ready": True}, "metrics": {}},
+                "pipeline": {"target": {"present": True, "get_generation": 4, "get_render_generation": 4, "get_collision_generation": 4, "is_visual_ready": True, "is_collision_ready": True}, "metrics": {
+                    "blocked_pending_chunk_replacements": 1,
+                    "pending_chunk_replacements": 1,
+                    "first_blocked_replacement_key_x": 20,
+                    "first_blocked_replacement_key_y": 2,
+                    "first_blocked_replacement_key_z": 20,
+                    "first_blocked_replacement_key_lod": 0,
+                    "first_blocked_replacement_generation": 2,
+                    "first_blocked_replacement_collision_required": True,
+                    "first_blocked_replacement_collision_ready": False,
+                }},
             },
         ]
         requests = [
@@ -182,6 +259,32 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(len(result["traces"][0]["edits"]), 2)
         self.assertTrue(
             result["traces"][0]["edits"][0]["process_usage_during_pipeline"]["available"]
+        )
+        self.assertEqual(
+            result["traces"][0]["edits"][0]["sampled_first_blocker"]["dominant_relation"],
+            "other_replacement",
+        )
+        self.assertEqual(
+            result["traces"][0]["edits"][1]["sampled_first_blocker"]["dominant_relation"],
+            "edit_replacement",
+        )
+        publication = result["traces"][0]["edits"][0][
+            "correlated_visibility_publication"
+        ]
+        self.assertEqual(
+            publication["classification"],
+            "BOUNDED_REGIONAL_BATCH_CONTAINS_EDIT_REPLACEMENTS",
+        )
+        self.assertEqual(publication["replacement_count"], 3)
+        self.assertEqual(publication["retirement_count"], 1)
+        self.assertEqual(publication["coverage_priority_other_key_count"], 1)
+        self.assertEqual(publication["edit_replacement_members"], 1)
+        self.assertEqual(publication["additional_replacements"], 2)
+        self.assertTrue(publication["all_edit_replacements_included"])
+        self.assertTrue(publication["exact_membership_available"])
+        self.assertEqual(
+            publication["non_edit_origin"]["classification"],
+            "ORIGIN_NOT_RETAINED",
         )
         self.assertGreater(result["traces"][0]["stage_usage"]["meshing"]["duration_ms_total"], 0)
         self.assertFalse(result["decision"]["gpu_architecture_selected"])

@@ -58,6 +58,19 @@ For each edit, the report preserves authority, demand, storage, sampling,
 meshing, transition meshing, publication, render sink, collision sink, and
 visibility intervals. It reports relocation distance, preceding flight,
 target-readiness latency, the dominant wait, and any retained staging blocker.
+It also reports the replacement/retirement counts of the visibility batch
+correlated with each edit's activation and classifies sampled first blockers as
+edit-owned or other work. Authority revisions with regional-member telemetry
+also retain every replacement and retirement in the successfully published
+cohort, grouped by publication ID. The report then labels membership `exact`
+and distinguishes exact edit replacements from non-edit replacements. Older
+traces remain readable but are labeled `correlated-only` rather than being
+silently upgraded to a stronger claim.
+Exact reports also correlate non-edit members with retained viewer-plan demand
+origins. A member originating in an older accepted plan is reported as such,
+but is not labeled stale: unchanged chunks can remain desired across newer
+plans without receiving another generation. Cancellation or supersession
+claims require desired-set evidence, not revision age alone.
 Wall-clock-aligned usage samples report CPU load and saturation for each edit's
 exact request-to-publication window rather than relying only on session averages.
 Worst movement frames are correlated with native events and sampled queue state.

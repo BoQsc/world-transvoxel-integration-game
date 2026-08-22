@@ -124,7 +124,8 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		"STORE queued %d  active %d  done %d  last %.2f ms\n" +
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
-		"VIS   replace %d  blocked %d  retire %d  render-retire %d"
+		"VIS   replace %d  blocked %d  ready %d  retire %d  render-retire %d\n" +
+		"FIRST %s"
 	) % [
 		int(metrics.get("viewer_updates", 0)),
 		int(metrics.get("scheduler_queued_jobs", 0)),
@@ -143,8 +144,10 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("total_collision_backlog", 0)),
 		int(metrics.get("pending_chunk_replacements", 0)),
 		int(metrics.get("blocked_pending_chunk_replacements", 0)),
+		int(metrics.get("ready_staged_chunk_replacements", 0)),
 		int(metrics.get("pending_chunk_retirements", 0)),
 		int(metrics.get("pending_render_retirements", 0)),
+		_first_blocker_text(metrics),
 	]
 
 	var target: Dictionary = pipeline.get("target", {})
@@ -196,6 +199,27 @@ func _classify_blocker(
 	if frame_ms >= 33.3:
 		return "frame hitch; inspect retained event window"
 	return "none observed"
+
+
+func _first_blocker_text(metrics: Dictionary) -> String:
+	if int(metrics.get("blocked_pending_chunk_replacements", 0)) <= 0:
+		return "none"
+	var reason := "collision"
+	if bool(metrics.get("first_blocked_replacement_missing", false)):
+		reason = "record missing"
+	elif bool(metrics.get("first_blocked_replacement_visual_required", false)) and \
+			not bool(metrics.get("first_blocked_replacement_visual_ready", false)):
+		reason = "visual"
+	elif not bool(metrics.get("first_blocked_replacement_collision_required", false)):
+		reason = "application"
+	return "%d,%d,%d L%d gen %d waiting %s" % [
+		int(metrics.get("first_blocked_replacement_key_x", 0)),
+		int(metrics.get("first_blocked_replacement_key_y", 0)),
+		int(metrics.get("first_blocked_replacement_key_z", 0)),
+		int(metrics.get("first_blocked_replacement_key_lod", 0)),
+		int(metrics.get("first_blocked_replacement_generation", 0)),
+		reason,
+	]
 
 
 func _format_events(events_value) -> String:

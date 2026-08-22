@@ -54,6 +54,8 @@ STAGE_BY_KIND = {
     "visibility_batch_published": "visibility",
     "visibility_coverage_priority_requested": "visibility",
     "visibility_coverage_priority_applied": "visibility",
+    "visibility_region_replacement_member": "visibility",
+    "visibility_region_retirement_member": "visibility",
 }
 
 PIPELINE_ORDER = (
@@ -333,6 +335,321 @@ def _target_generation_ready(
     )
 
 
+def sampled_blocker_analysis(
+    frames: list[dict[str, Any]],
+    replacement_identities: set[tuple[int, int, int, int, int]],
+    request_elapsed_us: int,
+) -> dict[str, Any]:
+    replacement_keys = {identity[:4] for identity in replacement_identities}
+    samples = []
+    transitions = []
+    last_signature = None
+    for event in frames:
+        metrics = metrics_from_event(event)
+        blocked = int(metrics.get("blocked_pending_chunk_replacements", 0))
+        if blocked <= 0:
+            continue
+        key = tuple(int(metrics.get(name, 0)) for name in (
+            "first_blocked_replacement_key_x",
+            "first_blocked_replacement_key_y",
+            "first_blocked_replacement_key_z",
+            "first_blocked_replacement_key_lod",
+        ))
+        if bool(metrics.get("first_blocked_replacement_missing", False)):
+            reason = "record_missing"
+        elif (
+            bool(metrics.get("first_blocked_replacement_visual_required", False))
+            and not bool(metrics.get("first_blocked_replacement_visual_ready", False))
+        ):
+            reason = "visual_not_ready"
+        elif (
+            bool(metrics.get("first_blocked_replacement_collision_required", False))
+            and not bool(metrics.get("first_blocked_replacement_collision_ready", False))
+        ):
+            reason = "collision_not_ready"
+        else:
+            reason = "application_or_sink_not_ready"
+        relation = "edit_replacement" if key in replacement_keys else "other_replacement"
+        sample = {
+            "elapsed_from_request_ms": (
+                int(event.get("elapsed_us", request_elapsed_us)) - request_elapsed_us
+            ) / 1000.0,
+            "key": {"x": key[0], "y": key[1], "z": key[2], "lod": key[3]},
+            "generation": int(metrics.get("first_blocked_replacement_generation", 0)),
+            "reason": reason,
+            "relation": relation,
+            "blocked_count": blocked,
+            "pending_replacements": int(metrics.get("pending_chunk_replacements", 0)),
+            "pending_retirements": int(metrics.get("pending_chunk_retirements", 0)),
+            "ready_staged_replacements": int(metrics.get("ready_staged_chunk_replacements", 0)),
+            "visibility_priority_pending": int(metrics.get("visibility_coverage_priority_pending", 0)),
+        }
+        samples.append(sample)
+        signature = (key, sample["generation"], reason, relation)
+        if signature != last_signature and len(transitions) < 32:
+            transitions.append(sample)
+            last_signature = signature
+    if not samples:
+        return {"available": False, "sample_count": 0, "transitions": []}
+    reason_counts = Counter(sample["reason"] for sample in samples)
+    relation_counts = Counter(sample["relation"] for sample in samples)
+    key_counts = Counter(
+        (sample["key"]["x"], sample["key"]["y"], sample["key"]["z"], sample["key"]["lod"])
+        for sample in samples
+    )
+    dominant_key = key_counts.most_common(1)[0][0]
+    return {
+        "available": True,
+        "sample_count": len(samples),
+        "first_sample_ms": samples[0]["elapsed_from_request_ms"],
+        "last_sample_ms": samples[-1]["elapsed_from_request_ms"],
+        "distinct_first_blocker_keys": len(key_counts),
+        "dominant_key": {
+            "x": dominant_key[0], "y": dominant_key[1],
+            "z": dominant_key[2], "lod": dominant_key[3],
+        },
+        "dominant_reason": reason_counts.most_common(1)[0][0],
+        "dominant_relation": relation_counts.most_common(1)[0][0],
+        "edit_replacement_sample_fraction": (
+            relation_counts["edit_replacement"] / len(samples)
+        ),
+        "peak_blocked_count": max(sample["blocked_count"] for sample in samples),
+        "peak_pending_replacements": max(
+            sample["pending_replacements"] for sample in samples
+        ),
+        "transitions": transitions,
+    }
+
+
+def regional_publication_analysis(
+    events: list[dict[str, Any]],
+    all_native_events: list[dict[str, Any]],
+    replacement_identities: set[tuple[int, int, int, int, int]],
+    origin_ns: int,
+    ready_ns: int,
+    batch_event: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if batch_event is None:
+        return {
+            "available": False,
+            "classification": "NO_POST_REPLACEMENT_VISIBILITY_BATCH",
+            "exact_membership_available": False,
+        }
+    batch_ns = int(batch_event.get("elapsed_ns", ready_ns))
+    replacement_count = int(batch_event.get("cause_id", 0))
+    retirement_count = int(batch_event.get("auxiliary", 0))
+    regional = int(batch_event.get("status", 0)) == 1
+    cohort_id = int(batch_event.get("generation", 0))
+    replacement_keys = {identity[:4] for identity in replacement_identities}
+    replacement_member_events = [
+        event for event in events
+        if event.get("kind") == "visibility_region_replacement_member"
+        and int(event.get("cause_id", 0)) == cohort_id
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+    ] if cohort_id > 0 else []
+    retirement_member_events = [
+        event for event in events
+        if event.get("kind") == "visibility_region_retirement_member"
+        and int(event.get("cause_id", 0)) == cohort_id
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+    ] if cohort_id > 0 else []
+    replacement_members = {
+        identity for event in replacement_member_events
+        if (identity := native_identity(event)) is not None
+    }
+    retirement_members = {
+        identity[:4] for event in retirement_member_events
+        if (identity := native_identity(event)) is not None
+    }
+    exact_membership = (
+        cohort_id > 0
+        and len(replacement_members) == replacement_count
+        and len(retirement_members) == retirement_count
+    )
+    edit_members = replacement_members & replacement_identities
+    all_edit_replacements_included = (
+        bool(replacement_identities)
+        and replacement_identities <= replacement_members
+    )
+    priority_events = [
+        event for event in events
+        if event.get("kind") == "visibility_coverage_priority_requested"
+        and origin_ns <= int(event.get("elapsed_ns", -1)) <= batch_ns
+        and int(event.get("cause_id", -1)) == replacement_count
+        and int(event.get("auxiliary", -1)) == retirement_count
+    ]
+    priority_identities = {
+        identity for event in priority_events
+        if (identity := native_identity(event)) is not None
+    }
+    priority_keys = {identity[:4] for identity in priority_identities}
+    priority_edit_keys = priority_keys & replacement_keys
+    viewer_plan_times = {
+        int(event.get("cause_id", 0)): int(event.get("elapsed_ns", 0))
+        for event in all_native_events
+        if event.get("kind") == "viewer_plan_started"
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+    }
+    demand_events_by_identity: dict[
+        tuple[int, int, int, int, int], list[dict[str, Any]]
+    ] = defaultdict(list)
+    for event in all_native_events:
+        if event.get("kind") != "chunk_demand_accepted" or \
+                int(event.get("elapsed_ns", -1)) > batch_ns:
+            continue
+        identity = native_identity(event)
+        if identity is not None:
+            demand_events_by_identity[identity].append(event)
+    viewer_origin_counts: Counter[int] = Counter()
+    unmatched_non_edit_members = 0
+    for identity in replacement_members - edit_members:
+        matching = [
+            event for event in demand_events_by_identity.get(identity, [])
+            if int(event.get("cause_id", 0)) in viewer_plan_times
+        ]
+        if not matching:
+            unmatched_non_edit_members += 1
+            continue
+        latest_demand = max(
+            matching, key=lambda event: int(event.get("elapsed_ns", 0))
+        )
+        viewer_origin_counts[int(latest_demand.get("cause_id", 0))] += 1
+    plans_before_edit = [
+        cause for cause, elapsed_ns in viewer_plan_times.items()
+        if elapsed_ns < origin_ns
+    ]
+    latest_plan_before_edit = max(
+        plans_before_edit,
+        key=lambda cause: viewer_plan_times[cause],
+        default=None,
+    )
+    latest_plan_before_publication = max(
+        viewer_plan_times,
+        key=lambda cause: viewer_plan_times[cause],
+        default=None,
+    )
+    older_origin_members = (
+        sum(
+            count for cause, count in viewer_origin_counts.items()
+            if viewer_plan_times[cause] < viewer_plan_times[latest_plan_before_edit]
+        )
+        if latest_plan_before_edit is not None else 0
+    )
+    additional_replacements = (
+        len(replacement_members - edit_members)
+        if exact_membership else max(0, replacement_count - len(replacement_identities))
+    )
+    broad = regional and additional_replacements >= 32
+    if exact_membership and not all_edit_replacements_included:
+        classification = "EXACT_BATCH_DOES_NOT_CONTAIN_ALL_EDIT_REPLACEMENTS"
+    elif broad and exact_membership:
+        classification = "BROAD_REGIONAL_BATCH_CONTAINS_EDIT_REPLACEMENTS"
+    elif regional and exact_membership:
+        classification = "BOUNDED_REGIONAL_BATCH_CONTAINS_EDIT_REPLACEMENTS"
+    elif broad:
+        classification = "BROAD_REGIONAL_BATCH_CORRELATED_WITH_EDIT_ACTIVATION"
+    elif regional:
+        classification = "BOUNDED_REGIONAL_BATCH_CORRELATED_WITH_EDIT_ACTIVATION"
+    else:
+        classification = "GLOBAL_BATCH_CORRELATED_WITH_EDIT_ACTIVATION"
+    return {
+        "available": True,
+        "classification": classification,
+        "regional": regional,
+        "cohort_id": cohort_id,
+        "replacement_count": replacement_count,
+        "retirement_count": retirement_count,
+        "edit_replacement_count": len(replacement_identities),
+        "edit_replacement_members": len(edit_members),
+        "all_edit_replacements_included": all_edit_replacements_included,
+        "additional_replacements": additional_replacements,
+        "coverage_priority_requested_count": len(priority_events),
+        "coverage_priority_unique_key_count": len(priority_keys),
+        "coverage_priority_edit_key_count": len(priority_edit_keys),
+        "coverage_priority_other_key_count": len(priority_keys - replacement_keys),
+        "non_edit_origin": {
+            "classification": (
+                "MULTI_VIEWER_PLAN_ORIGINS"
+                if len(viewer_origin_counts) > 1 else
+                "SINGLE_VIEWER_PLAN_ORIGIN"
+                if viewer_origin_counts else "ORIGIN_NOT_RETAINED"
+            ),
+            "viewer_plan_member_count": sum(viewer_origin_counts.values()),
+            "unmatched_member_count": unmatched_non_edit_members,
+            "distinct_viewer_plan_origins": len(viewer_origin_counts),
+            "latest_viewer_plan_before_edit": latest_plan_before_edit,
+            "latest_viewer_plan_before_publication": latest_plan_before_publication,
+            "members_from_plans_older_than_latest_pre_edit_plan": older_origin_members,
+            "viewer_plan_origin_counts": {
+                str(cause): count
+                for cause, count in sorted(viewer_origin_counts.items())
+            },
+            "claim_boundary": (
+                "An older demand origin proves that the publication component "
+                "spans multiple accepted viewer plans. It does not prove stale "
+                "or superseded work: a chunk may remain desired without receiving "
+                "a new generation in every later plan."
+            ),
+        },
+        "publication_after_edit_replacements_ready_ms": (
+            batch_ns - ready_ns
+        ) / 1_000_000.0,
+        "replacement_lod_counts": dict(sorted(Counter(
+            identity[3] for identity in replacement_members
+        ).items())),
+        "retirement_lod_counts": dict(sorted(Counter(
+            key[3] for key in retirement_members
+        ).items())),
+        "replacement_members": [
+            {
+                "x": identity[0], "y": identity[1], "z": identity[2],
+                "lod": identity[3], "generation": identity[4],
+                "relation": (
+                    "edit_replacement" if identity in replacement_identities
+                    else "non_edit_replacement"
+                ),
+            }
+            for identity in sorted(replacement_members)
+        ],
+        "retirement_members": [
+            {"x": key[0], "y": key[1], "z": key[2], "lod": key[3]}
+            for key in sorted(retirement_members)
+        ],
+        "exact_membership_available": exact_membership,
+        "claim_boundary": (
+            "The authority emitted every member of the successfully published "
+            "regional cohort. Edit identity is exact. Non-edit members are proven "
+            "not to be edit replacements, but their originating viewer-plan or "
+            "supersession cause is not encoded by this event schema."
+            if exact_membership else
+            "The retained event stream correlates this batch with edit activation "
+            "and exposes its counts and not-ready priority keys. It does not emit "
+            "the complete regional membership, so it cannot yet prove that every "
+            "edit replacement belonged to this batch or classify every additional "
+            "replacement's ownership."
+        ),
+    }
+
+
+def batch_contains_replacements(
+    events: list[dict[str, Any]],
+    batch_event: dict[str, Any],
+    replacement_identities: set[tuple[int, int, int, int, int]],
+) -> bool:
+    cohort_id = int(batch_event.get("generation", 0))
+    if cohort_id <= 0 or not replacement_identities:
+        return False
+    batch_ns = int(batch_event.get("elapsed_ns", 0))
+    members = {
+        identity for event in events
+        if event.get("kind") == "visibility_region_replacement_member"
+        and int(event.get("cause_id", 0)) == cohort_id
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+        and (identity := native_identity(event)) is not None
+    }
+    return replacement_identities <= members
+
+
 def edit_analysis(
     downstream_events: list[dict[str, Any]], native_events: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -404,11 +721,15 @@ def edit_analysis(
         ), None)
         ready_event = _last_event(replacement_events, {"visibility_replacement_ready"})
         ready_ns = int(ready_event.get("elapsed_ns", origin_ns)) if ready_event else origin_ns
-        batch_event = next((
+        batch_candidates = [
             event for event in events
             if event.get("kind") == "visibility_batch_published"
             and int(event.get("elapsed_ns", 0)) >= ready_ns
-        ), None)
+        ]
+        batch_event = next((
+            event for event in batch_candidates
+            if batch_contains_replacements(events, event, replacement_identities)
+        ), None) or next(iter(batch_candidates), None)
         blocker_event = next((
             event for event in events
             if event.get("kind") == "visibility_staging_blocked"
@@ -467,6 +788,26 @@ def edit_analysis(
             (int(final_event.get("elapsed_ns", origin_ns)) - origin_ns) / 1_000_000.0
             if final_event is not None else None
         )
+        completion_elapsed_us = (
+            int(final_event.get("elapsed_ns", origin_ns)) // 1000
+            if final_event is not None else next_request_elapsed_us
+        )
+        blocker_analysis = sampled_blocker_analysis(
+            [
+                event for event in edit_frames
+                if int(event.get("elapsed_us", -1)) <= completion_elapsed_us
+            ],
+            replacement_identities,
+            request_elapsed_us,
+        )
+        publication_analysis = regional_publication_analysis(
+            events,
+            native_events,
+            replacement_identities,
+            origin_ns,
+            ready_ns,
+            batch_event,
+        )
         reports.append({
             "index": index + 1,
             "mode": str((request.get("payload") or {}).get("mode", "unknown")),
@@ -508,6 +849,8 @@ def edit_analysis(
                 "pending_chunk_retirements": int(blocker_event.get("auxiliary", 0)),
                 "pending_render_retirements": int(blocker_event.get("status", 0)),
             },
+            "sampled_first_blocker": blocker_analysis,
+            "correlated_visibility_publication": publication_analysis,
             "dominant_wait": dominant_gap,
             "waterfall": stage_rows,
             "complete": committed is not None and bool(replacement_identities) and final_event is not None,
@@ -844,14 +1187,32 @@ def summary_text(report: dict[str, Any]) -> str:
         ])
         for edit in trace["edits"]:
             edit_usage = edit.get("process_usage_during_pipeline", {})
+            blocker = edit.get("sampled_first_blocker", {})
+            publication = edit.get("correlated_visibility_publication", {})
             usage_text = "cpu-window=n/a"
             if edit_usage.get("available"):
                 usage_text = "cpu-window={cores:.2f} cores saturated={saturated:.3f}".format(
                     cores=float(edit_usage["average_active_logical_cores"]),
                     saturated=float(edit_usage["saturated_sample_fraction"]),
                 )
+            blocker_text = "blocker=n/a"
+            if blocker.get("available"):
+                blocker_text = "blocker={relation}/{reason}".format(
+                    relation=blocker["dominant_relation"],
+                    reason=blocker["dominant_reason"],
+                )
+            publication_text = "publication=n/a"
+            if publication.get("available"):
+                publication_text = "publication={replacements}R/{retirements}D membership={membership}".format(
+                    replacements=publication["replacement_count"],
+                    retirements=publication["retirement_count"],
+                    membership=(
+                        "exact" if publication["exact_membership_available"]
+                        else "correlated-only"
+                    ),
+                )
             lines.append(
-                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage}".format(
+                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage} {blocker} {publication}".format(
                     index=edit["index"],
                     mode=edit["mode"],
                     distance=(
@@ -864,6 +1225,8 @@ def summary_text(report: dict[str, Any]) -> str:
                     ),
                     dominant=edit["dominant_wait"]["stage"],
                     usage=usage_text,
+                    blocker=blocker_text,
+                    publication=publication_text,
                 )
             )
     lines.extend([
