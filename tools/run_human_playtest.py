@@ -114,6 +114,11 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--human-lighting-preset", str(args.lighting_preset)])
     if args.preset:
         command.extend(["--human-playtest-preset", args.preset])
+    if args.procedural_generation_workers is not None:
+        command.extend([
+            "--procedural-generation-workers",
+            str(args.procedural_generation_workers),
+        ])
     if args.meshing_workers is not None:
         command.extend(["--meshing-workers", str(args.meshing_workers)])
     if inspect_marker is not None:
@@ -328,6 +333,13 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--preset",
         help="Optional human playtest preset, for example 'tunnel' or 'static_water_basin'.",
+    )
+    parser.add_argument(
+        "--procedural-generation-workers",
+        type=int,
+        choices=range(1, 9),
+        metavar="1..8",
+        help="Override bounded procedural page-generation workers.",
     )
     parser.add_argument(
         "--meshing-workers",
