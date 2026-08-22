@@ -1,0 +1,110 @@
+{
+  "schema": "world_transvoxel.cpu_b3i_scheduler_queue_residency.v1",
+  "date": "2026-08-22",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "authority_commit": "d1c6d9ea4011a27734d1887a530e8b345abeacc4",
+  "runtime_artifact_commit": "13edfb2",
+  "analyzer_commit": "3e8c39f",
+  "runtime_artifact_digest_sha256": "b1e9888aab7f5f23679c16e2de5165840467744d9bdbde9b2a5d0e5e338af5a4",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "route": {
+    "trace_count": 1,
+    "duration_seconds": 36.668557,
+    "logical_cpu_capacity": 3,
+    "long_flight_count": 2,
+    "relocated_edit_count": 2,
+    "carve_count": 1,
+    "construction_count": 1,
+    "trace_integrity_complete": true,
+    "terminal_controller_path_count": 2,
+    "complete_scheduler_queue_path_count": 2
+  },
+  "authority_events": {
+    "scheduler_job_queued": 4837,
+    "scheduler_job_dequeued": 4328,
+    "scheduler_job_priority_observed": 13389,
+    "page_meshing_ownership_established": 2190
+  },
+  "performance_diagnostic": {
+    "average_active_logical_cores": 1.446329,
+    "process_cpu_percent_p95": 260.91,
+    "process_cpu_percent_maximum": 293.9,
+    "saturated_sample_fraction": 0.064286,
+    "frame_time_p99_ms": 64.76404,
+    "trace_on_release_baseline": false
+  },
+  "edits": [
+    {
+      "mode": "carve",
+      "pipeline_completion_ms": 5359.0938,
+      "authority_commit_ms": 31.079,
+      "terminal_identity": {
+        "x": 16,
+        "y": -1,
+        "z": 16,
+        "lod": 1,
+        "generation": 2373
+      },
+      "terminal_relation": "non_edit_replacement",
+      "generation_origin": "VIEWER_DEMAND",
+      "priority_outcome": "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND",
+      "sample_admission_priority": 2147483589,
+      "sample_priority_observed": 2147483647,
+      "sample_jobs_ahead_at_admission": 177,
+      "sample_same_priority_jobs_ahead_at_admission": 4,
+      "sample_jobs_ahead_at_priority_observation": 160,
+      "sample_same_priority_jobs_ahead_at_priority_observation": 160,
+      "sample_queue_residency_ms": 936.5765,
+      "page_ownership_established_from_edit_ms": 998.5066,
+      "mesh_admission_priority": 2147483647,
+      "mesh_jobs_ahead_at_admission": 294,
+      "mesh_same_priority_jobs_ahead_at_admission": 294,
+      "mesh_queue_residency_ms": 3404.5141,
+      "measured_pipeline_work_ms": 22.0175,
+      "dominant_segment": "MESH_SCHEDULER_QUEUE",
+      "ready_before_publication_ms": 89.8363
+    },
+    {
+      "mode": "construct",
+      "pipeline_completion_ms": 4304.3975,
+      "authority_commit_ms": 5.7211,
+      "terminal_identity": {
+        "x": 11,
+        "y": 0,
+        "z": 19,
+        "lod": 1,
+        "generation": 3634
+      },
+      "terminal_relation": "non_edit_replacement",
+      "generation_origin": "VIEWER_DEMAND",
+      "priority_outcome": "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND",
+      "sample_admission_priority": 2147483595,
+      "sample_priority_observed": 2147483647,
+      "sample_jobs_ahead_at_admission": 106,
+      "sample_same_priority_jobs_ahead_at_admission": 9,
+      "sample_jobs_ahead_at_priority_observation": 86,
+      "sample_same_priority_jobs_ahead_at_priority_observation": 86,
+      "sample_queue_residency_ms": 956.1124,
+      "page_ownership_established_from_edit_ms": 1000.4917,
+      "mesh_admission_priority": 2147483647,
+      "mesh_jobs_ahead_at_admission": 263,
+      "mesh_same_priority_jobs_ahead_at_admission": 263,
+      "mesh_queue_residency_ms": 2594.9763,
+      "measured_pipeline_work_ms": 20.5127,
+      "dominant_segment": "MESH_SCHEDULER_QUEUE",
+      "ready_before_publication_ms": 95.7248
+    }
+  ],
+  "decision": {
+    "classification": "MAX_PRIORITY_COHORT_FIFO_CONFIRMED",
+    "report_classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+    "priority_lost": false,
+    "page_ownership_handoff_missing": false,
+    "sustained_cpu_capacity_exhaustion": false,
+    "change_runtime_scheduling": false,
+    "split_atomic_publication": false,
+    "gpu_architecture_selected": false,
+    "next_candidate": "BOUNDED_EQUAL_PRIORITY_VISIBILITY_COHORT_ORDERING"
+  },
+  "claim_boundary": "Exact scheduler queue and ownership behavior are proven for two terminal generations in one bounded traced route. Recurrence, corrective policy, and untraced release performance are not proven."
+}
