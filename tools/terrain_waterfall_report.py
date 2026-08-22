@@ -24,6 +24,7 @@ HITCH_THRESHOLD_MS = 33.3
 LONG_RELOCATION_DISTANCE = 128.0
 EDIT_RELOCATION_DISTANCE = 64.0
 CHUNK_SIZE = 16.0
+CHUNK_CELLS_PER_AXIS = 16
 
 STAGE_BY_KIND = {
     "viewer_plan_started": "viewer",
@@ -132,6 +133,176 @@ def native_identity(event: dict[str, Any]) -> tuple[int, int, int, int, int] | N
         int(event.get(name, 0))
         for name in ("chunk_x", "chunk_y", "chunk_z", "chunk_lod", "generation")
     )
+
+
+ChunkKey = tuple[int, int, int, int]
+
+
+def chunk_bounds(key: ChunkKey) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    extent = CHUNK_CELLS_PER_AXIS << key[3]
+    minimum = tuple(key[axis] * extent for axis in range(3))
+    return minimum, tuple(minimum[axis] + extent for axis in range(3))
+
+
+def chunk_bounds_overlap(left: ChunkKey, right: ChunkKey) -> bool:
+    left_minimum, left_maximum = chunk_bounds(left)
+    right_minimum, right_maximum = chunk_bounds(right)
+    return all(
+        left_minimum[axis] < right_maximum[axis]
+        and right_minimum[axis] < left_maximum[axis]
+        for axis in range(3)
+    )
+
+
+def chunk_bounds_share_face(left: ChunkKey, right: ChunkKey) -> bool:
+    if chunk_bounds_overlap(left, right):
+        return False
+    left_minimum, left_maximum = chunk_bounds(left)
+    right_minimum, right_maximum = chunk_bounds(right)
+    for face_axis in range(3):
+        if left_maximum[face_axis] != right_minimum[face_axis] and \
+                right_maximum[face_axis] != left_minimum[face_axis]:
+            continue
+        other_axes = [axis for axis in range(3) if axis != face_axis]
+        if all(
+            left_minimum[axis] < right_maximum[axis]
+            and right_minimum[axis] < left_maximum[axis]
+            for axis in other_axes
+        ):
+            return True
+    return False
+
+
+def chunk_bounds_contains(outer: ChunkKey, inner: ChunkKey) -> bool:
+    outer_minimum, outer_maximum = chunk_bounds(outer)
+    inner_minimum, inner_maximum = chunk_bounds(inner)
+    return all(
+        outer_minimum[axis] <= inner_minimum[axis]
+        and inner_maximum[axis] <= outer_maximum[axis]
+        for axis in range(3)
+    )
+
+
+def child_chunk_keys(parent: ChunkKey) -> Iterable[ChunkKey]:
+    if parent[3] == 0:
+        return
+    child_lod = parent[3] - 1
+    for child_z in range(2):
+        for child_y in range(2):
+            for child_x in range(2):
+                yield (
+                    parent[0] * 2 + child_x,
+                    parent[1] * 2 + child_y,
+                    parent[2] * 2 + child_z,
+                    child_lod,
+                )
+
+
+def replacement_set_covers(target: ChunkKey, replacements: set[ChunkKey]) -> bool:
+    if any(chunk_bounds_contains(replacement, target) for replacement in replacements):
+        return True
+    if target[3] == 0:
+        return False
+    for child in child_chunk_keys(target):
+        if not any(chunk_bounds_overlap(child, replacement) for replacement in replacements):
+            return False
+        if not replacement_set_covers(child, replacements):
+            return False
+    return True
+
+
+def publication_component_audit(
+    replacements: set[ChunkKey], retirements: set[ChunkKey]
+) -> dict[str, Any]:
+    """Mirror the authority's overlap and unsafe-LOD-face component rule."""
+    nodes = {
+        *(("replacement", key) for key in replacements),
+        *(("retirement", key) for key in retirements),
+    }
+    adjacency = {node: set() for node in nodes}
+    overlap_edges = 0
+    unsafe_lod_boundary_edges = 0
+    for replacement in replacements:
+        replacement_node = ("replacement", replacement)
+        for retirement in retirements:
+            if chunk_bounds_overlap(replacement, retirement):
+                overlap_edges += 1
+            elif abs(replacement[3] - retirement[3]) > 1 and \
+                    chunk_bounds_share_face(replacement, retirement):
+                unsafe_lod_boundary_edges += 1
+            else:
+                continue
+            retirement_node = ("retirement", retirement)
+            adjacency[replacement_node].add(retirement_node)
+            adjacency[retirement_node].add(replacement_node)
+
+    component_sizes: list[int] = []
+    unseen = set(nodes)
+    while unseen:
+        stack = [unseen.pop()]
+        size = 0
+        while stack:
+            node = stack.pop()
+            size += 1
+            connected = adjacency[node] & unseen
+            unseen.difference_update(connected)
+            stack.extend(connected)
+        component_sizes.append(size)
+    component_sizes.sort(reverse=True)
+
+    overlapping_replacement_pairs = 0
+    ordered_replacements = sorted(replacements)
+    for index, left in enumerate(ordered_replacements):
+        overlapping_replacement_pairs += sum(
+            chunk_bounds_overlap(left, right)
+            for right in ordered_replacements[index + 1:]
+        )
+    duplicate_role_keys = replacements & retirements
+    uncovered_retirements = sorted(
+        retirement for retirement in retirements
+        if not replacement_set_covers(retirement, replacements)
+    )
+    connected = bool(nodes) and len(component_sizes) == 1
+    complete_coverage = bool(replacements) and bool(retirements) and \
+        not uncovered_retirements
+    valid_ownership = not overlapping_replacement_pairs and not duplicate_role_keys
+    minimal_under_authority_rule = connected and complete_coverage and valid_ownership
+    if minimal_under_authority_rule:
+        classification = "MINIMAL_UNDER_AUTHORITY_COMPONENT_RULE"
+    elif not connected:
+        classification = "REGION_CONTAINS_DISCONNECTED_COMPONENTS"
+    elif not complete_coverage:
+        classification = "REGION_HAS_INCOMPLETE_RETIREMENT_COVERAGE"
+    else:
+        classification = "REGION_HAS_INVALID_REPLACEMENT_OWNERSHIP"
+    return {
+        "available": True,
+        "classification": classification,
+        "minimal_under_authority_rule": minimal_under_authority_rule,
+        "replacement_count": len(replacements),
+        "retirement_count": len(retirements),
+        "component_count": len(component_sizes),
+        "component_sizes": component_sizes,
+        "overlap_edge_count": overlap_edges,
+        "unsafe_lod_boundary_edge_count": unsafe_lod_boundary_edges,
+        "total_edge_count": overlap_edges + unsafe_lod_boundary_edges,
+        "maximum_node_degree": max(map(len, adjacency.values()), default=0),
+        "isolated_node_count": sum(not neighbors for neighbors in adjacency.values()),
+        "overlapping_replacement_pair_count": overlapping_replacement_pairs,
+        "duplicate_role_key_count": len(duplicate_role_keys),
+        "uncovered_retirement_count": len(uncovered_retirements),
+        "uncovered_retirements": [
+            {"x": key[0], "y": key[1], "z": key[2], "lod": key[3]}
+            for key in uncovered_retirements[:16]
+        ],
+        "claim_boundary": (
+            "Minimal means this exact cohort is one complete connected component "
+            "under the authority policy: volume-overlap ownership plus face "
+            "neighbors required to avoid an LOD gap above one. It does not prove "
+            "that the policy itself is the only possible crack-free publication "
+            "architecture or that this cohort is globally latency-optimal."
+        ),
+    }
 
 
 def metrics_from_event(event: dict[str, Any]) -> dict[str, Any]:
@@ -485,6 +656,17 @@ def regional_publication_analysis(
         and len(replacement_members) == replacement_count
         and len(retirement_members) == retirement_count
     )
+    component_audit = (
+        publication_component_audit(
+            {identity[:4] for identity in replacement_members},
+            retirement_members,
+        )
+        if exact_membership else {
+            "available": False,
+            "classification": "EXACT_MEMBERSHIP_REQUIRED",
+            "minimal_under_authority_rule": False,
+        }
+    )
     desired_snapshot_events = [
         event for event in events
         if event.get("kind") == "visibility_region_desired_snapshot"
@@ -737,6 +919,7 @@ def regional_publication_analysis(
             for key in sorted(retirement_members)
         ],
         "exact_membership_available": exact_membership,
+        "publication_component_audit": component_audit,
         "claim_boundary": (
             "The authority emitted every member of the successfully published "
             "regional cohort. Edit identity is exact. Non-edit members are proven "
@@ -2369,6 +2552,7 @@ def summary_text(report: dict[str, Any]) -> str:
                 )
             publication_text = "publication=n/a"
             if publication.get("available"):
+                component = publication.get("publication_component_audit", {})
                 publication_text = "publication={replacements}R/{retirements}D membership={membership}".format(
                     replacements=publication["replacement_count"],
                     retirements=publication["retirement_count"],
@@ -2377,6 +2561,10 @@ def summary_text(report: dict[str, Any]) -> str:
                         else "correlated-only"
                     ),
                 )
+                if component.get("available"):
+                    publication_text += " component={classification}".format(
+                        classification=component["classification"],
+                    )
             destination_text = "destination=n/a"
             if destination.get("available"):
                 demand = destination.get("first_demand") or {}

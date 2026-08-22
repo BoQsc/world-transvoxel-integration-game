@@ -167,6 +167,62 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
 
 
 class TerrainWaterfallReportTest(unittest.TestCase):
+    def test_publication_component_audit_accepts_exact_octree_replacement(self) -> None:
+        replacements = {
+            (x, y, z, 0)
+            for z in range(2)
+            for y in range(2)
+            for x in range(2)
+        }
+        result = report.publication_component_audit(
+            replacements,
+            {(0, 0, 0, 1)},
+        )
+        self.assertEqual(
+            result["classification"],
+            "MINIMAL_UNDER_AUTHORITY_COMPONENT_RULE",
+        )
+        self.assertTrue(result["minimal_under_authority_rule"])
+        self.assertEqual(result["component_count"], 1)
+        self.assertEqual(result["component_sizes"], [9])
+        self.assertEqual(result["overlap_edge_count"], 8)
+        self.assertEqual(result["unsafe_lod_boundary_edge_count"], 0)
+        self.assertEqual(result["uncovered_retirement_count"], 0)
+
+    def test_publication_component_audit_rejects_disconnected_backlog(self) -> None:
+        replacements = {
+            (x, y, z, 0)
+            for z in range(2)
+            for y in range(2)
+            for x in range(2)
+        }
+        replacements.add((8, 0, 0, 0))
+        result = report.publication_component_audit(
+            replacements,
+            {(0, 0, 0, 1)},
+        )
+        self.assertEqual(
+            result["classification"],
+            "REGION_CONTAINS_DISCONNECTED_COMPONENTS",
+        )
+        self.assertFalse(result["minimal_under_authority_rule"])
+        self.assertEqual(result["component_count"], 2)
+        self.assertEqual(result["component_sizes"], [9, 1])
+        self.assertEqual(result["isolated_node_count"], 1)
+
+    def test_publication_component_audit_retains_unsafe_lod_face_edge(self) -> None:
+        result = report.publication_component_audit(
+            {(4, 0, 0, 0)},
+            {(0, 0, 0, 2)},
+        )
+        self.assertEqual(result["component_count"], 1)
+        self.assertEqual(result["overlap_edge_count"], 0)
+        self.assertEqual(result["unsafe_lod_boundary_edge_count"], 1)
+        self.assertEqual(
+            result["classification"],
+            "REGION_HAS_INCOMPLETE_RETIREMENT_COVERAGE",
+        )
+
     def test_non_edit_publication_blocker_critical_path_is_attributed(self) -> None:
         identity = (99, 2, 99, 0, 7)
         native = []
