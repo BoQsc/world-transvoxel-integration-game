@@ -1,0 +1,58 @@
+{
+  "schema": "world_transvoxel.cpu_b3p_shared_work_budget.v1",
+  "date": "2026-08-22",
+  "status": "CANDIDATE_REJECTED",
+  "authority_candidate_commit": "afd0771759de47a535d660bb8ce121176860b9c6",
+  "authority_revert_commit": "90db7e5",
+  "integration_disposable_base_commit": "c2dce88",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "logical_cpu_affinity": [0, 1, 2],
+  "control": {
+    "configuration": "storage_workers=2 meshing_workers=0 shared_budget=0",
+    "runs": 2,
+    "frame_p95_ms": [35.504, 34.8],
+    "frame_p99_ms": [38.813, 39.28],
+    "relocation_ready_ms": [8053.584, 7774.585],
+    "blocked_movement_frames": [5, 4],
+    "maximum_consecutive_blocked_frames": [3, 2],
+    "maximum_mesh_job_ms": [65.0615, 72.1366],
+    "collision_apply_deadline_overruns": [136, 164],
+    "average_active_logical_cores": [1.5151248713, 1.5838839438]
+  },
+  "candidate": {
+    "configuration": "storage_workers=2 meshing_workers=2 shared_budget=2",
+    "runs": 2,
+    "shared_budget_capacity": 2,
+    "shared_budget_maximum_active": 2,
+    "shared_budget_grants": [4932, 5023],
+    "frame_p95_ms": [36.132, 33.903],
+    "frame_p99_ms": [38.847, 37.501],
+    "relocation_ready_ms": [6507.262, 6146.644],
+    "blocked_movement_frames": [14, 20],
+    "maximum_consecutive_blocked_frames": [7, 4],
+    "maximum_mesh_job_ms": [116.2977, 167.915],
+    "collision_apply_deadline_overruns": [261, 260],
+    "average_active_logical_cores": [1.8664837857, 1.8858765184],
+    "shared_budget_wait_time_ns_total": [26671526600, 21529793800],
+    "shared_budget_wait_time_ns_maximum": [217004400, 224110600]
+  },
+  "paired_median_change": {
+    "frame_p95_fraction": -0.0038,
+    "frame_p99_fraction": -0.0223,
+    "relocation_ready_fraction": -0.2005,
+    "blocked_movement_fraction": 2.7778,
+    "maximum_mesh_job_fraction": 1.0716,
+    "collision_apply_deadline_overrun_fraction": 0.7367,
+    "average_active_logical_cores_fraction": 0.2108
+  },
+  "decision": {
+    "classification": "SHARED_CPU_WORK_BUDGET_REJECTED",
+    "reason": "Readiness improved, but movement blocking, indivisible mesh duration, and collision apply overruns regressed materially while frame pacing was effectively unchanged.",
+    "accepted_storage_workers": 2,
+    "accepted_meshing_workers": 0,
+    "accepted_shared_cpu_work_budget": 0,
+    "gpu_architecture_selected": false,
+    "next_milestone": "CONVENTIONAL_CPU_RESOURCE_AND_QUEUE_AUDIT"
+  },
+  "claim_boundary": "Two paired trace-off runs support rejection on this fixed three-logical-CPU machine. They are not a universal hardware performance claim."
+}
