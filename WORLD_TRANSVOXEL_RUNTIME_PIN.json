@@ -3,7 +3,7 @@
   "status": "ACTIVE",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "d15c4961427b2daf3053296b87af58834f15f01f",
+    "commit": "a00d95fdeb474600909ee397784dc8ae894db5cf",
     "addon_tree": "16743b035bee4a341084e9a775d9f2aa8612f190",
     "native_source_tree": "1137525d69665a9d2eb3d30a7d8afe5eb9fd4ec6",
     "fallback": false
@@ -11,7 +11,7 @@
   "runtime_artifact": {
     "layout": "binary_consumer_v1",
     "native_source_included": false,
-    "binary_build_commit": "d15c4961427b2daf3053296b87af58834f15f01f",
+    "binary_build_commit": "a00d95fdeb474600909ee397784dc8ae894db5cf",
     "digest_sha256": "5be1fa97f010c8f2beb7bf8a3ec98eaa738957d7f21dc9232751a6c1ba090c03",
     "files": [
       "LICENSE_SCOPE.md",
