@@ -1,0 +1,70 @@
+{
+  "schema": "world_transvoxel.cpu_b3c_publication_ownership.v1",
+  "status": "EXACT_COMPONENT_ATTRIBUTED_REMEDIATION_NOT_SELECTED",
+  "date": "2026-08-22",
+  "implementation_changed": false,
+  "gpu_architecture_selected": false,
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "d89e3497c4c374bd6a116ba8cc9804b4b3f48494"
+  },
+  "integration": {
+    "repository": "world-transvoxel-integration-game",
+    "commit": "e66690f979457b2a6175438dcbe0aef5ea54201e"
+  },
+  "execution_boundary": {
+    "logical_cpu_affinity": [0, 1, 2],
+    "required_route_covered": true,
+    "trace_integrity_complete": true,
+    "consumer_gap_event_count": 0,
+    "local_dropped_event_count": 0
+  },
+  "edits": [
+    {
+      "mode": "carve",
+      "pipeline_completion_ms": 5443.0663,
+      "publication_wait_after_edit_replacements_ready_ms": 3576.9334,
+      "publication_cohort": 1,
+      "replacement_count": 456,
+      "retirement_count": 129,
+      "edit_replacement_members": 4,
+      "non_edit_replacement_members": 452,
+      "coverage_priority_edit_keys": 0,
+      "coverage_priority_other_keys": 198,
+      "viewer_plan_origin_members": 436,
+      "distinct_viewer_plan_origins": 14,
+      "members_from_plans_older_than_latest_pre_edit_plan": 255,
+      "average_active_logical_cores": 1.97,
+      "saturated_sample_fraction": 0.045
+    },
+    {
+      "mode": "construct",
+      "pipeline_completion_ms": 5843.8255,
+      "publication_wait_after_edit_replacements_ready_ms": 3757.8208,
+      "publication_cohort": 2,
+      "replacement_count": 462,
+      "retirement_count": 184,
+      "edit_replacement_members": 1,
+      "non_edit_replacement_members": 461,
+      "coverage_priority_edit_keys": 0,
+      "coverage_priority_other_keys": 24,
+      "viewer_plan_origin_members": 449,
+      "distinct_viewer_plan_origins": 27,
+      "members_from_plans_older_than_latest_pre_edit_plan": 388,
+      "average_active_logical_cores": 1.93,
+      "saturated_sample_fraction": 0.0
+    }
+  ],
+  "decision": {
+    "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+    "finding": "Relocated edit activation is coupled to broad mixed-LOD publication cohorts dominated by non-edit visual readiness, while the bounded CPU capacity is not sustained.",
+    "required_next": "Prove current desired-set ownership for broad cohort members, then test at most one bounded standard CPU lifecycle remedy without weakening atomic visibility publication."
+  },
+  "claim_boundaries": [
+    "Exact final regional replacement and retirement membership is proven for this run.",
+    "Edit membership and non-edit membership are exact.",
+    "Older viewer-plan origin does not by itself prove stale or superseded work.",
+    "Trace-on timing is diagnostic and is not a release performance baseline.",
+    "No terrain behavior, CPU performance target, or GPU architecture is qualified by this audit."
+  ]
+}
