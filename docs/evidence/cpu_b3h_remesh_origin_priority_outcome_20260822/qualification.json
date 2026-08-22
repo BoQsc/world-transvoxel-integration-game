@@ -1,0 +1,110 @@
+{
+  "schema": "world_transvoxel.cpu_b3h_remesh_origin_priority_outcome.v1",
+  "date": "2026-08-22",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "authority_commit": "0b9249ce0911932cf2c4553fabe8f4d93529556e",
+  "runtime_artifact_commit": "b2356de",
+  "analyzer_commit": "d3d8bd2",
+  "runtime_artifact_digest_sha256": "596a3e7e3b7e9d48802ae8deb42e0b86f44cae7f119f8cef5bf4d33c3aff7829",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "route": {
+    "trace_count": 1,
+    "duration_seconds": 33.135129,
+    "logical_cpu_capacity": 3,
+    "long_flight_count": 2,
+    "relocated_edit_count": 2,
+    "carve_count": 1,
+    "construction_count": 1,
+    "trace_integrity_complete": true,
+    "terminal_controller_path_count": 2,
+    "complete_terminal_controller_path_count": 2,
+    "exact_cohort_terminal_controller_path_count": 2
+  },
+  "authority_events": {
+    "transition_remesh_generation_created": 332,
+    "readiness_repair_generation_created": 0,
+    "visibility_coverage_priority_requested": 605,
+    "visibility_coverage_priority_outcome": 605,
+    "visibility_coverage_priority_applied": 590,
+    "priority_outcome_status_counts": {
+      "APPLIED": 66,
+      "PAGE_GENERATION_STALE": 15,
+      "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND": 524
+    }
+  },
+  "performance_diagnostic": {
+    "average_active_logical_cores": 1.349419,
+    "process_cpu_percent_mean": 134.94186,
+    "process_cpu_percent_p95": 248.96,
+    "process_cpu_percent_maximum": 271.4,
+    "saturated_sample_fraction": 0.046512,
+    "frame_time_p99_ms": 65.33496,
+    "frame_time_maximum_ms": 7204.751,
+    "trace_on_release_baseline": false
+  },
+  "edits": [
+    {
+      "mode": "carve",
+      "pipeline_completion_ms": 4091.9293,
+      "authority_commit_ms": 4.1721,
+      "destination_fully_ready_before_edit_ms": 736.7941,
+      "terminal_identity": {
+        "x": 17,
+        "y": -1,
+        "z": 17,
+        "lod": 1,
+        "generation": 2428
+      },
+      "terminal_relation": "non_edit_replacement",
+      "generation_origin": "VIEWER_DEMAND",
+      "demand_from_edit_ms": 30.1153,
+      "priority_requested_from_edit_ms": 345.4556,
+      "priority_outcome_from_edit_ms": 379.8904,
+      "priority_outcome": "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND",
+      "dependencies_ready_from_edit_ms": 1269.0538,
+      "mesh_started_from_edit_ms": 3936.2762,
+      "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+      "dominant_segment_ms": 2667.2224,
+      "measured_work_ms": 14.6585,
+      "visibility_ready_from_edit_ms": 4002.2971,
+      "ready_before_publication_ms": 89.6322
+    },
+    {
+      "mode": "construct",
+      "pipeline_completion_ms": 3695.9965,
+      "authority_commit_ms": 6.5215,
+      "destination_fully_ready_before_edit_ms": 867.7513,
+      "terminal_identity": {
+        "x": 11,
+        "y": -1,
+        "z": 22,
+        "lod": 1,
+        "generation": 3774
+      },
+      "terminal_relation": "non_edit_replacement",
+      "generation_origin": "VIEWER_DEMAND",
+      "demand_from_edit_ms": 30.742,
+      "priority_requested_from_edit_ms": 85.6393,
+      "priority_outcome_from_edit_ms": 103.8288,
+      "priority_outcome": "SCHEDULER_APPLIED_PAGE_RECORD_NOT_FOUND",
+      "dependencies_ready_from_edit_ms": 1214.5559,
+      "mesh_started_from_edit_ms": 3563.1971,
+      "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+      "dominant_segment_ms": 2348.6412,
+      "measured_work_ms": 11.3153,
+      "visibility_ready_from_edit_ms": 3603.5864,
+      "ready_before_publication_ms": 92.4101
+    }
+  ],
+  "decision": {
+    "classification": "VIEWER_DEMAND_COHORT_MESH_QUEUE_CONFIRMED",
+    "transition_remesh_is_direct_terminal_cause": false,
+    "readiness_repair_is_direct_terminal_cause": false,
+    "destination_readiness_is_direct_cause": false,
+    "gpu_architecture_selected": false,
+    "change_runtime_scheduling": false,
+    "split_atomic_publication": false,
+    "next_diagnostic": "EXACT_SCHEDULER_QUEUE_AND_PAGE_OWNERSHIP_HANDOFF"
+  },
+  "claim_boundary": "Exact terminal generation origin, priority outcome, and retained pipeline ordering are proven for this bounded traced route. Page-runtime ownership cause and untraced release performance are not proven."
+}
