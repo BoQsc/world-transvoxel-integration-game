@@ -1,0 +1,168 @@
+{
+  "schema": "world_transvoxel.cpu_b3g_publication_blocker_critical_path.v1",
+  "date": "2026-08-22",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "accepted_authority_commit": "72cfb300375bda990fc488b8fa6366e58fcb711f",
+  "analyzer_commit": "07aa92f",
+  "logical_cpu_capacity": 3,
+  "source_evidence": "cpu_b3f_relocation_destination_readiness_20260822",
+  "route": {
+    "repeat_count": 3,
+    "edit_count": 6,
+    "complete_terminal_controller_paths": 6,
+    "exact_cohort_terminal_controller_paths": 6,
+    "non_edit_terminal_controller_paths": 6
+  },
+  "aggregate": {
+    "terminal_controller_lod_counts": {
+      "1": 4,
+      "2": 2
+    },
+    "dominant_segment_counts": {
+      "DEPENDENCIES_READY_TO_MESH": 5,
+      "PRIORITY_REQUEST_TO_PIPELINE_START": 1
+    },
+    "dependencies_ready_to_mesh_ms_minimum": 2182.242,
+    "dependencies_ready_to_mesh_ms_maximum": 5055.1509,
+    "priority_request_to_pipeline_start_ms": 2652.1677,
+    "measured_work_ms_minimum": 7.2538,
+    "measured_work_ms_maximum": 54.0398,
+    "terminal_ready_to_publication_ms_minimum": 34.5588,
+    "terminal_ready_to_publication_ms_maximum": 107.4493,
+    "expect_chunk_without_demand_event_count": 4,
+    "viewer_demand_count": 2,
+    "priority_apply_retained_count": 2,
+    "priority_apply_not_retained_count": 4
+  },
+  "repeats": [
+    {
+      "repeat": 1,
+      "edits": [
+        {
+          "mode": "carve",
+          "identity": {"x": 14, "y": 3, "z": 16, "lod": 1, "generation": 2463},
+          "relation": "non_edit_replacement",
+          "generation_origin": "EXPECT_CHUNK_WITHOUT_DEMAND_EVENT",
+          "priority_requested_from_edit_ms": 992.9376,
+          "priority_apply_retained": false,
+          "sample_started_from_edit_ms": 3645.1053,
+          "dependencies_ready_from_edit_ms": 3662.0518,
+          "mesh_started_from_edit_ms": 3836.8511,
+          "visibility_ready_from_edit_ms": 3860.7338,
+          "publication_from_edit_ms": 3947.0029,
+          "dominant_segment": "PRIORITY_REQUEST_TO_PIPELINE_START",
+          "dominant_segment_ms": 2652.1677,
+          "measured_work_ms": 11.0496,
+          "ready_before_publication_ms": 86.2691
+        },
+        {
+          "mode": "construct",
+          "identity": {"x": 7, "y": 0, "z": 10, "lod": 2, "generation": 3803},
+          "relation": "non_edit_replacement",
+          "generation_origin": "EXPECT_CHUNK_WITHOUT_DEMAND_EVENT",
+          "priority_requested_from_edit_ms": 269.8806,
+          "priority_apply_retained": false,
+          "sample_started_from_edit_ms": 1189.2558,
+          "dependencies_ready_from_edit_ms": 1223.4703,
+          "mesh_started_from_edit_ms": 3405.7123,
+          "visibility_ready_from_edit_ms": 3469.2762,
+          "publication_from_edit_ms": 3561.0445,
+          "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+          "dominant_segment_ms": 2182.242,
+          "measured_work_ms": 54.0398,
+          "ready_before_publication_ms": 91.7683
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "edits": [
+        {
+          "mode": "carve",
+          "identity": {"x": 7, "y": -2, "z": 7, "lod": 2, "generation": 2377},
+          "relation": "non_edit_replacement",
+          "generation_origin": "EXPECT_CHUNK_WITHOUT_DEMAND_EVENT",
+          "priority_requested_from_edit_ms": 284.3797,
+          "priority_apply_retained": false,
+          "sample_started_from_edit_ms": 2893.8904,
+          "dependencies_ready_from_edit_ms": 2925.0566,
+          "mesh_started_from_edit_ms": 7980.2075,
+          "visibility_ready_from_edit_ms": 8018.9151,
+          "publication_from_edit_ms": 8126.3644,
+          "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+          "dominant_segment_ms": 5055.1509,
+          "measured_work_ms": 26.8409,
+          "ready_before_publication_ms": 107.4493
+        },
+        {
+          "mode": "construct",
+          "identity": {"x": 10, "y": -1, "z": 23, "lod": 1, "generation": 3648},
+          "relation": "non_edit_replacement",
+          "generation_origin": "VIEWER_DEMAND",
+          "demand_from_edit_ms": 43.1169,
+          "priority_requested_from_edit_ms": 62.9804,
+          "priority_applied_from_edit_ms": 71.1103,
+          "priority_apply_retained": true,
+          "sample_started_from_edit_ms": 2172.828,
+          "dependencies_ready_from_edit_ms": 2172.8486,
+          "mesh_started_from_edit_ms": 6256.6863,
+          "visibility_ready_from_edit_ms": 6308.5758,
+          "publication_from_edit_ms": 6378.5098,
+          "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+          "dominant_segment_ms": 4083.8377,
+          "measured_work_ms": 7.2538,
+          "ready_before_publication_ms": 69.934
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "edits": [
+        {
+          "mode": "carve",
+          "identity": {"x": 14, "y": 2, "z": 16, "lod": 1, "generation": 2471},
+          "relation": "non_edit_replacement",
+          "generation_origin": "EXPECT_CHUNK_WITHOUT_DEMAND_EVENT",
+          "priority_requested_from_edit_ms": 106.9012,
+          "priority_apply_retained": false,
+          "sample_started_from_edit_ms": 1237.2548,
+          "dependencies_ready_from_edit_ms": 1293.8551,
+          "mesh_started_from_edit_ms": 4192.9253,
+          "visibility_ready_from_edit_ms": 4223.3276,
+          "publication_from_edit_ms": 4257.8864,
+          "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+          "dominant_segment_ms": 2899.0702,
+          "measured_work_ms": 24.0127,
+          "ready_before_publication_ms": 34.5588
+        },
+        {
+          "mode": "construct",
+          "identity": {"x": 10, "y": -1, "z": 22, "lod": 1, "generation": 3760},
+          "relation": "non_edit_replacement",
+          "generation_origin": "VIEWER_DEMAND",
+          "demand_from_edit_ms": 27.6185,
+          "priority_requested_from_edit_ms": 73.4372,
+          "priority_applied_from_edit_ms": 89.5495,
+          "priority_apply_retained": true,
+          "sample_started_from_edit_ms": 1738.263,
+          "dependencies_ready_from_edit_ms": 2055.9278,
+          "mesh_started_from_edit_ms": 5038.2432,
+          "visibility_ready_from_edit_ms": 5071.6977,
+          "publication_from_edit_ms": 5136.6843,
+          "dominant_segment": "DEPENDENCIES_READY_TO_MESH",
+          "dominant_segment_ms": 2982.3154,
+          "measured_work_ms": 14.1193,
+          "ready_before_publication_ms": 64.9866
+        }
+      ]
+    }
+  ],
+  "decision": {
+    "classification": "BROAD_ATOMIC_PUBLICATION_MESH_QUEUE_IDENTIFIED",
+    "change_runtime_scheduling": false,
+    "split_atomic_publication": false,
+    "gpu_architecture_selected": false,
+    "next_diagnostic": "DISTINGUISH_REMESH_REPAIR_GENERATION_ORIGIN_AND_PRIORITY_OUTCOME"
+  },
+  "claim_boundary": "The exact terminal readiness controller and its retained pipeline intervals are proven. Four ExpectChunk generations lack an event that distinguishes transition remesh from readiness repair, so their precise authority origin is not claimed."
+}
