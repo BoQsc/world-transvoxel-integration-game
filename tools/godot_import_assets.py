@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import os
 import pathlib
 import shutil
@@ -144,15 +145,29 @@ def verify_imports(project: pathlib.Path) -> None:
         if not isinstance(dest_files, list) or not dest_files:
             failures.append(f"{relative}: no dest_files declared")
             continue
-        required_mtime = max(import_path.stat().st_mtime, source_path.stat().st_mtime)
         for dest_value in dest_files:
             dest_path = res_path_to_file(project, dest_value)
             if not dest_path.is_file():
                 failures.append(f"{relative}: imported artifact missing {dest_path}")
                 continue
-            if dest_path.stat().st_mtime + 0.5 < required_mtime:
+            checksum_path = dest_path.with_suffix(".md5")
+            if not checksum_path.is_file():
                 failures.append(
-                    f"{relative}: imported artifact is stale {dest_path}; "
+                    f"{relative}: imported checksum is missing {checksum_path}; "
+                    "run Godot --import"
+                )
+                continue
+            checksums = parse_import_file(checksum_path)
+            source_md5 = hashlib.md5(source_path.read_bytes()).hexdigest()
+            dest_md5 = hashlib.md5(dest_path.read_bytes()).hexdigest()
+            if checksums.get("source_md5") != source_md5:
+                failures.append(
+                    f"{relative}: imported source checksum is stale; "
+                    "run Godot --import"
+                )
+            if checksums.get("dest_md5") != dest_md5:
+                failures.append(
+                    f"{relative}: imported artifact checksum is stale; "
                     "run Godot --import"
                 )
     if failures:
