@@ -1,0 +1,136 @@
+{
+  "schema": "world_transvoxel.cpu_b3f_relocation_destination_readiness.v1",
+  "date": "2026-08-22",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "accepted_authority_commit": "72cfb300375bda990fc488b8fa6366e58fcb711f",
+  "analyzer_commit": "668f602",
+  "logical_cpu_capacity": 3,
+  "route": {
+    "repeat_count": 3,
+    "complete_trace_count": 3,
+    "edit_count": 6,
+    "has_long_flight": true,
+    "has_relocated_carve": true,
+    "has_relocated_construction": true,
+    "blocked_movement_frames": 0,
+    "blocked_flight_frames": 0
+  },
+  "repeats": [
+    {
+      "repeat": 1,
+      "trace_on_frame_p99_ms": 65.39852,
+      "trace_on_frame_maximum_ms": 6803.187,
+      "hitch_frames": 488,
+      "maximum_frame_classification": "NATIVE_MESHING",
+      "average_active_logical_cores": 1.37004,
+      "saturated_sample_fraction": 0.04,
+      "edits": [
+        {
+          "mode": "carve",
+          "target_demand_before_edit_ms": 1393.0548,
+          "target_full_readiness_before_edit_ms": 743.3656,
+          "pipeline_completion_ms": 3947.0029,
+          "publication_after_edit_replacements_ready_ms": 3671.8028,
+          "replacement_count": 428,
+          "additional_replacement_count": 424,
+          "retirement_count": 125,
+          "peak_blocked_replacement_count": 546
+        },
+        {
+          "mode": "construct",
+          "target_demand_before_edit_ms": 2104.2857,
+          "target_full_readiness_before_edit_ms": 869.461,
+          "pipeline_completion_ms": 3561.0445,
+          "publication_after_edit_replacements_ready_ms": 3411.8204,
+          "replacement_count": 462,
+          "additional_replacement_count": 461,
+          "retirement_count": 185,
+          "peak_blocked_replacement_count": 468
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "trace_on_frame_p99_ms": 33.23,
+      "trace_on_frame_maximum_ms": 11998.665,
+      "hitch_frames": 10,
+      "maximum_frame_classification": "NATIVE_STORAGE",
+      "average_active_logical_cores": 1.570496855345912,
+      "saturated_sample_fraction": 0.025157232704402517,
+      "edits": [
+        {
+          "mode": "carve",
+          "target_demand_before_edit_ms": 1356.9719,
+          "target_full_readiness_before_edit_ms": 70.3016,
+          "pipeline_completion_ms": 8126.3644,
+          "publication_after_edit_replacements_ready_ms": 5225.0967,
+          "replacement_count": 456,
+          "additional_replacement_count": 452,
+          "retirement_count": 129,
+          "peak_blocked_replacement_count": 534
+        },
+        {
+          "mode": "construct",
+          "target_demand_before_edit_ms": 2087.6573,
+          "target_full_readiness_before_edit_ms": 915.0016,
+          "pipeline_completion_ms": 6378.5098,
+          "publication_after_edit_replacements_ready_ms": 4138.6444,
+          "replacement_count": 462,
+          "additional_replacement_count": 461,
+          "retirement_count": 185,
+          "peak_blocked_replacement_count": 531
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "trace_on_frame_p99_ms": 33.19,
+      "trace_on_frame_maximum_ms": 6936.257,
+      "hitch_frames": 12,
+      "maximum_frame_classification": "NATIVE_STORAGE",
+      "average_active_logical_cores": 1.680955223880597,
+      "saturated_sample_fraction": 0.09701492537313433,
+      "edits": [
+        {
+          "mode": "carve",
+          "target_demand_before_edit_ms": 1396.8924,
+          "target_full_readiness_before_edit_ms": 780.881,
+          "pipeline_completion_ms": 4257.8864,
+          "publication_after_edit_replacements_ready_ms": 2881.1816,
+          "replacement_count": 428,
+          "additional_replacement_count": 424,
+          "retirement_count": 125,
+          "peak_blocked_replacement_count": 500
+        },
+        {
+          "mode": "construct",
+          "target_demand_before_edit_ms": 2107.1162,
+          "target_full_readiness_before_edit_ms": 901.1973,
+          "pipeline_completion_ms": 5136.6843,
+          "publication_after_edit_replacements_ready_ms": 5015.8998,
+          "replacement_count": 462,
+          "additional_replacement_count": 461,
+          "retirement_count": 185,
+          "peak_blocked_replacement_count": 489
+        }
+      ]
+    }
+  ],
+  "invariants": {
+    "all_target_chunks_demanded_before_edit": true,
+    "all_target_chunks_render_and_collision_ready_before_edit": true,
+    "all_dominant_waits_visibility_staging": true,
+    "all_dominant_sampled_blockers_non_edit_replacements": true,
+    "all_dominant_sampled_blockers_visual_not_ready": true,
+    "all_publications_exact_latest_drained_plan_ownership": true,
+    "raw_cpu_saturation_explains_wait": false
+  },
+  "decision": {
+    "classification": "LATE_DESTINATION_DEMAND_HYPOTHESIS_REJECTED",
+    "change_runtime_scheduling": false,
+    "reintroduce_target_prewarm": false,
+    "gpu_architecture_selected": false,
+    "next_diagnostic": "TRACE_NON_EDIT_ATOMIC_PUBLICATION_CRITICAL_PATH"
+  },
+  "claim_boundary": "Pre-edit readiness covers the eventual LOD0 edit-center chunk, not every brush-overlapped chunk or every member of the atomic regional publication. Trace-on frame timing is diagnostic and not a release-performance baseline."
+}
