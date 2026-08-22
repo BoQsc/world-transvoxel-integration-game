@@ -1,0 +1,72 @@
+{
+  "schema": "world_transvoxel.cpu_b3j_queue_composition_reconciliation.v1",
+  "date": "2026-08-22",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "authority_commit": "d1c6d9ea4011a27734d1887a530e8b345abeacc4",
+  "runtime_artifact_commit": "13edfb2",
+  "analyzer_commit": "9976c7c",
+  "source_evidence": "cpu_b3i_scheduler_queue_residency_20260822",
+  "trace_integrity_complete": true,
+  "logical_cpu_capacity": 3,
+  "terminal_paths": [
+    {
+      "mode": "carve",
+      "publication_replacement_count": 428,
+      "terminal_identity": {
+        "x": 16,
+        "y": -1,
+        "z": 16,
+        "lod": 1,
+        "generation": 2373
+      },
+      "mesh_jobs_ahead": 293,
+      "sample_jobs_ahead": 1,
+      "same_priority_jobs_ahead": 294,
+      "same_publication_region_jobs_ahead": 294,
+      "queue_composition_exact": true,
+      "mesh_queue_residency_ms": 3404.5141
+    },
+    {
+      "mode": "construct",
+      "publication_replacement_count": 440,
+      "terminal_identity": {
+        "x": 11,
+        "y": 0,
+        "z": 19,
+        "lod": 1,
+        "generation": 3634
+      },
+      "mesh_jobs_ahead": 263,
+      "sample_jobs_ahead": 0,
+      "same_priority_jobs_ahead": 263,
+      "same_publication_region_jobs_ahead": 263,
+      "queue_composition_exact": true,
+      "mesh_queue_residency_ms": 2594.9763
+    }
+  ],
+  "current_authority_execution": {
+    "mesh_execution": "SYNCHRONOUS_RUNTIME_CONTROL_THREAD",
+    "scheduler_jobs_per_control_iteration": 4,
+    "parallel_mesh_workers": 0
+  },
+  "historical_candidates": [
+    {
+      "commit": "50d66709f3555111c37b496a266f3d6ecacf387c",
+      "accepted_main": false,
+      "disposition": "HUMAN_FRAME_PACING_HOLD_AND_OPT_IN_CONTAINMENT"
+    },
+    {
+      "commit": "f0d88fe9f2d844190d11f26cbe9ed9919f7244d1",
+      "accepted_main": false,
+      "disposition": "SEPARATE_LINEAGE_NOT_ACCEPTED"
+    }
+  ],
+  "decision": {
+    "classification": "SAME_REGION_SERIAL_MESH_THROUGHPUT_CONFIRMED",
+    "equal_priority_cohort_ordering_candidate": "REJECTED_BEFORE_IMPLEMENTATION",
+    "split_atomic_publication": false,
+    "gpu_architecture_selected": false,
+    "next_milestone": "CURRENT_LINE_OPT_IN_BOUNDED_PARALLEL_MESHING"
+  },
+  "claim_boundary": "Exact queue composition is proven for two terminal generations in one complete bounded trace. Parallel-meshing correctness and performance are not yet proven."
+}
