@@ -635,6 +635,7 @@ def main(argv: list[str]) -> int:
         off_run, off_execution = baseline._run_measurement(
             godot, project, capture_dir, index, args.collision_radius,
             args.collision_prediction, args.procedural_generation_workers,
+            0,
             stem_prefix="trace_off",
             edit_ready_wait_frames=CAUSAL_EDIT_READY_WAIT_FRAMES,
         )
@@ -642,6 +643,7 @@ def main(argv: list[str]) -> int:
         on_run, on_execution = baseline._run_measurement(
             godot, project, capture_dir, index, args.collision_radius,
             args.collision_prediction, args.procedural_generation_workers,
+            0,
             causal_trace_path=trace_path, stem_prefix="trace_on",
             edit_ready_wait_frames=CAUSAL_EDIT_READY_WAIT_FRAMES,
         )

@@ -77,6 +77,7 @@ def _run_measurement(
     collision_radius: int,
     collision_prediction: float,
     procedural_generation_workers: int,
+    meshing_workers: int,
     causal_trace_path: pathlib.Path | None = None,
     stem_prefix: str = "run",
     edit_ready_wait_frames: int | None = None,
@@ -103,6 +104,8 @@ def _run_measurement(
         str(collision_prediction),
         "--procedural-generation-workers",
         str(procedural_generation_workers),
+        "--meshing-workers",
+        str(meshing_workers),
     ]
     if edit_ready_wait_frames is not None:
         if edit_ready_wait_frames < 900:
@@ -246,6 +249,7 @@ def _aggregate(
     runs: list[dict[str, object]],
     executions: list[dict[str, object]],
     procedural_generation_workers: int,
+    meshing_workers: int,
     provenance: dict[str, object],
 ) -> dict[str, object]:
     fields = {
@@ -402,6 +406,7 @@ def _aggregate(
             runs[0], "collision_prediction_distance"
         ),
         "procedural_generation_workers": procedural_generation_workers,
+        "meshing_workers": meshing_workers,
         "route_contract": {
             "movement_frames_per_run": int(_number(runs[0], "movement", "frames")),
             "normal_speed": _number(runs[0], "normal_speed"),
@@ -442,6 +447,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--collision-radius", type=int, default=2)
     parser.add_argument("--collision-prediction", type=float, default=24.0)
     parser.add_argument("--procedural-generation-workers", type=int, default=2)
+    parser.add_argument("--meshing-workers", type=int, choices=range(0, 9), default=0)
     parser.add_argument(
         "--output",
         help="Aggregate JSON output path. Defaults under .godot captures.",
@@ -485,6 +491,7 @@ def main(argv: list[str]) -> int:
             args.collision_radius,
             args.collision_prediction,
             args.procedural_generation_workers,
+            args.meshing_workers,
         )
         baselines.append(baseline)
         executions.append(execution)
@@ -493,6 +500,7 @@ def main(argv: list[str]) -> int:
         baselines,
         executions,
         args.procedural_generation_workers,
+        args.meshing_workers,
         _provenance(project, godot, affinity),
     )
     output = (
