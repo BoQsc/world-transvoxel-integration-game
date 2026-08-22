@@ -206,6 +206,24 @@ class TerrainWaterfallReportTest(unittest.TestCase):
                 "same_priority_jobs_ahead": same_priority_ahead,
             })
 
+        def add_ahead_mesh(
+            chunk: int,
+            job_sequence: int,
+        ) -> None:
+            add_job(
+                "scheduler_job_queued", 3030.5 + job_sequence / 1000.0,
+                "mesh", 2147483647, job_sequence, job_sequence - 1,
+                job_sequence - 1,
+            )
+            native[-1]["job_sequence"] = job_sequence
+            native[-1].update({
+                "chunk_x": chunk,
+                "chunk_y": 2,
+                "chunk_z": chunk,
+                "chunk_lod": 0,
+                "generation": 7,
+            })
+
         add("chunk_demand_accepted", 2800.0)
         add_job("scheduler_job_queued", 2800.1, "sample", 12, 40, 30, 2)
         add("readiness_repair_generation_created", 2995.0)
@@ -227,10 +245,13 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             2147483647, 0, 0, 0,
         )
         add("sample_finished", 3031.0, 1.0)
+        add_ahead_mesh(98, 100)
+        add_ahead_mesh(99, 101)
         add_job(
             "scheduler_job_queued", 3031.0, "mesh",
-            2147483647, 128, 120, 120,
+            2147483647, 3, 2, 2,
         )
+        native[-1]["job_sequence"] = 102
         add_job(
             "scheduler_job_dequeued", 3060.0, "mesh",
             2147483647, 20, 0, 0,
@@ -253,15 +274,18 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             }],
         }
         publication = {
-            "replacement_members": [{
-                "x": 99,
-                "y": 2,
-                "z": 99,
-                "lod": 0,
-                "generation": 7,
-                "visual_required": True,
-                "collision_required": True,
-            }],
+            "replacement_members": [
+                {
+                    "x": chunk,
+                    "y": 2,
+                    "z": chunk,
+                    "lod": 0,
+                    "generation": 7,
+                    "visual_required": True,
+                    "collision_required": True,
+                }
+                for chunk in (98, 99)
+            ],
         }
         result = report.publication_blocker_critical_path_analysis(
             native,
@@ -306,7 +330,16 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             path["scheduler_queue"]["mesh_admission"][
                 "same_priority_jobs_ahead"
             ],
-            120,
+            2,
+        )
+        composition = path["scheduler_queue"][
+            "mesh_admission_ahead_composition"
+        ]
+        self.assertTrue(composition["exact"])
+        self.assertEqual(composition["stage_counts"], {"mesh": 2})
+        self.assertEqual(composition["same_publication_region_jobs_ahead"], 2)
+        self.assertTrue(
+            composition["all_jobs_ahead_are_same_priority_publication_members"]
         )
         self.assertEqual(path["scheduler_queue"]["mesh_residency_ms"], 29.0)
         self.assertEqual(

@@ -1011,6 +1011,108 @@ def publication_blocker_critical_path_analysis(
         })
 
     paths = []
+
+    def queue_composition_at_admission(
+        admission: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if admission is None or not bool(admission.get("has_queue_state", False)):
+            return {
+                "available": False,
+                "classification": "QUEUE_ADMISSION_NOT_RETAINED",
+            }
+        target_event_sequence = int(admission.get("sequence", -1))
+        target_job_sequence = int(admission.get("job_sequence", 0))
+        active: dict[int, dict[str, Any]] = {}
+        for event in sorted(
+            native_events,
+            key=lambda item: int(item.get("sequence", 0)),
+        ):
+            event_sequence = int(event.get("sequence", -1))
+            if event_sequence > target_event_sequence:
+                break
+            kind = str(event.get("kind", ""))
+            job_sequence = int(event.get("job_sequence", 0))
+            if kind == "scheduler_job_queued":
+                queued_identity = native_identity(event)
+                if job_sequence > 0 and queued_identity is not None:
+                    active[job_sequence] = {
+                        "identity": queued_identity,
+                        "stage": str(event.get("job_stage", "unknown")),
+                        "priority": int(event.get("effective_priority", 0)),
+                    }
+            elif kind == "scheduler_job_priority_observed":
+                if job_sequence in active:
+                    active[job_sequence]["priority"] = int(
+                        event.get("effective_priority", 0)
+                    )
+            elif kind == "scheduler_job_dequeued":
+                active.pop(job_sequence, None)
+        if target_job_sequence not in active:
+            return {
+                "available": False,
+                "classification": "TARGET_JOB_NOT_RECONSTRUCTED",
+            }
+        ordered = sorted(
+            active.items(),
+            key=lambda item: (-int(item[1]["priority"]), item[0]),
+        )
+        target_index = next(
+            index for index, item in enumerate(ordered)
+            if item[0] == target_job_sequence
+        )
+        ahead = [item[1] for item in ordered[:target_index]]
+        target_priority = int(active[target_job_sequence]["priority"])
+        same_priority_ahead = [
+            item for item in ahead
+            if int(item["priority"]) == target_priority
+        ]
+        same_region_ahead = [
+            item for item in ahead
+            if item["identity"] in cohort_members
+        ]
+        same_priority_same_region_ahead = [
+            item for item in same_priority_ahead
+            if item["identity"] in cohort_members
+        ]
+
+        def counts(items: list[dict[str, Any]], name: str) -> dict[str, int]:
+            return dict(sorted(Counter(str(item[name]) for item in items).items()))
+
+        reported_jobs_ahead = int(admission.get("jobs_ahead", 0))
+        reported_same_priority = int(
+            admission.get("same_priority_jobs_ahead", 0)
+        )
+        exact = (
+            target_index == reported_jobs_ahead
+            and len(same_priority_ahead) == reported_same_priority
+        )
+        return {
+            "available": True,
+            "classification": (
+                "EXACT_QUEUE_COMPOSITION_RECONSTRUCTED"
+                if exact else "QUEUE_COMPOSITION_COUNT_MISMATCH"
+            ),
+            "exact": exact,
+            "reconstructed_jobs_ahead": target_index,
+            "reported_jobs_ahead": reported_jobs_ahead,
+            "stage_counts": counts(ahead, "stage"),
+            "lod_counts": dict(sorted(Counter(
+                int(item["identity"][3]) for item in ahead
+            ).items())),
+            "same_priority_jobs_ahead": len(same_priority_ahead),
+            "same_priority_stage_counts": counts(
+                same_priority_ahead, "stage"
+            ),
+            "same_publication_region_jobs_ahead": len(same_region_ahead),
+            "same_priority_same_publication_region_jobs_ahead": len(
+                same_priority_same_region_ahead
+            ),
+            "all_jobs_ahead_are_same_priority_publication_members": (
+                bool(ahead)
+                and len(same_priority_same_region_ahead) == len(ahead)
+            ),
+        }
+
     for identity, observations in observed.items():
         identity_events = sorted(
             (
@@ -1494,6 +1596,9 @@ def publication_blocker_critical_path_analysis(
                 "page_ownership": queue_event_summary(page_ownership),
                 "mesh_admission": queue_event_summary(mesh_queued),
                 "mesh_dequeue": queue_event_summary(mesh_dequeued),
+                "mesh_admission_ahead_composition": (
+                    queue_composition_at_admission(mesh_queued)
+                ),
                 "sample_residency_ms": (
                     (sample_dequeued_ns - sample_queued_ns) / 1_000_000.0
                     if sample_queued_ns > 0 and sample_dequeued_ns > 0 else None
