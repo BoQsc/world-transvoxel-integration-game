@@ -104,6 +104,21 @@ static func update_viewer(world, viewer_id: int, revision: int, position: Vector
 	world._last_error = "ok"
 	return true
 
+static func request_relocation_visibility_prewarm(world, position: Vector3, maximum_records: int) -> bool:
+	if not world.is_backend_world_running():
+		world._last_error = "backend world must be running before relocation visibility prewarm"
+		return false
+	if not world._backend_terrain.has_method("request_relocation_visibility_prewarm"):
+		world._last_error = "terrain backend cannot request relocation visibility prewarm"
+		return false
+	if not bool(world._backend_terrain.call(
+		"request_relocation_visibility_prewarm", position, maximum_records
+	)):
+		world._last_error = world.get_backend_world_error()
+		return false
+	world._last_error = "ok"
+	return true
+
 static func remove_viewer(world, viewer_id: int, revision: int) -> bool:
 	if not world.is_backend_world_running():
 		world._last_error = "backend world must be running before viewer removal"

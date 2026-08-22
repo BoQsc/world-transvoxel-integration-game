@@ -170,6 +170,11 @@ func request_authoritative_sample(point: Vector3i, lod: int = 0) -> int:
 func request_authoritative_samples(points: Array, lod: int = 0) -> int:
 	return _track_request(&"samples", BackendOps.request_authoritative_samples.bind(self, points, lod))
 
+func request_relocation_visibility_prewarm(position: Vector3, maximum_records: int = 16) -> bool:
+	return BackendOps.request_relocation_visibility_prewarm(
+		self, position, maximum_records
+	)
+
 func update_viewer(viewer_id: int, revision: int, position: Vector3, radius_chunks: int, maximum_lod: int = 0) -> bool:
 	var validation_error := _runtime_state.validate_viewer_update(viewer_id, revision, false)
 	if not validation_error.is_empty():

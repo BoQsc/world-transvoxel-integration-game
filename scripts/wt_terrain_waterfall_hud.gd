@@ -125,6 +125,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
 		"VIS   replace %d  blocked %d  ready %d  retire %d  render-retire %d\n" +
+		"PREWARM pending %d  requests %d  batches %d  records %d\n" +
 		"FIRST %s"
 	) % [
 		int(metrics.get("viewer_updates", 0)),
@@ -149,6 +150,10 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("ready_staged_chunk_replacements", 0)),
 		int(metrics.get("pending_chunk_retirements", 0)),
 		int(metrics.get("pending_render_retirements", 0)),
+		int(metrics.get("relocation_visibility_prewarm_pending", 0)),
+		int(metrics.get("relocation_visibility_prewarm_requests", 0)),
+		int(metrics.get("relocation_visibility_prewarm_batches", 0)),
+		int(metrics.get("relocation_visibility_prewarm_records", 0)),
 		_first_blocker_text(metrics),
 	]
 

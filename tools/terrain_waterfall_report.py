@@ -538,6 +538,7 @@ def regional_publication_analysis(
     priority_events = [
         event for event in events
         if event.get("kind") == "visibility_coverage_priority_requested"
+        and int(event.get("status", 0)) == 0
         and origin_ns <= int(event.get("elapsed_ns", -1)) <= batch_ns
         and int(event.get("cause_id", -1)) == replacement_count
         and int(event.get("auxiliary", -1)) == retirement_count
@@ -548,6 +549,22 @@ def regional_publication_analysis(
     }
     priority_keys = {identity[:4] for identity in priority_identities}
     priority_edit_keys = priority_keys & replacement_keys
+    prewarm_priority_events = [
+        event for event in all_native_events
+        if event.get("kind") == "visibility_coverage_priority_requested"
+        and int(event.get("status", 0)) == 1
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+        and (identity := native_identity(event)) is not None
+        and identity in replacement_members
+    ]
+    prewarm_priority_identities = {
+        identity for event in prewarm_priority_events
+        if (identity := native_identity(event)) is not None
+    }
+    prewarm_before_edit_events = [
+        event for event in prewarm_priority_events
+        if int(event.get("elapsed_ns", -1)) <= origin_ns
+    ]
     viewer_plan_times = {
         int(event.get("cause_id", 0)): int(event.get("elapsed_ns", 0))
         for event in all_native_events
@@ -631,6 +648,17 @@ def regional_publication_analysis(
         "coverage_priority_unique_key_count": len(priority_keys),
         "coverage_priority_edit_key_count": len(priority_edit_keys),
         "coverage_priority_other_key_count": len(priority_keys - replacement_keys),
+        "prewarm_priority_requested_count": len(prewarm_priority_events),
+        "prewarm_priority_unique_member_count": len(prewarm_priority_identities),
+        "first_prewarm_before_edit_ms": (
+            (
+                origin_ns - min(
+                    int(event.get("elapsed_ns", origin_ns))
+                    for event in prewarm_before_edit_events
+                )
+            ) / 1_000_000.0
+            if prewarm_before_edit_events else None
+        ),
         "non_edit_origin": {
             "classification": (
                 "MULTI_VIEWER_PLAN_ORIGINS"

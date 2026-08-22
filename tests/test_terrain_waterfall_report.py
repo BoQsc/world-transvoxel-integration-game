@@ -71,11 +71,17 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         ("visibility_replacement_ready", 79.0, 0.0),
         ("visibility_staging_blocked", 80.0, 0.0),
     ]
-    events = []
+    events = [native_event(
+        sequence,
+        origin_ms - 100.0,
+        "visibility_coverage_priority_requested",
+        chunk_x=98,
+        status=1,
+    )]
     for offset, (kind, delta, duration) in enumerate(kinds):
         has_chunk = kind not in {"visibility_staging_blocked", "visibility_batch_published"}
         events.append(native_event(
-            sequence + offset,
+            sequence + offset + 1,
             origin_ms + delta,
             kind,
             cause,
@@ -84,7 +90,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
             1 if kind == "chunk_demand_accepted" else 0,
         ))
     desired_snapshot = native_event(
-        sequence + len(kinds),
+        sequence + len(kinds) + 1,
         origin_ms + 81.9,
         "visibility_region_desired_snapshot",
         900,
@@ -93,7 +99,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
     desired_snapshot["generation"] = 77
     events.append(desired_snapshot)
     events.append(native_event(
-        sequence + len(kinds) + 1,
+        sequence + len(kinds) + 2,
         origin_ms + 82.0,
         "visibility_region_replacement_member",
         77,
@@ -101,7 +107,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=11,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 2,
+        sequence + len(kinds) + 3,
         origin_ms + 82.1,
         "visibility_region_replacement_member",
         77,
@@ -109,7 +115,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 3,
+        sequence + len(kinds) + 4,
         origin_ms + 82.2,
         "visibility_region_replacement_member",
         77,
@@ -117,7 +123,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 4,
+        sequence + len(kinds) + 5,
         origin_ms + 82.3,
         "visibility_region_retirement_member",
         77,
@@ -126,7 +132,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=1,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 5,
+        sequence + len(kinds) + 6,
         origin_ms + 84.0,
         "visibility_coverage_priority_requested",
         3,
@@ -134,7 +140,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         auxiliary=1,
     ))
     batch = native_event(
-        sequence + len(kinds) + 6,
+        sequence + len(kinds) + 7,
         origin_ms + 92.0,
         "visibility_batch_published",
         3,
@@ -284,6 +290,9 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(publication["replacement_count"], 3)
         self.assertEqual(publication["retirement_count"], 1)
         self.assertEqual(publication["coverage_priority_other_key_count"], 1)
+        self.assertEqual(publication["prewarm_priority_requested_count"], 1)
+        self.assertEqual(publication["prewarm_priority_unique_member_count"], 1)
+        self.assertEqual(publication["first_prewarm_before_edit_ms"], 100.0)
         self.assertEqual(publication["edit_replacement_members"], 1)
         self.assertEqual(publication["additional_replacements"], 2)
         self.assertTrue(publication["all_edit_replacements_included"])

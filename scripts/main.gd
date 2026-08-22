@@ -88,6 +88,7 @@ var cpu_causal_trace: RefCounted
 var terrain_waterfall_requested := false
 var terrain_waterfall_smoke := false
 var terrain_waterfall_autonomous_route := false
+var terrain_waterfall_relocation_prewarm_candidate := false
 var terrain_waterfall_output_path := ""
 var terrain_waterfall_capture_index := 0
 var terrain_waterfall_hud: PanelContainer
@@ -181,6 +182,9 @@ func _ready() -> void:
 	terrain_waterfall_smoke = args.has("--terrain-waterfall-smoke")
 	terrain_waterfall_autonomous_route = args.has(
 		"--terrain-waterfall-autonomous-route"
+	)
+	terrain_waterfall_relocation_prewarm_candidate = args.has(
+		"--terrain-waterfall-relocation-prewarm-candidate"
 	)
 	if terrain_waterfall_smoke or terrain_waterfall_autonomous_route:
 		terrain_waterfall_requested = true
@@ -2335,7 +2339,8 @@ func _toggle_terrain_waterfall() -> void:
 func _run_terrain_waterfall_autonomous_route() -> void:
 	var runner: RefCounted = TerrainWaterfallRoute.new()
 	var result_value = await runner.call(
-		"run", self, player, game_world, cpu_causal_trace, selected_profile
+		"run", self, player, game_world, cpu_causal_trace, selected_profile,
+		terrain_waterfall_relocation_prewarm_candidate
 	)
 	if not result_value is Dictionary:
 		_finish_terrain_waterfall_autonomous_route(false, {
