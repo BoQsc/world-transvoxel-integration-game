@@ -120,7 +120,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	var pipeline: Dictionary = snapshot.get("pipeline", {})
 	var metrics: Dictionary = pipeline.get("metrics", {})
 	_queues_label.text = (
-		"VIEW  updates %d  jobs %d  completions %d\n" +
+		"VIEW  updates %d  jobs %d  completions %d  plans %d open / %d latest\n" +
 		"STORE queued %d  active %d  done %d  last %.2f ms\n" +
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
@@ -130,6 +130,8 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("viewer_updates", 0)),
 		int(metrics.get("scheduler_queued_jobs", 0)),
 		int(metrics.get("scheduler_queued_completions", 0)),
+		int(metrics.get("open_viewer_plan_publications", 0)),
+		int(metrics.get("latest_completed_viewer_plan_revision", 0)),
 		int(metrics.get("storage_queued_requests", 0)),
 		int(metrics.get("storage_active_requests", 0)),
 		int(metrics.get("storage_completed_requests", 0)),

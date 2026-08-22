@@ -56,6 +56,7 @@ STAGE_BY_KIND = {
     "visibility_coverage_priority_applied": "visibility",
     "visibility_region_replacement_member": "visibility",
     "visibility_region_retirement_member": "visibility",
+    "visibility_region_desired_snapshot": "visibility",
 }
 
 PIPELINE_ORDER = (
@@ -466,6 +467,69 @@ def regional_publication_analysis(
         and len(replacement_members) == replacement_count
         and len(retirement_members) == retirement_count
     )
+    desired_snapshot_events = [
+        event for event in events
+        if event.get("kind") == "visibility_region_desired_snapshot"
+        and int(event.get("generation", 0)) == cohort_id
+        and int(event.get("elapsed_ns", -1)) <= batch_ns
+    ] if cohort_id > 0 else []
+    desired_snapshot = (
+        max(
+            desired_snapshot_events,
+            key=lambda event: int(event.get("elapsed_ns", 0)),
+        )
+        if desired_snapshot_events else None
+    )
+    desired_status_by_identity = {
+        identity: int(event.get("status", 0))
+        for event in replacement_member_events
+        if (identity := native_identity(event)) is not None
+    }
+    required_member_count = sum(
+        1 for status in desired_status_by_identity.values() if status & 0x3
+    )
+    visual_required_member_count = sum(
+        1 for status in desired_status_by_identity.values() if status & 0x1
+    )
+    collision_required_member_count = sum(
+        1 for status in desired_status_by_identity.values() if status & 0x2
+    )
+    staged_member_count = sum(
+        1 for status in desired_status_by_identity.values() if status & 0x4
+    )
+    fully_ready_member_count = sum(
+        1 for status in desired_status_by_identity.values() if status & 0x8
+    )
+    desired_snapshot_exact = len(desired_snapshot_events) == 1
+    open_viewer_plans = (
+        int(desired_snapshot.get("auxiliary", -1))
+        if desired_snapshot is not None else None
+    )
+    latest_completed_viewer_plan = (
+        int(desired_snapshot.get("cause_id", 0))
+        if desired_snapshot is not None else None
+    )
+    exact_latest_drained_ownership = (
+        exact_membership
+        and desired_snapshot_exact
+        and open_viewer_plans == 0
+        and required_member_count == replacement_count
+        and fully_ready_member_count == replacement_count
+    )
+    if not desired_snapshot_events:
+        desired_ownership_classification = "DESIRED_SNAPSHOT_NOT_RETAINED"
+    elif not desired_snapshot_exact:
+        desired_ownership_classification = "DESIRED_SNAPSHOT_AMBIGUOUS"
+    elif not exact_membership:
+        desired_ownership_classification = "COHORT_MEMBERSHIP_INCOMPLETE"
+    elif open_viewer_plans != 0:
+        desired_ownership_classification = "VIEWER_PLAN_PUBLICATION_OPEN"
+    elif required_member_count != replacement_count:
+        desired_ownership_classification = "COHORT_CONTAINS_UNREQUIRED_REPLACEMENT"
+    elif fully_ready_member_count != replacement_count:
+        desired_ownership_classification = "COHORT_CONTAINS_NOT_READY_REPLACEMENT"
+    else:
+        desired_ownership_classification = "EXACT_LATEST_DRAINED_PLAN_OWNERSHIP"
     edit_members = replacement_members & replacement_identities
     all_edit_replacements_included = (
         bool(replacement_identities)
@@ -591,6 +655,28 @@ def regional_publication_analysis(
                 "a new generation in every later plan."
             ),
         },
+        "desired_ownership": {
+            "available": desired_snapshot is not None,
+            "exact": exact_latest_drained_ownership,
+            "classification": desired_ownership_classification,
+            "snapshot_event_count": len(desired_snapshot_events),
+            "latest_completed_viewer_plan_revision": latest_completed_viewer_plan,
+            "open_viewer_plan_publications": open_viewer_plans,
+            "required_member_count": required_member_count,
+            "visual_required_member_count": visual_required_member_count,
+            "collision_required_member_count": collision_required_member_count,
+            "staged_member_count": staged_member_count,
+            "fully_ready_member_count": fully_ready_member_count,
+            "claim_boundary": (
+                "Exact means every retained replacement in this publication "
+                "cohort was still required and fully ready after the "
+                "latest fully drained frontend viewer plan. It does not cover "
+                "a future viewer plan that had not yet reached the frontend."
+                if exact_latest_drained_ownership else
+                "Current desired ownership is not proven unless one exact "
+                "publication-boundary snapshot and every cohort member are retained."
+            ),
+        },
         "publication_after_edit_replacements_ready_ms": (
             batch_ns - ready_ns
         ) / 1_000_000.0,
@@ -604,6 +690,23 @@ def regional_publication_analysis(
             {
                 "x": identity[0], "y": identity[1], "z": identity[2],
                 "lod": identity[3], "generation": identity[4],
+                "desired_roles_available": desired_snapshot_exact,
+                "visual_required": (
+                    bool(desired_status_by_identity.get(identity, 0) & 0x1)
+                    if desired_snapshot_exact else None
+                ),
+                "collision_required": (
+                    bool(desired_status_by_identity.get(identity, 0) & 0x2)
+                    if desired_snapshot_exact else None
+                ),
+                "staged_replacement": (
+                    bool(desired_status_by_identity.get(identity, 0) & 0x4)
+                    if desired_snapshot_exact else None
+                ),
+                "fully_ready": (
+                    bool(desired_status_by_identity.get(identity, 0) & 0x8)
+                    if desired_snapshot_exact else None
+                ),
                 "relation": (
                     "edit_replacement" if identity in replacement_identities
                     else "non_edit_replacement"
@@ -619,8 +722,9 @@ def regional_publication_analysis(
         "claim_boundary": (
             "The authority emitted every member of the successfully published "
             "regional cohort. Edit identity is exact. Non-edit members are proven "
-            "not to be edit replacements, but their originating viewer-plan or "
-            "supersession cause is not encoded by this event schema."
+            "not to be edit replacements. The nested desired-ownership result "
+            "separately states whether those members were still required at the "
+            "latest fully drained frontend plan boundary."
             if exact_membership else
             "The retained event stream correlates this batch with edit activation "
             "and exposes its counts and not-ready priority keys. It does not emit "

@@ -71,6 +71,17 @@ origins. A member originating in an older accepted plan is reported as such,
 but is not labeled stale: unchanged chunks can remain desired across newer
 plans without receiving another generation. Cancellation or supersession
 claims require desired-set evidence, not revision age alone.
+New authority traces also emit one desired-ownership snapshot immediately before
+each successful regional publication. The snapshot identifies the latest fully
+drained frontend viewer plan and records whether any viewer plan remains open.
+Each exact replacement member carries its required visual/collision roles plus
+application staging and readiness state. Fully ready application records clear
+their temporary staging flag, so qualification requires current ownership and
+readiness, not that transient flag. Only a complete cohort with one closed-plan
+snapshot is
+labeled `EXACT_LATEST_DRAINED_PLAN_OWNERSHIP`; older traces remain unqualified.
+This proves frontend ownership at publication time, not a future plan that had
+not yet reached the frontend.
 Wall-clock-aligned usage samples report CPU load and saturation for each edit's
 exact request-to-publication window rather than relying only on session averages.
 Worst movement frames are correlated with native events and sampled queue state.

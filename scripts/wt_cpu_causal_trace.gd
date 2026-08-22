@@ -44,6 +44,7 @@ const PIPELINE_METRICS := [
 	"non_retiring_fully_ready_chunk_records", "pending_retirement_records",
 	"pending_chunk_retirements", "pending_chunk_replacements",
 	"blocked_pending_chunk_replacements", "ready_staged_chunk_replacements",
+	"open_viewer_plan_publications", "latest_completed_viewer_plan_revision",
 	"regional_visibility_publications", "visibility_coverage_priority_pending",
 	"pending_render_retirements", "pending_retirement_records_missing",
 	"first_blocked_replacement_key_x", "first_blocked_replacement_key_y",

@@ -83,35 +83,41 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
             duration,
             1 if kind == "chunk_demand_accepted" else 0,
         ))
-    events.append(native_event(
+    desired_snapshot = native_event(
         sequence + len(kinds),
+        origin_ms + 81.9,
+        "visibility_region_desired_snapshot",
+        900,
+        auxiliary=0,
+    )
+    desired_snapshot["generation"] = 77
+    events.append(desired_snapshot)
+    events.append(native_event(
+        sequence + len(kinds) + 1,
         origin_ms + 82.0,
         "visibility_region_replacement_member",
         77,
         chunk_x,
-        auxiliary=3,
-        status=1,
+        status=11,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 1,
+        sequence + len(kinds) + 2,
         origin_ms + 82.1,
         "visibility_region_replacement_member",
         77,
         98,
-        auxiliary=3,
-        status=1,
+        status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 2,
+        sequence + len(kinds) + 3,
         origin_ms + 82.2,
         "visibility_region_replacement_member",
         77,
         99,
-        auxiliary=3,
-        status=1,
+        status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 3,
+        sequence + len(kinds) + 4,
         origin_ms + 82.3,
         "visibility_region_retirement_member",
         77,
@@ -120,7 +126,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=1,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 4,
+        sequence + len(kinds) + 5,
         origin_ms + 84.0,
         "visibility_coverage_priority_requested",
         3,
@@ -128,7 +134,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         auxiliary=1,
     ))
     batch = native_event(
-        sequence + len(kinds) + 5,
+        sequence + len(kinds) + 6,
         origin_ms + 92.0,
         "visibility_batch_published",
         3,
@@ -282,6 +288,18 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(publication["additional_replacements"], 2)
         self.assertTrue(publication["all_edit_replacements_included"])
         self.assertTrue(publication["exact_membership_available"])
+        self.assertEqual(
+            publication["desired_ownership"]["classification"],
+            "EXACT_LATEST_DRAINED_PLAN_OWNERSHIP",
+        )
+        self.assertTrue(publication["desired_ownership"]["exact"])
+        self.assertEqual(
+            publication["desired_ownership"]["latest_completed_viewer_plan_revision"],
+            900,
+        )
+        self.assertEqual(publication["desired_ownership"]["required_member_count"], 3)
+        self.assertEqual(publication["desired_ownership"]["visual_required_member_count"], 3)
+        self.assertEqual(publication["desired_ownership"]["collision_required_member_count"], 1)
         self.assertEqual(
             publication["non_edit_origin"]["classification"],
             "ORIGIN_NOT_RETAINED",
