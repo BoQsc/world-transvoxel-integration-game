@@ -18,6 +18,7 @@ const MIB := 1024 * 1024
 @export_range(1, 65536, 1) var demand_capacity_per_viewer: int = 4096
 @export_range(0, 16, 1) var lod_refinement_radius_chunks: int = 0
 @export_range(1, 8, 1) var procedural_generation_worker_count: int = 2
+@export_range(0, 8, 1) var meshing_worker_count: int = 0
 @export_range(1, 65536, 1) var storage_request_capacity: int = 256
 @export_range(1, 65536, 1) var storage_completion_capacity: int = 256
 @export_range(1, 65536, 1) var encoded_page_entry_capacity: int = 256
@@ -90,6 +91,7 @@ func get_backend_config_overrides() -> Dictionary:
 		"demand_capacity_per_viewer": demand_capacity_per_viewer,
 		"lod_refinement_radius_chunks": lod_refinement_radius_chunks,
 		"procedural_generation_worker_count": procedural_generation_worker_count,
+		"meshing_worker_count": meshing_worker_count,
 		"storage_request_capacity": storage_request_capacity,
 		"storage_completion_capacity": storage_completion_capacity,
 		"encoded_page_entry_capacity": encoded_page_entry_capacity,
@@ -135,6 +137,7 @@ func _match_common_defaults() -> void:
 	maximum_async_requests = 64
 	collision_radius_chunks = 2
 	lod_refinement_radius_chunks = 0
+	meshing_worker_count = 0
 	storage_completion_capacity = 256
 	encoded_page_mebibytes = 64
 	decoded_page_mebibytes = 64

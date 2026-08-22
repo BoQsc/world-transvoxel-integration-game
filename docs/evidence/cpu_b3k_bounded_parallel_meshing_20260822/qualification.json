@@ -1,0 +1,100 @@
+{
+  "schema": "world_transvoxel.cpu_b3k_bounded_parallel_meshing.v1",
+  "date": "2026-08-22",
+  "status": "CANDIDATE_REJECTED",
+  "authority_commit": "5a2ed88672611ca3a64d941f89d65ed83dedec98",
+  "integration_base_commit": "8962d74f8656e27c342cab7a0a1d925398a50e90",
+  "runtime_artifact_digest_sha256": "f5789fe6fe1ee8371d9c128112cbdae7fa70e0e32a5bf158c294f551690fb02b",
+  "logical_cpu_capacity": 3,
+  "route": {
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "storage": "fresh",
+    "material_mode": "production_texture_array",
+    "flight_distance_minimum": 536.005,
+    "relocated_edits": [
+      "carve",
+      "construct"
+    ]
+  },
+  "correctness": {
+    "trace_integrity_complete": true,
+    "required_route_covered": true,
+    "blocked_flight_frames": 0,
+    "destination_fully_ready_before_all_edits": true,
+    "publication_membership": "EXACT",
+    "serial_parallel_terrain_hash_equal": true,
+    "serial_parallel_water_hash_equal": true,
+    "active_cancellation_stale_completion_rejected": true,
+    "maximum_active_worker_jobs_proven": 2
+  },
+  "runs": [
+    {
+      "name": "serial",
+      "meshing_worker_count": 0,
+      "duration_seconds": 31.734,
+      "frame_p99_ms": 65.078,
+      "frame_maximum_ms": 6402.702,
+      "carve_pipeline_ms": 3761.663,
+      "construct_pipeline_ms": 3086.091,
+      "average_active_logical_cores": 1.181,
+      "process_cpu_percent_p95": 247.5,
+      "saturated_sample_fraction": 0.033,
+      "carve_edit_saturated_fraction": 0.133,
+      "construct_edit_saturated_fraction": 0.167,
+      "terminal_carve_segment": "MESH_SCHEDULER_QUEUE",
+      "terminal_carve_segment_ms": 2412.994,
+      "terminal_construct_segment": "MESH_SCHEDULER_QUEUE",
+      "terminal_construct_segment_ms": 2026.579,
+      "trace_bytes": 40526020,
+      "trace_sha256": "b9b70d26ce0a9ee8b40a6c8b5633a287152d2d71284cc9477f4cfc377e6c05e0"
+    },
+    {
+      "name": "single_worker",
+      "meshing_worker_count": 1,
+      "duration_seconds": 34.961,
+      "frame_p99_ms": 65.026,
+      "frame_maximum_ms": 7401.876,
+      "carve_pipeline_ms": 4618.665,
+      "construct_pipeline_ms": 4893.115,
+      "average_active_logical_cores": 1.684,
+      "process_cpu_percent_p95": 279.1,
+      "saturated_sample_fraction": 0.176,
+      "carve_edit_saturated_fraction": 0.333,
+      "construct_edit_saturated_fraction": 0.222,
+      "terminal_carve_segment": "MESH_DEQUEUE_TO_START",
+      "terminal_carve_segment_ms": 2307.434,
+      "terminal_construct_segment": "EDIT_TO_PRIORITY_REQUEST",
+      "terminal_construct_segment_ms": 2663.165,
+      "trace_bytes": 37348082,
+      "trace_sha256": "7bc5e0f1e57cdee629b7649df3f991f48e2c5b560a0729ca3835c083bdf96d21"
+    },
+    {
+      "name": "parallel",
+      "meshing_worker_count": 2,
+      "duration_seconds": 30.051,
+      "frame_p99_ms": 41.732,
+      "frame_maximum_ms": 5501.065,
+      "carve_pipeline_ms": 4577.526,
+      "construct_pipeline_ms": 4323.693,
+      "average_active_logical_cores": 1.933,
+      "process_cpu_percent_p95": 295.7,
+      "saturated_sample_fraction": 0.440,
+      "carve_edit_saturated_fraction": 0.765,
+      "construct_edit_saturated_fraction": 0.941,
+      "terminal_carve_segment": "MESH_DEQUEUE_TO_START",
+      "terminal_carve_segment_ms": 2540.234,
+      "terminal_construct_segment": "STORAGE_QUEUE",
+      "terminal_construct_segment_ms": 2335.458,
+      "trace_bytes": 37325762,
+      "trace_sha256": "14cabe3c0898a898c011c7aaa00e1dcf9fa18711e7658962fe4f24f2e2f61f70"
+    }
+  ],
+  "decision": {
+    "classification": "BOUNDED_PARALLEL_MESHING_REJECTED_AS_DEFAULT",
+    "accepted_meshing_worker_count": 0,
+    "worker_mode_retained_opt_in": true,
+    "gpu_architecture_selected": false,
+    "next_milestone": "BOUNDED_ASYNC_MESH_ADMISSION_AUDIT"
+  },
+  "claim_boundary": "Complete intrusive traces prove causal ordering and support relative candidate rejection. They are not release performance baselines; trace-off acceptance is required for a surviving candidate."
+}

@@ -82,6 +82,7 @@ var runtime_collision_apply_deadline_us_override := -1
 var player_collision_invoker_radius_chunks_override := -1
 var player_collision_prediction_distance_override := -1.0
 var procedural_generation_worker_count_override := -1
+var meshing_worker_count_override := -1
 var runtime_baseline_edit_ready_wait_frames := 900
 var cpu_causal_trace_output_path := ""
 var cpu_causal_trace: RefCounted
@@ -170,6 +171,9 @@ func _ready() -> void:
 	)
 	procedural_generation_worker_count_override = int(
 		_arg_value(args, "--procedural-generation-workers", "-1")
+	)
+	meshing_worker_count_override = int(
+		_arg_value(args, "--meshing-workers", "-1")
 	)
 	runtime_baseline_edit_ready_wait_frames = int(
 		_arg_value(args, "--runtime-baseline-edit-ready-wait-frames", "900")
@@ -367,6 +371,10 @@ func _start_profile() -> void:
 		procedural_generation_worker_count_override \
 		if procedural_generation_worker_count_override > 0 else \
 		int(settings.get("runtime_procedural_generation_worker_count", 0))
+	game_world.runtime_meshing_worker_count = \
+		meshing_worker_count_override \
+		if meshing_worker_count_override >= 0 else \
+		int(settings.get("runtime_meshing_worker_count", 0))
 	game_world.runtime_render_apply_budget = int(settings.get("runtime_render_apply_budget", 0))
 	game_world.runtime_collision_apply_budget = int(settings.get("runtime_collision_apply_budget", 0))
 	game_world.runtime_collision_apply_deadline_us = int(settings.get("runtime_collision_apply_deadline_us", 0))

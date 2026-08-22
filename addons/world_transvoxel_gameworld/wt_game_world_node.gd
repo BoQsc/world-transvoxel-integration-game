@@ -32,6 +32,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 65536, 1) var runtime_collision_entry_capacity: int = 0
 @export_range(0, 65536, 1) var runtime_lod_refinement_radius_chunks: int = 0
 @export_range(0, 8, 1) var runtime_procedural_generation_worker_count: int = 0
+@export_range(0, 8, 1) var runtime_meshing_worker_count: int = 0
 @export_range(0, 128, 1) var runtime_render_apply_budget: int = 0
 @export_range(0, 128, 1) var runtime_collision_apply_budget: int = 0
 @export_range(0, 33333, 1) var runtime_collision_apply_deadline_us: int = 0
@@ -477,6 +478,7 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_demand_capacity_per_viewer": runtime_demand_capacity_per_viewer,
 		"runtime_lod_refinement_radius_chunks": runtime_lod_refinement_radius_chunks,
 		"runtime_procedural_generation_worker_count": runtime_procedural_generation_worker_count,
+		"runtime_meshing_worker_count": runtime_meshing_worker_count,
 		"runtime_render_apply_budget": runtime_render_apply_budget,
 		"runtime_collision_apply_budget": runtime_collision_apply_budget,
 		"runtime_collision_apply_deadline_us": runtime_collision_apply_deadline_us,
@@ -840,6 +842,7 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_lod_refinement_radius_chunks = runtime_lod_refinement_radius_chunks
 	terrain_world.runtime_procedural_generation_worker_count = \
 		runtime_procedural_generation_worker_count
+	terrain_world.runtime_meshing_worker_count = runtime_meshing_worker_count
 	terrain_world.runtime_render_apply_budget = runtime_render_apply_budget
 	terrain_world.runtime_collision_apply_budget = runtime_collision_apply_budget
 	terrain_world.runtime_collision_apply_deadline_us = runtime_collision_apply_deadline_us

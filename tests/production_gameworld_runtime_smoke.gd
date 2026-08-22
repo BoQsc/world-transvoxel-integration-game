@@ -44,6 +44,7 @@ func _run_test() -> void:
 	game_world.runtime_render_entry_capacity = 8
 	game_world.runtime_collision_entry_capacity = 8
 	game_world.runtime_procedural_generation_worker_count = 1
+	game_world.runtime_meshing_worker_count = 2
 	game_world.configure_game_world(
 		&"production_runtime_smoke",
 		generation,
@@ -75,10 +76,13 @@ func _run_test() -> void:
 	if str(summary.get("terrain_scene", "")) != "production_runtime":
 		_fail("production runtime identity is absent: %s" % str(summary))
 		return
+	if int(summary.get("runtime_meshing_worker_count", -1)) != 2:
+		_fail("bounded meshing worker override is absent: %s" % str(summary))
+		return
 	if not await game_world.stop_world():
 		_fail("production GameWorld stop failed: %s" % game_world.get_last_error())
 		return
-	print("%s render=1 collision=1 debug_scene=false workers=1" % MARKER)
+	print("%s render=1 collision=1 debug_scene=false generation_workers=1 meshing_workers=2" % MARKER)
 	quit(0)
 
 
