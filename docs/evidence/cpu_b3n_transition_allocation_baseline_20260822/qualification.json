@@ -1,0 +1,104 @@
+{
+  "schema": "world_transvoxel.cpu_b3n_transition_allocation_baseline.v1",
+  "date": "2026-08-22",
+  "status": "CPU_BASELINE_ADVANCED_GPU_BLOCKED",
+  "authority_commit": "b57aba9b0ebf76da420391d8eacc1e1f6585c530",
+  "integration_artifact_commit": "9ec3b42",
+  "runtime_artifact_digest_sha256": "46dfe3cd5fa41ac240ee7fc8694a7d3535ff13e11aa3e61a9fbb81cae53fce4a",
+  "logical_cpu_affinity": [
+    0,
+    1,
+    2
+  ],
+  "authority_correctness": {
+    "m2_chunk_hash": "f3ebfec883e2de19",
+    "m5_page_transition_hash": "1761e09383752d56",
+    "m5_page_meshing_runtime_hash": "aa1a828204ad38c1d476286553af5f65e779cc0eccfe777c88db44b31f49f45d",
+    "exhaustive_lod2_transition_mask_pairs": 729,
+    "maximum_transition_indices": 153,
+    "fine_transition_boundary_exact": true,
+    "capacity_independent_geometry": true,
+    "debug_release_gates_passed": true
+  },
+  "focused_page_meshing_benchmark": {
+    "configuration": "template_release",
+    "frozen_baseline_elapsed_ms": [
+      20234.8994,
+      20466.7179,
+      29713.8273,
+      28038.0459,
+      32844.1799,
+      25910.0122,
+      26373.6777,
+      22377.1304,
+      20647.2874,
+      21798.4407
+    ],
+    "candidate_elapsed_ms": [
+      18186.3603,
+      19365.1574,
+      17255.498,
+      17322.5393,
+      18417.7439
+    ],
+    "frozen_baseline_median_ms": 24143.5713,
+    "candidate_median_ms": 18186.3603,
+    "median_change_fraction": -0.2467,
+    "candidate_maximum_sampled_working_set_bytes": 17211392,
+    "memory_claim": "NOT_PRODUCTION_REPRESENTATIVE"
+  },
+  "godot_runtime_smokes": {
+    "engine": "4.7.2.stable.steam.ed1daf0bf",
+    "binary_artifact": "PASS",
+    "dependency_boundary": "PASS",
+    "migration_render_collision_edit_journal": "PASS",
+    "bottom_boundary_edit": "PASS"
+  },
+  "terrain_waterfall": {
+    "trace_integrity_complete": true,
+    "native_local_dropped_events": 0,
+    "downstream_dropped_events": 0,
+    "flight_distance": 536.8058252334594,
+    "blocked_flight_frames": 0,
+    "frame_p99_ms": 64.5955,
+    "frame_maximum_ms": 8138.621,
+    "overall_average_active_logical_cores": 1.195,
+    "overall_saturated_sample_fraction": 0.039,
+    "carve": {
+      "pipeline_ms": 4623.8907,
+      "destination_fully_ready_before_edit": true,
+      "replacement_count": 428,
+      "retirement_count": 125,
+      "publication_membership": "EXACT_LATEST_DRAINED_PLAN_OWNERSHIP",
+      "terminal_segment": "MESH_SCHEDULER_QUEUE",
+      "terminal_segment_ms": 3273.904,
+      "average_active_logical_cores": 1.4459444444444443,
+      "saturated_sample_fraction": 0.05555555555555555
+    },
+    "construct": {
+      "pipeline_ms": 5126.0618,
+      "destination_fully_ready_before_edit": true,
+      "replacement_count": 462,
+      "retirement_count": 185,
+      "publication_membership": "EXACT_LATEST_DRAINED_PLAN_OWNERSHIP",
+      "terminal_segment": "MESH_SCHEDULER_QUEUE",
+      "terminal_segment_ms": 3477.649,
+      "average_active_logical_cores": 1.5457368421052633,
+      "saturated_sample_fraction": 0.15789473684210525
+    },
+    "raw_evidence": {
+      "trace_bytes": 40175180,
+      "trace_sha256": "11fcbeead3702c45bd2548214c01135e409e9a282a4d2099a82d7cb76b335150",
+      "report_bytes": 704323,
+      "report_sha256": "34b2364b5fb090a372691fbac32b115f48dfda99ce5c9950f8614e51dfbb02d5",
+      "usage_bytes": 52276,
+      "usage_sha256": "1c12b5e09ddcf20f70ad44c4b1e35e512058e9a44e5dd2de04c99d82174d58d2"
+    },
+    "claim_boundary": "Trace-on timing is intrusive and supports causal ordering and relative diagnosis, not release frame-rate acceptance."
+  },
+  "decision": {
+    "classification": "CPU_PATH_NOT_COMPLETE_PUBLICATION_COMPONENT_PROOF_REQUIRED",
+    "gpu_architecture_selected": false,
+    "next_milestone": "MINIMAL_SEAM_CONNECTED_PUBLICATION_COMPONENT_AUDIT"
+  }
+}
