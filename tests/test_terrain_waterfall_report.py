@@ -71,11 +71,31 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         ("visibility_replacement_ready", 79.0, 0.0),
         ("visibility_staging_blocked", 80.0, 0.0),
     ]
-    events = []
-    for offset, (kind, delta, duration) in enumerate(kinds):
+    events = [
+        native_event(
+            sequence,
+            origin_ms - 200.0,
+            "chunk_demand_accepted",
+            900,
+            chunk_x,
+        ),
+        native_event(
+            sequence + 1,
+            origin_ms - 120.0,
+            "render_sink_applied",
+            chunk_x=chunk_x,
+        ),
+        native_event(
+            sequence + 2,
+            origin_ms - 100.0,
+            "collision_sink_applied",
+            chunk_x=chunk_x,
+        ),
+    ]
+    for kind, delta, duration in kinds:
         has_chunk = kind not in {"visibility_staging_blocked", "visibility_batch_published"}
         events.append(native_event(
-            sequence + offset,
+            sequence + len(events),
             origin_ms + delta,
             kind,
             cause,
@@ -84,7 +104,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
             1 if kind == "chunk_demand_accepted" else 0,
         ))
     desired_snapshot = native_event(
-        sequence + len(kinds),
+        sequence + len(events),
         origin_ms + 81.9,
         "visibility_region_desired_snapshot",
         900,
@@ -93,7 +113,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
     desired_snapshot["generation"] = 77
     events.append(desired_snapshot)
     events.append(native_event(
-        sequence + len(kinds) + 1,
+        sequence + len(events),
         origin_ms + 82.0,
         "visibility_region_replacement_member",
         77,
@@ -101,7 +121,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=11,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 2,
+        sequence + len(events),
         origin_ms + 82.1,
         "visibility_region_replacement_member",
         77,
@@ -109,7 +129,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 3,
+        sequence + len(events),
         origin_ms + 82.2,
         "visibility_region_replacement_member",
         77,
@@ -117,7 +137,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=9,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 4,
+        sequence + len(events),
         origin_ms + 82.3,
         "visibility_region_retirement_member",
         77,
@@ -126,7 +146,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         status=1,
     ))
     events.append(native_event(
-        sequence + len(kinds) + 5,
+        sequence + len(events),
         origin_ms + 84.0,
         "visibility_coverage_priority_requested",
         3,
@@ -134,7 +154,7 @@ def edit_chain(sequence: int, origin_ms: float, cause: int, chunk_x: int) -> lis
         auxiliary=1,
     ))
     batch = native_event(
-        sequence + len(kinds) + 6,
+        sequence + len(events),
         origin_ms + 92.0,
         "visibility_batch_published",
         3,
@@ -274,6 +294,15 @@ class TerrainWaterfallReportTest(unittest.TestCase):
             result["traces"][0]["edits"][1]["sampled_first_blocker"]["dominant_relation"],
             "edit_replacement",
         )
+        destination = result["traces"][0]["edits"][0][
+            "pre_edit_destination_readiness"
+        ]
+        self.assertEqual(
+            destination["classification"],
+            "DESTINATION_FULLY_READY_BEFORE_EDIT",
+        )
+        self.assertEqual(destination["first_demand"]["before_edit_ms"], 200.0)
+        self.assertEqual(destination["full_readiness"]["before_edit_ms"], 100.0)
         publication = result["traces"][0]["edits"][0][
             "correlated_visibility_publication"
         ]

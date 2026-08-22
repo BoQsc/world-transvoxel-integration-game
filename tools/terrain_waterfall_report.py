@@ -23,6 +23,7 @@ REPORT_SCHEMA = "world_transvoxel.terrain_waterfall_report.v1"
 HITCH_THRESHOLD_MS = 33.3
 LONG_RELOCATION_DISTANCE = 128.0
 EDIT_RELOCATION_DISTANCE = 64.0
+CHUNK_SIZE = 16.0
 
 STAGE_BY_KIND = {
     "viewer_plan_started": "viewer",
@@ -754,6 +755,165 @@ def batch_contains_replacements(
     return replacement_identities <= members
 
 
+def pre_edit_destination_readiness(
+    downstream_events: list[dict[str, Any]],
+    native_events: list[dict[str, Any]],
+    request: dict[str, Any],
+    submission: dict[str, Any],
+) -> dict[str, Any]:
+    payload = request.get("payload") or {}
+    center = position(payload.get("center"))
+    if center is None:
+        return {
+            "available": False,
+            "classification": "EDIT_CENTER_NOT_RETAINED",
+        }
+    mode = str(payload.get("mode", "unknown"))
+    target_key = (
+        math.floor(center[0] / CHUNK_SIZE),
+        math.floor(center[1] / CHUNK_SIZE),
+        math.floor(center[2] / CHUNK_SIZE),
+        0,
+    )
+    request_us = int(request.get(
+        "elapsed_us", int(submission.get("elapsed_ns", 0)) // 1000
+    ))
+    origin_ns = int(submission.get("elapsed_ns", request_us * 1000))
+    relocation_label = f"flight_relocation_{mode}"
+    relocation_phases = [
+        event for event in downstream_events
+        if event.get("kind") == "phase_started"
+        and str((event.get("payload") or {}).get("label", "")) == relocation_label
+        and int(event.get("elapsed_us", -1)) <= request_us
+    ]
+    relocation_phase = max(
+        relocation_phases,
+        key=lambda event: int(event.get("elapsed_us", 0)),
+        default=None,
+    )
+    relocation_start_us = (
+        int(relocation_phase.get("elapsed_us", 0))
+        if relocation_phase is not None else 0
+    )
+    surface_phases = [
+        event for event in downstream_events
+        if event.get("kind") == "phase_started"
+        and str((event.get("payload") or {}).get("label", "")) == "relocation_surface_wait"
+        and relocation_start_us <= int(event.get("elapsed_us", -1)) <= request_us
+    ]
+    surface_phase = max(
+        surface_phases,
+        key=lambda event: int(event.get("elapsed_us", 0)),
+        default=None,
+    )
+    surface_start_us = (
+        int(surface_phase.get("elapsed_us", 0))
+        if surface_phase is not None else None
+    )
+    window_start_ns = relocation_start_us * 1000
+    target_events = [
+        event for event in native_events
+        if window_start_ns <= int(event.get("elapsed_ns", -1)) < origin_ns
+        and (identity := native_identity(event)) is not None
+        and identity[:4] == target_key
+    ]
+    demands = [
+        event for event in target_events
+        if event.get("kind") == "chunk_demand_accepted"
+    ]
+    first_demand = min(
+        demands,
+        key=lambda event: int(event.get("elapsed_ns", 0)),
+        default=None,
+    )
+    render_by_generation = {
+        int(event.get("generation", 0)): event
+        for event in target_events
+        if event.get("kind") == "render_sink_applied"
+    }
+    collision_by_generation = {
+        int(event.get("generation", 0)): event
+        for event in target_events
+        if event.get("kind") == "collision_sink_applied"
+    }
+    common_generations = render_by_generation.keys() & collision_by_generation.keys()
+    ready_candidates = [
+        (
+            max(
+                int(render_by_generation[generation].get("elapsed_ns", 0)),
+                int(collision_by_generation[generation].get("elapsed_ns", 0)),
+            ),
+            generation,
+        )
+        for generation in common_generations
+    ]
+    ready_ns, ready_generation = max(
+        ready_candidates,
+        default=(None, None),
+    )
+    if first_demand is None:
+        classification = "NO_RELOCATION_WINDOW_TARGET_DEMAND_RETAINED"
+    elif ready_ns is None:
+        classification = "TARGET_DEMANDED_BUT_FULL_READINESS_NOT_RETAINED"
+    else:
+        classification = "DESTINATION_FULLY_READY_BEFORE_EDIT"
+
+    first_demand_ns = (
+        int(first_demand.get("elapsed_ns", 0))
+        if first_demand is not None else None
+    )
+    return {
+        "available": first_demand is not None,
+        "classification": classification,
+        "target": {
+            "x": target_key[0],
+            "y": target_key[1],
+            "z": target_key[2],
+            "lod": target_key[3],
+        },
+        "relocation_phase": relocation_label,
+        "relocation_phase_start_ms": relocation_start_us / 1000.0,
+        "surface_wait_start_ms": (
+            surface_start_us / 1000.0 if surface_start_us is not None else None
+        ),
+        "edit_submission_ms": origin_ns / 1_000_000.0,
+        "first_demand": None if first_demand is None else {
+            "generation": int(first_demand.get("generation", 0)),
+            "viewer_plan_revision": int(first_demand.get("cause_id", 0)),
+            "elapsed_ms": first_demand_ns / 1_000_000.0,
+            "after_relocation_start_ms": (
+                first_demand_ns - window_start_ns
+            ) / 1_000_000.0,
+            "before_surface_wait_ms": (
+                (surface_start_us * 1000 - first_demand_ns) / 1_000_000.0
+                if surface_start_us is not None else None
+            ),
+            "before_edit_ms": (origin_ns - first_demand_ns) / 1_000_000.0,
+        },
+        "full_readiness": (
+            {
+                "available": True,
+                "generation": ready_generation,
+                "elapsed_ms": ready_ns / 1_000_000.0,
+                "after_relocation_start_ms": (
+                    ready_ns - window_start_ns
+                ) / 1_000_000.0,
+                "before_edit_ms": (origin_ns - ready_ns) / 1_000_000.0,
+            }
+            if ready_ns is not None else {"available": False}
+        ),
+        "claim_boundary": (
+            "This proves retained render and collision sink application for the "
+            "eventual LOD0 edit chunk before authority accepted the edit. It does "
+            "not prove that every member of the surrounding atomic visibility "
+            "publication region was ready."
+            if ready_ns is not None else
+            "No complete pre-edit render/collision pair was retained for the "
+            "eventual LOD0 edit chunk in this relocation window."
+        ),
+    }
+
+
 def edit_analysis(
     downstream_events: list[dict[str, Any]], native_events: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -912,6 +1072,12 @@ def edit_analysis(
             ready_ns,
             batch_event,
         )
+        destination_readiness = pre_edit_destination_readiness(
+            downstream_events,
+            native_events,
+            request,
+            submission,
+        )
         reports.append({
             "index": index + 1,
             "mode": str((request.get("payload") or {}).get("mode", "unknown")),
@@ -954,6 +1120,7 @@ def edit_analysis(
                 "pending_render_retirements": int(blocker_event.get("status", 0)),
             },
             "sampled_first_blocker": blocker_analysis,
+            "pre_edit_destination_readiness": destination_readiness,
             "correlated_visibility_publication": publication_analysis,
             "dominant_wait": dominant_gap,
             "waterfall": stage_rows,
@@ -1293,6 +1460,7 @@ def summary_text(report: dict[str, Any]) -> str:
             edit_usage = edit.get("process_usage_during_pipeline", {})
             blocker = edit.get("sampled_first_blocker", {})
             publication = edit.get("correlated_visibility_publication", {})
+            destination = edit.get("pre_edit_destination_readiness", {})
             usage_text = "cpu-window=n/a"
             if edit_usage.get("available"):
                 usage_text = "cpu-window={cores:.2f} cores saturated={saturated:.3f}".format(
@@ -1315,8 +1483,20 @@ def summary_text(report: dict[str, Any]) -> str:
                         else "correlated-only"
                     ),
                 )
+            destination_text = "destination=n/a"
+            if destination.get("available"):
+                demand = destination.get("first_demand") or {}
+                readiness = destination.get("full_readiness") or {}
+                destination_text = "destination={classification} demand-lead={demand:.3f}ms ready-lead={ready}".format(
+                    classification=destination["classification"],
+                    demand=float(demand.get("before_edit_ms", 0.0)),
+                    ready=(
+                        f"{float(readiness['before_edit_ms']):.3f}ms"
+                        if readiness.get("available") else "n/a"
+                    ),
+                )
             lines.append(
-                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage} {blocker} {publication}".format(
+                "Edit {index} {mode}: relocation={distance} m completion={completion} ms dominant={dominant} {usage} {blocker} {publication} {destination}".format(
                     index=edit["index"],
                     mode=edit["mode"],
                     distance=(
@@ -1331,6 +1511,7 @@ def summary_text(report: dict[str, Any]) -> str:
                     usage=usage_text,
                     blocker=blocker_text,
                     publication=publication_text,
+                    destination=destination_text,
                 )
             )
     lines.extend([
