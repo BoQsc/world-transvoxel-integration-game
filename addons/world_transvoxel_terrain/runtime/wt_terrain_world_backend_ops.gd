@@ -143,6 +143,32 @@ static func remove_collision_viewer(world, viewer_id: int, revision: int) -> boo
 	world._last_error = "ok"
 	return true
 
+
+static func update_foreground_priority_lease(
+	world,
+	source_id: int,
+	revision: int,
+	priority_class: int,
+	chunk_coordinates: Array
+) -> bool:
+	if not world.is_backend_world_running():
+		world._last_error = "backend world must be running before foreground priority updates"
+		return false
+	if not world._backend_terrain.has_method("update_foreground_priority_lease"):
+		world._last_error = "terrain backend cannot update foreground priority leases"
+		return false
+	if not bool(world._backend_terrain.call(
+		"update_foreground_priority_lease",
+		source_id,
+		revision,
+		priority_class,
+		chunk_coordinates
+	)):
+		world._last_error = world.get_backend_world_error()
+		return false
+	world._last_error = "ok"
+	return true
+
 static func query_chunk_state(world, chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	if world._backend_terrain == null or not world._backend_terrain.has_method("query_chunk_state"):
 		world._last_error = "backend terrain cannot query chunk state"

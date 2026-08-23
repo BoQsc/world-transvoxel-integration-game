@@ -42,6 +42,13 @@ func _run_test() -> void:
 	if not world.update_collision_viewer(2, 1, Vector3(8, 8, 8), 0):
 		_fail("collision viewer update failed: %s" % world.get_last_error())
 		return
+	if not world.update_foreground_priority_lease(
+		1, 1, 0, [Vector3i.ZERO]
+	) or not world.update_foreground_priority_lease(
+		2, 1, 1, [Vector3i.ZERO]
+	):
+		_fail("foreground priority lease update failed: %s" % world.get_last_error())
+		return
 	if world.update_viewer(1, 1, Vector3(9, 8, 8), 0, 0):
 		_fail("stale viewer revision was accepted")
 		return
@@ -56,6 +63,13 @@ func _run_test() -> void:
 	if str(chunk.get("render_state", "")) != "ready" or \
 			str(chunk.get("collision_state", "")) != "ready":
 		_fail("origin chunk is not render/collision ready: %s" % str(chunk))
+		return
+	var priority_metrics: Dictionary = world.get_runtime_metrics()
+	if int(priority_metrics.get("foreground_priority_updates", 0)) != 2 or \
+			int(priority_metrics.get("foreground_priority_active_sources", 0)) != 2 or \
+			int(priority_metrics.get("foreground_priority_support_keys", 0)) != 1 or \
+			int(priority_metrics.get("foreground_priority_focus_keys", 0)) != 1:
+		_fail("foreground priority metrics are incomplete: %s" % str(priority_metrics))
 		return
 
 	var invalid = EditOperation.new()

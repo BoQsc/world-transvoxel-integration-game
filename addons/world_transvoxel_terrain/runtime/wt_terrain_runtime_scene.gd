@@ -76,3 +76,19 @@ func update_runtime_collision_viewer(
 	return terrain_world != null and bool(terrain_world.call(
 		"update_collision_viewer", viewer_id, revision, position, radius_chunks
 	))
+
+
+func update_runtime_foreground_priority_lease(
+	source_id: int,
+	revision: int,
+	priority_class: int,
+	chunk_coordinates: Array
+) -> bool:
+	var terrain_world := get_terrain_world()
+	return terrain_world != null and bool(terrain_world.call(
+		"update_foreground_priority_lease",
+		source_id,
+		revision,
+		priority_class,
+		chunk_coordinates
+	))

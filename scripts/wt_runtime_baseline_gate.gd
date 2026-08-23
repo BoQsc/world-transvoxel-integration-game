@@ -33,7 +33,8 @@ func run(
 	player: CharacterBody3D,
 	selected_profile: StringName,
 	causal_trace_output_path: String = "",
-	edit_ready_wait_frames: int = EDIT_READY_WAIT_FRAMES
+	edit_ready_wait_frames: int = EDIT_READY_WAIT_FRAMES,
+	foreground_priority_focus_settle_frames: int = 0
 ) -> Dictionary:
 	if host == null or game_world == null or player == null:
 		return _structural_failure("host_game_world_or_player_unavailable")
@@ -41,6 +42,9 @@ func run(
 		return _structural_failure("runtime_baseline_requires_g23")
 	if edit_ready_wait_frames < EDIT_READY_WAIT_FRAMES:
 		return _structural_failure("edit_ready_wait_below_baseline")
+	if foreground_priority_focus_settle_frames < 0 or \
+			foreground_priority_focus_settle_frames > 60:
+		return _structural_failure("foreground_priority_focus_settle_out_of_range")
 	var terrain_world: Node = game_world.call("get_terrain_world")
 	if terrain_world == null:
 		return _structural_failure("terrain_world_unavailable")
@@ -159,7 +163,7 @@ func run(
 		}, true)
 	var edit_summary := await _run_single_edit_measurement(
 		host, game_world, terrain_world, player, clock, backlog,
-		edit_ready_wait_frames
+		edit_ready_wait_frames, foreground_priority_focus_settle_frames
 	)
 	var runtime_metrics_end: Dictionary = terrain_world.call("get_runtime_metrics")
 	var movement_summary := _summarize_movement(phases)
@@ -255,6 +259,8 @@ func run(
 		"fixed_post_flight_edit_position": _vector3_summary(
 			FIXED_POST_FLIGHT_EDIT_POSITION
 		),
+		"foreground_priority_focus_settle_frames":
+			foreground_priority_focus_settle_frames,
 		"normal_speed": normal_speed,
 		"fast_speed": fast_speed,
 		"collision_invoker_radius_chunks": int(
@@ -299,6 +305,35 @@ func run(
 			"viewer_updates": _metric_delta(runtime_metrics_start, runtime_metrics_end, "viewer_updates"),
 			"collision_viewer_updates": _metric_delta(
 				runtime_metrics_start, runtime_metrics_end, "collision_viewer_updates"
+			),
+			"foreground_priority_updates": _metric_delta(
+				runtime_metrics_start,
+				runtime_metrics_end,
+				"foreground_priority_updates"
+			),
+			"foreground_priority_matched_keys": _metric_delta(
+				runtime_metrics_start,
+				runtime_metrics_end,
+				"foreground_priority_matched_keys"
+			),
+			"foreground_priority_missing_keys": _metric_delta(
+				runtime_metrics_start,
+				runtime_metrics_end,
+				"foreground_priority_missing_keys"
+			),
+			"foreground_priority_changed_priorities": _metric_delta(
+				runtime_metrics_start,
+				runtime_metrics_end,
+				"foreground_priority_changed_priorities"
+			),
+			"foreground_priority_active_sources_end": int(
+				runtime_metrics_end.get("foreground_priority_active_sources", 0)
+			),
+			"foreground_priority_support_keys_end": int(
+				runtime_metrics_end.get("foreground_priority_support_keys", 0)
+			),
+			"foreground_priority_focus_keys_end": int(
+				runtime_metrics_end.get("foreground_priority_focus_keys", 0)
 			),
 			"collision_apply_time_ns_total": _metric_delta(
 				runtime_metrics_start, runtime_metrics_end, "collision_apply_time_ns_total"
@@ -436,7 +471,8 @@ func _run_single_edit_measurement(
 	player: CharacterBody3D,
 	clock: Dictionary,
 	backlog: Dictionary,
-	edit_ready_wait_frames: int
+	edit_ready_wait_frames: int,
+	foreground_priority_focus_settle_frames: int
 ) -> Dictionary:
 	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
@@ -450,16 +486,27 @@ func _run_single_edit_measurement(
 		return {"measurement_complete": false, "error": "camera_look_at_failed"}
 
 	_trace_begin_phase("edit_target_wait", "edit:target_acquisition", true)
-	var physics_target_wait_frames := 0
+	var physics_target_wait_frames := foreground_priority_focus_settle_frames
 	var physics_hit := {}
 	var target_wait_frame_us := []
+	if foreground_priority_focus_settle_frames > 0 and \
+			game_world.has_method("refresh_player_foreground_priority"):
+		game_world.call("refresh_player_foreground_priority", true)
+		for frame in range(foreground_priority_focus_settle_frames):
+			if game_world.has_method("update_player_viewer"):
+				game_world.call("update_player_viewer", false)
+			if frame % 3 == 0:
+				_collect_backlog(game_world, terrain_world, backlog)
+			target_wait_frame_us.append(await _next_physics_frame(host, clock))
 	for frame in range(PHYSICS_TARGET_WAIT_FRAMES + 1):
 		physics_hit = _physics_interaction_target(host, player, camera)
 		if not physics_hit.is_empty():
-			physics_target_wait_frames = frame
+			physics_target_wait_frames = \
+				foreground_priority_focus_settle_frames + frame
 			break
 		if frame == PHYSICS_TARGET_WAIT_FRAMES:
-			physics_target_wait_frames = frame
+			physics_target_wait_frames = \
+				foreground_priority_focus_settle_frames + frame
 			break
 		if game_world.has_method("update_player_viewer"):
 			game_world.call("update_player_viewer", false)

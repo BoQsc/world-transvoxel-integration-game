@@ -3,6 +3,10 @@ extends Node3D
 const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
 const COLLISION_INVOKER_CHUNK_EXTENT := 16.0
+const FOREGROUND_PRIORITY_PLAYER_SUPPORT := 0
+const FOREGROUND_PRIORITY_INTERACTION_FOCUS := 1
+const FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID := 1
+const FOREGROUND_PRIORITY_FOCUS_SOURCE_ID := 2
 const RuntimeScene := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -20,6 +24,8 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export var player_collision_invoker_enabled: bool = false
 @export_range(0, 16, 1) var player_collision_invoker_radius_chunks: int = 2
 @export_range(0.0, 1000000.0, 0.01) var player_collision_prediction_distance: float = 16.0
+@export var player_foreground_priority_enabled: bool = false
+@export_range(16, 1000, 1) var player_foreground_priority_update_interval_ms: int = 100
 @export var debug_overlay_enabled: bool = false
 @export var startup_requires_cold_idle: bool = true
 @export_range(1, 7200, 1) var startup_world_state_timeout_frames: int = 900
@@ -75,6 +81,13 @@ var _accepted_player_viewer_updates := 0
 var _accepted_predictive_viewer_updates := 0
 var _accepted_focus_viewer_updates := 0
 var _accepted_collision_viewer_updates := 0
+var _foreground_support_revision := 0
+var _foreground_focus_revision := 0
+var _last_foreground_support_keys: Array = []
+var _last_foreground_focus_keys: Array = []
+var _foreground_priority_next_update_usec := 0
+var _accepted_foreground_support_updates := 0
+var _accepted_foreground_focus_updates := 0
 var _coalesced_player_viewer_updates := 0
 var _last_player_viewer_coalesce_reason := "none"
 var _last_error := ""
@@ -114,6 +127,24 @@ func configure_game_world(
 
 func set_cpu_causal_trace(trace: RefCounted) -> void:
 	_cpu_causal_trace = trace
+
+
+func set_player_foreground_priority_enabled(enabled: bool) -> bool:
+	if player_foreground_priority_enabled == enabled:
+		return true
+	if not enabled and player_foreground_priority_enabled and \
+			_reference_scene != null:
+		if not _release_player_foreground_priority_leases():
+			return false
+	player_foreground_priority_enabled = enabled
+	_foreground_priority_next_update_usec = 0
+	if enabled and _reference_scene != null and _player != null:
+		return _update_player_foreground_priority_leases(true)
+	return true
+
+
+func refresh_player_foreground_priority(force: bool = true) -> bool:
+	return _update_player_foreground_priority_leases(force)
 
 
 func setup_standard_world() -> Node:
@@ -177,6 +208,9 @@ func start_world() -> bool:
 func stop_world() -> bool:
 	if _reference_scene == null:
 		return true
+	if player_foreground_priority_enabled:
+		if not _release_player_foreground_priority_leases():
+			return false
 	if not bool(_reference_scene.call("stop_runtime_world")):
 		return _fail("backend stop failed: %s" % _terrain_world_error())
 	if not await _wait_for_world_state("stopped"):
@@ -195,7 +229,9 @@ func update_player_viewer(force: bool = false) -> bool:
 	var previous_position := _last_player_viewer_position
 	var visual_update_required := force or _should_update_player_viewer(position)
 	if not visual_update_required:
-		return _update_player_collision_invoker(position, force)
+		if not _update_player_collision_invoker(position, force):
+			return false
+		return _update_player_foreground_priority_leases(force)
 	if not force and player_viewer_coalesce_while_streaming:
 		var coalesce_reason := _player_viewer_streaming_debt_reason()
 		if not coalesce_reason.is_empty():
@@ -224,6 +260,8 @@ func update_player_viewer(force: bool = false) -> bool:
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
 	if not _update_focus_player_viewer(force):
+		return false
+	if not _update_player_foreground_priority_leases(force):
 		return false
 	_begin_streaming_burst()
 	return true
@@ -471,6 +509,12 @@ func get_game_world_summary() -> Dictionary:
 		"player_collision_invoker_radius_chunks": player_collision_invoker_radius_chunks,
 		"player_collision_prediction_distance": player_collision_prediction_distance,
 		"player_collision_viewer_updates": _accepted_collision_viewer_updates,
+		"player_foreground_priority_enabled": player_foreground_priority_enabled,
+		"player_foreground_priority_update_interval_ms": player_foreground_priority_update_interval_ms,
+		"player_foreground_support_updates": _accepted_foreground_support_updates,
+		"player_foreground_focus_updates": _accepted_foreground_focus_updates,
+		"player_foreground_support_keys": _last_foreground_support_keys.duplicate(),
+		"player_foreground_focus_keys": _last_foreground_focus_keys.duplicate(),
 		"viewer_positions": _viewer_positions.size(),
 		"viewer_radius_chunks": _viewer_radius_chunks,
 		"viewer_maximum_lod": _viewer_maximum_lod,
@@ -1157,6 +1201,123 @@ func _should_update_focus_player_viewer(position: Vector3) -> bool:
 	if is_inf(_last_focus_viewer_position.x):
 		return true
 	return position.distance_to(_last_focus_viewer_position) >= player_viewer_update_distance
+
+
+func _update_player_foreground_priority_leases(force: bool) -> bool:
+	if not player_foreground_priority_enabled or _player == null or \
+			_reference_scene == null:
+		return true
+	var now_usec := Time.get_ticks_usec()
+	if not force and now_usec < _foreground_priority_next_update_usec:
+		return true
+	if not _player.has_method("get_foreground_priority_targets"):
+		return _fail("player does not expose foreground priority targets")
+	var targets: Dictionary = _player.call("get_foreground_priority_targets")
+	var support_keys := _foreground_chunk_keys(
+		Array(targets.get("support_points", []))
+	)
+	var focus_keys: Array = []
+	if bool(targets.get("focus_valid", false)):
+		focus_keys = _foreground_chunk_keys([
+			targets.get("focus_point", _player.global_position)
+		])
+	if force or support_keys != _last_foreground_support_keys:
+		_foreground_support_revision += 1
+		if not _submit_foreground_priority_lease(
+			FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID,
+			_foreground_support_revision,
+			FOREGROUND_PRIORITY_PLAYER_SUPPORT,
+			support_keys,
+			"player_support"
+		):
+			return false
+		_last_foreground_support_keys = support_keys.duplicate()
+		_accepted_foreground_support_updates += 1
+	if force or focus_keys != _last_foreground_focus_keys:
+		_foreground_focus_revision += 1
+		if not _submit_foreground_priority_lease(
+			FOREGROUND_PRIORITY_FOCUS_SOURCE_ID,
+			_foreground_focus_revision,
+			FOREGROUND_PRIORITY_INTERACTION_FOCUS,
+			focus_keys,
+			"interaction_focus"
+		):
+			return false
+		_last_foreground_focus_keys = focus_keys.duplicate()
+		_accepted_foreground_focus_updates += 1
+	_foreground_priority_next_update_usec = now_usec + \
+		player_foreground_priority_update_interval_ms * 1000
+	return true
+
+
+func _release_player_foreground_priority_leases() -> bool:
+	if _reference_scene == null:
+		return true
+	_foreground_support_revision += 1
+	if not _submit_foreground_priority_lease(
+		FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID,
+		_foreground_support_revision,
+		FOREGROUND_PRIORITY_PLAYER_SUPPORT,
+		[],
+		"player_support_release"
+	):
+		return false
+	_foreground_focus_revision += 1
+	if not _submit_foreground_priority_lease(
+		FOREGROUND_PRIORITY_FOCUS_SOURCE_ID,
+		_foreground_focus_revision,
+		FOREGROUND_PRIORITY_INTERACTION_FOCUS,
+		[],
+		"interaction_focus_release"
+	):
+		return false
+	_last_foreground_support_keys.clear()
+	_last_foreground_focus_keys.clear()
+	return true
+
+
+func _submit_foreground_priority_lease(
+	source_id: int,
+	revision: int,
+	priority_class: int,
+	keys: Array,
+	role: String
+) -> bool:
+	if not bool(_reference_scene.call(
+		"update_runtime_foreground_priority_lease",
+		source_id,
+		revision,
+		priority_class,
+		keys
+	)):
+		return _fail("%s priority update failed: %s" % [
+			role,
+			_terrain_world_error(),
+		])
+	_trace_event(&"foreground_priority_submitted", {
+		"role": role,
+		"source_id": source_id,
+		"revision": revision,
+		"priority_class": priority_class,
+		"keys": keys.duplicate(),
+	})
+	return true
+
+
+func _foreground_chunk_keys(points: Array) -> Array:
+	var keys: Array = []
+	for value in points:
+		if not value is Vector3:
+			continue
+		var point: Vector3 = value
+		var key := Vector3i(
+			floori(point.x / COLLISION_INVOKER_CHUNK_EXTENT),
+			floori(point.y / COLLISION_INVOKER_CHUNK_EXTENT),
+			floori(point.z / COLLISION_INVOKER_CHUNK_EXTENT)
+		)
+		if not keys.has(key):
+			keys.append(key)
+	return keys
 
 
 func _operation_mode(mode_name: StringName) -> int:

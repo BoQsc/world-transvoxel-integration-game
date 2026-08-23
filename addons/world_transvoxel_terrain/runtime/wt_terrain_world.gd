@@ -215,6 +215,21 @@ func remove_collision_viewer(viewer_id: int, revision: int) -> bool:
 		_emit_readiness()
 	return accepted
 
+
+func update_foreground_priority_lease(
+	source_id: int,
+	revision: int,
+	priority_class: int,
+	chunk_coordinates: Array
+) -> bool:
+	return BackendOps.update_foreground_priority_lease(
+		self,
+		source_id,
+		revision,
+		priority_class,
+		chunk_coordinates
+	)
+
 func query_chunk_state(chunk_coordinate: Vector3i, lod: int) -> RefCounted:
 	return BackendOps.query_chunk_state(self, chunk_coordinate, lod)
 

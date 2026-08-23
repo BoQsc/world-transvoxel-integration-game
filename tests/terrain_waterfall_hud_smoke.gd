@@ -32,6 +32,11 @@ class FakeTrace extends RefCounted:
 					"storage_active_requests": 1,
 					"page_awaiting_mesh_records": 2,
 					"queued_render": 1,
+					"foreground_priority_support_keys": 1,
+					"foreground_priority_focus_keys": 1,
+					"foreground_priority_matched_keys": 7,
+					"foreground_priority_missing_keys": 2,
+					"foreground_priority_changed_priorities": 5,
 					"pending_chunk_replacements": 4,
 					"blocked_pending_chunk_replacements": 4,
 				},
@@ -46,7 +51,7 @@ class FakeTrace extends RefCounted:
 			"recent_native_events": [{
 				"elapsed_ns": 2400000000,
 				"thread_role": "runtime",
-				"kind": "mesh_started",
+				"kind": "foreground_priority_lease_applied",
 				"has_chunk": true,
 				"chunk_x": 4,
 				"chunk_y": 2,
@@ -73,7 +78,8 @@ func _run_test() -> void:
 		return
 	var text := _collect_label_text(hud)
 	for expected in [
-		"TERRAIN PIPELINE WATERFALL", "workers 2", "mesh_started", "waiting on storage",
+		"TERRAIN PIPELINE WATERFALL", "workers 2", "PRIOR support 1", "focus 1",
+		"matched 7", "missing 2", "changes 5", "priority_lease", "waiting on storage",
 	]:
 		if not text.contains(expected):
 			_fail("HUD is missing expected live data: %s" % expected)

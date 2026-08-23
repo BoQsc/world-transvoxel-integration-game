@@ -81,9 +81,11 @@ var runtime_collision_apply_budget_override := -1
 var runtime_collision_apply_deadline_us_override := -1
 var player_collision_invoker_radius_chunks_override := -1
 var player_collision_prediction_distance_override := -1.0
+var foreground_priority_override := "auto"
 var procedural_generation_worker_count_override := -1
 var meshing_worker_count_override := -1
 var runtime_baseline_edit_ready_wait_frames := 900
+var foreground_priority_focus_settle_frames := 0
 var cpu_causal_trace_output_path := ""
 var cpu_causal_trace: RefCounted
 var terrain_waterfall_requested := false
@@ -169,6 +171,16 @@ func _ready() -> void:
 	player_collision_prediction_distance_override = float(
 		_arg_value(args, "--player-collision-prediction-distance", "-1")
 	)
+	foreground_priority_override = _arg_value(
+		args, "--foreground-priority", "auto"
+	).to_lower()
+	if foreground_priority_override not in ["auto", "enabled", "disabled"]:
+		push_error(
+			"--foreground-priority must be auto, enabled, or disabled; got %s" %
+			foreground_priority_override
+		)
+		get_tree().quit(2)
+		return
 	procedural_generation_worker_count_override = int(
 		_arg_value(args, "--procedural-generation-workers", "-1")
 	)
@@ -178,6 +190,14 @@ func _ready() -> void:
 	runtime_baseline_edit_ready_wait_frames = int(
 		_arg_value(args, "--runtime-baseline-edit-ready-wait-frames", "900")
 	)
+	foreground_priority_focus_settle_frames = int(
+		_arg_value(args, "--foreground-priority-focus-settle-frames", "0")
+	)
+	if foreground_priority_focus_settle_frames < 0 or \
+			foreground_priority_focus_settle_frames > 60:
+		push_error("--foreground-priority-focus-settle-frames must be 0..60")
+		get_tree().quit(2)
+		return
 	cpu_causal_trace_output_path = _arg_value(
 		args, "--cpu-causal-trace-output", ""
 	)
@@ -213,7 +233,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+T visual material"
+	human_controls_hint_line = "controls: LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+R priority diagnostic | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -357,6 +377,19 @@ func _start_profile() -> void:
 		player_collision_prediction_distance_override \
 		if player_collision_prediction_distance_override >= 0.0 else \
 		float(settings.get("player_collision_prediction_distance", 16.0))
+	var foreground_priority_enabled := bool(settings.get(
+		"player_foreground_priority_enabled", false
+	))
+	if foreground_priority_override == "enabled":
+		foreground_priority_enabled = true
+	elif foreground_priority_override == "disabled":
+		foreground_priority_enabled = false
+	elif autonomous and human_visual_capture_path.is_empty():
+		foreground_priority_enabled = false
+	game_world.player_foreground_priority_enabled = foreground_priority_enabled
+	game_world.player_foreground_priority_update_interval_ms = int(settings.get(
+		"player_foreground_priority_update_interval_ms", 100
+	))
 	game_world.startup_requires_cold_idle = bool(settings.get("startup_requires_cold_idle", true))
 	game_world.startup_world_state_timeout_frames = int(settings.get("startup_world_state_timeout_frames", 900))
 	game_world.startup_minimum_render_resources = int(settings.get("startup_minimum_render_resources", expected_resources))
@@ -987,6 +1020,8 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		settings["player_viewer_update_distance"] = 8.0
 		settings["player_collision_invoker_enabled"] = true
 		settings["player_collision_invoker_radius_chunks"] = 2
+		settings["player_foreground_priority_enabled"] = false
+		settings["player_foreground_priority_update_interval_ms"] = 100
 		# Keep 8 world units of the radius-2 collision sphere behind the
 		# predicted center. A full-radius (32-unit) shift can exclude the
 		# current chunk during diagonal flight; 16 units did not provide
@@ -1938,6 +1973,15 @@ func handle_human_command(command: StringName) -> bool:
 		&"toggle_terrain_waterfall":
 			_toggle_terrain_waterfall()
 			return true
+		&"toggle_foreground_priority":
+			if game_world == null or not game_world.has_method(
+				"set_player_foreground_priority_enabled"
+			):
+				return false
+			return bool(game_world.call(
+				"set_player_foreground_priority_enabled",
+				not bool(game_world.get("player_foreground_priority_enabled"))
+			))
 	return false
 
 
@@ -4770,7 +4814,8 @@ func _capture_human_visual() -> void:
 			player,
 			selected_profile,
 			cpu_causal_trace_output_path,
-			runtime_baseline_edit_ready_wait_frames
+			runtime_baseline_edit_ready_wait_frames,
+			foreground_priority_focus_settle_frames
 		)
 		print("WT_RUNTIME_BASELINE_SUMMARY ", JSON.stringify(last_runtime_baseline_summary))
 		if not bool(last_runtime_baseline_summary.get("ok", false)):
@@ -4855,6 +4900,10 @@ func _capture_human_visual() -> void:
 		"player_collision_invoker_radius_chunks": int(summary.get("player_collision_invoker_radius_chunks", 0)),
 		"player_collision_prediction_distance": float(summary.get("player_collision_prediction_distance", 0.0)),
 		"player_collision_viewer_updates": int(summary.get("player_collision_viewer_updates", 0)),
+		"player_foreground_priority_enabled": bool(summary.get("player_foreground_priority_enabled", false)),
+		"player_foreground_priority_update_interval_ms": int(summary.get("player_foreground_priority_update_interval_ms", 0)),
+		"player_foreground_support_updates": int(summary.get("player_foreground_support_updates", 0)),
+		"player_foreground_focus_updates": int(summary.get("player_foreground_focus_updates", 0)),
 		"runtime_viewer_capacity": int(summary.get("runtime_viewer_capacity", 0)),
 		"runtime_demand_capacity_per_viewer": int(summary.get("runtime_demand_capacity_per_viewer", 0)),
 		"runtime_lod_refinement_radius_chunks": int(summary.get("runtime_lod_refinement_radius_chunks", 0)),

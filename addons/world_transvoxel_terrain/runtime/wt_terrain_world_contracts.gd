@@ -77,6 +77,7 @@ static func terrain_api_contract_summary(world) -> Dictionary:
 				"remove_viewer",
 				"update_collision_viewer",
 				"remove_collision_viewer",
+				"update_foreground_priority_lease",
 				"query_chunk_state",
 				"get_chunk_readiness",
 			],

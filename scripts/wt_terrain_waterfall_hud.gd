@@ -125,6 +125,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		"STORE queued %d  active %d  done %d  last %.2f ms\n" +
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
+		"PRIOR support %d  focus %d  matched %d  missing %d  changes %d\n" +
 		"VIS   replace %d  blocked %d  ready %d  retire %d  render-retire %d\n" +
 		"FIRST %s"
 	) % [
@@ -151,6 +152,11 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("queued_collision", 0)),
 		int(metrics.get("deferred_collision", 0)),
 		int(metrics.get("total_collision_backlog", 0)),
+		int(metrics.get("foreground_priority_support_keys", 0)),
+		int(metrics.get("foreground_priority_focus_keys", 0)),
+		int(metrics.get("foreground_priority_matched_keys", 0)),
+		int(metrics.get("foreground_priority_missing_keys", 0)),
+		int(metrics.get("foreground_priority_changed_priorities", 0)),
 		int(metrics.get("pending_chunk_replacements", 0)),
 		int(metrics.get("blocked_pending_chunk_replacements", 0)),
 		int(metrics.get("ready_staged_chunk_replacements", 0)),
@@ -257,6 +263,10 @@ func _format_events(events_value) -> String:
 
 
 func _short_kind(kind: String) -> String:
+	if kind == "foreground_priority_lease_applied":
+		return "priority_lease"
+	if kind == "foreground_priority_changed":
+		return "priority_changed"
 	return kind.replace("completion_consumed", "consumed").replace(
 		"visibility_", "vis_"
 	).replace("frontend_publication_", "frontend_")

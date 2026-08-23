@@ -131,6 +131,29 @@ func get_interaction_target_summary() -> Dictionary:
 	return _interaction_target()
 
 
+func get_foreground_priority_targets() -> Dictionary:
+	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return {
+			"support_points": [global_position, global_position + Vector3.DOWN * 2.0],
+			"focus_valid": false,
+			"focus_point": global_position,
+		}
+	var origin := camera.global_position
+	var direction := -camera.global_transform.basis.z.normalized()
+	var end := origin + direction * interaction_distance
+	var query := PhysicsRayQueryParameters3D.create(origin, end)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	return {
+		"support_points": [global_position, global_position + Vector3.DOWN * 2.0],
+		"focus_valid": not hit.is_empty(),
+		"focus_point": hit.get("position", end),
+	}
+
+
 func autonomous_look_at(target: Vector3) -> bool:
 	var camera := get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
@@ -336,6 +359,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if human_command_armed and (event.keycode == KEY_W or event.physical_keycode == KEY_W):
 			human_command_armed = false
 			_forward_human_command(&"toggle_terrain_waterfall")
+			return
+		if human_command_armed and (event.keycode == KEY_R or event.physical_keycode == KEY_R):
+			human_command_armed = false
+			_forward_human_command(&"toggle_foreground_priority")
 			return
 		if human_command_armed and (event.keycode == KEY_L or event.physical_keycode == KEY_L):
 			human_command_armed = false
