@@ -1,0 +1,58 @@
+{
+  "schema": "world_transvoxel_cpu_foreground_priority_qualification_v1",
+  "status": "CANDIDATE_REJECTED_DEFAULT_OFF",
+  "decision": "Do not automatically prioritize player-support and cursor-target chunks in the g23 production profile.",
+  "authority_commit": "68e5b3de33cc774f00145094de68f1ec34759f48",
+  "integration_candidate_commit": "7d2e850af7a26bdf2837b88356c3d33d4f6ff836",
+  "runtime_boundary": {
+    "logical_cpu_affinity": [0, 1, 2],
+    "godot": "4.7.2.stable.steam.ed1daf0bf",
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "fresh_storage_per_run": true,
+    "focus_settle_frames": 6,
+    "changes_residency_or_lod_topology": false,
+    "changes_collision_or_visual_roles": false
+  },
+  "activation_proof": {
+    "forward_matched_keys": 367,
+    "forward_changed_priorities": 51,
+    "reverse_matched_keys": 374,
+    "reverse_changed_priorities": 63,
+    "missing_keys": 0,
+    "support_and_focus_active_at_end": true
+  },
+  "paired_results": {
+    "disabled_first": {
+      "enabled_minus_disabled_visual_and_collision_ready_ms": 618.422,
+      "enabled_minus_disabled_frame_p95_ms": 2.848,
+      "enabled_minus_disabled_frame_p99_ms": 7.321,
+      "enabled_minus_disabled_blocked_movement_frames": 12,
+      "enabled_minus_disabled_maximum_scheduler_queued_jobs": 27
+    },
+    "enabled_first": {
+      "enabled_minus_disabled_visual_and_collision_ready_ms": 273.409,
+      "enabled_minus_disabled_frame_p95_ms": 0.896,
+      "enabled_minus_disabled_frame_p99_ms": 2.37,
+      "enabled_minus_disabled_blocked_movement_frames": 2,
+      "enabled_minus_disabled_maximum_scheduler_queued_jobs": -19
+    }
+  },
+  "conclusions": [
+    "The authority lease contract activated and reprioritized existing demand without expanding terrain residency.",
+    "The proposed automatic production policy did not improve the first post-relocation edit in either run order.",
+    "Committed edits already use the highest scheduler priority; the remaining delay is after acceptance and authority commit, chiefly in readiness and publication work.",
+    "The g23 production default remains disabled. Tilde+R and the command-line override retain an explicit diagnostic path only.",
+    "This rejection does not promote a GPU backend and does not weaken CPU correctness authority."
+  ],
+  "evidence": [
+    {
+      "path": "forward.json",
+      "sha256": "dc1cbd803e9feaf24d3e6eabbdb7e72f8b6e8761ba3b775707f4e1e05ce7f9ea"
+    },
+    {
+      "path": "reverse.json",
+      "sha256": "1dcec21b51a2c72064b20c8ec92321aceaa7609184b23e0f073f835783fe9d01"
+    }
+  ],
+  "claim_boundary": "Two order-balanced paired diagnostics reject this policy for the pinned system. They do not prove that all narrower foreground scheduling policies are universally harmful."
+}

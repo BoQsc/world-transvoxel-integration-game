@@ -1,0 +1,134 @@
+{
+  "schema": "world_transvoxel_cpu_foreground_priority_ab_v1",
+  "status": "DIAGNOSTIC_COMPLETE",
+  "purpose": "bounded player-support and cursor-target scheduling priority",
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "provenance": {
+    "integration_repository": "world-transvoxel-integration-game",
+    "integration_commit": "7d2e850af7a26bdf2837b88356c3d33d4f6ff836",
+    "integration_tree": "a9a0a6d3922ca12a9044bf880d018f0cab74af51",
+    "measurement_contract": "authoritative_cpu_human_baseline_v1",
+    "authority_commit": "68e5b3de33cc774f00145094de68f1ec34759f48",
+    "authority_addon_tree": "5c4dfd7cc84b70a929e0a546a1be9bef3c036626",
+    "authority_runtime_artifact_digest_sha256": "4ed53783117041798221ac88d669ff112d2d495e6bc275307d7685c065fce062",
+    "debug_binary_sha256": "8ec4e02bf9704274b4b42fb9b70026e8a828ee130e0888d622fb1469cb00db62",
+    "release_binary_sha256": "3654ffc8a44f2365dc2054c2d0b7c2bc25b75c99acd516f42675a6c0b8069306",
+    "godot_executable": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+    "runtime_kind": "godot_editor_debug",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "processor": "Intel64 Family 6 Model 158 Stepping 9, GenuineIntel",
+    "logical_cpu_count": 4,
+    "logical_cpu_affinity": [
+      0,
+      1,
+      2
+    ],
+    "power_source": {
+      "available": true,
+      "plugged_in": true,
+      "battery_percent": 95,
+      "watts_available": false
+    }
+  },
+  "route": {
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "mode": "runtime_baseline_gate",
+    "fresh_storage_per_run": true,
+    "procedural_generation_workers": 2,
+    "meshing_workers": 0,
+    "collision_radius_chunks": 2,
+    "collision_prediction_distance": 24.0,
+    "focus_settle_frames": 6,
+    "run_order": [
+      "enabled",
+      "disabled"
+    ]
+  },
+  "contract": {
+    "changes_residency_or_lod_topology": false,
+    "changes_collision_or_visual_roles": false,
+    "support_points": "player position and two metres below",
+    "focus_point": "physics ray hit under the cursor",
+    "update_policy": "100 ms maximum cadence plus key changes"
+  },
+  "checks": {
+    "disabled_policy_inert": true,
+    "enabled_policy_matched_existing_demand": true
+  },
+  "disabled": {
+    "target_status": "MEASURED_TARGET_MISS",
+    "wall_seconds": 59.92520900000818,
+    "average_active_cores": 1.720373641082936,
+    "frame_p95_ms": 36.572,
+    "frame_p99_ms": 44.72,
+    "movement_blocked_frames": 0,
+    "physics_target_wait_ms": 99.987,
+    "authority_commit_ms": 57.258,
+    "relocation_to_visual_ready_ms": 7531.784,
+    "relocation_to_collision_ready_ms": 7531.784,
+    "visual_ready_frames_after_commit": 440,
+    "collision_ready_frames_after_commit": 440,
+    "maximum_scheduler_queued_jobs": 779,
+    "foreground_priority": {
+      "foreground_priority_updates": 0,
+      "foreground_priority_matched_keys": 0,
+      "foreground_priority_missing_keys": 0,
+      "foreground_priority_changed_priorities": 0,
+      "foreground_priority_active_sources_end": 0,
+      "foreground_priority_support_keys_end": 0,
+      "foreground_priority_focus_keys_end": 0
+    },
+    "trace": {
+      "path": ".godot/world_transvoxel_captures/cpu_foreground_priority_ab/enabled-first/disabled_causal_trace.json",
+      "bytes": 60820690,
+      "sha256": "bb78c1c6b5e760a4e813f5d53fd5f5664b16434b8c8702d5b79a43192c1aa8a7"
+    }
+  },
+  "enabled": {
+    "target_status": "MEASURED_TARGET_MISS",
+    "wall_seconds": 60.069097300001886,
+    "average_active_cores": 1.7058480084733483,
+    "frame_p95_ms": 37.468,
+    "frame_p99_ms": 47.09,
+    "movement_blocked_frames": 2,
+    "physics_target_wait_ms": 99.993,
+    "authority_commit_ms": 41.922,
+    "relocation_to_visual_ready_ms": 7805.193,
+    "relocation_to_collision_ready_ms": 7805.193,
+    "visual_ready_frames_after_commit": 457,
+    "collision_ready_frames_after_commit": 457,
+    "maximum_scheduler_queued_jobs": 760,
+    "foreground_priority": {
+      "foreground_priority_updates": 92,
+      "foreground_priority_matched_keys": 374,
+      "foreground_priority_missing_keys": 0,
+      "foreground_priority_changed_priorities": 63,
+      "foreground_priority_active_sources_end": 2,
+      "foreground_priority_support_keys_end": 1,
+      "foreground_priority_focus_keys_end": 1
+    },
+    "trace": {
+      "path": ".godot/world_transvoxel_captures/cpu_foreground_priority_ab/enabled-first/enabled_causal_trace.json",
+      "bytes": 58725653,
+      "sha256": "1067e132f23ba16ad17d5d21dbd6b766510a8d0fa31248f76f1a35e16afb9f8b"
+    }
+  },
+  "enabled_minus_disabled": {
+    "wall_seconds": 0.143888299993705,
+    "frame_p95_ms": 0.8960000000000008,
+    "frame_p99_ms": 2.3700000000000045,
+    "movement_blocked_frames": 2.0,
+    "physics_target_wait_ms": 0.006000000000000227,
+    "authority_commit_ms": -15.336000000000006,
+    "relocation_to_visual_ready_ms": 273.40900000000056,
+    "relocation_to_collision_ready_ms": 273.40900000000056,
+    "visual_ready_frames_after_commit": 17.0,
+    "collision_ready_frames_after_commit": 17.0,
+    "maximum_scheduler_queued_jobs": -19.0
+  },
+  "claim_boundary": "One paired diagnostic run can prove policy activation and expose a directional result; it cannot establish a stable performance win."
+}
