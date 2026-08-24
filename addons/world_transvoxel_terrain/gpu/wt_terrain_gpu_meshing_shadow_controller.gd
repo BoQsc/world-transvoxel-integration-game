@@ -12,6 +12,10 @@ const REQUIRED_BACKEND_METHODS := [
 	"complete_gpu_meshing_shadow_request",
 	"get_gpu_meshing_shadow_metrics",
 ]
+const PUBLICATION_BACKEND_METHODS := [
+	"begin_gpu_meshing_publication",
+	"complete_gpu_meshing_publication_request",
+]
 
 var _backend_terrain: Node
 var _service
@@ -19,6 +23,7 @@ var _pending: Dictionary = {}
 var _capacity := 3
 var _service_capacity := 2
 var _running := false
+var _publish_matched := false
 var _last_error := ""
 var _submitted_results := 0
 var _matched_results := 0
@@ -28,13 +33,18 @@ var _transition_matched_results := 0
 var _mismatched_results := 0
 var _stale_results := 0
 var _identity_rejections := 0
+var _publication_queued := 0
+var _publication_rejections := 0
+var _publication_stale_skips := 0
 
 
 func _ready() -> void:
 	set_process(false)
 
 
-func start(backend_terrain: Node, capacity: int = 3) -> bool:
+func start(
+	backend_terrain: Node, capacity: int = 3, publish_matched: bool = false
+) -> bool:
 	if _running:
 		return true
 	if backend_terrain == null:
@@ -44,6 +54,11 @@ func start(backend_terrain: Node, capacity: int = 3) -> bool:
 		if not backend_terrain.has_method(method_name):
 			_last_error = "native terrain backend lacks %s" % method_name
 			return false
+	if publish_matched:
+		for method_name in PUBLICATION_BACKEND_METHODS:
+			if not backend_terrain.has_method(method_name):
+				_last_error = "native terrain backend lacks %s" % method_name
+				return false
 	_capacity = clampi(capacity, 1, GpuMeshingService.REQUEST_CAPACITY)
 	_service_capacity = maxi(1, _capacity - 1)
 	_service = GpuMeshingService.new()
@@ -51,12 +66,15 @@ func start(backend_terrain: Node, capacity: int = 3) -> bool:
 		_last_error = _service.get_last_error()
 		_service = null
 		return false
-	if not bool(backend_terrain.call("begin_gpu_meshing_shadow", _capacity)):
-		_last_error = "native terrain backend rejected GPU shadow capture"
+	var begin_method := "begin_gpu_meshing_publication" \
+		if publish_matched else "begin_gpu_meshing_shadow"
+	if not bool(backend_terrain.call(begin_method, _capacity)):
+		_last_error = "native terrain backend rejected GPU meshing capture"
 		_service.close()
 		_service = null
 		return false
 	_backend_terrain = backend_terrain
+	_publish_matched = publish_matched
 	_pending.clear()
 	_running = true
 	_last_error = ""
@@ -75,6 +93,7 @@ func stop() -> void:
 	_pending.clear()
 	_service = null
 	_backend_terrain = null
+	_publish_matched = false
 
 
 func is_running() -> bool:
@@ -92,6 +111,7 @@ func get_status() -> Dictionary:
 	return {
 		"schema": "world_transvoxel.terrain.gpu_meshing_shadow_controller.v1",
 		"running": _running,
+		"publish_matched": _publish_matched,
 		"capacity": _capacity,
 		"service_capacity": _service_capacity,
 		"native_freshness_slot_reserved": _capacity > 1,
@@ -104,12 +124,16 @@ func get_status() -> Dictionary:
 		"mismatched_results": _mismatched_results,
 		"stale_results": _stale_results,
 		"identity_rejections": _identity_rejections,
+		"publication_queued": _publication_queued,
+		"publication_rejections": _publication_rejections,
+		"publication_stale_skips": _publication_stale_skips,
 		"last_error": _last_error,
 		"native_metrics": native_metrics,
 		"service_status": service_status,
 		"cpu_render_authority": true,
 		"cpu_collision_authority": true,
-		"gpu_publication_enabled": false,
+		"gpu_publication_enabled": _publish_matched,
+		"gpu_resident_render_publication": false,
 	}
 
 
@@ -134,13 +158,24 @@ func _drain_completions() -> void:
 		_pending.erase(service_request_id)
 		var comparison_error := _validate_completion(native_request, completion)
 		var matched := comparison_error.is_empty()
-		var native_completion := Dictionary(_backend_terrain.call(
-			"complete_gpu_meshing_shadow_request",
-			int(native_request.get("request_id", 0)),
-			Dictionary(native_request.get("identity", {})),
-			matched,
-			comparison_error
-		))
+		var native_completion: Dictionary
+		if _publish_matched:
+			native_completion = Dictionary(_backend_terrain.call(
+				"complete_gpu_meshing_publication_request",
+				int(native_request.get("request_id", 0)),
+				Dictionary(native_request.get("identity", {})),
+				Array(completion.get("cells", [])),
+				matched,
+				comparison_error
+			))
+		else:
+			native_completion = Dictionary(_backend_terrain.call(
+				"complete_gpu_meshing_shadow_request",
+				int(native_request.get("request_id", 0)),
+				Dictionary(native_request.get("identity", {})),
+				matched,
+				comparison_error
+			))
 		var status := str(native_completion.get("status", ""))
 		match status:
 			"MATCHED":
@@ -158,6 +193,14 @@ func _drain_completions() -> void:
 				_stale_results += 1
 			"IDENTITY_MISMATCH":
 				_identity_rejections += 1
+		if _publish_matched and bool(native_completion.get("publication_queued", false)):
+			_publication_queued += 1
+		elif _publish_matched \
+				and str(native_completion.get("publication_status", "")) \
+				== "STALE_APPLICATION":
+			_publication_stale_skips += 1
+		elif _publish_matched and status == "MATCHED":
+			_publication_rejections += 1
 		if not matched or status not in ["MATCHED", "STALE"]:
 			_last_error = comparison_error if not comparison_error.is_empty() \
 				else str(native_completion.get("error", "GPU shadow completion failed"))
@@ -183,7 +226,8 @@ func _submit_captures() -> void:
 			batch.get("material_authored", PackedByteArray()),
 			batch.get("cells", []),
 			batch.get("authority_cells", []),
-			identity
+			identity,
+			_publish_matched
 		))
 		if service_request_id <= 0:
 			_complete_rejected_native_request(native_request, _service.get_last_error())
@@ -195,13 +239,24 @@ func _submit_captures() -> void:
 func _complete_rejected_native_request(request: Dictionary, error: String) -> void:
 	_last_error = error
 	_mismatched_results += 1
-	_backend_terrain.call(
-		"complete_gpu_meshing_shadow_request",
-		int(request.get("request_id", 0)),
-		Dictionary(request.get("identity", {})),
-		false,
-		error
-	)
+	if _publish_matched:
+		_publication_rejections += 1
+		_backend_terrain.call(
+			"complete_gpu_meshing_publication_request",
+			int(request.get("request_id", 0)),
+			Dictionary(request.get("identity", {})),
+			[],
+			false,
+			error
+		)
+	else:
+		_backend_terrain.call(
+			"complete_gpu_meshing_shadow_request",
+			int(request.get("request_id", 0)),
+			Dictionary(request.get("identity", {})),
+			false,
+			error
+		)
 
 
 func _validate_native_request(request: Dictionary) -> String:
@@ -210,7 +265,7 @@ func _validate_native_request(request: Dictionary) -> String:
 		return "native GPU shadow request contract failed"
 	if not bool(request.get("cpu_render_publication_unchanged", false)) \
 			or not bool(request.get("cpu_collision_publication_unchanged", false)) \
-			or bool(request.get("gpu_publication_enabled", true)):
+			or bool(request.get("gpu_publication_enabled", false)) != _publish_matched:
 		return "native GPU shadow request violated CPU publication authority"
 	var batch: Dictionary = request.get("cell_batch", {})
 	if str(batch.get("status", "")) != "PASS" or bool(batch.get("fallback_used", true)) \

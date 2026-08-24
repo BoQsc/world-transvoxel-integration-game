@@ -58,6 +58,7 @@ signal readiness_changed(snapshot: Dictionary)
 @export var runtime_shader_fade_parameter_enabled: bool = false
 @export var runtime_global_coarse_lod_coverage: bool = false
 @export var runtime_gpu_meshing_shadow_enabled: bool = false
+@export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
 @export_range(1, 3, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
@@ -141,8 +142,11 @@ func start_backend_world() -> bool:
 	if not profile_error.is_empty():
 		_last_error = profile_error
 		return false
-	if runtime_gpu_meshing_shadow_enabled and not begin_gpu_meshing_shadow(
-		runtime_gpu_meshing_shadow_capacity
+	if (runtime_gpu_meshing_shadow_enabled \
+			or runtime_gpu_meshing_publication_candidate_enabled) \
+			and not begin_gpu_meshing_shadow(
+			runtime_gpu_meshing_shadow_capacity,
+			runtime_gpu_meshing_publication_candidate_enabled
 	):
 		return false
 	var accepted := BackendOps.start_backend_world(self)
@@ -264,7 +268,9 @@ func get_runtime_metrics() -> Dictionary:
 	return RuntimeAudit.get_runtime_metrics(_backend_terrain)
 
 
-func begin_gpu_meshing_shadow(capacity: int = 3) -> bool:
+func begin_gpu_meshing_shadow(
+	capacity: int = 3, publish_matched: bool = false
+) -> bool:
 	if _gpu_meshing_shadow_controller != null \
 			and _gpu_meshing_shadow_controller.is_running():
 		return true
@@ -273,7 +279,9 @@ func begin_gpu_meshing_shadow(capacity: int = 3) -> bool:
 	_gpu_meshing_shadow_controller = GpuMeshingShadowController.new()
 	_gpu_meshing_shadow_controller.name = "WT_GpuMeshingShadow"
 	add_child(_gpu_meshing_shadow_controller)
-	if not _gpu_meshing_shadow_controller.start(_backend_terrain, capacity):
+	if not _gpu_meshing_shadow_controller.start(
+		_backend_terrain, capacity, publish_matched
+	):
 		_last_error = _gpu_meshing_shadow_controller.get_status().get(
 			"last_error", "GPU meshing shadow failed to start"
 		)
@@ -300,6 +308,7 @@ func get_gpu_meshing_shadow_status() -> Dictionary:
 			"cpu_render_authority": true,
 			"cpu_collision_authority": true,
 			"gpu_publication_enabled": false,
+			"gpu_resident_render_publication": false,
 		}
 	return _gpu_meshing_shadow_controller.get_status()
 

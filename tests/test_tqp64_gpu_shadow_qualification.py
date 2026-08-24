@@ -95,3 +95,20 @@ def test_baseline_rejects_an_active_shadow() -> None:
     assert qualification.evaluate_run("cpu_baseline", summary) == [
         "shadow_disabled"
     ]
+
+
+def test_trace_summary_retains_candidate_application_counters() -> None:
+    event = status(20, 3, 1)
+    event["pipeline"]["metrics"] = {
+        "application_submitted_gpu_candidate_render": 7,
+        "application_applied_gpu_candidate_render": 6,
+        "application_stale_gpu_candidate_render": 1,
+    }
+
+    summary = qualification.summarize_trace({"events": [event]})
+
+    assert summary["application_publication_maximum"] == {
+        "application_submitted_gpu_candidate_render": 7,
+        "application_applied_gpu_candidate_render": 6,
+        "application_stale_gpu_candidate_render": 1,
+    }

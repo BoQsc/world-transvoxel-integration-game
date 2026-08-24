@@ -76,7 +76,8 @@ func submit_shadow_samples(
 	material_authored: PackedByteArray,
 	cells: Array,
 	authority_cells: Array,
-	identity: Dictionary = {}
+	identity: Dictionary = {},
+	retain_candidate_cells: bool = false
 ) -> int:
 	if authority_cells.size() != cells.size():
 		_mutex.lock()
@@ -85,7 +86,7 @@ func submit_shadow_samples(
 		return 0
 	return _submit_request(
 		densities, gradients, materials, material_authored, cells, identity,
-		authority_cells, false, true
+		authority_cells, retain_candidate_cells, true
 	)
 
 

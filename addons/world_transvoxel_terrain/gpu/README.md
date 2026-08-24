@@ -18,11 +18,17 @@ native runtime captures exact accepted terrain and static-water cell inputs,
 the service meshes and compares them against CPU authority on its worker, and
 the controller returns the compact verdict with the unchanged native identity.
 Queue capacity is three. One slot is reserved for fresher native work, and an
-older queued capture can be superseded without revoking in-flight work. CPU
-render and collision publication remain unchanged and the GPU has no
-publication route.
+older queued capture can be superseded without revoking in-flight work.
 
-Persistent shadow resources and large-world validation are qualified for the
-retained Vulkan and D3D12 scope. GPU-resident terrain rendering, versioned GPU
-publication, targeted collision coordination, measured performance benefit,
-device recovery, and release promotion remain TQP-64 work.
+The separate default-off matched-publication mode retains the exact native
+source pages and CPU mesh authority. A worker match is parsed and finalized by
+the native backend, compared exactly with the CPU render payload, and may then
+replace the already-ready visual at the same generation. Stale pre-visual
+candidates are skipped. Collision publication is never part of this route.
+
+Persistent shadow resources and bounded matched-cell visual publication are
+qualified on the retained large-world Vulkan and D3D12 routes. The publication
+stage still reads cells back, reruns native finalization, and uploads a CPU
+`ArrayMesh`. GPU-resident terrain rendering, zero-readback production drawing,
+measured performance benefit, device recovery, and release promotion remain
+TQP-64 work.

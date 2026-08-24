@@ -26,6 +26,9 @@ CONTROLLER_COUNTERS = (
     "mismatched_results",
     "stale_results",
     "identity_rejections",
+    "publication_queued",
+    "publication_rejections",
+    "publication_stale_skips",
 )
 NATIVE_COUNTERS = (
     "queued_requests",
@@ -38,6 +41,18 @@ NATIVE_COUNTERS = (
     "stale_results",
     "unknown_results",
     "identity_mismatches",
+    "gpu_publication_attempts",
+    "gpu_publication_queued",
+    "gpu_publication_finalization_rejections",
+    "gpu_publication_application_rejections",
+    "gpu_publication_stale_application_skips",
+    "gpu_publication_terrain_queued",
+    "gpu_publication_water_queued",
+)
+APPLICATION_PUBLICATION_COUNTERS = (
+    "application_submitted_gpu_candidate_render",
+    "application_applied_gpu_candidate_render",
+    "application_stale_gpu_candidate_render",
 )
 SERVICE_COUNTERS = (
     "submitted_request_count",
@@ -107,6 +122,20 @@ def _maximum_nested_counters(
     return result
 
 
+def _maximum_pipeline_counters(
+    trace: dict[str, Any], keys: tuple[str, ...]
+) -> dict[str, int]:
+    result = {key: 0 for key in keys}
+    for event in trace.get("events", []):
+        pipeline = event.get("pipeline")
+        metrics = pipeline.get("metrics", {}) if isinstance(pipeline, dict) else {}
+        if not isinstance(metrics, dict):
+            continue
+        for key in keys:
+            result[key] = max(result[key], int(metrics.get(key, 0)))
+    return result
+
+
 def _edit_shadow_deltas(
     trace: dict[str, Any], snapshots: list[tuple[int, dict[str, Any]]]
 ) -> dict[str, int]:
@@ -152,6 +181,9 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         ("service_status", "persistent_resources"),
         PERSISTENT_RESOURCE_COUNTERS,
     )
+    application_publication = _maximum_pipeline_counters(
+        trace, APPLICATION_PUBLICATION_COUNTERS
+    )
     return {
         "schema": trace.get("schema", ""),
         "reason": trace.get("reason", ""),
@@ -167,6 +199,9 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "snapshot_count": len(snapshots),
         "shadow_running_observed": any(
             bool(status.get("running", False)) for _, status in snapshots
+        ),
+        "publish_matched_observed": any(
+            bool(status.get("publish_matched", False)) for _, status in snapshots
         ),
         "cpu_render_authority": bool(snapshots) and all(
             bool(status.get("cpu_render_authority", False))
@@ -184,6 +219,7 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "native_maximum": native_counters,
         "service_maximum": service_counters,
         "persistent_resource_maximum": persistent_counters,
+        "application_publication_maximum": application_publication,
         "immutable_shadow_handoff": any(
             bool(status.get("service_status", {}).get(
                 "immutable_shadow_handoff", False
@@ -293,8 +329,9 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
         "cpu_limit_at_most_three": 0 < usage["logical_cpu_capacity"] <= 3,
         "cpu_render_authority": trace["cpu_render_authority"],
         "cpu_collision_authority": trace["cpu_collision_authority"],
-        "gpu_never_published": not trace["gpu_publication_observed"],
     }
+    if mode != "gpu_publication":
+        required["gpu_never_published"] = not trace["gpu_publication_observed"]
     if mode == "cpu_baseline":
         required["shadow_disabled"] = not trace["shadow_running_observed"]
     else:
@@ -302,6 +339,7 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
         native = trace["native_maximum"]
         service = trace["service_maximum"]
         persistent = trace["persistent_resource_maximum"]
+        application = trace["application_publication_maximum"]
         edit_deltas = trace["relocated_edit_terrain_match_deltas"]
         required.update(
             {
@@ -344,6 +382,39 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
                 ],
             }
         )
+        if mode == "gpu_publication":
+            required.update(
+                {
+                    "matched_publication_mode": trace["publish_matched_observed"],
+                    "gpu_publication_enabled": trace["gpu_publication_observed"],
+                    "publication_queued": controller["publication_queued"] > 0,
+                    "no_publication_rejection": (
+                        controller["publication_rejections"] == 0
+                    ),
+                    "native_publication_attempted": (
+                        native["gpu_publication_attempts"] > 0
+                    ),
+                    "native_publication_queued": (
+                        native["gpu_publication_queued"] > 0
+                    ),
+                    "native_finalization_clean": (
+                        native["gpu_publication_finalization_rejections"] == 0
+                    ),
+                    "native_application_clean": (
+                        native["gpu_publication_application_rejections"] == 0
+                    ),
+                    "candidate_render_submitted": (
+                        application["application_submitted_gpu_candidate_render"] > 0
+                    ),
+                    "candidate_render_applied": (
+                        application["application_applied_gpu_candidate_render"]
+                        == application["application_submitted_gpu_candidate_render"]
+                    ),
+                    "no_stale_candidate_application": (
+                        application["application_stale_gpu_candidate_render"] == 0
+                    ),
+                }
+            )
     for name, passed in required.items():
         if not passed:
             failures.append(name)
@@ -441,6 +512,8 @@ def run_mode(
         command.extend(["--godot", godot])
     if mode == "gpu_shadow":
         command.append("--gpu-meshing-shadow")
+    elif mode == "gpu_publication":
+        command.append("--gpu-meshing-publication-candidate")
 
     raw_root.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
