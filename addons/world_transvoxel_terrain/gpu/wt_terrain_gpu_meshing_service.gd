@@ -9,6 +9,9 @@ const Differential := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_differential.gd"
 )
 const REQUEST_CAPACITY := 3
+const EXECUTION_MESH_READBACK := "mesh_readback"
+const EXECUTION_SHADOW_READBACK := "shadow_readback"
+const EXECUTION_RESIDENT_RASTER := "resident_raster"
 
 var _thread := Thread.new()
 var _semaphore := Semaphore.new()
@@ -26,6 +29,8 @@ var _shadow_submission_count := 0
 var _shadow_comparison_count := 0
 var _shadow_comparison_failure_count := 0
 var _last_shadow_comparison: Dictionary = {}
+var _resident_submission_count := 0
+var _resident_completion_count := 0
 
 
 func start() -> bool:
@@ -65,7 +70,7 @@ func submit_explicit_samples(
 ) -> int:
 	return _submit_request(
 		densities, gradients, materials, material_authored, cells, identity,
-		[], true, false
+		[], true, false, EXECUTION_MESH_READBACK, {}
 	)
 
 
@@ -86,7 +91,28 @@ func submit_shadow_samples(
 		return 0
 	return _submit_request(
 		densities, gradients, materials, material_authored, cells, identity,
-		authority_cells, retain_candidate_cells, true
+		authority_cells, retain_candidate_cells, true, EXECUTION_SHADOW_READBACK, {}
+	)
+
+
+func submit_resident_resource_samples(
+	densities: PackedFloat32Array,
+	gradients: PackedVector3Array,
+	materials: PackedInt32Array,
+	material_authored: PackedByteArray,
+	cells: Array,
+	identity: Dictionary,
+	view_center: Vector3,
+	view_extent: float,
+	target_size: Vector2i = Vector2i(256, 256)
+) -> int:
+	return _submit_request(
+		densities, gradients, materials, material_authored, cells, identity,
+		[], false, true, EXECUTION_RESIDENT_RASTER, {
+			"view_center": view_center,
+			"view_extent": view_extent,
+			"target_size": target_size,
+		}
 	)
 
 
@@ -99,7 +125,9 @@ func _submit_request(
 	identity: Dictionary,
 	authority_cells: Array,
 	retain_candidate_cells: bool,
-	immutable_handoff: bool
+	immutable_handoff: bool,
+	execution_mode: String,
+	resident_view: Dictionary
 ) -> int:
 	if not _thread.is_started() and not start():
 		return 0
@@ -131,12 +159,16 @@ func _submit_request(
 		"authority_cells": authority_cells,
 		"retain_candidate_cells": retain_candidate_cells,
 		"immutable_handoff": immutable_handoff,
+		"execution_mode": execution_mode,
+		"resident_view": resident_view.duplicate(true),
 		"identity": identity.duplicate(true),
 	}
 	_requests.append(request)
 	_submitted_request_count += 1
-	if immutable_handoff:
+	if execution_mode == EXECUTION_SHADOW_READBACK:
 		_shadow_submission_count += 1
+	elif execution_mode == EXECUTION_RESIDENT_RASTER:
+		_resident_submission_count += 1
 	_last_error = ""
 	_mutex.unlock()
 	_semaphore.post()
@@ -185,6 +217,8 @@ func get_status() -> Dictionary:
 		"shadow_comparison_count": _shadow_comparison_count,
 		"shadow_comparison_failure_count": _shadow_comparison_failure_count,
 		"last_shadow_comparison": _last_shadow_comparison.duplicate(true),
+		"resident_submission_count": _resident_submission_count,
+		"resident_completion_count": _resident_completion_count,
 		"immutable_shadow_handoff": true,
 		"worker_side_shadow_differential": true,
 		"last_error": _last_error,
@@ -214,14 +248,30 @@ func _worker_main() -> void:
 		var request := _requests.pop_front()
 		_active_request_id = int(request.get("request_id", 0))
 		_mutex.unlock()
-		var result: Dictionary = candidate.mesh_explicit_samples(
-			request.get("densities", PackedFloat32Array()),
-			request.get("gradients", PackedVector3Array()),
-			request.get("materials", PackedInt32Array()),
-			request.get("material_authored", PackedByteArray()),
-			request.get("cells", []),
-			request.get("identity", {})
-		)
+		var result: Dictionary
+		var execution_mode := str(request.get("execution_mode", EXECUTION_MESH_READBACK))
+		if execution_mode == EXECUTION_RESIDENT_RASTER:
+			var resident_view: Dictionary = request.get("resident_view", {})
+			result = candidate.rasterize_explicit_samples(
+				request.get("densities", PackedFloat32Array()),
+				request.get("gradients", PackedVector3Array()),
+				request.get("materials", PackedInt32Array()),
+				request.get("material_authored", PackedByteArray()),
+				request.get("cells", []),
+				request.get("identity", {}),
+				resident_view.get("view_center", Vector3.ZERO),
+				float(resident_view.get("view_extent", 0.0)),
+				resident_view.get("target_size", Vector2i.ZERO)
+			)
+		else:
+			result = candidate.mesh_explicit_samples(
+				request.get("densities", PackedFloat32Array()),
+				request.get("gradients", PackedVector3Array()),
+				request.get("materials", PackedInt32Array()),
+				request.get("material_authored", PackedByteArray()),
+				request.get("cells", []),
+				request.get("identity", {})
+			)
 		result["request_id"] = _active_request_id
 		result["service_identity"] = Dictionary(request.get("identity", {})).duplicate(true)
 		result["service_schema"] = "world_transvoxel.terrain.gpu_meshing_service.v1"
@@ -238,6 +288,8 @@ func _worker_main() -> void:
 		_mutex.lock()
 		_resource_status = candidate.get_resource_status().duplicate(true)
 		_completed_request_count += 1
+		if execution_mode == EXECUTION_RESIDENT_RASTER:
+			_resident_completion_count += 1
 		if not authority_cells.is_empty():
 			_shadow_comparison_count += 1
 			_last_shadow_comparison = Dictionary(

@@ -367,7 +367,7 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
                 "worker_comparisons_clean": (
                     service["shadow_comparison_failure_count"] == 0
                 ),
-                "persistent_buffer_inventory": persistent["buffer_count"] == 20,
+                "persistent_buffer_inventory": persistent["buffer_count"] == 21,
                 "persistent_buffer_bounded_growth": (
                     0 < persistent["buffer_generation"] <= 3
                     and persistent["buffer_rebuild_count"]

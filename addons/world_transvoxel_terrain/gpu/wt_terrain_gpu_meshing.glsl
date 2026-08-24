@@ -65,6 +65,17 @@ layout(set = 0, binding = 19, std430) writeonly buffer OutputIdentity {
 	ivec4 values[];
 } output_identity;
 
+struct DrawIndexedIndirectCommand {
+	uint index_count;
+	uint instance_count;
+	uint first_index;
+	int vertex_offset;
+	uint first_instance;
+};
+layout(set = 0, binding = 20, std430) writeonly buffer OutputDrawCommands {
+	DrawIndexedIndirectCommand values[];
+} output_draw_commands;
+
 const int CELL_REGULAR = 0;
 const int CELL_TRANSITION = 1;
 const int STATUS_EMPTY = 0;
@@ -123,6 +134,9 @@ void main() {
 	int cell_index = int(cell_index_u);
 	int vertex_base = cell_index * MAX_VERTICES;
 	int index_base = cell_index * MAX_INDICES;
+	output_draw_commands.values[cell_index] = DrawIndexedIndirectCommand(
+		0u, 0u, uint(index_base), vertex_base, 0u
+	);
 	for (int index = 0; index < MAX_VERTICES; ++index) {
 		output_positions.values[vertex_base + index] = vec4(0.0);
 		output_normals.values[vertex_base + index] = vec4(0.0);
@@ -306,5 +320,8 @@ void main() {
 	}
 	output_cell_meta.values[cell_index] = ivec4(
 		STATUS_OK, case_code, vertex_count, output_index_count
+	);
+	output_draw_commands.values[cell_index] = DrawIndexedIndirectCommand(
+		uint(output_index_count), 1u, uint(index_base), vertex_base, 0u
 	);
 }

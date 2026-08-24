@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_LARGE_WORLD_SHADOW_QUALIFIED`
+Status: `TQP64_LOCAL_RESIDENT_RESOURCE_QUALIFIED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -18,7 +18,7 @@ tables exported by the pinned native backend, reports unsupported or saturated
 states explicitly, and never falls back to CPU meshing. Compute submission,
 synchronization, and readback do not execute on the Godot frame thread.
 
-The service now retains one 20-buffer uniform-set inventory across requests,
+The service now retains one 21-buffer uniform-set inventory across requests,
 grows those buffers geometrically only when required, and updates request
 inputs in place. Exact differential comparison also runs on the dedicated
 worker and returns a compact verdict instead of copying full GPU cell results
@@ -65,11 +65,21 @@ performance promotion while qualifying the persistent validation architecture.
 Board-global telemetry is not process-attributed, and trace-on timing is not a
 release performance baseline.
 
+The next bounded slice qualifies a versioned
+[GPU resident render-resource contract](GPU_RESIDENT_RENDER_RESOURCE_CONTRACT.md).
+One exact 4,352-cell LOD1 fixture is compute-meshed and rasterized on the same
+local RenderingDevice with GPU-written indexed indirect commands, zero geometry
+readback, no CPU chunk finalization, and no ArrayMesh upload. Vulkan and D3D12
+produce the identical retained raster signature. Godot 4.7 requires one
+device-local storage-to-index-buffer copy because index-buffer RIDs are not
+accepted as compute storage uniforms; vertices and indirect commands remain
+directly consumed.
+
 This remains deliberately disconnected from live GPU terrain publication. The
 default runtime remains CPU-only, while shadow mode still publishes the normal
-CPU render and targeted CPU collision resources. GPU-resident rendering,
-versioned GPU publication, production GPU field evaluation, broader material
-coverage, targeted collision coordination, device recovery, large-world
+CPU render and targeted CPU collision resources. Global-renderer GPU resource
+ownership, versioned GPU publication, production GPU field evaluation,
+broader material coverage, targeted collision coordination, device recovery, large-world
 responsiveness benefit, performance and power benefit, and release packaging
 remain TQP-64 work.
 

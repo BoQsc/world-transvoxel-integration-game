@@ -1,0 +1,61 @@
+{
+  "schema": "world_transvoxel.terrain.gpu_resident_resource_qualification.v1",
+  "date": "2026-08-24",
+  "status": "PASS_BOUNDED_LOCAL_DEVICE_PROOF",
+  "baseline_commit": "ed8714f452dfb9bd2c60fcfb6bff44f57dfb19a1",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "hardware": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+  "logical_cpu_limit": 3,
+  "fixture": {
+    "lod": 1,
+    "cell_count": 4352,
+    "regular_cell_count": 4096,
+    "transition_cell_count": 256,
+    "target_size": [256, 256],
+    "indexed_indirect_draw_count": 4352,
+    "indexed_indirect_stride_bytes": 20
+  },
+  "contract": {
+    "persistent_compute_buffer_count": 21,
+    "direct_compute_written_vertex_buffers": 3,
+    "direct_index_storage_alias_supported_by_godot": false,
+    "device_local_index_copy_required": true,
+    "geometry_device_local_copy_bytes": 626688,
+    "geometry_readback_bytes": 0,
+    "render_target_readback_bytes": 262144,
+    "cpu_meshing_used": false,
+    "cpu_chunk_finalization_used": false,
+    "array_mesh_upload_used": false,
+    "dedicated_gpu_worker": true,
+    "frame_thread_compute_sync": false,
+    "production_scene_publication": false,
+    "cpu_collision_authority_retained": true
+  },
+  "profiles": {
+    "vulkan": {
+      "status": "PASS",
+      "api": "Vulkan 1.3.289",
+      "foreground_pixel_count": 29496,
+      "foreground_coverage": 0.450073,
+      "image_sha256": "8c8e39b3480a9674472074bab1169d68e602e20eca9b09160137cd9785439a32",
+      "warnings": 0,
+      "errors": 0
+    },
+    "d3d12": {
+      "status": "PASS",
+      "api": "D3D12 12_0",
+      "foreground_pixel_count": 29496,
+      "foreground_coverage": 0.450073,
+      "image_sha256": "8c8e39b3480a9674472074bab1169d68e602e20eca9b09160137cd9785439a32",
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "regressions": {
+    "gpu_meshing_service_vulkan": "PASS",
+    "gpu_meshing_service_d3d12": "PASS",
+    "matched_publication_vulkan": "PASS",
+    "matched_publication_d3d12": "PASS"
+  },
+  "conclusion": "Render-consumable compute resources and GPU-written indexed indirect commands are viable on the same local RenderingDevice without geometry readback. Global renderer publication remains unimplemented and TQP-64 remains incomplete."
+}

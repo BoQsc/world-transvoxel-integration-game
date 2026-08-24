@@ -34,7 +34,7 @@ def status(frame: int, terrain: int, transition: int = 0) -> dict:
                         "buffer_generation": 1,
                         "buffer_rebuild_count": 1,
                         "buffer_reuse_count": max(0, terrain - 1),
-                        "buffer_count": 20,
+                        "buffer_count": 21,
                         "gpu_resident_render_publication": False,
                     },
                 },

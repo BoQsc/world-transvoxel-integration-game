@@ -125,7 +125,7 @@ func _run() -> void:
 		"persistent_resources", {}
 	)
 	if not bool(resource_status.get("persistent", false)) \
-			or int(resource_status.get("buffer_count", 0)) != 20 \
+			or int(resource_status.get("buffer_count", 0)) != 21 \
 			or int(resource_status.get("buffer_rebuild_count", 0)) != 1 \
 			or int(resource_status.get("buffer_reuse_count", 0)) < 3 \
 			or int(resource_status.get("dispatch_count", 0)) < 4 \

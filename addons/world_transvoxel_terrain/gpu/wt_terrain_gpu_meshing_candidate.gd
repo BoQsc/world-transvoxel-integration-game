@@ -5,8 +5,14 @@ class_name WtTerrainGpuMeshingCandidate
 const SHADER_PATH := (
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing.glsl"
 )
+const ResidentRasterConsumer := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_raster_consumer.gd"
+)
 const FIELD_SCHEMA := "world_transvoxel.terrain.gpu_field_batch.v1"
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_meshing_batch.v1"
+const RESIDENT_RESULT_SCHEMA := (
+	"world_transvoxel.terrain.gpu_resident_render_resource.v1"
+)
 const TABLE_SCHEMA := "world_transvoxel.cell_probe.gpu_meshing_tables.v1"
 const LOCAL_SIZE := 64
 const MAXIMUM_CELL_COUNT := 8192
@@ -18,6 +24,7 @@ const STATUS_NAMES := ["Empty", "Ok", "TopologyFailure"]
 var _rendering_device: RenderingDevice
 var _shader := RID()
 var _pipeline := RID()
+var _resident_raster_consumer
 var _tables: Dictionary = {}
 var _error := ""
 var _persistent_buffers: Array[RID] = []
@@ -30,6 +37,8 @@ var _persistent_allocated_bytes := 0
 var _dispatch_count := 0
 var _uploaded_bytes := 0
 var _readback_bytes := 0
+var _render_target_readback_bytes := 0
+var _resident_draw_dispatch_count := 0
 
 
 func initialize() -> bool:
@@ -72,6 +81,8 @@ func initialize() -> bool:
 
 func close() -> void:
 	if _rendering_device != null:
+		if _resident_raster_consumer != null:
+			_resident_raster_consumer.close()
 		_free_persistent_resources()
 		if _pipeline.is_valid():
 			_rendering_device.free_rid(_pipeline)
@@ -81,6 +92,7 @@ func close() -> void:
 	_rendering_device = null
 	_shader = RID()
 	_pipeline = RID()
+	_resident_raster_consumer = null
 	_tables = {}
 
 
@@ -100,8 +112,16 @@ func get_resource_status() -> Dictionary:
 		"dispatch_count": _dispatch_count,
 		"uploaded_bytes": _uploaded_bytes,
 		"readback_bytes": _readback_bytes,
+		"render_target_readback_bytes": _render_target_readback_bytes,
+		"resident_draw_dispatch_count": _resident_draw_dispatch_count,
 		"uniform_set_valid": _persistent_uniform_set.is_valid(),
 		"local_rendering_device": true,
+		"render_consumable_vertex_buffers": 3,
+		"render_consumable_index_buffers": 1,
+		"direct_index_storage_alias_supported": false,
+		"device_local_index_copy_required": true,
+		"gpu_written_indirect_buffer": true,
+		"same_device_compute_raster": true,
 		"gpu_resident_render_publication": false,
 	}
 
@@ -147,6 +167,37 @@ func mesh_explicit_samples(
 	}, cells, "explicit_cell_samples")
 
 
+func rasterize_explicit_samples(
+	densities: PackedFloat32Array,
+	gradients: PackedVector3Array,
+	materials: PackedInt32Array,
+	material_authored: PackedByteArray,
+	cells: Array,
+	identity: Dictionary,
+	view_center: Vector3,
+	view_extent: float,
+	target_size: Vector2i = Vector2i(256, 256)
+) -> Dictionary:
+	if densities.is_empty() or gradients.size() != densities.size() \
+			or materials.size() != densities.size() \
+			or material_authored.size() != densities.size():
+		return _resident_failure("explicit sample arrays must have equal nonzero lengths")
+	if not view_center.is_finite() or not is_finite(view_extent) or view_extent <= 0.0 \
+			or target_size.x < 16 or target_size.y < 16 \
+			or target_size.x > 2048 or target_size.y > 2048:
+		return _resident_failure("resident raster view is invalid")
+	return _rasterize_batch({
+		"schema": "world_transvoxel.terrain.explicit_cell_samples.v1",
+		"status": "PASS",
+		"fallback_used": false,
+		"densities": densities,
+		"gradients": gradients,
+		"materials": materials,
+		"material_authored": material_authored,
+		"identity": identity,
+	}, cells, view_center, view_extent, target_size)
+
+
 func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Dictionary:
 	if str(batch.get("status", "")) != "PASS" or bool(batch.get("fallback_used", true)):
 		return _failure("GPU meshing input failed or used a fallback")
@@ -168,31 +219,14 @@ func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Diction
 	var started_usec := Time.get_ticks_usec()
 	var cell_count := cells.size()
 	var input_buffers: Array = packed.get("input_buffers", [])
-	var output_sizes: Array[int] = [
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
-		cell_count * 16,
-		48,
-	]
+	var output_sizes := _output_buffer_sizes(cell_count)
 	var resource_preparation := _prepare_persistent_resources(input_buffers, output_sizes)
 	if str(resource_preparation.get("status", "")) != "PASS":
 		return _failure(str(resource_preparation.get("error", "GPU resource preparation failed")))
 	var prepared_usec := Time.get_ticks_usec()
-	var compute_list := _rendering_device.compute_list_begin()
-	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _pipeline)
-	_rendering_device.compute_list_bind_uniform_set(
-		compute_list, _persistent_uniform_set, 0
-	)
-	_rendering_device.compute_list_dispatch(
-		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
-	)
-	_rendering_device.compute_list_end()
+	_dispatch_compute(cell_count)
 	_rendering_device.submit()
 	_rendering_device.sync()
-	_dispatch_count += 1
 	var synchronized_usec := Time.get_ticks_usec()
 	var output_bytes: Array[PackedByteArray] = []
 	for index in range(13, 20):
@@ -215,6 +249,120 @@ func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Diction
 	result["persistent_resources"] = get_resource_status()
 	result["persistent_resources_rebuilt"] = bool(resource_preparation.get("rebuilt", false))
 	return result
+
+
+func _rasterize_batch(
+	batch: Dictionary,
+	cells: Array,
+	view_center: Vector3,
+	view_extent: float,
+	target_size: Vector2i
+) -> Dictionary:
+	var densities: PackedFloat32Array = batch.get("densities", PackedFloat32Array())
+	var gradients: PackedVector3Array = batch.get("gradients", PackedVector3Array())
+	var materials: PackedInt32Array = batch.get("materials", PackedInt32Array())
+	var authored: PackedByteArray = batch.get("material_authored", PackedByteArray())
+	if densities.is_empty() or densities.size() > MAXIMUM_SAMPLE_COUNT \
+			or gradients.size() != densities.size() or materials.size() != densities.size() \
+			or authored.size() != densities.size():
+		return _resident_failure("GPU resident input sample arrays are invalid")
+	if cells.is_empty() or cells.size() > MAXIMUM_CELL_COUNT:
+		return _resident_failure("GPU resident cell count is outside the candidate limit")
+	if not initialize():
+		return _resident_failure(_error)
+	var packed := _pack_request(
+		batch, cells, densities, gradients, materials, authored,
+		"explicit_resident_resource"
+	)
+	if str(packed.get("status", "")) != "PASS":
+		return _resident_failure(str(packed.get("failures", ["request packing failed"])))
+	var cell_count := cells.size()
+	var output_sizes := _output_buffer_sizes(cell_count)
+	var geometry_readback_before := _readback_bytes
+	var started_usec := Time.get_ticks_usec()
+	var resource_preparation := _prepare_persistent_resources(
+		Array(packed.get("input_buffers", [])), output_sizes
+	)
+	if str(resource_preparation.get("status", "")) != "PASS":
+		return _resident_failure(str(resource_preparation.get(
+			"error", "GPU resident resource preparation failed"
+		)))
+	var prepared_usec := Time.get_ticks_usec()
+	_dispatch_compute(cell_count)
+	if _resident_raster_consumer == null:
+		_resident_raster_consumer = ResidentRasterConsumer.new()
+	var raster_result: Dictionary = _resident_raster_consumer.consume(
+		_rendering_device,
+		_persistent_buffers,
+		cell_count,
+		view_center,
+		view_extent,
+		target_size
+	)
+	if str(raster_result.get("status", "")) != "PASS":
+		return _resident_failure(str(raster_result.get(
+			"error", "GPU resident raster consumption failed"
+		)))
+	_resident_draw_dispatch_count += 1
+	var target_readback := int(raster_result.get("render_target_readback_bytes", 0))
+	_render_target_readback_bytes += target_readback
+	return {
+		"schema": RESIDENT_RESULT_SCHEMA,
+		"status": "PASS",
+		"fallback_used": false,
+		"cpu_meshing_used": false,
+		"cpu_chunk_finalization_used": false,
+		"array_mesh_upload_used": false,
+		"geometry_readback_bytes": _readback_bytes - geometry_readback_before,
+		"render_target_readback_bytes": target_readback,
+		"same_device_compute_raster": true,
+		"local_device_screen_shareable": false,
+		"gpu_written_indirect_commands": true,
+		"gpu_resident_vertex_index_consumed": true,
+		"device_local_index_copy_used": bool(raster_result.get(
+			"device_local_index_copy_used", false
+		)),
+		"geometry_device_local_copy_bytes": int(raster_result.get(
+			"geometry_device_local_copy_bytes", 0
+		)),
+		"production_scene_publication": false,
+		"cell_count": cell_count,
+		"identity": batch.get("identity", {}).duplicate(true),
+		"raster": raster_result,
+		"timing_usec": {
+			"prepare": prepared_usec - started_usec,
+			"compute_and_raster": Time.get_ticks_usec() - prepared_usec,
+			"total": Time.get_ticks_usec() - started_usec,
+		},
+		"persistent_resources": get_resource_status(),
+		"persistent_resources_rebuilt": bool(resource_preparation.get("rebuilt", false)),
+	}
+
+
+func _output_buffer_sizes(cell_count: int) -> Array[int]:
+	return [
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
+		cell_count * 16,
+		48,
+		cell_count * 20,
+	]
+
+
+func _dispatch_compute(cell_count: int) -> void:
+	var compute_list := _rendering_device.compute_list_begin()
+	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _pipeline)
+	_rendering_device.compute_list_bind_uniform_set(
+		compute_list, _persistent_uniform_set, 0
+	)
+	_rendering_device.compute_list_dispatch(
+		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
+	)
+	_rendering_device.compute_list_end()
+	_dispatch_count += 1
 
 
 func _pack_request(
@@ -481,7 +629,7 @@ func _prepare_persistent_resources(
 	input_buffers: Array,
 	output_sizes: Array[int]
 ) -> Dictionary:
-	if input_buffers.size() != 13 or output_sizes.size() != 7:
+	if input_buffers.size() != 13 or output_sizes.size() != 8:
 		return {"status": "FAIL", "error": "GPU buffer inventory changed"}
 	var required_sizes: Array[int] = []
 	for bytes in input_buffers:
@@ -524,9 +672,9 @@ func _rebuild_persistent_resources(required_sizes: Array[int]) -> bool:
 	_persistent_buffer_capacities.resize(required_sizes.size())
 	for binding in range(required_sizes.size()):
 		var capacity := _next_buffer_capacity(required_sizes[binding])
-		var buffer := _rendering_device.storage_buffer_create(capacity)
+		var buffer := _create_persistent_buffer(binding, capacity)
 		if not buffer.is_valid():
-			_error = "GPU persistent storage buffer creation failed at binding %d" % binding
+			_error = "GPU persistent buffer creation failed at binding %d" % binding
 			_free_persistent_resources()
 			return false
 		_persistent_buffers.append(buffer)
@@ -548,6 +696,22 @@ func _rebuild_persistent_resources(required_sizes: Array[int]) -> bool:
 		return false
 	_persistent_buffer_generation += 1
 	return true
+
+
+func _create_persistent_buffer(binding: int, capacity: int) -> RID:
+	if binding in [13, 14, 15]:
+		return _rendering_device.vertex_buffer_create(
+			capacity,
+			PackedByteArray(),
+			RenderingDevice.BUFFER_CREATION_AS_STORAGE_BIT
+		)
+	if binding == 20:
+		return _rendering_device.storage_buffer_create(
+			capacity,
+			PackedByteArray(),
+			RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT
+		)
+	return _rendering_device.storage_buffer_create(capacity)
 
 
 func _free_persistent_resources() -> void:
@@ -623,5 +787,19 @@ static func _failure(message: String) -> Dictionary:
 		"status": "FAIL",
 		"fallback_used": false,
 		"cpu_meshing_used": false,
+		"failures": [message],
+	}
+
+
+static func _resident_failure(message: String) -> Dictionary:
+	return {
+		"schema": RESIDENT_RESULT_SCHEMA,
+		"status": "FAIL",
+		"fallback_used": false,
+		"cpu_meshing_used": false,
+		"cpu_chunk_finalization_used": false,
+		"array_mesh_upload_used": false,
+		"geometry_readback_bytes": 0,
+		"production_scene_publication": false,
 		"failures": [message],
 	}
