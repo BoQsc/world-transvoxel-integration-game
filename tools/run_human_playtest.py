@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -26,6 +27,7 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
 LATEST_HUMAN_PROFILE = "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
 LATEST_HUMAN_MATERIAL = "production_texture_array"
 WATERFALL_SAMPLE_INTERVAL_SECONDS = 0.25
+WATERFALL_GPU_SAMPLE_INTERVAL_SECONDS = 0.5
 
 
 def repo_root() -> pathlib.Path:
@@ -96,8 +98,10 @@ def build_command(args: argparse.Namespace) -> list[str]:
     elif args.inspect_latest_marker:
         inspect_marker = latest_human_marker(project)
 
-    command = [
-        str(godot),
+    command = [str(godot)]
+    if args.rendering_driver:
+        command.extend(["--rendering-driver", args.rendering_driver])
+    command.extend([
         "--path",
         str(project),
         "--",
@@ -105,7 +109,7 @@ def build_command(args: argparse.Namespace) -> list[str]:
         args.profile,
         "--human-material-mode",
         args.material,
-    ]
+    ])
     if args.windowed:
         command.append("--human-windowed")
     if args.preserve_storage:
@@ -121,6 +125,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         ])
     if args.meshing_workers is not None:
         command.extend(["--meshing-workers", str(args.meshing_workers)])
+    if args.gpu_meshing_shadow:
+        command.append("--gpu-meshing-shadow")
     if inspect_marker is not None:
         command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
     if args.terrain_waterfall:
@@ -182,6 +188,27 @@ def _write_usage_report(
 ) -> None:
     cpu_values = [float(sample["process_cpu_percent"]) for sample in samples]
     rss_values = [int(sample["rss_bytes"]) for sample in samples]
+    gpu_utilization = [
+        float(sample["gpu_board_utilization_percent"])
+        for sample in samples
+        if sample.get("gpu_board_utilization_percent") is not None
+    ]
+    gpu_power = [
+        float(sample["gpu_board_power_watts"])
+        for sample in samples
+        if sample.get("gpu_board_power_watts") is not None
+    ]
+
+    def distribution(values: list[float]) -> dict[str, float | int]:
+        if not values:
+            return {"count": 0, "mean": 0.0, "median": 0.0, "maximum": 0.0}
+        return {
+            "count": len(values),
+            "mean": statistics.fmean(values),
+            "median": statistics.median(values),
+            "maximum": max(values),
+        }
+
     payload = {
         "schema": "world_transvoxel.terrain_waterfall_usage.v1",
         "sample_interval_seconds": WATERFALL_SAMPLE_INTERVAL_SECONDS,
@@ -200,6 +227,9 @@ def _write_usage_report(
             sum(cpu_values) / (100.0 * len(cpu_values)) if cpu_values else 0.0
         ),
         "rss_bytes_maximum": max(rss_values, default=0),
+        "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+        "gpu_board_utilization_percent": distribution(gpu_utilization),
+        "gpu_board_power_watts": distribution(gpu_power),
         "samples": samples,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -210,6 +240,36 @@ def _waterfall_trace_paths(base: pathlib.Path) -> list[pathlib.Path]:
     candidates = [base]
     candidates.extend(sorted(base.parent.glob(f"{base.stem}_[0-9][0-9][0-9]{base.suffix}")))
     return [path for path in candidates if path.is_file()]
+
+
+def _gpu_board_sample() -> dict[str, float | str] | None:
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        windows_candidate = pathlib.Path(r"C:\Windows\System32\nvidia-smi.exe")
+        if not windows_candidate.is_file():
+            return None
+        executable = str(windows_candidate)
+    try:
+        result = subprocess.run(
+            [
+                executable,
+                "--query-gpu=utilization.gpu,power.draw,pstate",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+        first_line = result.stdout.strip().splitlines()[0]
+        utilization, power, pstate = [part.strip() for part in first_line.split(",", 2)]
+        return {
+            "gpu_board_utilization_percent": float(utilization),
+            "gpu_board_power_watts": float(power),
+            "gpu_board_pstate": pstate,
+        }
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
 
 
 def run_waterfall_session(
@@ -240,19 +300,25 @@ def run_waterfall_session(
     samples: list[dict[str, Any]] = []
     sampling_started_unix_seconds = time.time()
     started = time.perf_counter()
+    next_gpu_sample = 0.0
     while process.poll() is None:
         time.sleep(WATERFALL_SAMPLE_INTERVAL_SECONDS)
         try:
             memory = measured.memory_info()
-            samples.append(
-                {
-                    "elapsed_seconds": time.perf_counter() - started,
-                    "unix_time_seconds": time.time(),
-                    "process_cpu_percent": measured.cpu_percent(None),
-                    "rss_bytes": int(memory.rss),
-                    "thread_count": measured.num_threads(),
-                }
-            )
+            elapsed_seconds = time.perf_counter() - started
+            sample: dict[str, Any] = {
+                "elapsed_seconds": elapsed_seconds,
+                "unix_time_seconds": time.time(),
+                "process_cpu_percent": measured.cpu_percent(None),
+                "rss_bytes": int(memory.rss),
+                "thread_count": measured.num_threads(),
+            }
+            if elapsed_seconds >= next_gpu_sample:
+                gpu_sample = _gpu_board_sample()
+                if gpu_sample is not None:
+                    sample.update(gpu_sample)
+                next_gpu_sample = elapsed_seconds + WATERFALL_GPU_SAMPLE_INTERVAL_SECONDS
+            samples.append(sample)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             break
     exit_code = process.wait()
@@ -347,6 +413,19 @@ def main(argv: list[str]) -> int:
         choices=range(0, 9),
         metavar="0..8",
         help="Override bounded authority meshing workers; normal profiles use 0.",
+    )
+    parser.add_argument(
+        "--rendering-driver",
+        choices=("vulkan", "d3d12"),
+        help="Optional Godot rendering driver override for a qualification run.",
+    )
+    parser.add_argument(
+        "--gpu-meshing-shadow",
+        action="store_true",
+        help=(
+            "Enable validation-only GPU meshing shadow capture. CPU render and "
+            "collision publication remain authoritative."
+        ),
     )
     parser.add_argument(
         "--inspect-marker",

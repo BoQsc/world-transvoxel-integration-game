@@ -350,6 +350,10 @@ func _pipeline_snapshot() -> Dictionary:
 	}
 	if _game_world.has_method("get_causal_trace_context"):
 		snapshot["viewer"] = _game_world.call("get_causal_trace_context")
+	if _terrain_world.has_method("get_gpu_meshing_shadow_status"):
+		snapshot["gpu_meshing_shadow"] = _terrain_world.call(
+			"get_gpu_meshing_shadow_status"
+		)
 	if _target_enabled:
 		snapshot["target"] = _target_snapshot()
 	var elapsed_us := maxi(0, Time.get_ticks_usec() - started)

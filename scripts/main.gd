@@ -149,10 +149,12 @@ var window_has_focus := true
 var last_human_activity_msec := 0
 var active_frame_cap := -1
 var frame_policy_update_counter := 0
+var gpu_meshing_shadow_requested := false
 
 
 func _ready() -> void:
 	var args := Array(OS.get_cmdline_user_args())
+	gpu_meshing_shadow_requested = args.has("--gpu-meshing-shadow")
 	autonomous = args.has("--p2-autonomous")
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
@@ -433,6 +435,8 @@ func _start_profile() -> void:
 	game_world.runtime_edit_burst_frames = int(settings.get("runtime_edit_burst_frames", 0))
 	game_world.runtime_collision_activation_distance = float(settings.get("runtime_collision_activation_distance", 0.0))
 	game_world.runtime_collision_deactivation_distance = float(settings.get("runtime_collision_deactivation_distance", 0.0))
+	game_world.runtime_gpu_meshing_shadow_enabled = gpu_meshing_shadow_requested
+	game_world.runtime_gpu_meshing_shadow_capacity = 3
 	add_child(game_world)
 	player = _create_player(settings["start"])
 	player.game_world = game_world

@@ -56,6 +56,8 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(0, 600, 1) var runtime_edit_burst_frames: int = 0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
+@export var runtime_gpu_meshing_shadow_enabled: bool = false
+@export_range(1, 64, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 
 var _profile_id: StringName = &""
 var _terrain_profile: Resource
@@ -481,6 +483,8 @@ func get_causal_trace_context() -> Dictionary:
 		"edit_commit_count": _edit_commit_count,
 		"edit_failure_count": _edit_failure_count,
 		"last_edit_committed_revision": _last_edit_committed_revision,
+		"gpu_meshing_shadow_enabled": runtime_gpu_meshing_shadow_enabled,
+		"gpu_meshing_shadow_capacity": runtime_gpu_meshing_shadow_capacity,
 	}
 
 
@@ -904,6 +908,8 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_global_coarse_lod_coverage = runtime_global_coarse_lod_coverage
 	terrain_world.runtime_collision_activation_distance = runtime_collision_activation_distance
 	terrain_world.runtime_collision_deactivation_distance = runtime_collision_deactivation_distance
+	terrain_world.runtime_gpu_meshing_shadow_enabled = runtime_gpu_meshing_shadow_enabled
+	terrain_world.runtime_gpu_meshing_shadow_capacity = runtime_gpu_meshing_shadow_capacity
 
 
 func _begin_streaming_burst() -> void:

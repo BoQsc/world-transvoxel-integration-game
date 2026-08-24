@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_ACTIVE_FIRST_INTEGRATION_SLICE`
+Status: `TQP64_LARGE_WORLD_SHADOW_QUALIFIED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -35,13 +35,31 @@ authority, and returns the exact identity for native stale validation. A live
 construct remesh, volumetric static water, and a deliberately superseded result
 pass on both Vulkan and D3D12.
 
+The retained large-world qualification runs the accepted G23 2,048 x 256 x
+2,048 profile through the same deterministic two-leg relocation route in
+CPU-only and shadow modes. Vulkan and D3D12 both complete long flight, LOD
+transition work, relocated carve, and relocated construction with complete
+traces. Vulkan records 167 matched terrain results including 41 transition
+results; D3D12 records 226 including 47 transitions. Both drivers record
+positive terrain matches in each relocated edit window and zero geometry,
+unknown-request, or identity mismatch.
+
+This run also rejects promotion of the present shadow bridge as a performance
+architecture. The three-request diagnostic queue rejects 3,078 Vulkan and
+3,303 D3D12 captures rather than blocking CPU authority. Shadow wall time is
+about 48% higher and trace-on frame p95 rises from 24-31 ms to 307-318 ms.
+The result is expected from per-request readback and main-thread differential
+comparison, but it proves the production path needs batched persistent GPU
+resources and GPU-resident render consumption. Board-global telemetry is not
+process-attributed, and trace-on timing is not a release performance baseline.
+
 This remains deliberately disconnected from live GPU terrain publication. The
 default runtime remains CPU-only, while shadow mode still publishes the normal
 CPU render and targeted CPU collision resources. Persistent shared buffers,
 GPU-resident rendering, versioned GPU publication, production GPU field
-evaluation, broader edit/material/LOD coverage, targeted collision
-coordination, device recovery, large-world responsiveness, performance and
-power benefit, and release packaging remain TQP-64 work.
+evaluation, broader material coverage, targeted collision coordination,
+device recovery, large-world responsiveness benefit, performance and power
+benefit, and release packaging remain TQP-64 work.
 
 ## Decision
 

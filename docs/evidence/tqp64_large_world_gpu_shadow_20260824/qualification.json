@@ -1,0 +1,591 @@
+{
+  "claim_boundary": {
+    "cpu_collision_authority": true,
+    "cpu_render_authority": true,
+    "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+    "gpu_publication_qualified": false,
+    "performance_promotion": false,
+    "trace_timing_is_release_baseline": false,
+    "validation_only": true
+  },
+  "classification": "PASS_LARGE_WORLD_SHADOW_VALIDATION",
+  "drivers": [
+    "vulkan",
+    "d3d12"
+  ],
+  "logical_cpu_limit": 3,
+  "material": "production_texture_array",
+  "pairs": {
+    "d3d12": {
+      "comparison": {
+        "frame_p95_ms": {
+          "cpu_baseline": 31.098699999999987,
+          "gpu_shadow": 318.31389999999993,
+          "shadow_change_percent": 923.5601488165103
+        },
+        "frame_p99_ms": {
+          "cpu_baseline": 39.24001999999998,
+          "gpu_shadow": 924.9642699999999,
+          "shadow_change_percent": 2257.1962246706307
+        },
+        "gpu_board_power_mean_watts": {
+          "cpu_baseline": 17.459340659340658,
+          "gpu_shadow": 9.149621212121213,
+          "shadow_change_percent": -47.59469220147089
+        },
+        "gpu_board_utilization_mean_percent": {
+          "cpu_baseline": 28.87912087912088,
+          "gpu_shadow": 7.674242424242424,
+          "shadow_change_percent": -73.42632950509662
+        },
+        "process_cpu_percent_mean": {
+          "cpu_baseline": 127.89727891156464,
+          "gpu_shadow": 163.6966666666667,
+          "shadow_change_percent": 27.990734486115027
+        },
+        "wall_seconds": {
+          "cpu_baseline": 80.39651750000485,
+          "gpu_shadow": 119.67862679999962,
+          "shadow_change_percent": 48.860461275567566
+        }
+      },
+      "cpu_baseline": {
+        "artifacts": {
+          "log": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_cpu_baseline.log",
+          "report": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_cpu_baseline_report.json",
+          "trace": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_cpu_baseline_trace.json",
+          "usage": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_cpu_baseline_usage.json"
+        },
+        "driver": "d3d12",
+        "exit_code": 0,
+        "failures": [],
+        "mode": "cpu_baseline",
+        "passed": true,
+        "report": {
+          "blocked_flight_frame_count": 0,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 536.0050745606421,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 11260.154,
+            "mean": 20.91919650167473,
+            "p50": 16.668,
+            "p95": 31.098699999999987,
+            "p99": 39.24001999999998
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "cpu_collision_authority": true,
+          "cpu_limit_at_most_three": true,
+          "cpu_render_authority": true,
+          "gpu_never_published": true,
+          "process_exit_zero": true,
+          "report_integrity_complete": true,
+          "report_single_trace": true,
+          "route_covered": true,
+          "shadow_disabled": true,
+          "trace_final": true,
+          "trace_native_complete": true,
+          "trace_no_dropped_events": true,
+          "trace_no_native_consumer_gaps": true,
+          "trace_no_native_local_drops": true
+        },
+        "runner_wall_seconds": 93.56916480000655,
+        "trace": {
+          "controller_maximum": {
+            "identity_rejections": 0,
+            "matched_results": 0,
+            "mismatched_results": 0,
+            "stale_results": 0,
+            "static_water_matched_results": 0,
+            "submitted_results": 0,
+            "terrain_matched_results": 0,
+            "transition_matched_results": 0
+          },
+          "cpu_collision_authority": true,
+          "cpu_render_authority": true,
+          "dropped_event_count": 0,
+          "final": true,
+          "gpu_publication_observed": false,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "capacity_rejections": 0,
+            "captured_requests": 0,
+            "identity_mismatches": 0,
+            "in_flight_requests": 0,
+            "matched_results": 0,
+            "mismatched_results": 0,
+            "queued_requests": 0,
+            "stale_results": 0,
+            "unknown_results": 0
+          },
+          "reason": "autonomous_route_complete",
+          "relocated_edit_terrain_match_deltas": {
+            "relocated_carve": 0,
+            "relocated_construct": 0
+          },
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "shadow_running_observed": false,
+          "snapshot_count": 727
+        },
+        "usage": {
+          "average_active_logical_cores": 1.2789727891156464,
+          "gpu_board_power_watts": {
+            "count": 91,
+            "maximum": 37.92,
+            "mean": 17.459340659340658,
+            "median": 14.85
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 91,
+            "maximum": 78.0,
+            "mean": 28.87912087912088,
+            "median": 33.0
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 272.5,
+          "process_cpu_percent_mean": 127.89727891156464,
+          "rss_bytes_maximum": 1593446400,
+          "wall_seconds": 80.39651750000485
+        }
+      },
+      "gpu_shadow": {
+        "artifacts": {
+          "log": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_gpu_shadow.log",
+          "report": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_gpu_shadow_report.json",
+          "trace": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_gpu_shadow_trace.json",
+          "usage": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/d3d12_gpu_shadow_usage.json"
+        },
+        "driver": "d3d12",
+        "exit_code": 0,
+        "failures": [],
+        "mode": "gpu_shadow",
+        "passed": true,
+        "report": {
+          "blocked_flight_frame_count": 117,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 473.5994578599929,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 11966.078,
+            "mean": 55.7766911573472,
+            "p50": 1.8165,
+            "p95": 318.31389999999993,
+            "p99": 924.9642699999999
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "cpu_collision_authority": true,
+          "cpu_limit_at_most_three": true,
+          "cpu_render_authority": true,
+          "gpu_never_published": true,
+          "no_controller_identity_rejection": true,
+          "no_controller_mismatch": true,
+          "no_native_identity_mismatch": true,
+          "no_native_mismatch": true,
+          "no_native_unknown_result": true,
+          "process_exit_zero": true,
+          "relocated_carve_matched": true,
+          "relocated_construct_matched": true,
+          "report_integrity_complete": true,
+          "report_single_trace": true,
+          "route_covered": true,
+          "shadow_captured": true,
+          "shadow_matched": true,
+          "shadow_running": true,
+          "terrain_matched": true,
+          "trace_final": true,
+          "trace_native_complete": true,
+          "trace_no_dropped_events": true,
+          "trace_no_native_consumer_gaps": true,
+          "trace_no_native_local_drops": true,
+          "transition_matched": true
+        },
+        "runner_wall_seconds": 131.501944299991,
+        "trace": {
+          "controller_maximum": {
+            "identity_rejections": 0,
+            "matched_results": 226,
+            "mismatched_results": 0,
+            "stale_results": 45,
+            "static_water_matched_results": 0,
+            "submitted_results": 271,
+            "terrain_matched_results": 226,
+            "transition_matched_results": 47
+          },
+          "cpu_collision_authority": true,
+          "cpu_render_authority": true,
+          "dropped_event_count": 0,
+          "final": true,
+          "gpu_publication_observed": false,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "capacity_rejections": 3303,
+            "captured_requests": 271,
+            "identity_mismatches": 0,
+            "in_flight_requests": 3,
+            "matched_results": 226,
+            "mismatched_results": 0,
+            "queued_requests": 1,
+            "stale_results": 45,
+            "unknown_results": 0
+          },
+          "reason": "autonomous_route_complete",
+          "relocated_edit_terrain_match_deltas": {
+            "relocated_carve": 14,
+            "relocated_construct": 2
+          },
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "shadow_running_observed": true,
+          "snapshot_count": 431
+        },
+        "usage": {
+          "average_active_logical_cores": 1.6369666666666667,
+          "gpu_board_power_watts": {
+            "count": 132,
+            "maximum": 25.94,
+            "mean": 9.149621212121213,
+            "median": 7.65
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 132,
+            "maximum": 71.0,
+            "mean": 7.674242424242424,
+            "median": 1.0
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 264.9,
+          "process_cpu_percent_mean": 163.6966666666667,
+          "rss_bytes_maximum": 1781874688,
+          "wall_seconds": 119.67862679999962
+        }
+      },
+      "passed": true
+    },
+    "vulkan": {
+      "comparison": {
+        "frame_p95_ms": {
+          "cpu_baseline": 24.45359999999997,
+          "gpu_shadow": 307.31574999999987,
+          "shadow_change_percent": 1156.7300929106561
+        },
+        "frame_p99_ms": {
+          "cpu_baseline": 33.23,
+          "gpu_shadow": 601.1426299999997,
+          "shadow_change_percent": 1709.0359012940105
+        },
+        "gpu_board_power_mean_watts": {
+          "cpu_baseline": 26.866666666666667,
+          "gpu_shadow": 21.224941176470587,
+          "shadow_change_percent": -20.998978251350174
+        },
+        "gpu_board_utilization_mean_percent": {
+          "cpu_baseline": 20.892156862745097,
+          "gpu_shadow": 4.5058823529411764,
+          "shadow_change_percent": -78.4326607226654
+        },
+        "process_cpu_percent_mean": {
+          "cpu_baseline": 150.47912087912087,
+          "gpu_shadow": 153.22096774193548,
+          "shadow_change_percent": 1.8220779379865752
+        },
+        "wall_seconds": {
+          "cpu_baseline": 66.95759859999816,
+          "gpu_shadow": 98.88128000000142,
+          "shadow_change_percent": 47.67745867159002
+        }
+      },
+      "cpu_baseline": {
+        "artifacts": {
+          "log": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_cpu_baseline.log",
+          "report": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_cpu_baseline_report.json",
+          "trace": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_cpu_baseline_trace.json",
+          "usage": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_cpu_baseline_usage.json"
+        },
+        "driver": "vulkan",
+        "exit_code": 0,
+        "failures": [],
+        "mode": "cpu_baseline",
+        "passed": true,
+        "report": {
+          "blocked_flight_frame_count": 0,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 536.0053899884223,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 9717.485,
+            "mean": 20.93543824175824,
+            "p50": 16.667,
+            "p95": 24.45359999999997,
+            "p99": 33.23
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "cpu_collision_authority": true,
+          "cpu_limit_at_most_three": true,
+          "cpu_render_authority": true,
+          "gpu_never_published": true,
+          "process_exit_zero": true,
+          "report_integrity_complete": true,
+          "report_single_trace": true,
+          "route_covered": true,
+          "shadow_disabled": true,
+          "trace_final": true,
+          "trace_native_complete": true,
+          "trace_no_dropped_events": true,
+          "trace_no_native_consumer_gaps": true,
+          "trace_no_native_local_drops": true
+        },
+        "runner_wall_seconds": 80.25100459999521,
+        "trace": {
+          "controller_maximum": {
+            "identity_rejections": 0,
+            "matched_results": 0,
+            "mismatched_results": 0,
+            "stale_results": 0,
+            "static_water_matched_results": 0,
+            "submitted_results": 0,
+            "terrain_matched_results": 0,
+            "transition_matched_results": 0
+          },
+          "cpu_collision_authority": true,
+          "cpu_render_authority": true,
+          "dropped_event_count": 0,
+          "final": true,
+          "gpu_publication_observed": false,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "capacity_rejections": 0,
+            "captured_requests": 0,
+            "identity_mismatches": 0,
+            "in_flight_requests": 0,
+            "matched_results": 0,
+            "mismatched_results": 0,
+            "queued_requests": 0,
+            "stale_results": 0,
+            "unknown_results": 0
+          },
+          "reason": "autonomous_route_complete",
+          "relocated_edit_terrain_match_deltas": {
+            "relocated_carve": 0,
+            "relocated_construct": 0
+          },
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "shadow_running_observed": false,
+          "snapshot_count": 557
+        },
+        "usage": {
+          "average_active_logical_cores": 1.5047912087912088,
+          "gpu_board_power_watts": {
+            "count": 102,
+            "maximum": 41.41,
+            "mean": 26.866666666666667,
+            "median": 28.665
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 102,
+            "maximum": 39.0,
+            "mean": 20.892156862745097,
+            "median": 29.5
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 274.1,
+          "process_cpu_percent_mean": 150.47912087912087,
+          "rss_bytes_maximum": 1694900224,
+          "wall_seconds": 66.95759859999816
+        }
+      },
+      "gpu_shadow": {
+        "artifacts": {
+          "log": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_gpu_shadow.log",
+          "report": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_gpu_shadow_report.json",
+          "trace": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_gpu_shadow_trace.json",
+          "usage": ".godot/world_transvoxel_captures/tqp64_gpu_shadow_qualification/vulkan_gpu_shadow_usage.json"
+        },
+        "driver": "vulkan",
+        "exit_code": 0,
+        "failures": [],
+        "mode": "gpu_shadow",
+        "passed": true,
+        "report": {
+          "blocked_flight_frame_count": 216,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 420.7952277064323,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 14490.079,
+            "mean": 46.90447284533648,
+            "p50": 0.7825,
+            "p95": 307.31574999999987,
+            "p99": 601.1426299999997
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "cpu_collision_authority": true,
+          "cpu_limit_at_most_three": true,
+          "cpu_render_authority": true,
+          "gpu_never_published": true,
+          "no_controller_identity_rejection": true,
+          "no_controller_mismatch": true,
+          "no_native_identity_mismatch": true,
+          "no_native_mismatch": true,
+          "no_native_unknown_result": true,
+          "process_exit_zero": true,
+          "relocated_carve_matched": true,
+          "relocated_construct_matched": true,
+          "report_integrity_complete": true,
+          "report_single_trace": true,
+          "route_covered": true,
+          "shadow_captured": true,
+          "shadow_matched": true,
+          "shadow_running": true,
+          "terrain_matched": true,
+          "trace_final": true,
+          "trace_native_complete": true,
+          "trace_no_dropped_events": true,
+          "trace_no_native_consumer_gaps": true,
+          "trace_no_native_local_drops": true,
+          "transition_matched": true
+        },
+        "runner_wall_seconds": 111.5395273000031,
+        "trace": {
+          "controller_maximum": {
+            "identity_rejections": 0,
+            "matched_results": 167,
+            "mismatched_results": 0,
+            "stale_results": 45,
+            "static_water_matched_results": 0,
+            "submitted_results": 212,
+            "terrain_matched_results": 167,
+            "transition_matched_results": 41
+          },
+          "cpu_collision_authority": true,
+          "cpu_render_authority": true,
+          "dropped_event_count": 0,
+          "final": true,
+          "gpu_publication_observed": false,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "capacity_rejections": 3078,
+            "captured_requests": 212,
+            "identity_mismatches": 0,
+            "in_flight_requests": 3,
+            "matched_results": 167,
+            "mismatched_results": 0,
+            "queued_requests": 2,
+            "stale_results": 45,
+            "unknown_results": 0
+          },
+          "reason": "autonomous_route_complete",
+          "relocated_edit_terrain_match_deltas": {
+            "relocated_carve": 13,
+            "relocated_construct": 3
+          },
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "shadow_running_observed": true,
+          "snapshot_count": 552
+        },
+        "usage": {
+          "average_active_logical_cores": 1.532209677419355,
+          "gpu_board_power_watts": {
+            "count": 85,
+            "maximum": 32.22,
+            "mean": 21.224941176470587,
+            "median": 25.61
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 85,
+            "maximum": 47.0,
+            "mean": 4.5058823529411764,
+            "median": 0.0
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 286.4,
+          "process_cpu_percent_mean": 153.22096774193548,
+          "rss_bytes_maximum": 1701445632,
+          "wall_seconds": 98.88128000000142
+        }
+      },
+      "passed": true
+    }
+  },
+  "passed": true,
+  "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+  "schema": "world_transvoxel.tqp64_gpu_shadow_qualification.v1"
+}
