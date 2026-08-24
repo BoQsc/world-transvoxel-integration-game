@@ -27,6 +27,7 @@ var _frames: Array = []
 var _static_frame_us: Array[float] = []
 var _moving_frame_us: Array[float] = []
 var _defects: Array = []
+var _block_events: Array = []
 var _blocked_frames := 0
 var _longest_blocked_run := 0
 var _current_blocked_run := 0
@@ -185,6 +186,7 @@ func _step(
 	var floor_y := float(floor.get("position", Vector3.ZERO).y) if floor_hit else -INF
 	var foot_y := position_after.y - PLAYER_FOOT_OFFSET
 	var clearance := foot_y - floor_y if floor_hit else INF
+	var completed_block_run := _current_blocked_run if accepted else 0
 	if accepted:
 		_current_blocked_run = 0
 	else:
@@ -224,6 +226,20 @@ func _step(
 	var collision_status: Dictionary = _player.call(
 		"get_streaming_collision_status"
 	)
+	if not accepted and _current_blocked_run == 1:
+		_block_events.append({
+			"start_phase_frame": phase_frame,
+			"position": _vector3_summary(position_after),
+			"runtime": _runtime_digest(),
+			"collision": _collision_digest(),
+			"active_coverage": _active_coverage(position_after),
+			"scene_collision_nodes": _scene_collision_nodes(position_after),
+		})
+	elif accepted and completed_block_run > 0 and not _block_events.is_empty():
+		var event: Dictionary = _block_events[-1]
+		event["blocked_frames"] = completed_block_run
+		event["recovery_phase_frame"] = phase_frame
+		event["recovery_runtime"] = _runtime_digest()
 	var frame_record := {
 		"phase": phase,
 		"phase_frame": phase_frame,
@@ -507,6 +523,7 @@ func _finish(ok: bool, reason: String, start_surface: Vector3) -> Dictionary:
 		"longest_blocked_run": _longest_blocked_run,
 		"longest_missing_floor_run": _longest_missing_floor_run,
 		"maximum_floor_penetration": _maximum_floor_penetration,
+		"block_events": _block_events.duplicate(true),
 		"static_frame_time_us": _distribution(_static_frame_us),
 		"moving_frame_time_us": _distribution(_moving_frame_us),
 		"defects": _defects.duplicate(true),

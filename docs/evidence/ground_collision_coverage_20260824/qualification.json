@@ -1,0 +1,86 @@
+{
+  "schema": "world_transvoxel.ground_collision_coverage_qualification.v1",
+  "status": "PASS",
+  "authority_commit": "671148d9728569a364bf403e19811490f54df0a5",
+  "runtime_artifact_digest": "29da425974158bbeeea7ed9a45a9c4fa08f16ca2a7ef9868c30c227f78526a33",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "logical_cpu_limit": 3,
+  "procedural_generation_workers": 2,
+  "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+  "gpu_scope": "board_global_not_process_attributed",
+  "route": {
+    "walk_speed_meters_per_second": 8.0,
+    "required_distance_meters": 192.0,
+    "rendered": true,
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
+  },
+  "acceptance": {
+    "completed_repeats": 4,
+    "requested_repeats": 4,
+    "maximum_blocked_frames": 2,
+    "maximum_missing_floor_run": 2,
+    "maximum_floor_penetration_meters": 0.2
+  },
+  "runs": [
+    {
+      "run": 1,
+      "distance_meters": 192.119995117188,
+      "settle_frames": 347,
+      "final_collision_resources": 210,
+      "blocked_frames": 0,
+      "longest_missing_floor_run": 0,
+      "maximum_floor_penetration_meters": 0.0,
+      "static_cpu_cores_mean": 0.1728,
+      "moving_cpu_cores_mean": 1.221236842105263,
+      "static_gpu_board_utilization_percent_mean": 22.0,
+      "moving_gpu_board_utilization_percent_mean": 35.68421052631579,
+      "static_gpu_board_watts_mean": 29.316,
+      "moving_gpu_board_watts_mean": 40.60763157894737
+    },
+    {
+      "run": 2,
+      "distance_meters": 192.119995117188,
+      "settle_frames": 348,
+      "final_collision_resources": 230,
+      "blocked_frames": 0,
+      "longest_missing_floor_run": 0,
+      "maximum_floor_penetration_meters": 0.0,
+      "static_cpu_cores_mean": 0.1576,
+      "moving_cpu_cores_mean": 1.2143589743589744,
+      "static_gpu_board_utilization_percent_mean": 19.0,
+      "moving_gpu_board_utilization_percent_mean": 35.41025641025641,
+      "static_gpu_board_watts_mean": 35.884,
+      "moving_gpu_board_watts_mean": 42.887948717948724
+    },
+    {
+      "run": 3,
+      "distance_meters": 192.119995117188,
+      "settle_frames": 333,
+      "final_collision_resources": 210,
+      "blocked_frames": 0,
+      "longest_missing_floor_run": 0,
+      "maximum_floor_penetration_meters": 0.0,
+      "static_cpu_cores_mean": 0.1412,
+      "moving_cpu_cores_mean": 1.218675,
+      "static_gpu_board_utilization_percent_mean": 20.0,
+      "moving_gpu_board_utilization_percent_mean": 35.875,
+      "static_gpu_board_watts_mean": 33.484,
+      "moving_gpu_board_watts_mean": 42.93325
+    },
+    {
+      "run": 4,
+      "distance_meters": 192.119995117188,
+      "settle_frames": 299,
+      "final_collision_resources": 229,
+      "blocked_frames": 0,
+      "longest_missing_floor_run": 0,
+      "maximum_floor_penetration_meters": 0.0,
+      "static_cpu_cores_mean": 0.142,
+      "moving_cpu_cores_mean": 1.2148684210526315,
+      "static_gpu_board_utilization_percent_mean": 19.0,
+      "moving_gpu_board_utilization_percent_mean": 35.421052631578945,
+      "static_gpu_board_watts_mean": 34.632,
+      "moving_gpu_board_watts_mean": 43.42184210526316
+    }
+  ]
+}
