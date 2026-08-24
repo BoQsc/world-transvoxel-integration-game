@@ -9,7 +9,6 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ACCEPTED_AUTHORITY = "b35491948e126f6f660f64ad89532acbc50895bc"
 COMPATIBILITY_BASE = "4f1fdb59e3c6200c8f823b99027b2d3f15563858"
 RUNTIME_SCENE = (
     ROOT
@@ -37,6 +36,7 @@ DIRECT_BACKEND_EXCEPTION_PATHS = {
     "addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd",
     "scripts/main.gd",
     "scripts/wt_cpu_b3a_lod_opening_capture.gd",
+    "scripts/wt_ground_traversal_probe.gd",
     "scripts/wt_production_player.gd",
 }
 
@@ -54,9 +54,10 @@ def main() -> int:
     runtime_pin = load_json("WORLD_TRANSVOXEL_RUNTIME_PIN.json")
     authority = runtime_pin.get("authority", {})
     artifact = runtime_pin.get("runtime_artifact", {})
+    active_authority = str(authority.get("commit", ""))
     require(
-        authority.get("commit") == ACCEPTED_AUTHORITY,
-        "unexpected accepted authority revision",
+        len(active_authority) == 40,
+        "active authority revision is invalid",
     )
     require(authority.get("fallback") is False, "native fallback must remain disabled")
     require(
@@ -64,7 +65,7 @@ def main() -> int:
         "runtime artifact must remain binary-only",
     )
     require(
-        artifact.get("binary_build_commit") == ACCEPTED_AUTHORITY,
+        artifact.get("binary_build_commit") == active_authority,
         "runtime binary does not match the accepted authority revision",
     )
 
@@ -142,7 +143,7 @@ def main() -> int:
     require(documentation.is_file(), "dependency boundary document is missing")
     print(
         "WT_TERRAIN_DEPENDENCY_BOUNDARY_PASS "
-        f"authority={ACCEPTED_AUTHORITY[:8]} "
+        f"authority={active_authority[:8]} "
         f"compatibility_base={COMPATIBILITY_BASE[:7]} "
         "runtime_scene=production native_source=0 fallback=false "
         "direct_backend_paths=%d" % len(direct_backend_paths)

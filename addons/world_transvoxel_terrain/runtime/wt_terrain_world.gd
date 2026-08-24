@@ -10,6 +10,9 @@ const RuntimeAudit := preload("res://addons/world_transvoxel_terrain/runtime/wt_
 const RuntimeState := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_state.gd")
 const RuntimeEvents := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_world_runtime_events.gd")
 const DebugSnapshot := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_debug_snapshot.gd")
+const GpuMeshingShadowController := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_shadow_controller.gd"
+)
 const VALIDATION_MARKERS := [
 	"a4_phase1_resource_semantics_only",
 	"GenerationBackend.start_backend_world",
@@ -54,6 +57,8 @@ signal readiness_changed(snapshot: Dictionary)
 @export_range(0, 240, 1) var runtime_render_transition_frames: int = 0
 @export var runtime_shader_fade_parameter_enabled: bool = false
 @export var runtime_global_coarse_lod_coverage: bool = false
+@export var runtime_gpu_meshing_shadow_enabled: bool = false
+@export_range(1, 3, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
@@ -62,6 +67,7 @@ var _backend_config: Resource
 var _last_error: String = "ok"
 var _last_edit_submission_summary: Dictionary = {}
 var _runtime_state = RuntimeState.new()
+var _gpu_meshing_shadow_controller
 
 func _ready() -> void:
 	if Engine.is_editor_hint() and auto_report_dependency_status:
@@ -135,7 +141,13 @@ func start_backend_world() -> bool:
 	if not profile_error.is_empty():
 		_last_error = profile_error
 		return false
+	if runtime_gpu_meshing_shadow_enabled and not begin_gpu_meshing_shadow(
+		runtime_gpu_meshing_shadow_capacity
+	):
+		return false
 	var accepted := BackendOps.start_backend_world(self)
+	if not accepted and _gpu_meshing_shadow_controller != null:
+		end_gpu_meshing_shadow()
 	if accepted:
 		_transition_runtime(true, "world_started")
 	return accepted
@@ -144,6 +156,8 @@ func stop_world() -> bool:
 	return stop_backend_world()
 
 func stop_backend_world() -> bool:
+	if _gpu_meshing_shadow_controller != null:
+		end_gpu_meshing_shadow()
 	var accepted := BackendOps.stop_backend_world(self)
 	if accepted:
 		_transition_runtime(false, "world_stopped")
@@ -248,6 +262,46 @@ func get_api_generation() -> int:
 
 func get_runtime_metrics() -> Dictionary:
 	return RuntimeAudit.get_runtime_metrics(_backend_terrain)
+
+
+func begin_gpu_meshing_shadow(capacity: int = 3) -> bool:
+	if _gpu_meshing_shadow_controller != null \
+			and _gpu_meshing_shadow_controller.is_running():
+		return true
+	if not BackendOps.ensure_backend_terrain(self):
+		return false
+	_gpu_meshing_shadow_controller = GpuMeshingShadowController.new()
+	_gpu_meshing_shadow_controller.name = "WT_GpuMeshingShadow"
+	add_child(_gpu_meshing_shadow_controller)
+	if not _gpu_meshing_shadow_controller.start(_backend_terrain, capacity):
+		_last_error = _gpu_meshing_shadow_controller.get_status().get(
+			"last_error", "GPU meshing shadow failed to start"
+		)
+		_gpu_meshing_shadow_controller.queue_free()
+		_gpu_meshing_shadow_controller = null
+		return false
+	_last_error = "ok"
+	return true
+
+
+func end_gpu_meshing_shadow() -> void:
+	if _gpu_meshing_shadow_controller == null:
+		return
+	_gpu_meshing_shadow_controller.stop()
+	_gpu_meshing_shadow_controller.queue_free()
+	_gpu_meshing_shadow_controller = null
+
+
+func get_gpu_meshing_shadow_status() -> Dictionary:
+	if _gpu_meshing_shadow_controller == null:
+		return {
+			"schema": "world_transvoxel.terrain.gpu_meshing_shadow_controller.v1",
+			"running": false,
+			"cpu_render_authority": true,
+			"cpu_collision_authority": true,
+			"gpu_publication_enabled": false,
+		}
+	return _gpu_meshing_shadow_controller.get_status()
 
 
 func begin_cpu_causal_trace() -> bool:

@@ -9,7 +9,7 @@ Windows NVIDIA Vulkan/D3D12 profiles in the Terrain Lab. Those results do not
 replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
-## TQP-64 First Integration Slice
+## TQP-64 Integration Status
 
 The production terrain addon now owns an opt-in
 `WtTerrainGpuMeshingService`. It runs the qualified compute mesher on one
@@ -26,10 +26,20 @@ D3D12 both pass on the retained GTX 1060 Max-Q profile with zero cell mismatch
 and exact finalized chunk geometry. Bounded saturation and deterministic
 repeat controls also pass.
 
-This is deliberately not connected to live terrain publication yet. The
-default runtime remains CPU-only. Live immutable sample handoff, persistent
-buffers, GPU-resident rendering, versioned publication and stale rejection,
-production field evaluation, edits/material/water coverage, targeted collision
+The second slice connects the candidate to accepted live terrain work as an
+opt-in shadow validator. The native authority captures immutable regular and
+transition inputs only after its existing generation/revision acceptance,
+including terrain and static-water surfaces. The addon meshes those captures
+on its dedicated GPU worker, compares all geometry and metadata against CPU
+authority, and returns the exact identity for native stale validation. A live
+construct remesh, volumetric static water, and a deliberately superseded result
+pass on both Vulkan and D3D12.
+
+This remains deliberately disconnected from live GPU terrain publication. The
+default runtime remains CPU-only, while shadow mode still publishes the normal
+CPU render and targeted CPU collision resources. Persistent shared buffers,
+GPU-resident rendering, versioned GPU publication, production GPU field
+evaluation, broader edit/material/LOD coverage, targeted collision
 coordination, device recovery, large-world responsiveness, performance and
 power benefit, and release packaging remain TQP-64 work.
 

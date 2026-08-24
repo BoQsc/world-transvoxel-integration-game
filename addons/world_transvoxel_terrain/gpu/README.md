@@ -10,7 +10,14 @@ synchronization and readback remain off the Godot frame thread. Requests use
 tables exported by the pinned native `world-transvoxel` backend; copied or
 fallback lookup tables are forbidden.
 
-This first slice qualifies production-addon ownership and native-finalizer
-differential replay only. Live runtime admission, persistent shared buffers,
-GPU-resident terrain rendering, versioned publication, targeted collision,
-performance benefit, and release promotion remain TQP-64 work.
+`WtTerrainGpuMeshingShadowController` adds an opt-in live validation lane. The
+native runtime captures exact accepted terrain and static-water cell inputs,
+the service meshes them on the GPU, and the controller compares every result
+against CPU authority before returning the unchanged native identity. Queue
+capacity is three; superseded results are rejected as stale. CPU render and
+collision publication remain unchanged and the GPU has no publication route.
+
+Persistent shared buffers, GPU-resident terrain rendering, versioned GPU
+publication, targeted collision coordination, measured performance benefit,
+device recovery, large-world qualification, and release promotion remain
+TQP-64 work.

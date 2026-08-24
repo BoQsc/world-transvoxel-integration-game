@@ -158,6 +158,7 @@ func _worker_main() -> void:
 			request.get("identity", {})
 		)
 		result["request_id"] = _active_request_id
+		result["service_identity"] = Dictionary(request.get("identity", {})).duplicate(true)
 		result["service_schema"] = "world_transvoxel.terrain.gpu_meshing_service.v1"
 		result["execution_thread"] = "dedicated_gpu_worker"
 		result["frame_thread_compute_sync"] = false
