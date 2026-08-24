@@ -1,5 +1,8 @@
 extends CharacterBody3D
 
+const COLLISION_RADIUS := 0.45
+const COLLISION_HALF_HEIGHT := 0.9
+const COLLISION_SUPPORT_MARGIN := 0.2
 const PLACE_MATERIAL_IDS := [1, 2, 3, 4, 5, 7, 8, 10, 9]
 const PLACE_MATERIAL_NAMES := [
 	"deep_stone",
@@ -38,6 +41,14 @@ var _interaction_attempt_count := 0
 var selected_place_material_index := 3
 var cpu_causal_trace: RefCounted
 var cpu_causal_trace_last_tick_us := 0
+var _collision_wait_started_us := 0
+var _collision_blocked_frame_count := 0
+var _last_streaming_collision_status := {
+	"waiting": false,
+	"wait_seconds": 0.0,
+	"blocked_frame_count": 0,
+	"readiness": {"ready": true, "enabled": false},
+}
 var _last_interaction_summary := {
 	"attempt": 0,
 	"mode": "",
@@ -89,6 +100,25 @@ func diagnostic_flight_step(
 	return accepted
 
 
+func diagnostic_walk_step(
+	horizontal_velocity: Vector3,
+	delta: float = 1.0 / 60.0
+) -> bool:
+	if fly_mode_enabled:
+		_set_fly_mode_enabled(false)
+	velocity.x = horizontal_velocity.x
+	velocity.z = horizontal_velocity.z
+	if not is_on_floor():
+		velocity.y -= 24.0 * delta
+	else:
+		velocity.y = 0.0
+	var accepted := _move_with_streaming_collision(delta)
+	if game_world != null and game_world.has_method("update_player_viewer"):
+		game_world.call("update_player_viewer", false)
+	_capture_cpu_causal_trace_frame()
+	return accepted
+
+
 func set_fly_mode_enabled(enabled: bool) -> void:
 	_set_fly_mode_enabled(enabled)
 
@@ -99,6 +129,15 @@ func is_fly_mode_enabled() -> bool:
 
 func get_last_interaction_summary() -> Dictionary:
 	return _last_interaction_summary.duplicate(true)
+
+
+func get_streaming_collision_status() -> Dictionary:
+	var result := _last_streaming_collision_status.duplicate(true)
+	if bool(result.get("waiting", false)) and _collision_wait_started_us > 0:
+		result["wait_seconds"] = float(
+			Time.get_ticks_usec() - _collision_wait_started_us
+		) / 1000000.0
+	return result
 
 
 func get_selected_material_summary() -> Dictionary:
@@ -300,19 +339,53 @@ func _move_with_streaming_collision(
 ) -> bool:
 	var requested_velocity := velocity
 	var position_before := global_position
-	if game_world != null and \
-			game_world.has_method("is_player_collision_ready_at") and \
-			not bool(game_world.call(
-				"is_player_collision_ready_at",
-				global_position + velocity * delta,
-				allow_outside_vertical_volume
-			)):
+	var readiness := {
+		"ready": false,
+		"enabled": true,
+		"reason": "collision_readiness_api_unavailable",
+		"not_ready_chunks": [],
+	}
+	if game_world != null and game_world.has_method(
+		"get_player_collision_readiness_at"
+	):
+		readiness = game_world.call(
+			"get_player_collision_readiness_at",
+			global_position + velocity * delta,
+			allow_outside_vertical_volume,
+			COLLISION_RADIUS,
+			COLLISION_HALF_HEIGHT,
+			COLLISION_SUPPORT_MARGIN
+		)
+	if not bool(readiness.get("ready", false)):
+		if _collision_wait_started_us <= 0:
+			_collision_wait_started_us = Time.get_ticks_usec()
+		_collision_blocked_frame_count += 1
+		_last_streaming_collision_status = {
+			"waiting": true,
+			"wait_seconds": float(
+				Time.get_ticks_usec() - _collision_wait_started_us
+			) / 1000000.0,
+			"blocked_frame_count": _collision_blocked_frame_count,
+			"requested_velocity": requested_velocity,
+			"position": position_before,
+			"readiness": readiness.duplicate(true),
+		}
 		velocity = Vector3.ZERO
 		_note_cpu_causal_trace_movement(
 			false, requested_velocity, position_before, global_position
 		)
 		return false
 	move_and_slide()
+	_last_streaming_collision_status = {
+		"waiting": false,
+		"wait_seconds": 0.0,
+		"blocked_frame_count": _collision_blocked_frame_count,
+		"requested_velocity": requested_velocity,
+		"position": global_position,
+		"on_floor": is_on_floor(),
+		"readiness": readiness.duplicate(true),
+	}
+	_collision_wait_started_us = 0
 	_note_cpu_causal_trace_movement(
 		true, requested_velocity, position_before, global_position
 	)
@@ -347,7 +420,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			if not _forward_human_command(&"toggle_escape_menu"):
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			return
 		if _is_human_command_prefix(event):
 			human_command_armed = true

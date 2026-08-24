@@ -3,6 +3,9 @@ extends Node3D
 const ADDON_ID := "world_transvoxel_gameworld"
 const API_VERSION := 1
 const COLLISION_INVOKER_CHUNK_EXTENT := 16.0
+const DEFAULT_PLAYER_COLLISION_RADIUS := 0.45
+const DEFAULT_PLAYER_COLLISION_HALF_HEIGHT := 0.9
+const DEFAULT_PLAYER_SUPPORT_MARGIN := 0.2
 const FOREGROUND_PRIORITY_PLAYER_SUPPORT := 0
 const FOREGROUND_PRIORITY_INTERACTION_FOCUS := 1
 const FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID := 1
@@ -101,6 +104,12 @@ var _last_edit_committed_revision := 0
 var _last_edit_failure_error := "ok"
 var _streaming_burst_frames_remaining := 0
 var _cpu_causal_trace: RefCounted
+var _last_player_collision_readiness := {
+	"ready": true,
+	"enabled": false,
+	"probe_chunks": [],
+	"not_ready_chunks": [],
+}
 
 
 func configure_game_world(
@@ -1115,10 +1124,31 @@ func is_player_collision_ready_at(
 	position: Vector3,
 	allow_outside_vertical_volume: bool = false
 ) -> bool:
+	return bool(get_player_collision_readiness_at(
+		position,
+		allow_outside_vertical_volume,
+		DEFAULT_PLAYER_COLLISION_RADIUS,
+		DEFAULT_PLAYER_COLLISION_HALF_HEIGHT,
+		DEFAULT_PLAYER_SUPPORT_MARGIN
+	).get("ready", false))
+
+
+func get_player_collision_readiness_at(
+	position: Vector3,
+	allow_outside_vertical_volume: bool = false,
+	body_radius: float = DEFAULT_PLAYER_COLLISION_RADIUS,
+	body_half_height: float = DEFAULT_PLAYER_COLLISION_HALF_HEIGHT,
+	support_margin: float = DEFAULT_PLAYER_SUPPORT_MARGIN
+) -> Dictionary:
 	if not player_collision_invoker_enabled:
-		return true
-	if allow_outside_vertical_volume and _is_outside_vertical_volume(position):
-		return true
+		_last_player_collision_readiness = {
+			"ready": true,
+			"enabled": false,
+			"position": _vector3_summary(position),
+			"probe_chunks": [],
+			"not_ready_chunks": [],
+		}
+		return _last_player_collision_readiness.duplicate(true)
 	if _player != null:
 		var player_position: Vector3 = _player.global_position
 		_pending_collision_motion = position - player_position
@@ -1128,16 +1158,169 @@ func is_player_collision_ready_at(
 			invoker_position += _pending_collision_motion.normalized() * \
 				_player_collision_prediction_distance()
 		if not _submit_player_collision_invoker(invoker_position, false):
-			return false
+			_last_player_collision_readiness = {
+				"ready": false,
+				"enabled": true,
+				"reason": "collision_viewer_update_failed",
+				"position": _vector3_summary(position),
+				"probe_chunks": [],
+				"not_ready_chunks": [],
+			}
+			return _last_player_collision_readiness.duplicate(true)
 	var terrain_world := get_terrain_world()
 	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
-		return false
-	var state: RefCounted = terrain_world.call(
-		"query_chunk_state", _collision_invoker_chunk(position), 0
+		_last_player_collision_readiness = {
+			"ready": false,
+			"enabled": true,
+			"reason": "terrain_world_unavailable",
+			"position": _vector3_summary(position),
+			"probe_chunks": [],
+			"not_ready_chunks": [],
+		}
+		return _last_player_collision_readiness.duplicate(true)
+	var probe_chunks := _player_collision_probe_chunks(
+		position, body_radius, body_half_height, support_margin
 	)
-	return state != null and \
-		bool(state.call("is_collision_required")) and \
-		bool(state.call("is_collision_ready"))
+	var checked_chunks: Array = []
+	var not_ready_chunks: Array = []
+	for chunk_value in probe_chunks:
+		var chunk: Vector3i = chunk_value
+		if allow_outside_vertical_volume and _is_chunk_outside_vertical_volume(chunk):
+			continue
+		var coverage := _collision_coverage_for_lod0_chunk(terrain_world, chunk)
+		var summary := {
+			"coordinate": chunk,
+			"present": coverage.get("present", false),
+			"collision_required": coverage.get("collision_required", false),
+			"collision_ready": coverage.get("collision_ready", false),
+			"collision_generation": coverage.get("collision_generation", 0),
+			"staged_collision_generation": coverage.get(
+				"staged_collision_generation", 0
+			),
+			"physical_coverage_lod": coverage.get("physical_coverage_lod", -1),
+			"coverage_source": coverage.get("source", "none"),
+		}
+		checked_chunks.append(summary)
+		if not bool(coverage.get("ready", false)):
+			not_ready_chunks.append(summary)
+	_last_player_collision_readiness = {
+		"ready": not_ready_chunks.is_empty(),
+		"enabled": true,
+		"reason": "ready" if not_ready_chunks.is_empty() else "support_collision_pending",
+		"position": _vector3_summary(position),
+		"probe_chunks": checked_chunks,
+		"not_ready_chunks": not_ready_chunks,
+	}
+	return _last_player_collision_readiness.duplicate(true)
+
+
+func get_last_player_collision_readiness() -> Dictionary:
+	return _last_player_collision_readiness.duplicate(true)
+
+
+func _collision_coverage_for_lod0_chunk(
+	terrain_world: Object,
+	chunk: Vector3i,
+	maximum_lod: int = -1
+) -> Dictionary:
+	var state: RefCounted = terrain_world.call("query_chunk_state", chunk, 0)
+	var present := state != null and bool(state.call("is_present"))
+	var collision_required := state != null and bool(
+		state.call("is_collision_required")
+	)
+	var collision_ready := state != null and bool(
+		state.call("is_collision_ready")
+	)
+	var collision_generation := int(
+		state.call("get_collision_generation") if state != null else 0
+	)
+	var staged_collision_generation := int(
+		state.call("get_staged_collision_generation") if state != null else 0
+	)
+	var result := {
+		"ready": false,
+		"source": "none",
+		"physical_coverage_lod": -1,
+		"present": present,
+		"collision_required": collision_required,
+		"collision_ready": collision_ready,
+		"collision_generation": collision_generation,
+		"staged_collision_generation": staged_collision_generation,
+	}
+	if collision_generation > 0:
+		result.ready = true
+		result.source = "applied_lod0"
+		result.physical_coverage_lod = 0
+		return result
+	var highest_lod := clampi(
+		_viewer_maximum_lod if maximum_lod < 0 else maximum_lod,
+		0,
+		15
+	)
+	var preserved_ancestor_lods: Array = []
+	for lod in range(1, highest_lod + 1):
+		var scale := 1 << lod
+		var ancestor := Vector3i(
+			floori(float(chunk.x) / float(scale)),
+			floori(float(chunk.y) / float(scale)),
+			floori(float(chunk.z) / float(scale))
+		)
+		var ancestor_state: RefCounted = terrain_world.call(
+			"query_chunk_state", ancestor, lod
+		)
+		if ancestor_state != null and int(
+			ancestor_state.call("get_collision_generation")
+		) > 0:
+			preserved_ancestor_lods.append(lod)
+	result.preserved_ancestor_lods = preserved_ancestor_lods
+	# A completed empty payload is authoritative: no collision should exist here.
+	if present and collision_required and collision_ready and \
+			staged_collision_generation == 0:
+		result.ready = true
+		result.source = "resolved_empty_lod0"
+	return result
+
+
+func _collision_state_has_usable_applied_shape(state: RefCounted) -> bool:
+	if state == null or not bool(state.call("is_collision_required")) or \
+			not bool(state.call("is_collision_ready")):
+		return false
+	var applied_generation := int(state.call("get_collision_generation"))
+	var staged_generation := int(state.call("get_staged_collision_generation"))
+	# Generation zero is valid for an authoritative empty collision payload.
+	# It is not usable while a non-empty/current replacement remains staged.
+	return applied_generation > 0 or staged_generation == 0
+
+
+func _player_collision_probe_chunks(
+	position: Vector3,
+	body_radius: float,
+	body_half_height: float,
+	support_margin: float
+) -> Array:
+	var radius := maxf(0.0, body_radius)
+	var minimum := position + Vector3(
+		-radius,
+		-maxf(0.0, body_half_height) - maxf(0.0, support_margin),
+		-radius
+	)
+	var maximum := position + Vector3(radius, 0.0, radius)
+	var minimum_chunk := _collision_invoker_chunk(minimum)
+	var maximum_chunk := _collision_invoker_chunk(maximum)
+	var chunks: Array = []
+	for chunk_y in range(minimum_chunk.y, maximum_chunk.y + 1):
+		for chunk_z in range(minimum_chunk.z, maximum_chunk.z + 1):
+			for chunk_x in range(minimum_chunk.x, maximum_chunk.x + 1):
+				chunks.append(Vector3i(chunk_x, chunk_y, chunk_z))
+	return chunks
+
+
+func _is_chunk_outside_vertical_volume(chunk: Vector3i) -> bool:
+	if _generation_profile == null:
+		return false
+	var origin_y := int(_generation_profile.get("world_chunk_origin_y"))
+	var count_y := int(_generation_profile.get("world_chunk_count_y"))
+	return count_y > 0 and (chunk.y < origin_y or chunk.y >= origin_y + count_y)
 
 
 func _is_outside_vertical_volume(position: Vector3) -> bool:

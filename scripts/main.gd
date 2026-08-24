@@ -27,6 +27,8 @@ const TerrainWaterfallHud := preload("res://scripts/wt_terrain_waterfall_hud.gd"
 const TerrainWaterfallRoute := preload("res://scripts/wt_terrain_waterfall_route.gd")
 const CpuB3aLodOpeningCapture := preload("res://scripts/wt_cpu_b3a_lod_opening_capture.gd")
 const StaticWaterVisualProbe := preload("res://scripts/wt_static_water_visual_probe.gd")
+const PlaytestDiagnostics := preload("res://scripts/wt_playtest_diagnostics.gd")
+const GroundTraversalProbe := preload("res://scripts/wt_ground_traversal_probe.gd")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
@@ -94,6 +96,9 @@ var terrain_waterfall_autonomous_route := false
 var terrain_waterfall_output_path := ""
 var terrain_waterfall_capture_index := 0
 var terrain_waterfall_hud: PanelContainer
+var playtest_diagnostics: Node3D
+var ground_traversal_probe_requested := false
+var ground_traversal_probe_output_path := ""
 var lod_movement_direct_only := false
 var lod_movement_operation_limit := -1
 var lod_movement_gap_only_probe := false
@@ -214,6 +219,12 @@ func _ready() -> void:
 	if not terrain_waterfall_output_path.is_empty():
 		terrain_waterfall_requested = true
 		cpu_causal_trace_output_path = terrain_waterfall_output_path
+	ground_traversal_probe_requested = args.has("--ground-traversal-probe")
+	ground_traversal_probe_output_path = _arg_value(
+		args,
+		"--ground-traversal-probe-output",
+		"res://.godot/world_transvoxel_captures/ground_traversal/latest.json"
+	)
 	lod_movement_direct_only = args.has("--p2-lod-movement-direct-only")
 	lod_movement_operation_limit = int(_arg_value(args, "--p2-lod-movement-operation-limit", "-1"))
 	lod_movement_gap_only_probe = args.has("--p2-lod-movement-gap-only-probe")
@@ -233,7 +244,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+R priority diagnostic | Tilde+T visual material"
+	human_controls_hint_line = "controls: ESC menu | LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+R priority diagnostic | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -439,6 +450,8 @@ func _start_profile() -> void:
 		_terrain_profile(selected_profile)
 	)
 	game_world.attach_player(player, settings["start"])
+	if playtest_diagnostics != null:
+		playtest_diagnostics.call("attach_runtime", game_world, player)
 	if not await game_world.start_world():
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
@@ -476,6 +489,9 @@ func _start_profile() -> void:
 		game_world.human_input_enabled = true
 		player.call("set_human_input_enabled", true)
 		_start_human_cpu_causal_trace()
+		if ground_traversal_probe_requested:
+			call_deferred("_run_ground_traversal_probe")
+			return
 		if terrain_waterfall_requested and cpu_causal_trace != null:
 			terrain_waterfall_capture_index = 1
 			_attach_terrain_waterfall_hud()
@@ -742,6 +758,7 @@ func _build_hud() -> void:
 		_build_human_position_label(canvas)
 		_build_human_launch_command_label(canvas)
 		_build_terrain_waterfall_hud(canvas)
+		_build_playtest_diagnostics(canvas)
 	_build_loading_overlay()
 	if not autonomous:
 		return
@@ -832,6 +849,13 @@ func _build_human_position_label(canvas: CanvasLayer) -> void:
 func _build_terrain_waterfall_hud(canvas: CanvasLayer) -> void:
 	terrain_waterfall_hud = TerrainWaterfallHud.new()
 	canvas.add_child(terrain_waterfall_hud)
+
+
+func _build_playtest_diagnostics(canvas: CanvasLayer) -> void:
+	playtest_diagnostics = PlaytestDiagnostics.new()
+	playtest_diagnostics.name = "PlaytestDiagnostics"
+	add_child(playtest_diagnostics)
+	playtest_diagnostics.call("build_ui", canvas, crosshair)
 
 
 func _style_human_static_label(label: Label) -> void:
@@ -1955,6 +1979,11 @@ func _configure_game_lighting() -> void:
 
 func handle_human_command(command: StringName) -> bool:
 	match command:
+		&"toggle_escape_menu":
+			if playtest_diagnostics == null:
+				return false
+			playtest_diagnostics.call("toggle_menu")
+			return true
 		&"cycle_lighting":
 			_apply_lighting_preset((lighting_preset_index + 1) % 4)
 			return true
@@ -2453,6 +2482,20 @@ func _run_terrain_waterfall_smoke() -> void:
 		"observer": result.get("observer", {}),
 	}))
 	get_tree().quit(0)
+
+
+func _run_ground_traversal_probe() -> void:
+	var probe := GroundTraversalProbe.new()
+	var result: Dictionary = await probe.run(
+		self,
+		player,
+		game_world,
+		selected_profile,
+		ground_traversal_probe_output_path
+	)
+	_finalize_human_cpu_causal_trace("ground_traversal_probe_complete")
+	await get_tree().process_frame
+	get_tree().quit(0 if str(result.get("status", "FAIL")) == "PASS" else 1)
 
 
 func _start_human_cpu_causal_trace() -> void:
@@ -4470,7 +4513,9 @@ func _human_launch_command_text(user_args: Array) -> String:
 
 func _human_test_context_text() -> String:
 	var test_name := "human_playtest"
-	if not human_visual_capture_path.is_empty():
+	if ground_traversal_probe_requested:
+		test_name = "ground_traversal_probe"
+	elif not human_visual_capture_path.is_empty():
 		test_name = "visual_capture:%s" % human_visual_capture_mode
 	elif not human_artifact_marker_sequence_file_path.is_empty():
 		test_name = "human_marker_sequence"
