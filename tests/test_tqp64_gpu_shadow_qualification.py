@@ -26,6 +26,18 @@ def status(frame: int, terrain: int, transition: int = 0) -> dict:
                     "captured_requests": terrain,
                     "matched_results": terrain,
                 },
+                "service_status": {
+                    "immutable_shadow_handoff": True,
+                    "worker_side_shadow_differential": True,
+                    "shadow_comparison_count": terrain,
+                    "persistent_resources": {
+                        "buffer_generation": 1,
+                        "buffer_rebuild_count": 1,
+                        "buffer_reuse_count": max(0, terrain - 1),
+                        "buffer_count": 20,
+                        "gpu_resident_render_publication": False,
+                    },
+                },
             }
         },
     }

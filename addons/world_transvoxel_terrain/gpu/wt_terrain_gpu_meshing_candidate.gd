@@ -20,6 +20,16 @@ var _shader := RID()
 var _pipeline := RID()
 var _tables: Dictionary = {}
 var _error := ""
+var _persistent_buffers: Array[RID] = []
+var _persistent_buffer_capacities: Array[int] = []
+var _persistent_uniform_set := RID()
+var _persistent_buffer_generation := 0
+var _persistent_buffer_rebuild_count := 0
+var _persistent_buffer_reuse_count := 0
+var _persistent_allocated_bytes := 0
+var _dispatch_count := 0
+var _uploaded_bytes := 0
+var _readback_bytes := 0
 
 
 func initialize() -> bool:
@@ -62,6 +72,7 @@ func initialize() -> bool:
 
 func close() -> void:
 	if _rendering_device != null:
+		_free_persistent_resources()
 		if _pipeline.is_valid():
 			_rendering_device.free_rid(_pipeline)
 		if _shader.is_valid():
@@ -75,6 +86,24 @@ func close() -> void:
 
 func get_error() -> String:
 	return _error
+
+
+func get_resource_status() -> Dictionary:
+	return {
+		"schema": "world_transvoxel.terrain.gpu_persistent_resources.v1",
+		"persistent": true,
+		"buffer_generation": _persistent_buffer_generation,
+		"buffer_rebuild_count": _persistent_buffer_rebuild_count,
+		"buffer_reuse_count": _persistent_buffer_reuse_count,
+		"buffer_count": _persistent_buffers.size(),
+		"allocated_bytes": _persistent_allocated_bytes,
+		"dispatch_count": _dispatch_count,
+		"uploaded_bytes": _uploaded_bytes,
+		"readback_bytes": _readback_bytes,
+		"uniform_set_valid": _persistent_uniform_set.is_valid(),
+		"local_rendering_device": true,
+		"gpu_resident_render_publication": false,
+	}
 
 
 func get_table_identity() -> Dictionary:
@@ -137,50 +166,43 @@ func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Diction
 	if str(packed.get("status", "")) != "PASS":
 		return packed
 	var started_usec := Time.get_ticks_usec()
-	var buffers: Array[RID] = []
-	for bytes in packed.get("input_buffers", []):
-		_storage_buffer(bytes, buffers)
 	var cell_count := cells.size()
-	_empty_storage_buffer(cell_count * MAXIMUM_VERTICES_PER_CELL * 16, buffers)
-	_empty_storage_buffer(cell_count * MAXIMUM_VERTICES_PER_CELL * 16, buffers)
-	_empty_storage_buffer(cell_count * MAXIMUM_VERTICES_PER_CELL * 16, buffers)
-	_empty_storage_buffer(cell_count * MAXIMUM_VERTICES_PER_CELL * 16, buffers)
-	_empty_storage_buffer(cell_count * MAXIMUM_INDICES_PER_CELL * 4, buffers)
-	_empty_storage_buffer(cell_count * 16, buffers)
-	_empty_storage_buffer(48, buffers)
-	for buffer in buffers:
-		if not buffer.is_valid():
-			_free_rids(buffers)
-			return _failure("GPU meshing storage buffer creation failed")
-	var uniforms: Array[RDUniform] = []
-	for binding in range(buffers.size()):
-		var uniform := RDUniform.new()
-		uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
-		uniform.binding = binding
-		uniform.add_id(buffers[binding])
-		uniforms.append(uniform)
-	var uniform_set := _rendering_device.uniform_set_create(uniforms, _shader, 0)
-	if not uniform_set.is_valid():
-		_free_rids(buffers)
-		return _failure("GPU meshing uniform set creation failed")
+	var input_buffers: Array = packed.get("input_buffers", [])
+	var output_sizes: Array[int] = [
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
+		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
+		cell_count * 16,
+		48,
+	]
+	var resource_preparation := _prepare_persistent_resources(input_buffers, output_sizes)
+	if str(resource_preparation.get("status", "")) != "PASS":
+		return _failure(str(resource_preparation.get("error", "GPU resource preparation failed")))
 	var prepared_usec := Time.get_ticks_usec()
 	var compute_list := _rendering_device.compute_list_begin()
 	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _pipeline)
-	_rendering_device.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
+	_rendering_device.compute_list_bind_uniform_set(
+		compute_list, _persistent_uniform_set, 0
+	)
 	_rendering_device.compute_list_dispatch(
 		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
 	)
 	_rendering_device.compute_list_end()
 	_rendering_device.submit()
 	_rendering_device.sync()
+	_dispatch_count += 1
 	var synchronized_usec := Time.get_ticks_usec()
 	var output_bytes: Array[PackedByteArray] = []
 	for index in range(13, 20):
-		output_bytes.append(_rendering_device.buffer_get_data(buffers[index]))
+		var output_size := output_sizes[index - 13]
+		output_bytes.append(_rendering_device.buffer_get_data(
+			_persistent_buffers[index], 0, output_size
+		))
+		_readback_bytes += output_size
 	var readback_usec := Time.get_ticks_usec()
-	_rendering_device.free_rid(uniform_set)
-	_free_rids(buffers)
-	return _unpack_result(
+	var result := _unpack_result(
 		output_bytes,
 		cells,
 		input_lane,
@@ -190,6 +212,9 @@ func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Diction
 		synchronized_usec,
 		readback_usec
 	)
+	result["persistent_resources"] = get_resource_status()
+	result["persistent_resources_rebuilt"] = bool(resource_preparation.get("rebuilt", false))
+	return result
 
 
 func _pack_request(
@@ -452,22 +477,98 @@ func _validate_tables(tables: Dictionary) -> bool:
 	return true
 
 
-func _storage_buffer(bytes: PackedByteArray, rids: Array[RID]) -> RID:
-	var rid := _rendering_device.storage_buffer_create(bytes.size(), bytes)
-	rids.append(rid)
-	return rid
+func _prepare_persistent_resources(
+	input_buffers: Array,
+	output_sizes: Array[int]
+) -> Dictionary:
+	if input_buffers.size() != 13 or output_sizes.size() != 7:
+		return {"status": "FAIL", "error": "GPU buffer inventory changed"}
+	var required_sizes: Array[int] = []
+	for bytes in input_buffers:
+		if not bytes is PackedByteArray or bytes.is_empty():
+			return {"status": "FAIL", "error": "GPU input buffer is empty"}
+		required_sizes.append(bytes.size())
+	required_sizes.append_array(output_sizes)
+	var rebuild := _persistent_buffers.size() != required_sizes.size() \
+			or not _persistent_uniform_set.is_valid()
+	if not rebuild:
+		for index in range(required_sizes.size()):
+			if required_sizes[index] > _persistent_buffer_capacities[index]:
+				rebuild = true
+				break
+	if rebuild and not _rebuild_persistent_resources(required_sizes):
+		return {"status": "FAIL", "error": _error}
+	var upload_binding_count := input_buffers.size() if rebuild else 7
+	for binding in range(upload_binding_count):
+		var bytes: PackedByteArray = input_buffers[binding]
+		var error := _rendering_device.buffer_update(
+			_persistent_buffers[binding], 0, bytes.size(), bytes
+		)
+		if error != OK:
+			return {
+				"status": "FAIL",
+				"error": "GPU persistent buffer update failed at binding %d: %s" % [
+					binding, error_string(error),
+				],
+			}
+		_uploaded_bytes += bytes.size()
+	if rebuild:
+		_persistent_buffer_rebuild_count += 1
+	else:
+		_persistent_buffer_reuse_count += 1
+	return {"status": "PASS", "rebuilt": rebuild}
 
 
-func _empty_storage_buffer(size: int, rids: Array[RID]) -> RID:
-	var rid := _rendering_device.storage_buffer_create(size)
-	rids.append(rid)
-	return rid
+func _rebuild_persistent_resources(required_sizes: Array[int]) -> bool:
+	_free_persistent_resources()
+	_persistent_buffer_capacities.resize(required_sizes.size())
+	for binding in range(required_sizes.size()):
+		var capacity := _next_buffer_capacity(required_sizes[binding])
+		var buffer := _rendering_device.storage_buffer_create(capacity)
+		if not buffer.is_valid():
+			_error = "GPU persistent storage buffer creation failed at binding %d" % binding
+			_free_persistent_resources()
+			return false
+		_persistent_buffers.append(buffer)
+		_persistent_buffer_capacities[binding] = capacity
+		_persistent_allocated_bytes += capacity
+	var uniforms: Array[RDUniform] = []
+	for binding in range(_persistent_buffers.size()):
+		var uniform := RDUniform.new()
+		uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+		uniform.binding = binding
+		uniform.add_id(_persistent_buffers[binding])
+		uniforms.append(uniform)
+	_persistent_uniform_set = _rendering_device.uniform_set_create(
+		uniforms, _shader, 0
+	)
+	if not _persistent_uniform_set.is_valid():
+		_error = "GPU persistent uniform set creation failed"
+		_free_persistent_resources()
+		return false
+	_persistent_buffer_generation += 1
+	return true
 
 
-func _free_rids(rids: Array[RID]) -> void:
-	for rid in rids:
-		if rid.is_valid():
-			_rendering_device.free_rid(rid)
+func _free_persistent_resources() -> void:
+	if _rendering_device == null:
+		return
+	if _persistent_uniform_set.is_valid():
+		_rendering_device.free_rid(_persistent_uniform_set)
+	_persistent_uniform_set = RID()
+	for buffer in _persistent_buffers:
+		if buffer.is_valid():
+			_rendering_device.free_rid(buffer)
+	_persistent_buffers.clear()
+	_persistent_buffer_capacities.clear()
+	_persistent_allocated_bytes = 0
+
+
+static func _next_buffer_capacity(required_size: int) -> int:
+	var capacity := 16
+	while capacity < required_size:
+		capacity *= 2
+	return capacity
 
 
 static func _unpack_identity(values: PackedInt32Array) -> Dictionary:

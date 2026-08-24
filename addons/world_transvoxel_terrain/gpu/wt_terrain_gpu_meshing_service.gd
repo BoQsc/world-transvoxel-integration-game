@@ -5,6 +5,9 @@ class_name WtTerrainGpuMeshingService
 const Candidate := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_candidate.gd"
 )
+const Differential := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_differential.gd"
+)
 const REQUEST_CAPACITY := 3
 
 var _thread := Thread.new()
@@ -16,6 +19,13 @@ var _next_request_id := 1
 var _active_request_id := 0
 var _stopping := false
 var _last_error := ""
+var _resource_status: Dictionary = {}
+var _submitted_request_count := 0
+var _completed_request_count := 0
+var _shadow_submission_count := 0
+var _shadow_comparison_count := 0
+var _shadow_comparison_failure_count := 0
+var _last_shadow_comparison: Dictionary = {}
 
 
 func start() -> bool:
@@ -53,6 +63,43 @@ func submit_explicit_samples(
 	cells: Array,
 	identity: Dictionary = {}
 ) -> int:
+	return _submit_request(
+		densities, gradients, materials, material_authored, cells, identity,
+		[], true, false
+	)
+
+
+func submit_shadow_samples(
+	densities: PackedFloat32Array,
+	gradients: PackedVector3Array,
+	materials: PackedInt32Array,
+	material_authored: PackedByteArray,
+	cells: Array,
+	authority_cells: Array,
+	identity: Dictionary = {}
+) -> int:
+	if authority_cells.size() != cells.size():
+		_mutex.lock()
+		_last_error = "GPU shadow authority inventory differs from cell inventory"
+		_mutex.unlock()
+		return 0
+	return _submit_request(
+		densities, gradients, materials, material_authored, cells, identity,
+		authority_cells, false, true
+	)
+
+
+func _submit_request(
+	densities: PackedFloat32Array,
+	gradients: PackedVector3Array,
+	materials: PackedInt32Array,
+	material_authored: PackedByteArray,
+	cells: Array,
+	identity: Dictionary,
+	authority_cells: Array,
+	retain_candidate_cells: bool,
+	immutable_handoff: bool
+) -> int:
 	if not _thread.is_started() and not start():
 		return 0
 	if densities.is_empty() or gradients.size() != densities.size() \
@@ -72,15 +119,23 @@ func submit_explicit_samples(
 		return 0
 	var request_id := _next_request_id
 	_next_request_id += 1
-	_requests.append({
+	var request := {
 		"request_id": request_id,
-		"densities": densities.duplicate(),
-		"gradients": gradients.duplicate(),
-		"materials": materials.duplicate(),
-		"material_authored": material_authored.duplicate(),
-		"cells": cells.duplicate(true),
+		"densities": densities if immutable_handoff else densities.duplicate(),
+		"gradients": gradients if immutable_handoff else gradients.duplicate(),
+		"materials": materials if immutable_handoff else materials.duplicate(),
+		"material_authored": material_authored \
+			if immutable_handoff else material_authored.duplicate(),
+		"cells": cells if immutable_handoff else cells.duplicate(true),
+		"authority_cells": authority_cells,
+		"retain_candidate_cells": retain_candidate_cells,
+		"immutable_handoff": immutable_handoff,
 		"identity": identity.duplicate(true),
-	})
+	}
+	_requests.append(request)
+	_submitted_request_count += 1
+	if immutable_handoff:
+		_shadow_submission_count += 1
 	_last_error = ""
 	_mutex.unlock()
 	_semaphore.post()
@@ -122,6 +177,15 @@ func get_status() -> Dictionary:
 		"execution_thread": "dedicated_gpu_worker",
 		"frame_thread_compute_sync": false,
 		"cpu_meshing_fallback": false,
+		"persistent_resources": _resource_status.duplicate(true),
+		"submitted_request_count": _submitted_request_count,
+		"completed_request_count": _completed_request_count,
+		"shadow_submission_count": _shadow_submission_count,
+		"shadow_comparison_count": _shadow_comparison_count,
+		"shadow_comparison_failure_count": _shadow_comparison_failure_count,
+		"last_shadow_comparison": _last_shadow_comparison.duplicate(true),
+		"immutable_shadow_handoff": true,
+		"worker_side_shadow_differential": true,
 		"last_error": _last_error,
 	}
 	_mutex.unlock()
@@ -162,10 +226,31 @@ func _worker_main() -> void:
 		result["service_schema"] = "world_transvoxel.terrain.gpu_meshing_service.v1"
 		result["execution_thread"] = "dedicated_gpu_worker"
 		result["frame_thread_compute_sync"] = false
+		var authority_cells: Array = request.get("authority_cells", [])
+		if not authority_cells.is_empty():
+			var comparison := Differential.compare_cells(
+				authority_cells, result.get("cells", [])
+			)
+			result["shadow_comparison"] = comparison
+			if not bool(request.get("retain_candidate_cells", true)):
+				result.erase("cells")
 		_mutex.lock()
+		_resource_status = candidate.get_resource_status().duplicate(true)
+		_completed_request_count += 1
+		if not authority_cells.is_empty():
+			_shadow_comparison_count += 1
+			_last_shadow_comparison = Dictionary(
+				result.get("shadow_comparison", {})
+			).duplicate(true)
+			if str(result.get("shadow_comparison", {}).get("status", "")) != "PASS":
+				_shadow_comparison_failure_count += 1
 		_completions.append(result)
 		_active_request_id = 0
 		if str(result.get("status", "")) != "PASS":
 			_last_error = str(result.get("failures", ["GPU meshing request failed"]))
+		elif str(result.get("shadow_comparison", {"status": "PASS"}).get(
+			"status", ""
+		)) != "PASS":
+			_last_error = JSON.stringify(result.get("shadow_comparison", {}))
 		_mutex.unlock()
 	candidate.close()

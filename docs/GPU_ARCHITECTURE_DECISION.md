@@ -18,6 +18,15 @@ tables exported by the pinned native backend, reports unsupported or saturated
 states explicitly, and never falls back to CPU meshing. Compute submission,
 synchronization, and readback do not execute on the Godot frame thread.
 
+The service now retains one 20-buffer uniform-set inventory across requests,
+grows those buffers geometrically only when required, and updates request
+inputs in place. Exact differential comparison also runs on the dedicated
+worker and returns a compact verdict instead of copying full GPU cell results
+back to the frame thread. Topology, indices, materials, reuse metadata, and
+identity remain exact. Vertex comparison uses a bounded float32 scale-aware
+tolerance; normals retain the absolute `1e-5` bound. There is still no GPU
+render publication path.
+
 The retained integration smoke captures one real native LOD1 chunk containing
 4,352 cells (4,096 regular and 256 transition), meshes every captured cell on
 the GPU, compares geometry and metadata against CPU authority, and sends the
@@ -39,27 +48,30 @@ The retained large-world qualification runs the accepted G23 2,048 x 256 x
 2,048 profile through the same deterministic two-leg relocation route in
 CPU-only and shadow modes. Vulkan and D3D12 both complete long flight, LOD
 transition work, relocated carve, and relocated construction with complete
-traces. Vulkan records 167 matched terrain results including 41 transition
-results; D3D12 records 226 including 47 transitions. Both drivers record
+traces. Vulkan records 74 matched terrain results including 3 transition
+results; D3D12 records 102 including 3 transitions. Both drivers record
 positive terrain matches in each relocated edit window and zero geometry,
-unknown-request, or identity mismatch.
+unknown-request, or identity mismatch. The native bounded queue supersedes 11
+older Vulkan captures and 19 older D3D12 captures so fresh relocated work is
+validated without increasing capacity or revoking in-flight work.
 
-This run also rejects promotion of the present shadow bridge as a performance
-architecture. The three-request diagnostic queue rejects 3,078 Vulkan and
-3,303 D3D12 captures rather than blocking CPU authority. Shadow wall time is
-about 48% higher and trace-on frame p95 rises from 24-31 ms to 307-318 ms.
-The result is expected from per-request readback and main-thread differential
-comparison, but it proves the production path needs batched persistent GPU
-resources and GPU-resident render consumption. Board-global telemetry is not
-process-attributed, and trace-on timing is not a release performance baseline.
+Persistent resources materially reduce the intrusive shadow cost measured by
+the earlier diagnostic. Vulkan trace-on frame p95 is 31.80 ms versus 26.82 ms
+for its paired CPU run; D3D12 is 34.60 ms versus 29.14 ms. The old per-request
+allocation and frame-thread comparison run measured 307-318 ms p95. However,
+shadow p99 remains 150-157 ms and route wall time remains 28-41% higher because
+all candidate geometry is still read back for validation. This rejects
+performance promotion while qualifying the persistent validation architecture.
+Board-global telemetry is not process-attributed, and trace-on timing is not a
+release performance baseline.
 
 This remains deliberately disconnected from live GPU terrain publication. The
 default runtime remains CPU-only, while shadow mode still publishes the normal
-CPU render and targeted CPU collision resources. Persistent shared buffers,
-GPU-resident rendering, versioned GPU publication, production GPU field
-evaluation, broader material coverage, targeted collision coordination,
-device recovery, large-world responsiveness benefit, performance and power
-benefit, and release packaging remain TQP-64 work.
+CPU render and targeted CPU collision resources. GPU-resident rendering,
+versioned GPU publication, production GPU field evaluation, broader material
+coverage, targeted collision coordination, device recovery, large-world
+responsiveness benefit, performance and power benefit, and release packaging
+remain TQP-64 work.
 
 ## Decision
 

@@ -3,7 +3,9 @@ extends SceneTree
 const GpuMeshingService := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_service.gd"
 )
-const MAXIMUM_VECTOR_DIFFERENCE := 0.00001
+const Differential := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_differential.gd"
+)
 
 var _service
 
@@ -13,6 +15,10 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var tolerance_error := _validate_differential_tolerance()
+	if not tolerance_error.is_empty():
+		_fail(tolerance_error)
+		return
 	if not ClassDB.class_exists("WorldTransvoxelCellProbe"):
 		_fail("WorldTransvoxelCellProbe is unavailable")
 		return
@@ -87,11 +93,10 @@ func _run() -> void:
 	if gpu_cells.size() != authority_cells.size():
 		_fail("GPU and authority cell counts differ")
 		return
-	for index in range(gpu_cells.size()):
-		var comparison := _compare_cell(authority_cells[index], gpu_cells[index])
-		if not comparison.is_empty():
-			_fail("cell %d differs: %s" % [index, comparison])
-			return
+	var comparison := Differential.compare_cells(authority_cells, gpu_cells)
+	if str(comparison.get("status", "")) != "PASS":
+		_fail("GPU service differential failed: %s" % JSON.stringify(comparison))
+		return
 	var replayed: Dictionary = probe.call(
 		"finalize_chunk_with_gpu_cells_callable",
 		Callable(self, "_chunk_sample"),
@@ -116,13 +121,26 @@ func _run() -> void:
 		_fail(capacity_error)
 		return
 	var timing: Dictionary = completion.get("timing_usec", {})
+	var resource_status: Dictionary = _service.get_status().get(
+		"persistent_resources", {}
+	)
+	if not bool(resource_status.get("persistent", false)) \
+			or int(resource_status.get("buffer_count", 0)) != 20 \
+			or int(resource_status.get("buffer_rebuild_count", 0)) != 1 \
+			or int(resource_status.get("buffer_reuse_count", 0)) < 3 \
+			or int(resource_status.get("dispatch_count", 0)) < 4 \
+			or bool(resource_status.get("gpu_resident_render_publication", true)):
+		_fail("persistent GPU resource contract failed: %s" % str(resource_status))
+		return
 	_service.close()
 	print(
-		"GPU_MESHING_SERVICE_SMOKE_PASS cells=%d vertices=%d triangles=%d gpu_total_us=%d" % [
+		"GPU_MESHING_SERVICE_SMOKE_PASS cells=%d vertices=%d triangles=%d gpu_total_us=%d persistent_rebuilds=%d persistent_reuses=%d" % [
 			gpu_cells.size(),
 			int(completion.get("vertex_count", 0)),
 			int(completion.get("triangle_count", 0)),
 			int(timing.get("total", 0)),
+			int(resource_status.get("buffer_rebuild_count", 0)),
+			int(resource_status.get("buffer_reuse_count", 0)),
 		]
 	)
 	quit(0)
@@ -175,41 +193,42 @@ func _wait_for_completion(request_id: int, timeout_seconds: float) -> Dictionary
 	return {}
 
 
-func _compare_cell(authority: Dictionary, candidate: Dictionary) -> String:
-	for key in ["status", "case_code", "vertex_count", "index_count", "triangle_count"]:
-		if authority.get(key) != candidate.get(key):
-			return "%s differs" % key
-	for key in [
-		"backend_indices", "indices", "materials", "material_authored",
-		"endpoint_a", "endpoint_b", "reuse_data",
-	]:
-		if PackedInt32Array(authority.get(key, PackedInt32Array())) \
-				!= PackedInt32Array(candidate.get(key, PackedInt32Array())):
-			return "%s differs" % key
-	if _maximum_vector_difference(
-		authority.get("vertices", PackedVector3Array()),
-		candidate.get("vertices", PackedVector3Array())
-	) > MAXIMUM_VECTOR_DIFFERENCE:
-		return "vertices differ"
-	if _maximum_vector_difference(
-		authority.get("normals", PackedVector3Array()),
-		candidate.get("normals", PackedVector3Array())
-	) > MAXIMUM_VECTOR_DIFFERENCE:
-		return "normals differ"
+func _validate_differential_tolerance() -> String:
+	var authority := {
+		"id": "far_world_cell",
+		"type": "regular",
+		"orientation": 0,
+		"status": "SURFACE",
+		"case_code": 1,
+		"vertex_count": 1,
+		"index_count": 0,
+		"triangle_count": 0,
+		"vertices": PackedVector3Array([Vector3(2048.0, 0.0, -2048.0)]),
+		"normals": PackedVector3Array([Vector3.UP]),
+		"backend_indices": PackedInt32Array(),
+		"indices": PackedInt32Array(),
+		"materials": PackedInt32Array([1]),
+		"material_authored": PackedInt32Array([1]),
+		"endpoint_a": PackedInt32Array([0]),
+		"endpoint_b": PackedInt32Array([1]),
+		"reuse_data": PackedInt32Array([0]),
+	}
+	var candidate: Dictionary = authority.duplicate(true)
+	candidate["vertices"] = PackedVector3Array([
+		Vector3(2048.0005, 0.0, -2048.0005)
+	])
+	if str(Differential.compare_cells([authority], [candidate]).get("status", "")) \
+			!= "PASS":
+		return "scale-aware float32 vertex tolerance rejected a bounded delta"
+	candidate["vertices"] = PackedVector3Array([
+		Vector3(2048.01, 0.0, -2048.01)
+	])
+	var rejected: Dictionary = Differential.compare_cells([authority], [candidate])
+	if str(rejected.get("status", "")) != "FAIL" \
+			or str(rejected.get("field", "")) != "vertices" \
+			or int(rejected.get("failed_cell_index", -1)) != 0:
+		return "scale-aware float32 vertex tolerance did not fail closed"
 	return ""
-
-
-func _maximum_vector_difference(
-	left: PackedVector3Array,
-	right: PackedVector3Array
-) -> float:
-	if left.size() != right.size():
-		return INF
-	var maximum := 0.0
-	for index in range(left.size()):
-		var difference := (left[index] - right[index]).abs()
-		maximum = maxf(maximum, maxf(difference.x, maxf(difference.y, difference.z)))
-	return maximum
 
 
 func _chunk_mesh_equal(left: Dictionary, right: Dictionary) -> bool:

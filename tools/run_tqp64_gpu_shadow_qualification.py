@@ -32,11 +32,29 @@ NATIVE_COUNTERS = (
     "in_flight_requests",
     "captured_requests",
     "capacity_rejections",
+    "superseded_queued_requests",
     "matched_results",
     "mismatched_results",
     "stale_results",
     "unknown_results",
     "identity_mismatches",
+)
+SERVICE_COUNTERS = (
+    "submitted_request_count",
+    "completed_request_count",
+    "shadow_submission_count",
+    "shadow_comparison_count",
+    "shadow_comparison_failure_count",
+)
+PERSISTENT_RESOURCE_COUNTERS = (
+    "buffer_generation",
+    "buffer_rebuild_count",
+    "buffer_reuse_count",
+    "buffer_count",
+    "allocated_bytes",
+    "dispatch_count",
+    "uploaded_bytes",
+    "readback_bytes",
 )
 EDIT_PHASES = ("relocated_carve", "relocated_construct")
 
@@ -65,6 +83,23 @@ def _maximum_counters(
     result = {key: 0 for key in keys}
     for _, status in snapshots:
         source = status.get(nested_key, {}) if nested_key else status
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            result[key] = max(result[key], int(source.get(key, 0)))
+    return result
+
+
+def _maximum_nested_counters(
+    snapshots: list[tuple[int, dict[str, Any]]],
+    path: tuple[str, ...],
+    keys: tuple[str, ...],
+) -> dict[str, int]:
+    result = {key: 0 for key in keys}
+    for _, status in snapshots:
+        source: Any = status
+        for component in path:
+            source = source.get(component, {}) if isinstance(source, dict) else {}
         if not isinstance(source, dict):
             continue
         for key in keys:
@@ -109,6 +144,14 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         native = {}
     controller = _maximum_counters(snapshots, CONTROLLER_COUNTERS)
     native_counters = _maximum_counters(snapshots, NATIVE_COUNTERS, "native_metrics")
+    service_counters = _maximum_counters(
+        snapshots, SERVICE_COUNTERS, "service_status"
+    )
+    persistent_counters = _maximum_nested_counters(
+        snapshots,
+        ("service_status", "persistent_resources"),
+        PERSISTENT_RESOURCE_COUNTERS,
+    )
     return {
         "schema": trace.get("schema", ""),
         "reason": trace.get("reason", ""),
@@ -139,6 +182,26 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         ),
         "controller_maximum": controller,
         "native_maximum": native_counters,
+        "service_maximum": service_counters,
+        "persistent_resource_maximum": persistent_counters,
+        "immutable_shadow_handoff": any(
+            bool(status.get("service_status", {}).get(
+                "immutable_shadow_handoff", False
+            ))
+            for _, status in snapshots
+        ),
+        "worker_side_shadow_differential": any(
+            bool(status.get("service_status", {}).get(
+                "worker_side_shadow_differential", False
+            ))
+            for _, status in snapshots
+        ),
+        "gpu_resident_render_publication_observed": any(
+            bool(status.get("service_status", {}).get(
+                "persistent_resources", {}
+            ).get("gpu_resident_render_publication", False))
+            for _, status in snapshots
+        ),
         "relocated_edit_terrain_match_deltas": _edit_shadow_deltas(
             trace, snapshots
         ),
@@ -237,6 +300,8 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
     else:
         controller = trace["controller_maximum"]
         native = trace["native_maximum"]
+        service = trace["service_maximum"]
+        persistent = trace["persistent_resource_maximum"]
         edit_deltas = trace["relocated_edit_terrain_match_deltas"]
         required.update(
             {
@@ -254,6 +319,29 @@ def evaluate_run(mode: str, summary: dict[str, Any]) -> list[str]:
                 "no_native_mismatch": native["mismatched_results"] == 0,
                 "no_native_unknown_result": native["unknown_results"] == 0,
                 "no_native_identity_mismatch": native["identity_mismatches"] == 0,
+                "immutable_shadow_handoff": trace["immutable_shadow_handoff"],
+                "worker_side_shadow_differential": (
+                    trace["worker_side_shadow_differential"]
+                ),
+                "worker_comparisons_completed": (
+                    service["shadow_comparison_count"] > 0
+                ),
+                "worker_comparisons_clean": (
+                    service["shadow_comparison_failure_count"] == 0
+                ),
+                "persistent_buffer_inventory": persistent["buffer_count"] == 20,
+                "persistent_buffer_bounded_growth": (
+                    0 < persistent["buffer_generation"] <= 3
+                    and persistent["buffer_rebuild_count"]
+                    == persistent["buffer_generation"]
+                ),
+                "persistent_buffers_reused": (
+                    persistent["buffer_reuse_count"]
+                    > persistent["buffer_rebuild_count"]
+                ),
+                "persistent_gpu_publication_still_disabled": not trace[
+                    "gpu_resident_render_publication_observed"
+                ],
             }
         )
     for name, passed in required.items():

@@ -5,7 +5,6 @@ class_name WtTerrainGpuMeshingShadowController
 const GpuMeshingService := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_service.gd"
 )
-const MAXIMUM_VECTOR_DIFFERENCE := 0.00001
 const REQUIRED_BACKEND_METHODS := [
 	"begin_gpu_meshing_shadow",
 	"end_gpu_meshing_shadow",
@@ -18,6 +17,7 @@ var _backend_terrain: Node
 var _service
 var _pending: Dictionary = {}
 var _capacity := 3
+var _service_capacity := 2
 var _running := false
 var _last_error := ""
 var _submitted_results := 0
@@ -45,6 +45,7 @@ func start(backend_terrain: Node, capacity: int = 3) -> bool:
 			_last_error = "native terrain backend lacks %s" % method_name
 			return false
 	_capacity = clampi(capacity, 1, GpuMeshingService.REQUEST_CAPACITY)
+	_service_capacity = maxi(1, _capacity - 1)
 	_service = GpuMeshingService.new()
 	if not _service.start():
 		_last_error = _service.get_last_error()
@@ -82,13 +83,18 @@ func is_running() -> bool:
 
 func get_status() -> Dictionary:
 	var native_metrics := {}
+	var service_status := {}
 	if _backend_terrain != null and is_instance_valid(_backend_terrain) \
 			and _backend_terrain.has_method("get_gpu_meshing_shadow_metrics"):
 		native_metrics = Dictionary(_backend_terrain.call("get_gpu_meshing_shadow_metrics"))
+	if _service != null:
+		service_status = _service.get_status()
 	return {
 		"schema": "world_transvoxel.terrain.gpu_meshing_shadow_controller.v1",
 		"running": _running,
 		"capacity": _capacity,
+		"service_capacity": _service_capacity,
+		"native_freshness_slot_reserved": _capacity > 1,
 		"pending_results": _pending.size(),
 		"submitted_results": _submitted_results,
 		"matched_results": _matched_results,
@@ -100,6 +106,7 @@ func get_status() -> Dictionary:
 		"identity_rejections": _identity_rejections,
 		"last_error": _last_error,
 		"native_metrics": native_metrics,
+		"service_status": service_status,
 		"cpu_render_authority": true,
 		"cpu_collision_authority": true,
 		"gpu_publication_enabled": false,
@@ -157,7 +164,7 @@ func _drain_completions() -> void:
 
 
 func _submit_captures() -> void:
-	while _pending.size() < _capacity:
+	while _pending.size() < _service_capacity:
 		var native_request := Dictionary(
 			_backend_terrain.call("pop_gpu_meshing_shadow_request")
 		)
@@ -169,12 +176,13 @@ func _submit_captures() -> void:
 			continue
 		var batch: Dictionary = native_request.get("cell_batch", {})
 		var identity: Dictionary = native_request.get("identity", {})
-		var service_request_id := int(_service.submit_explicit_samples(
+		var service_request_id := int(_service.submit_shadow_samples(
 			batch.get("densities", PackedFloat32Array()),
 			batch.get("gradients", PackedVector3Array()),
 			batch.get("materials", PackedInt32Array()),
 			batch.get("material_authored", PackedByteArray()),
 			batch.get("cells", []),
+			batch.get("authority_cells", []),
 			identity
 		))
 		if service_request_id <= 0:
@@ -229,53 +237,10 @@ func _validate_completion(request: Dictionary, completion: Dictionary) -> String
 	]:
 		if gpu_identity.get(key) != expected_identity.get(key):
 			return "GPU result identity differs at %s" % key
-	var batch: Dictionary = request.get("cell_batch", {})
-	var gpu_cells: Array = completion.get("cells", [])
-	var authority_cells: Array = batch.get("authority_cells", [])
-	if gpu_cells.size() != authority_cells.size():
-		return "GPU and CPU authority cell counts differ"
-	for index in range(gpu_cells.size()):
-		var difference := _compare_cell(authority_cells[index], gpu_cells[index])
-		if not difference.is_empty():
-			return "cell %d %s" % [index, difference]
+	var comparison: Dictionary = completion.get("shadow_comparison", {})
+	if str(comparison.get("schema", "")) \
+			!= "world_transvoxel.terrain.gpu_meshing_differential.v1" \
+			or str(comparison.get("status", "")) != "PASS" \
+			or not bool(comparison.get("matched", false)):
+		return "GPU worker differential failed: %s" % JSON.stringify(comparison)
 	return ""
-
-
-static func _compare_cell(authority: Dictionary, candidate: Dictionary) -> String:
-	for key in [
-		"id", "type", "orientation", "status", "case_code", "vertex_count",
-		"index_count", "triangle_count",
-	]:
-		if authority.get(key) != candidate.get(key):
-			return "%s differs" % key
-	for key in [
-		"backend_indices", "indices", "materials", "material_authored",
-		"endpoint_a", "endpoint_b", "reuse_data",
-	]:
-		if PackedInt32Array(authority.get(key, PackedInt32Array())) \
-				!= PackedInt32Array(candidate.get(key, PackedInt32Array())):
-			return "%s differs" % key
-	if _maximum_vector_difference(
-		authority.get("vertices", PackedVector3Array()),
-		candidate.get("vertices", PackedVector3Array())
-	) > MAXIMUM_VECTOR_DIFFERENCE:
-		return "vertices differ"
-	if _maximum_vector_difference(
-		authority.get("normals", PackedVector3Array()),
-		candidate.get("normals", PackedVector3Array())
-	) > MAXIMUM_VECTOR_DIFFERENCE:
-		return "normals differ"
-	return ""
-
-
-static func _maximum_vector_difference(
-	left: PackedVector3Array,
-	right: PackedVector3Array
-) -> float:
-	if left.size() != right.size():
-		return INF
-	var maximum := 0.0
-	for index in range(left.size()):
-		var difference := (left[index] - right[index]).abs()
-		maximum = maxf(maximum, maxf(difference.x, maxf(difference.y, difference.z)))
-	return maximum
