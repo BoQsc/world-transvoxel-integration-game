@@ -1,0 +1,83 @@
+{
+  "schema": "world_transvoxel.integration.gpu_production_backend_slice.v1",
+  "date": "2026-08-24",
+  "milestone": "TQP-64",
+  "status": "PASS_FIRST_INTEGRATION_SLICE_ONLY",
+  "claim_boundary": "Opt-in production-addon GPU cell meshing service and native-finalizer differential; not a live or released GPU terrain backend.",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "671148d9728569a364bf403e19811490f54df0a5",
+    "runtime_binary_sha256": "29da425974158bbeeea7ed9a45a9c4fa08f16ca2a7ef9868c30c227f78526a33",
+    "backend": "transvoxel_mit_official",
+    "cpu_reference_retained": true
+  },
+  "integration_parent": {
+    "repository": "world-transvoxel-integration-game",
+    "commit": "ae63c6abb3b3b720fe0e2a6b04f8e0b2669cb808",
+    "baseline_tag": "cpu-collision-qualified-baseline-2026-08-24"
+  },
+  "service_contract": {
+    "class": "WtTerrainGpuMeshingService",
+    "default_runtime_backend_changed": false,
+    "explicit_opt_in": true,
+    "dedicated_worker_count": 1,
+    "request_capacity": 3,
+    "frame_thread_compute_sync": false,
+    "cpu_meshing_fallback": false,
+    "native_table_export_required": true,
+    "capacity_overflow_policy": "FAIL_CLOSED"
+  },
+  "fixture": {
+    "source": "WorldTransvoxelCellProbe.capture_chunk_cells_with_callable",
+    "lod": 1,
+    "transition_mask": 32,
+    "cell_count": 4352,
+    "regular_cell_count": 4096,
+    "transition_cell_count": 256,
+    "gpu_vertex_count": 504,
+    "gpu_triangle_count": 248,
+    "cell_mismatch_count": 0,
+    "native_finalized_chunk_exact": true,
+    "cpu_cell_geometry_fallback_used": false,
+    "bounded_queue_saturation_control": "PASS",
+    "three_request_repeat_determinism": "PASS"
+  },
+  "profiles": [
+    {
+      "platform": "Windows",
+      "godot": "4.7.2.stable.steam.ed1daf0bf",
+      "rendering_driver": "vulkan",
+      "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "logical_cpu_affinity": [0, 1, 2],
+      "status": "PASS",
+      "observed_gpu_batch_total_us": 13972
+    },
+    {
+      "platform": "Windows",
+      "godot": "4.7.2.stable.steam.ed1daf0bf",
+      "rendering_driver": "d3d12",
+      "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "logical_cpu_affinity": [0, 1, 2],
+      "status": "PASS",
+      "observed_gpu_batch_total_us": 10285
+    }
+  ],
+  "timing_scope": "Single integration observations only; no performance, frame-pacing, throughput, or power qualification claim.",
+  "source_sha256": {
+    "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_candidate.gd": "23c2ada8f094bcede49284b6e0feafee80b2955783af2428f30c0a1ba014e17e",
+    "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_service.gd": "761c21185ed115414387e0e55173110206c07e9cc6c4d78eb7b29ae5d8593015",
+    "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing.glsl": "2b88516a97c21db26e31bfab150ca82bdfb5d5422c894d8a5dd9f01825f02fc9",
+    "tests/gpu_meshing_service_smoke.gd": "8167696690bc5290ee6a21fe34ddf56613135f6ec8a8f0485c1384949e8165aa",
+    "tools/run_gpu_meshing_service_smoke.py": "198d472e238358bbeab2cabc30ec06bfa204594b155c0b7817651b951d0ef73e"
+  },
+  "explicitly_unqualified": [
+    "live production terrain admission or publication",
+    "persistent shared GPU buffers and GPU-resident terrain rendering",
+    "production density gradient material and edit field evaluation",
+    "roads caves lakes water bedrock and relocated edit behavior",
+    "versioned stale rejection and device recovery in the integration runtime",
+    "targeted collision coordination or collision readback",
+    "large-world responsiveness frame pacing throughput power or efficiency benefit",
+    "GPU backend release or Gate G closure"
+  ]
+}

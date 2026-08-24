@@ -1,10 +1,37 @@
 # GPU Architecture Decision
 
-Status: `SELECTED_CANDIDATE_ARCHITECTURE_NOT_IMPLEMENTED`
+Status: `TQP64_ACTIVE_FIRST_INTEGRATION_SLICE`
 
-TQP-58 selects a bounded GPU candidate for field evaluation and Transvoxel
-mesh extraction. It does not replace the authoritative CPU implementation and
-does not qualify a production GPU backend.
+TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
+mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
+field, cell meshing, shared differential, residency/publication, and retained
+Windows NVIDIA Vulkan/D3D12 profiles in the Terrain Lab. Those results do not
+replace the authoritative CPU implementation or qualify a production GPU
+backend. TQP-64 is now active.
+
+## TQP-64 First Integration Slice
+
+The production terrain addon now owns an opt-in
+`WtTerrainGpuMeshingService`. It runs the qualified compute mesher on one
+dedicated worker, admits at most three outstanding requests, consumes lookup
+tables exported by the pinned native backend, reports unsupported or saturated
+states explicitly, and never falls back to CPU meshing. Compute submission,
+synchronization, and readback do not execute on the Godot frame thread.
+
+The retained integration smoke captures one real native LOD1 chunk containing
+4,352 cells (4,096 regular and 256 transition), meshes every captured cell on
+the GPU, compares geometry and metadata against CPU authority, and sends the
+GPU cell payload through the unchanged native chunk finalizer. Vulkan and
+D3D12 both pass on the retained GTX 1060 Max-Q profile with zero cell mismatch
+and exact finalized chunk geometry. Bounded saturation and deterministic
+repeat controls also pass.
+
+This is deliberately not connected to live terrain publication yet. The
+default runtime remains CPU-only. Live immutable sample handoff, persistent
+buffers, GPU-resident rendering, versioned publication and stale rejection,
+production field evaluation, edits/material/water coverage, targeted collision
+coordination, device recovery, large-world responsiveness, performance and
+power benefit, and release packaging remain TQP-64 work.
 
 ## Decision
 
@@ -41,15 +68,16 @@ path without delaying publication or weakening collision correctness.
 
 ## Required Qualification
 
-The candidate may advance only through the existing ordered milestones:
+The candidate advances only through the existing ordered milestones:
 
-1. TQP-59: analytical and CPU-differential field evaluation;
-2. TQP-60: regular and transition GPU meshing candidate;
-3. TQP-61: shared CPU/GPU differential corpus;
+1. TQP-59: analytical and CPU-differential field evaluation (`qualified`);
+2. TQP-60: regular and transition GPU meshing candidate (`qualified`);
+3. TQP-61: shared CPU/GPU differential corpus (`qualified`);
 4. TQP-62: residency, synchronization, stale rejection, publication, and
-   targeted collision-readback decision;
-5. TQP-63: cross-hardware, driver, API, memory, thermal, and power matrix;
-6. TQP-64: separately reviewed production backend release.
+   targeted collision-readback decision (`qualified`, bounded candidate);
+5. TQP-63: supported driver/API/memory/thermal/power matrix (`qualified` for
+   the retained Windows NVIDIA GTX 1060 Max-Q Vulkan and D3D12 scope);
+6. TQP-64: separately reviewed production backend release (`active`).
 
 The differential corpus must cover all regular cases, transition orientations
 and masks, materials including water, edits, bounds, seams, negative controls,
