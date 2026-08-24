@@ -1,0 +1,64 @@
+{
+  "schema": "world_transvoxel.terrain.gpu_global_render_qualification.v1",
+  "date": "2026-08-24",
+  "status": "PASS_BOUNDED_GLOBAL_VIEWPORT_PROOF",
+  "baseline_commit": "90161d1a552857ba2111e05d16800f905503b7ee",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "hardware": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+  "logical_cpu_limit": 3,
+  "fixture": {
+    "lod": 1,
+    "cell_count": 4352,
+    "regular_cell_count": 4096,
+    "transition_cell_count": 256,
+    "viewport_size": [640, 480]
+  },
+  "publication": {
+    "requested": 3,
+    "applied": 2,
+    "stale_queued_skips": 1,
+    "superseded_entries": 1,
+    "rejected_stale_submissions": 1,
+    "final_resident_entries": 1,
+    "pre_allocation_stale_check": true,
+    "pre_visibility_stale_check": true
+  },
+  "contract": {
+    "global_rendering_device": true,
+    "render_thread_owned": true,
+    "same_global_device_compute_raster": true,
+    "resident_buffer_count_per_entry": 21,
+    "gpu_written_indexed_indirect_commands": true,
+    "device_local_index_copy_required": true,
+    "geometry_readback_bytes": 0,
+    "publication_effect_render_target_readback_bytes": 0,
+    "cpu_meshing_used": false,
+    "cpu_chunk_finalization_used": false,
+    "array_mesh_upload_used": false,
+    "fallback_used": false,
+    "cpu_collision_authority_retained": true,
+    "production_chunk_replacement": false,
+    "production_material_parity": false
+  },
+  "profiles": {
+    "vulkan": {
+      "status": "PASS",
+      "draw_frames": 5,
+      "indirect_draw_calls": 5,
+      "foreground_pixel_count": 27312,
+      "image_sha256": "b4f424159ca782f3ed0f27ef2144cf391bc19398a1024675db68ca9627823ed8",
+      "warnings": 0,
+      "errors": 0
+    },
+    "d3d12": {
+      "status": "PASS",
+      "draw_frames": 5,
+      "indirect_draw_calls": 5,
+      "foreground_pixel_count": 27312,
+      "image_sha256": "b4f424159ca782f3ed0f27ef2144cf391bc19398a1024675db68ca9627823ed8",
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "conclusion": "Global render-thread ownership and exact versioned live viewport publication are viable without geometry readback. Production chunk replacement, large-world benefit, recovery, packaging, and TQP-64 release remain open."
+}

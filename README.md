@@ -63,12 +63,15 @@ target misses. A lossless causal trace attributes the dominant delay to serial
 mesh work feeding a conservative global visibility/replacement/collision
 backlog. [TQP-58](docs/GPU_ARCHITECTURE_DECISION.md) therefore selects a
 bounded GPU field-and-meshing candidate while CPU control remains authoritative.
-The current TQP-64 work also qualifies a bounded
-[same-device GPU resident-resource proof](docs/GPU_RESIDENT_RENDER_RESOURCE_CONTRACT.md):
-compute-written vertex data and indexed indirect commands render without
-geometry readback, CPU finalization, or ArrayMesh upload on Vulkan and D3D12.
-It is not yet live global-renderer publication, so the CPU terrain remains the
-production visual and collision authority.
+The current TQP-64 work qualifies both a bounded
+[same-device GPU resident-resource proof](docs/GPU_RESIDENT_RENDER_RESOURCE_CONTRACT.md)
+and a default-off
+[global render-thread publication proof](docs/GPU_GLOBAL_RENDER_PUBLICATION_CONTRACT.md).
+Compute-written vertex data and indexed indirect commands now reach a live
+Godot viewport without geometry readback, CPU finalization, or ArrayMesh upload
+on Vulkan and D3D12, with exact stale and supersession checks. The global proof
+is not connected to production chunk replacement or production materials, so
+the CPU terrain remains the production visual and collision authority.
 
 ## Critical edited-terrain LOD boundary
 

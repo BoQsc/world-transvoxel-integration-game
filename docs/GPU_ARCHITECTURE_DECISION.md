@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_LOCAL_RESIDENT_RESOURCE_QUALIFIED`
+Status: `TQP64_GLOBAL_VIEWPORT_PUBLICATION_QUALIFIED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -24,8 +24,8 @@ inputs in place. Exact differential comparison also runs on the dedicated
 worker and returns a compact verdict instead of copying full GPU cell results
 back to the frame thread. Topology, indices, materials, reuse metadata, and
 identity remain exact. Vertex comparison uses a bounded float32 scale-aware
-tolerance; normals retain the absolute `1e-5` bound. There is still no GPU
-render publication path.
+tolerance; normals retain the absolute `1e-5` bound. This validation service
+does not publish GPU render resources.
 
 The retained integration smoke captures one real native LOD1 chunk containing
 4,352 cells (4,096 regular and 256 transition), meshes every captured cell on
@@ -65,7 +65,7 @@ performance promotion while qualifying the persistent validation architecture.
 Board-global telemetry is not process-attributed, and trace-on timing is not a
 release performance baseline.
 
-The next bounded slice qualifies a versioned
+A bounded slice qualifies a versioned
 [GPU resident render-resource contract](GPU_RESIDENT_RENDER_RESOURCE_CONTRACT.md).
 One exact 4,352-cell LOD1 fixture is compute-meshed and rasterized on the same
 local RenderingDevice with GPU-written indexed indirect commands, zero geometry
@@ -75,13 +75,22 @@ device-local storage-to-index-buffer copy because index-buffer RIDs are not
 accepted as compute storage uniforms; vertices and indirect commands remain
 directly consumed.
 
-This remains deliberately disconnected from live GPU terrain publication. The
-default runtime remains CPU-only, while shadow mode still publishes the normal
-CPU render and targeted CPU collision resources. Global-renderer GPU resource
-ownership, versioned GPU publication, production GPU field evaluation,
-broader material coverage, targeted collision coordination, device recovery, large-world
-responsiveness benefit, performance and power benefit, and release packaging
-remain TQP-64 work.
+The following bounded
+[global render publication contract](GPU_GLOBAL_RENDER_PUBLICATION_CONTRACT.md)
+now proves the next ownership boundary. A pre-transparent `CompositorEffect`
+allocates and consumes the 21-buffer mesh inventory on Godot's global
+RenderingDevice, performs exact sequence checks before allocation and again
+before visibility, retires a superseded resident entry, and draws into a live
+viewport. No geometry readback, CPU finalization, or ArrayMesh upload occurs.
+Vulkan and D3D12 produce the identical retained image signature.
+
+This proof remains deliberately disconnected from production terrain chunk
+replacement. The default runtime remains CPU-only, while shadow and matched
+publication modes retain normal CPU render and targeted CPU collision
+resources. Production chunk admission and retirement, GPU field evaluation,
+production terrain and water materials, targeted collision coordination,
+device recovery, large-world responsiveness benefit, performance and power
+benefit, and release packaging remain TQP-64 work.
 
 ## Decision
 

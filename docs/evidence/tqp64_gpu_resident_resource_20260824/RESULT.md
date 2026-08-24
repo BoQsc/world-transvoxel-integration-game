@@ -40,6 +40,7 @@ python tools/run_gpu_meshing_live_publication_smoke.py --driver vulkan
 python tools/run_gpu_meshing_live_publication_smoke.py --driver d3d12
 ```
 
-This result qualifies the resident-resource contract, not TQP-64. The next
-stage is global render-thread resource ownership and versioned live scene
-publication without cell readback or ArrayMesh upload.
+This result qualifies the resident-resource contract, not TQP-64. The
+subsequent bounded global render-thread viewport proof is retained in
+`../tqp64_gpu_global_render_publication_20260824/RESULT.md`; production chunk
+replacement remains open.

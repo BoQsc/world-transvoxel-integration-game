@@ -29,6 +29,16 @@ candidates are skipped. Collision publication is never part of this route.
 Persistent shadow resources and bounded matched-cell visual publication are
 qualified on the retained large-world Vulkan and D3D12 routes. The publication
 stage still reads cells back, reruns native finalization, and uploads a CPU
-`ArrayMesh`. GPU-resident terrain rendering, zero-readback production drawing,
-measured performance benefit, device recovery, and release promotion remain
-TQP-64 work.
+`ArrayMesh`.
+
+The next default-off proof owns equivalent compute and raster resources on
+Godot's global RenderingDevice from a pre-transparent render-thread callback.
+It performs exact sequence rejection before allocation and before visibility,
+supersedes one resident entry, and draws directly into a live viewport with no
+geometry readback, CPU finalization, or ArrayMesh upload. Vulkan and D3D12
+produce the same retained image signature. It is not connected to production
+chunk replacement and uses a diagnostic material.
+
+Production chunk lifecycle integration, shared bounded residency, material
+parity, measured large-world benefit, device recovery, and release promotion
+remain TQP-64 work.

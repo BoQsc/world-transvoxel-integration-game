@@ -74,10 +74,10 @@ screen renderer. This contract therefore does not claim live terrain
 replacement, frame-time benefit, power benefit, material parity, device
 recovery, or TQP-64 completion.
 
-The next stage must allocate and consume equivalent resources on Godot's
-global RenderingDevice through render-thread-owned code, preserve exact
-version/stale validation before visibility, and retain CPU collision authority.
-It must not route geometry through cell readback, native CPU finalization, or
-ArrayMesh upload.
+The subsequent
+[global render publication contract](GPU_GLOBAL_RENDER_PUBLICATION_CONTRACT.md)
+now allocates and consumes equivalent resources on Godot's global
+RenderingDevice with render-thread ownership and exact sequence checks. It
+remains a bounded viewport proof rather than production chunk replacement.
 
 Evidence: [TQP-64 GPU resident resource proof](evidence/tqp64_gpu_resident_resource_20260824/RESULT.md).

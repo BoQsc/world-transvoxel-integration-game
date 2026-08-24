@@ -46,16 +46,7 @@ func initialize() -> bool:
 			and not _tables.is_empty():
 		return true
 	close()
-	if not ClassDB.class_exists("WorldTransvoxelCellProbe"):
-		_error = "WorldTransvoxelCellProbe is unavailable; fallback tables are forbidden"
-		return false
-	var probe := ClassDB.instantiate("WorldTransvoxelCellProbe") as RefCounted
-	if probe == null or not probe.has_method("get_gpu_meshing_tables"):
-		_error = "native GPU meshing table export is unavailable; fallback tables are forbidden"
-		return false
-	_tables = probe.call("get_gpu_meshing_tables")
-	if not _validate_tables(_tables):
-		_tables = {}
+	if not _load_tables():
 		return false
 	var shader_file := load(SHADER_PATH) as RDShaderFile
 	if shader_file == null:
@@ -74,6 +65,24 @@ func initialize() -> bool:
 	if not _pipeline.is_valid():
 		_error = "GPU meshing pipeline creation failed"
 		close()
+		return false
+	_error = ""
+	return true
+
+
+func _load_tables() -> bool:
+	if not _tables.is_empty():
+		return true
+	if not ClassDB.class_exists("WorldTransvoxelCellProbe"):
+		_error = "WorldTransvoxelCellProbe is unavailable; fallback tables are forbidden"
+		return false
+	var probe := ClassDB.instantiate("WorldTransvoxelCellProbe") as RefCounted
+	if probe == null or not probe.has_method("get_gpu_meshing_tables"):
+		_error = "native GPU meshing table export is unavailable; fallback tables are forbidden"
+		return false
+	_tables = probe.call("get_gpu_meshing_tables")
+	if not _validate_tables(_tables):
+		_tables = {}
 		return false
 	_error = ""
 	return true
@@ -196,6 +205,63 @@ func rasterize_explicit_samples(
 		"material_authored": material_authored,
 		"identity": identity,
 	}, cells, view_center, view_extent, target_size)
+
+
+func pack_explicit_samples_for_global_rendering(
+	densities: PackedFloat32Array,
+	gradients: PackedVector3Array,
+	materials: PackedInt32Array,
+	material_authored: PackedByteArray,
+	cells: Array,
+	identity: Dictionary
+) -> Dictionary:
+	if densities.is_empty() or densities.size() > MAXIMUM_SAMPLE_COUNT \
+			or gradients.size() != densities.size() \
+			or materials.size() != densities.size() \
+			or material_authored.size() != densities.size() \
+			or cells.is_empty() or cells.size() > MAXIMUM_CELL_COUNT:
+		return {
+			"schema": "world_transvoxel.terrain.gpu_global_render_request.v1",
+			"status": "FAIL",
+			"error": "global render sample or cell inventory is invalid",
+		}
+	if not _load_tables():
+		return {
+			"schema": "world_transvoxel.terrain.gpu_global_render_request.v1",
+			"status": "FAIL",
+			"error": _error,
+		}
+	var batch := {
+		"schema": "world_transvoxel.terrain.explicit_cell_samples.v1",
+		"status": "PASS",
+		"fallback_used": false,
+		"densities": densities,
+		"gradients": gradients,
+		"materials": materials,
+		"material_authored": material_authored,
+		"identity": identity.duplicate(true),
+	}
+	var packed := _pack_request(
+		batch,
+		cells,
+		densities,
+		gradients,
+		materials,
+		material_authored,
+		"explicit_global_render"
+	)
+	if str(packed.get("status", "")) != "PASS":
+		return {
+			"schema": "world_transvoxel.terrain.gpu_global_render_request.v1",
+			"status": "FAIL",
+			"error": str(packed.get("failures", ["global render packing failed"])),
+		}
+	packed["schema"] = "world_transvoxel.terrain.gpu_global_render_request.v1"
+	packed["identity"] = identity.duplicate(true)
+	packed["cell_count"] = cells.size()
+	packed["sample_count"] = densities.size()
+	packed["fallback_used"] = false
+	return packed
 
 
 func _mesh_batch(batch: Dictionary, cells: Array, input_lane: String) -> Dictionary:
