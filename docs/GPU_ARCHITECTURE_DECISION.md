@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_BOUNDED_MATERIAL_RESPONSE_QUALIFIED_BACKEND_BLOCKED`
+Status: `TQP64_PRE_MESH_FIELD_HANDOFF_QUALIFIED_BACKEND_BLOCKED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -228,6 +228,25 @@ GPU-first field evaluation and regular/transition extraction is now the next
 bounded architecture step. Full standard Godot material integration remains a
 release gate; reproducing Forward+ lighting inside the addon is rejected as a
 nonstandard substitute.
+
+### Pre-Mesh Field Handoff
+
+The pinned `world-transvoxel` authority now emits resident request schema v4
+from immutable page-backed field inputs before invoking CPU Transvoxel
+topology. The request carries the exact chunk, generation, source/world
+revision, transition masks, surface, and native-packed regular/transition cell
+inputs. Focused runtime tests prove the handoff occurs before terrain-ready
+publication and contains all 4,864 cells for a three-transition-face LOD1
+fixture. The capture backend makes zero CPU topology calls.
+
+This removes the CPU-topology result as an input dependency of GPU extraction.
+It does not yet remove CPU field sampling or CPU reference meshing: the current
+default-off route samples the page-backed field for the GPU handoff, then runs
+the unchanged CPU visual/collision path for authority and recovery. Therefore
+it is not a performance candidate and no large-world promotion claim is made.
+The next bounded step is authoritative GPU density/material field generation,
+followed by omitting CPU visual meshing for non-collision chunks while keeping
+targeted CPU collision and exact recovery semantics.
 
 ## Decision
 

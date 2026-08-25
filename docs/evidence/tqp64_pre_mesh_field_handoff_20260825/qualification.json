@@ -1,0 +1,46 @@
+{
+  "schema": "world_transvoxel.tqp64_pre_mesh_field_handoff.v1",
+  "date": "2026-08-25",
+  "classification": "RETAINED_ORDERING_BOUNDARY_PRODUCTION_BLOCKED",
+  "authority_commit": "a18cb6e296c84e7a537e2fb3de698c633445ea4b",
+  "runtime_artifact_digest_sha256": "db155e705f69f8376c89562c43664b8fc3d710c45682f4c5ba1158a69f6a114e",
+  "request_schema": "world_transvoxel.gpu_resident_render_request.v4",
+  "claim_boundary": {
+    "pre_mesh_field_handoff": true,
+    "cpu_topology_input_dependency": false,
+    "cpu_field_sampling": true,
+    "gpu_density_field_generation": false,
+    "gpu_transvoxel_extraction": true,
+    "cpu_reference_visual_mesh": true,
+    "cpu_collision_authority": true,
+    "performance_promotion": false,
+    "production_backend_qualified": false
+  },
+  "native": {
+    "fixture_lod": 1,
+    "transition_face_count": 3,
+    "captured_cell_count": 4864,
+    "cpu_topology_call_count": 0,
+    "page_runtime_hash": "aa1a828204ad38c1d476286553af5f65e779cc0eccfe777c88db44b31f49f45d",
+    "production_lifecycle_hash": "ccdb1e1ad000f824ebd4628e640a6c1d95f9d734cc1298f738de3d0c98f3a126",
+    "production_streaming_hash": "39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b",
+    "production_lod_streaming_hash": "7c9071d1c31da0397e48db0338c299b8bf923dbb0e80448ae11cf049c3c0d2fb"
+  },
+  "drivers": {
+    "vulkan": {
+      "lifecycle_pass": true,
+      "visual_parity_pass": true,
+      "global_publication_pass": true,
+      "overview_sha256": "15e5cca3efb91b3987c0fedbe131aa997514ec61fdf8ffaec8dbc88d48682a4b",
+      "near_sha256": "fe44900e4d7652979155ab8eb392ff48e97a82c2b012bab1c5f4529fd0d705aa",
+      "global_publication_sha256": "b4f424159ca782f3ed0f27ef2144cf391bc19398a1024675db68ca9627823ed8"
+    },
+    "d3d12": {
+      "lifecycle_pass": true,
+      "visual_parity_pass": true,
+      "overview_sha256": "70c45ba2b44dbfa69f7b18c6205ab84db251c3ba2ec09f2ae7c99e77146ad6c7",
+      "near_sha256": "15c25cb4f059e1e86b26826459fbbde8e003dc2329303a354507e2df66e25d74"
+    }
+  },
+  "recommended_next": "GPU density/material field generation from authoritative page/edit inputs, then omit CPU visual meshing for non-collision chunks"
+}

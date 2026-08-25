@@ -184,6 +184,11 @@ func _run() -> void:
 			or int(native_metrics.get("capture_reservation_attempts", 0)) < 3 \
 			or int(native_metrics.get("reserved_captures", 0)) < 4 \
 			or int(native_metrics.get("released_capture_slots", 0)) < 2 \
+			or int(native_metrics.get("pre_mesh_field_captures", 0)) < 4 \
+			or bool(native_metrics.get("cpu_topology_input_dependency", true)) \
+			or not bool(native_metrics.get("cpu_field_sampling", false)) \
+			or bool(native_metrics.get("gpu_density_field_generation", true)) \
+			or not bool(native_metrics.get("gpu_transvoxel_extraction", false)) \
 			or int(native_metrics.get("reserved_capture_slots", -1)) != 0 \
 			or int(native_metrics.get("activated_chunks", 0)) < 3 \
 			or int(native_metrics.get("validation_rejections", -1)) != 0 \
@@ -219,7 +224,9 @@ func _run() -> void:
 			+ "water_fresnel_tint_parity=1 water_refraction_parity=0 " \
 			+ "material_params=368 material_textures=5 water_params=48 " \
 			+ "arena=paged_shared native_packed=1 " \
-			+ "pre_mesh_admission=1 reservations=%d captures=%d released=%d"
+			+ "pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 " \
+			+ "cpu_field_sampling=1 gpu_density_generation=0 " \
+			+ "reservations=%d captures=%d released=%d"
 		) % [
 			MARKER,
 			int(native_metrics.get("activated_chunks", 0)),

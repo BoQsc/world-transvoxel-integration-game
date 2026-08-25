@@ -840,11 +840,17 @@ static func _required_surfaces(group: Dictionary) -> Array[String]:
 
 static func _validate_native_request(request: Dictionary) -> String:
 	if str(request.get("schema", "")) \
-			!= "world_transvoxel.gpu_resident_render_request.v3" \
+			!= "world_transvoxel.gpu_resident_render_request.v4" \
 			or str(request.get("status", "")) != "PASS":
 		return "native GPU resident request contract failed"
 	if str(request.get("position_space", "")) != "world":
 		return "native GPU resident request is not in world position space"
+	if str(request.get("input_stage", "")) != "pre_mesh_field" \
+			or bool(request.get("cpu_topology_input_dependency", true)) \
+			or not bool(request.get("cpu_field_sampling", false)) \
+			or bool(request.get("gpu_density_field_generation", true)) \
+			or not bool(request.get("gpu_transvoxel_extraction", false)):
+		return "native GPU resident request did not originate before CPU topology"
 	if not bool(request.get("gpu_resident_render_publication", false)) \
 			or not bool(request.get("cpu_render_visible_until_activation", false)) \
 			or not bool(request.get("cpu_collision_publication_unchanged", false)) \
@@ -863,6 +869,9 @@ static func _validate_native_request(request: Dictionary) -> String:
 		actual_bytes += PackedByteArray(buffer_value).size()
 	if actual_bytes != int(request.get("packed_byte_count", -1)):
 		return "native GPU resident packed byte count is invalid"
+	var identity := Dictionary(request.get("identity", {}))
+	if str(identity.get("input_stage", "")) != "pre_mesh_field":
+		return "native GPU resident identity lost its input stage"
 	var bounds_min_value = request.get("bounds_min", null)
 	var bounds_max_value = request.get("bounds_max", null)
 	if not bounds_min_value is Vector3 or not bounds_max_value is Vector3:

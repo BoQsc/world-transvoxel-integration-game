@@ -1,6 +1,6 @@
 # GPU Production Resident Lifecycle Contract
 
-Status: `BOUNDED_LIFECYCLE_MATERIAL_RESPONSE_QUALIFIED_BACKEND_BLOCKED`
+Status: `BOUNDED_LIFECYCLE_PRE_MESH_FIELD_HANDOFF_QUALIFIED_BACKEND_BLOCKED`
 
 Schema: `world_transvoxel.terrain.gpu_production_resident_lifecycle.v1`
 
@@ -125,6 +125,22 @@ must preserve the shared arena, exact lifecycle, admission rules, compact
 rendering, and CPU recovery contract, then pass Vulkan before a second
 large-world backend is measured.
 
+## Pre-Mesh Field Handoff
+
+Native resident request v4 is now produced before CPU Transvoxel topology. It
+contains complete regular and transition field inputs and identifies its stage
+as `pre_mesh_field`; request and metrics contracts also report
+`cpu_topology_input_dependency=false`, `cpu_field_sampling=true`,
+`gpu_density_field_generation=false`, and `gpu_transvoxel_extraction=true`.
+The lifecycle still waits for the unchanged CPU reference publication before
+atomic replacement, and CPU collision authority remains unchanged.
+
+This qualifies request ordering and removes post-mesh CPU geometry from the GPU
+input boundary. It does not qualify a production-performance backend because
+field sampling and the CPU reference mesh are still duplicated. The next
+replacement slice must generate the authoritative density/material field on
+the GPU and skip CPU visual meshing where targeted collision is not required.
+
 Evidence:
 
 - [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md)
@@ -132,3 +148,4 @@ Evidence:
 - [TQP-64 compact world-space resident candidate](evidence/tqp64_large_world_gpu_resident_candidate_20260825/RESULT.md)
 - [TQP-64 production albedo, camera, and LOD candidate](evidence/tqp64_large_world_gpu_production_visual_candidate_20260825/RESULT.md)
 - [TQP-64 bounded material response candidate](evidence/tqp64_large_world_gpu_material_response_candidate_20260825/RESULT.md)
+- [TQP-64 pre-mesh field handoff](evidence/tqp64_pre_mesh_field_handoff_20260825/RESULT.md)

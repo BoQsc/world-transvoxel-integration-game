@@ -40,11 +40,16 @@ produce the same retained image signature. It is not connected to production
 chunk replacement and uses a diagnostic material.
 
 The production lifecycle now uses the same global device through a bounded
-shared arena with four reusable surface slots per page. Native v2 resident
+shared arena with four reusable surface slots per page. Native v4 resident
 requests provide 13 prepacked buffers and never export the diagnostic
 `cell_batch`; production GDScript packing must remain zero. Bounded Vulkan tests
 qualify exact activation, retirement, relocation reuse, CPU visual recovery,
 and unchanged CPU collision authority.
+
+The v4 request is captured from immutable page-backed field inputs before CPU
+Transvoxel topology. It has no CPU-topology input dependency, but the current
+candidate still performs CPU field sampling and the unchanged CPU reference
+mesh. This is a qualified ownership boundary, not a performance promotion.
 
 The large-world Vulkan candidate is still rejected. Native packing removes the
 previous frame-time bottleneck, but CPU meshing still records every candidate
