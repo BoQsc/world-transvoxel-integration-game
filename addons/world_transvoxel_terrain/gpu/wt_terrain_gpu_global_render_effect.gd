@@ -17,6 +17,9 @@ const RASTER_SHADER_FILE := preload(
 const PRODUCTION_RASTER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_production.glsl"
 )
+const PRODUCTION_WATER_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_water.glsl"
+)
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 3
 const DEFAULT_RESIDENT_CAPACITY := 64
@@ -53,6 +56,13 @@ var _production_material_buffer := RID()
 var _production_material_set := RID()
 var _pending_production_material := {}
 var _production_material_resources: Array = []
+var _production_water_shader := RID()
+var _production_water_pipeline := RID()
+var _production_water_pipeline_format := -1
+var _production_water_buffer := RID()
+var _production_water_set := RID()
+var _pending_production_water := {}
+var _production_water_resource
 var _vertex_format := -1
 var _initialization_attempted := false
 var _close_requested := false
@@ -136,13 +146,21 @@ var _status := {
 	"production_material_parity": false,
 	"production_terrain_material_payload_ready": false,
 	"production_terrain_albedo_mapping_parity": false,
+	"production_terrain_roughness_mapping_parity": false,
+	"production_terrain_accepted_normal_response_parity": false,
+	"production_terrain_bounded_pbr_response_parity": false,
 	"production_terrain_normal_mapping_parity": false,
 	"production_terrain_pbr_lighting_parity": false,
 	"production_terrain_material_parity": false,
 	"production_static_water_material_parity": false,
+	"production_static_water_material_payload_ready": false,
+	"production_static_water_fresnel_tint_parity": false,
+	"production_static_water_refraction_parity": false,
 	"production_material_source": "",
 	"production_material_parameter_bytes": 0,
 	"production_material_texture_count": 0,
+	"production_water_material_source": "",
+	"production_water_parameter_bytes": 0,
 	"last_error": "",
 	"last_applied_identity": {},
 }
@@ -179,6 +197,27 @@ func configure_production_terrain_material(config: Dictionary) -> bool:
 		parameter_bytes
 	).size()
 	_status["production_material_texture_count"] = texture_rids.size()
+	_mutex.unlock()
+	return true
+
+
+func configure_production_static_water_material(config: Dictionary) -> bool:
+	var parameter_bytes = config.get("parameter_bytes", PackedByteArray())
+	var resource = config.get("resource")
+	if not parameter_bytes is PackedByteArray \
+			or PackedByteArray(parameter_bytes).size() != 3 * 16:
+		_record_rejection("production water parameter block must be 48 bytes")
+		return false
+	if not resource is ShaderMaterial:
+		_record_rejection("production water material resource is invalid")
+		return false
+	_mutex.lock()
+	_pending_production_water = config.duplicate(true)
+	_production_water_resource = resource
+	_status["production_water_material_source"] = str(config.get("source", ""))
+	_status["production_water_parameter_bytes"] = PackedByteArray(
+		parameter_bytes
+	).size()
 	_mutex.unlock()
 	return true
 
@@ -415,6 +454,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		_record_render_error("global RenderingDevice shader initialization failed")
 		return
 	_apply_pending_production_material_on_render_thread()
+	_apply_pending_production_water_on_render_thread()
 	_drain_pending_on_render_thread()
 	_drain_lifecycle_commands_on_render_thread()
 	_draw_entries_on_render_thread(render_data)
@@ -423,6 +463,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 func _ensure_shaders() -> bool:
 	if _compute_pipeline.is_valid() and _raster_shader.is_valid() \
 			and _production_raster_shader.is_valid() \
+			and _production_water_shader.is_valid() \
 			and _vertex_format >= 0:
 		return true
 	if _initialization_attempted:
@@ -434,15 +475,20 @@ func _ensure_shaders() -> bool:
 	var compute_file := COMPUTE_SHADER_FILE as RDShaderFile
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
 	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
+	var production_water_file := PRODUCTION_WATER_SHADER_FILE as RDShaderFile
 	if compute_file == null or raster_file == null or production_raster_file == null \
+			or production_water_file == null \
 			or not compute_file.get_base_error().is_empty() \
 			or not raster_file.get_base_error().is_empty() \
-			or not production_raster_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s %s" % [
+			or not production_raster_file.get_base_error().is_empty() \
+			or not production_water_file.get_base_error().is_empty():
+		_record_render_error("global render shader import is invalid: %s %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
 			production_raster_file.get_base_error() \
 				if production_raster_file != null else "production raster missing",
+			production_water_file.get_base_error() \
+				if production_water_file != null else "production water missing",
 		])
 		return false
 	_compute_shader = _rendering_device.shader_create_from_spirv(
@@ -462,6 +508,11 @@ func _ensure_shaders() -> bool:
 		production_raster_file.get_spirv()
 	)
 	if not _production_raster_shader.is_valid():
+		return false
+	_production_water_shader = _rendering_device.shader_create_from_spirv(
+		production_water_file.get_spirv()
+	)
+	if not _production_water_shader.is_valid():
 		return false
 	var attributes: Array[RDVertexAttribute] = []
 	attributes.append(_vertex_attribute(
@@ -549,6 +600,14 @@ func _apply_pending_production_material_on_render_thread() -> void:
 		_production_material_set.is_valid()
 	_status["production_terrain_albedo_mapping_parity"] = \
 		_production_material_set.is_valid()
+	_status["production_terrain_roughness_mapping_parity"] = \
+		_production_material_set.is_valid()
+	# The accepted production shader declares a normal array but does not write
+	# NORMAL_MAP. Preserving geometric normals is therefore the exact response.
+	_status["production_terrain_accepted_normal_response_parity"] = \
+		_production_material_set.is_valid()
+	_status["production_terrain_bounded_pbr_response_parity"] = \
+		_production_material_set.is_valid()
 	_status["production_terrain_material_parity"] = bool(
 		_status["production_terrain_albedo_mapping_parity"]
 	) and bool(_status["production_terrain_normal_mapping_parity"]) \
@@ -558,6 +617,52 @@ func _apply_pending_production_material_on_render_thread() -> void:
 	) and bool(_status["production_static_water_material_parity"])
 	if not _production_material_set.is_valid():
 		_status["last_error"] = "production material uniform set creation failed"
+	_mutex.unlock()
+
+
+func _apply_pending_production_water_on_render_thread() -> void:
+	var config := {}
+	_mutex.lock()
+	if not _pending_production_water.is_empty():
+		config = _pending_production_water
+		_pending_production_water = {}
+	_mutex.unlock()
+	if config.is_empty():
+		return
+	_free_rids_on_render_thread([
+		_production_water_set,
+		_production_water_buffer,
+	])
+	_production_water_set = RID()
+	_production_water_buffer = RID()
+	var parameter_bytes := PackedByteArray(config.get(
+		"parameter_bytes", PackedByteArray()
+	))
+	_production_water_buffer = _rendering_device.uniform_buffer_create(
+		parameter_bytes.size(), parameter_bytes
+	)
+	if not _production_water_buffer.is_valid():
+		_record_render_error("production water material buffer creation failed")
+		return
+	var parameters := RDUniform.new()
+	parameters.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
+	parameters.binding = 0
+	parameters.add_id(_production_water_buffer)
+	_production_water_set = _rendering_device.uniform_set_create(
+		[parameters], _production_water_shader, 1
+	)
+	_mutex.lock()
+	_status["production_static_water_material_payload_ready"] = \
+		_production_water_set.is_valid()
+	_status["production_static_water_fresnel_tint_parity"] = \
+		_production_water_set.is_valid()
+	_status["production_static_water_refraction_parity"] = false
+	_status["production_static_water_material_parity"] = false
+	_status["production_material_parity"] = bool(
+		_status["production_terrain_material_parity"]
+	) and bool(_status["production_static_water_material_parity"])
+	if not _production_water_set.is_valid():
+		_status["last_error"] = "production water material uniform set creation failed"
 	_mutex.unlock()
 
 
@@ -829,10 +934,23 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			if not production_scene_set.is_valid():
 				_record_render_error("production render scene uniform set failed")
 				return
-		var draw_list := _rendering_device.draw_list_begin(framebuffer)
-		var production_pipeline_bound := false
-		_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
-		_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
+		var water_scene_set := RID()
+		var water_ready := _production_water_set.is_valid()
+		if water_ready:
+			if not _ensure_production_water_pipeline(
+				_rendering_device.framebuffer_get_format(framebuffer)
+			):
+				_record_render_error("production water raster pipeline failed")
+				return
+			water_scene_set = UniformSetCacheRD.get_cache(
+				_production_water_shader, 0, [scene_uniform]
+			)
+			if not water_scene_set.is_valid():
+				_record_render_error("production water scene uniform set failed")
+				return
+		var production_entries: Array[Dictionary] = []
+		var diagnostic_entries: Array[Dictionary] = []
+		var water_entries: Array[Dictionary] = []
 		var push_bytes := PackedInt32Array([view, view_count, 0, 0]).to_byte_array()
 		for entry_value in _entries.values():
 			var entry: Dictionary = entry_value
@@ -847,49 +965,49 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				view_records_avoided += source_cell_count
 				continue
 			visible_surfaces += 1
-			var use_production := production_ready and str(Dictionary(
+			var surface := str(Dictionary(
 				entry.get("identity", {})
-			).get("surface", "")) == "terrain"
-			if use_production != production_pipeline_bound:
-				if use_production:
-					_rendering_device.draw_list_bind_render_pipeline(
-						draw_list, _production_raster_pipeline
-					)
-					_rendering_device.draw_list_bind_uniform_set(
-						draw_list, production_scene_set, 0
-					)
-					_rendering_device.draw_list_bind_uniform_set(
-						draw_list, _production_material_set, 1
-					)
-				else:
-					_rendering_device.draw_list_bind_render_pipeline(
-						draw_list, _raster_pipeline
-					)
-					_rendering_device.draw_list_bind_uniform_set(
-						draw_list, scene_set, 0
-					)
-				production_pipeline_bound = use_production
-			_rendering_device.draw_list_bind_vertex_array(
-				draw_list, entry.get("vertex_array", RID())
-			)
-			_rendering_device.draw_list_bind_index_array(
-				draw_list, entry.get("index_array", RID())
-			)
-			_rendering_device.draw_list_set_push_constant(
-				draw_list, push_bytes, push_bytes.size()
-			)
-			_rendering_device.draw_list_draw_indirect(
-				draw_list,
-				true,
-				entry.get("indirect_buffer", RID()),
-				int(entry.get("indirect_offset", 0)),
-				int(entry.get("indirect_draw_count", 1)),
-				DRAW_COMMAND_STRIDE
-			)
-			draw_calls += 1
+			).get("surface", ""))
+			if surface == "terrain" and production_ready:
+				production_entries.append(entry)
+			elif surface == "static_water" and water_ready:
+				water_entries.append(entry)
+			else:
+				diagnostic_entries.append(entry)
 			view_command_records += 1
 			view_records_avoided += maxi(0, source_cell_count - 1)
+		var draw_list := _rendering_device.draw_list_begin(framebuffer)
+		if not production_entries.is_empty():
+			_rendering_device.draw_list_bind_render_pipeline(
+				draw_list, _production_raster_pipeline
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, production_scene_set, 0
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, _production_material_set, 1
+			)
+			for entry in production_entries:
+				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
+		if not diagnostic_entries.is_empty():
+			_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
+			_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
+			for entry in diagnostic_entries:
+				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
+		if not water_entries.is_empty():
+			_rendering_device.draw_list_bind_render_pipeline(
+				draw_list, _production_water_pipeline
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, water_scene_set, 0
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, _production_water_set, 1
+			)
+			for entry in water_entries:
+				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
 		_rendering_device.draw_list_end()
+		draw_calls += view_command_records
 		compact_command_records += view_command_records
 		source_records_avoided += view_records_avoided
 		maximum_commands_per_view = maxi(
@@ -929,6 +1047,28 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		maximum_records_avoided_per_view
 	)
 	_mutex.unlock()
+
+
+func _draw_entry_on_render_thread(
+	draw_list: int, entry: Dictionary, push_bytes: PackedByteArray
+) -> void:
+	_rendering_device.draw_list_bind_vertex_array(
+		draw_list, entry.get("vertex_array", RID())
+	)
+	_rendering_device.draw_list_bind_index_array(
+		draw_list, entry.get("index_array", RID())
+	)
+	_rendering_device.draw_list_set_push_constant(
+		draw_list, push_bytes, push_bytes.size()
+	)
+	_rendering_device.draw_list_draw_indirect(
+		draw_list,
+		true,
+		entry.get("indirect_buffer", RID()),
+		int(entry.get("indirect_offset", 0)),
+		int(entry.get("indirect_draw_count", 1)),
+		DRAW_COMMAND_STRIDE
+	)
 
 
 func _ensure_raster_pipeline(framebuffer_format: int) -> bool:
@@ -993,6 +1133,37 @@ func _ensure_production_raster_pipeline(framebuffer_format: int) -> bool:
 	return _production_raster_pipeline.is_valid()
 
 
+func _ensure_production_water_pipeline(framebuffer_format: int) -> bool:
+	if _production_water_pipeline.is_valid() \
+			and _production_water_pipeline_format == framebuffer_format:
+		return true
+	if _production_water_pipeline.is_valid():
+		_rendering_device.free_rid(_production_water_pipeline)
+		_production_water_pipeline = RID()
+	var rasterization := RDPipelineRasterizationState.new()
+	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_DISABLED
+	var depth_stencil := RDPipelineDepthStencilState.new()
+	depth_stencil.enable_depth_test = true
+	depth_stencil.enable_depth_write = true
+	depth_stencil.depth_compare_operator = RenderingDevice.COMPARE_OP_GREATER_OR_EQUAL
+	var color_attachment := RDPipelineColorBlendStateAttachment.new()
+	color_attachment.set_as_mix()
+	var color_blend := RDPipelineColorBlendState.new()
+	color_blend.attachments = [color_attachment]
+	_production_water_pipeline = _rendering_device.render_pipeline_create(
+		_production_water_shader,
+		framebuffer_format,
+		_vertex_format,
+		RenderingDevice.RENDER_PRIMITIVE_TRIANGLES,
+		rasterization,
+		RDPipelineMultisampleState.new(),
+		depth_stencil,
+		color_blend
+	)
+	_production_water_pipeline_format = framebuffer_format
+	return _production_water_pipeline.is_valid()
+
+
 func _framebuffer_for(color: RID, depth: RID) -> RID:
 	if not color.is_valid() or not depth.is_valid():
 		return RID()
@@ -1023,7 +1194,9 @@ func _close_on_render_thread() -> void:
 	_free_rids_on_render_thread([
 		_production_material_set, _production_material_buffer,
 		_production_material_sampler, _production_raster_pipeline,
-		_production_raster_shader, _raster_pipeline, _raster_shader,
+		_production_raster_shader, _production_water_set,
+		_production_water_buffer, _production_water_pipeline,
+		_production_water_shader, _raster_pipeline, _raster_shader,
 		_compute_pipeline, _compute_shader,
 	])
 	_production_material_set = RID()
@@ -1031,6 +1204,10 @@ func _close_on_render_thread() -> void:
 	_production_material_sampler = RID()
 	_production_raster_pipeline = RID()
 	_production_raster_shader = RID()
+	_production_water_set = RID()
+	_production_water_buffer = RID()
+	_production_water_pipeline = RID()
+	_production_water_shader = RID()
 	_raster_pipeline = RID()
 	_raster_shader = RID()
 	_compute_pipeline = RID()

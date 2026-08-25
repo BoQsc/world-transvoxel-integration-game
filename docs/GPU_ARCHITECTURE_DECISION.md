@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_PRODUCTION_ALBEDO_CAMERA_LOD_SLICE_QUALIFIED_BACKEND_BLOCKED`
+Status: `TQP64_BOUNDED_MATERIAL_RESPONSE_QUALIFIED_BACKEND_BLOCKED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -201,6 +201,33 @@ The backend remains blocked on full terrain/static-water material response,
 large-world LOD and coverage completeness, native admission, frame p95, and
 GPU-first field/Transvoxel generation. Raising capacities alone is not an
 acceptable resolution.
+
+### Bounded Material Response Follow-Up
+
+The generated terrain shader now preserves exact production roughness selection
+and the accepted shader's current geometric-normal behavior, then applies a
+bounded Burley diffuse response. The accepted CPU shader declares a normal
+texture helper but never writes `NORMAL_MAP`; applying a new perturbation here
+would be divergence, not parity. The generated static-water shader retains the
+accepted deep/edge Fresnel tint and rear-face response through a separate
+terrain-before-water pass.
+
+Focused Vulkan and D3D12 lifecycle and visual fixtures pass with a 368-byte
+terrain payload, five terrain textures, a 48-byte water payload, visible water
+response, bounded LOD0/1/2 continuity, zero readback, and CPU collision
+authority. Full Forward+ scene-light/shadow parity and water screen-texture
+refraction remain explicitly false.
+
+The fresh 2,048 x 256 x 2,048 Vulkan comparison remains rejected. Frame p95 is
+33.15 ms versus 21.90 ms CPU (+51.39%), p99 is +19.50%, wall time is +49.71%,
+and RSS is +0.14%. Coverage remains 17.16%; the terrain inventory has LOD0 and
+LOD3 but no LOD1/2. Native admission rejects 513 reservations and 2,108
+captured requests while downstream genuine rejection remains zero.
+
+GPU-first field evaluation and regular/transition extraction is now the next
+bounded architecture step. Full standard Godot material integration remains a
+release gate; reproducing Forward+ lighting inside the addon is rejected as a
+nonstandard substitute.
 
 ## Decision
 

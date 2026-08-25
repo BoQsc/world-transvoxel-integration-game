@@ -16,9 +16,13 @@ const REQUIRED_BACKEND_METHODS := [
 	"reconcile_gpu_resident_render_chunks",
 	"get_gpu_resident_render_metrics",
 	"get_render_material_override",
+	"get_water_material_override",
 ]
 const PRODUCTION_TERRAIN_SHADER := (
 	"res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader"
+)
+const PRODUCTION_WATER_SHADER := (
+	"res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader"
 )
 const PRODUCTION_DEFAULT_ROAD_GRADES := [
 	Vector2(34.0, 39.0),
@@ -67,6 +71,7 @@ var _recovery_count := 0
 var _application_wait_expirations := 0
 var _process_frame := 0
 var _production_material_signature := ""
+var _production_water_signature := ""
 
 
 func _ready() -> void:
@@ -201,6 +206,15 @@ func get_status() -> Dictionary:
 		"production_terrain_albedo_mapping_parity": bool(effect_status.get(
 			"production_terrain_albedo_mapping_parity", false
 		)),
+		"production_terrain_roughness_mapping_parity": bool(effect_status.get(
+			"production_terrain_roughness_mapping_parity", false
+		)),
+		"production_terrain_accepted_normal_response_parity": bool(effect_status.get(
+			"production_terrain_accepted_normal_response_parity", false
+		)),
+		"production_terrain_bounded_pbr_response_parity": bool(effect_status.get(
+			"production_terrain_bounded_pbr_response_parity", false
+		)),
 		"production_terrain_normal_mapping_parity": bool(effect_status.get(
 			"production_terrain_normal_mapping_parity", false
 		)),
@@ -213,6 +227,15 @@ func get_status() -> Dictionary:
 		"production_static_water_material_parity": bool(effect_status.get(
 			"production_static_water_material_parity", false
 		)),
+		"production_static_water_material_payload_ready": bool(effect_status.get(
+			"production_static_water_material_payload_ready", false
+		)),
+		"production_static_water_fresnel_tint_parity": bool(effect_status.get(
+			"production_static_water_fresnel_tint_parity", false
+		)),
+		"production_static_water_refraction_parity": bool(effect_status.get(
+			"production_static_water_refraction_parity", false
+		)),
 		"production_material_source": str(effect_status.get(
 			"production_material_source", ""
 		)),
@@ -222,6 +245,12 @@ func get_status() -> Dictionary:
 		"production_material_texture_count": int(effect_status.get(
 			"production_material_texture_count", 0
 		)),
+		"production_water_material_source": str(effect_status.get(
+			"production_water_material_source", ""
+		)),
+		"production_water_parameter_bytes": int(effect_status.get(
+			"production_water_parameter_bytes", 0
+		)),
 	}
 
 
@@ -229,7 +258,7 @@ func _process(_delta: float) -> void:
 	if not _running or _backend_terrain == null or _effect == null:
 		return
 	_process_frame += 1
-	_sync_production_terrain_material()
+	_sync_production_materials()
 	_drain_effect_events()
 	_retry_prepared_groups()
 	_reconcile_active_chunks()
@@ -239,6 +268,11 @@ func _process(_delta: float) -> void:
 			and not bool(effect_status.get("initialized", false)) \
 			and not str(effect_status.get("last_error", "")).is_empty():
 		_fail_closed(str(effect_status.get("last_error", "GPU renderer failed")))
+
+
+func _sync_production_materials() -> void:
+	_sync_production_terrain_material()
+	_sync_production_water_material()
 
 
 func _sync_production_terrain_material() -> void:
@@ -257,6 +291,47 @@ func _sync_production_terrain_material() -> void:
 		return
 	if _effect.configure_production_terrain_material(config):
 		_production_material_signature = signature
+
+
+func _sync_production_water_material() -> void:
+	if _effect == null or _backend_terrain == null:
+		return
+	var material_value = _backend_terrain.call("get_water_material_override")
+	if not material_value is ShaderMaterial:
+		return
+	var material := material_value as ShaderMaterial
+	if material.shader == null or material.shader.resource_path != PRODUCTION_WATER_SHADER:
+		return
+	var deep_color = material.get_shader_parameter("deep_color")
+	var edge_color = material.get_shader_parameter("edge_color")
+	if not deep_color is Color:
+		deep_color = Color(0.015, 0.14, 0.20, 1.0)
+	if not edge_color is Color:
+		edge_color = Color(0.08, 0.38, 0.46, 1.0)
+	var deep_tint = material.get_shader_parameter("deep_tint")
+	var edge_tint = material.get_shader_parameter("edge_tint")
+	var refraction_strength = material.get_shader_parameter("refraction_strength")
+	var values := PackedFloat32Array()
+	_append_vec4(values, Vector4(deep_color.r, deep_color.g, deep_color.b, 1.0))
+	_append_vec4(values, Vector4(edge_color.r, edge_color.g, edge_color.b, 1.0))
+	_append_vec4(values, Vector4(
+		float(deep_tint) if deep_tint is float else 0.34,
+		float(edge_tint) if edge_tint is float else 0.52,
+		float(refraction_strength) if refraction_strength is float else 0.008,
+		0.0
+	))
+	var parameter_bytes := values.to_byte_array()
+	var signature := "%s:%s" % [
+		str(material.get_instance_id()), parameter_bytes.hex_encode()
+	]
+	if signature == _production_water_signature:
+		return
+	if _effect.configure_production_static_water_material({
+		"source": PRODUCTION_WATER_SHADER,
+		"parameter_bytes": parameter_bytes,
+		"resource": material,
+	}):
+		_production_water_signature = signature
 
 
 func _production_material_config(material: ShaderMaterial) -> Dictionary:

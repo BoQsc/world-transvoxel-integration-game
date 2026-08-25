@@ -11,6 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader"
 TARGET = ROOT / "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_production.glsl"
+WATER_SOURCE = ROOT / "addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader"
+WATER_TARGET = ROOT / "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_water.glsl"
 
 
 VERTEX_SOURCE = r'''#[vertex]
@@ -47,6 +49,7 @@ layout(location = 2) out vec4 generated_material_weights_low;
 layout(location = 3) out vec4 generated_material_weights_high;
 layout(location = 4) out vec4 authored_material_weights_low;
 layout(location = 5) out vec4 authored_material_weights_high;
+layout(location = 6) out vec3 world_view_direction;
 
 int material_weight_slot(int material) {
 	if (material == 1) return 0;
@@ -73,7 +76,11 @@ void main() {
 	}
 	world_position = vertex_position.xyz;
 	world_normal = normalize(vertex_normal.xyz);
-	gl_Position = projection * view_matrix * vec4(world_position, 1.0);
+	vec3 view_position = (view_matrix * vec4(world_position, 1.0)).xyz;
+	world_view_direction = normalize(
+		transpose(mat3(view_matrix)) * -view_position
+	);
+	gl_Position = projection * vec4(view_position, 1.0);
 	generated_material_weights_low = vec4(0.0);
 	generated_material_weights_high = vec4(0.0);
 	authored_material_weights_low = vec4(0.0);
@@ -102,6 +109,7 @@ layout(location = 2) in vec4 generated_material_weights_low;
 layout(location = 3) in vec4 generated_material_weights_high;
 layout(location = 4) in vec4 authored_material_weights_low;
 layout(location = 5) in vec4 authored_material_weights_high;
+layout(location = 6) in vec3 world_view_direction;
 layout(location = 0) out vec4 output_color;
 
 layout(set = 1, binding = 0, std140) uniform ProductionMaterialParams {
@@ -157,6 +165,13 @@ const float clean_roughness = 1.0;
 const float clean_specular = 0.0;
 const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
 const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
+
+struct ProductionMaterialResponse {
+	vec3 albedo;
+	float roughness;
+	float specular;
+	float metallic;
+};
 '''
 
 
@@ -170,17 +185,28 @@ def transform_fragment(source: str) -> str:
     fragment = source[source.index("void fragment()"):].strip()
     fragment = fragment.replace(
         "void fragment() {",
-        "vec3 production_fragment_albedo() {\n\tvec3 output_albedo = vec3(0.0);",
+        (
+            "ProductionMaterialResponse production_fragment_material() {\n"
+            "\tProductionMaterialResponse result;\n"
+            "\tresult.albedo = vec3(0.0);\n"
+            "\tresult.roughness = 1.0;\n"
+            "\tresult.specular = 0.0;\n"
+            "\tresult.metallic = 0.0;"
+        ),
         1,
     )
-    discarded_prefixes = ("NORMAL =", "METALLIC =", "SPECULAR =", "ROUGHNESS =")
+    discarded_prefixes = ("NORMAL =",)
     kept = [
         line for line in fragment.splitlines()
         if not line.strip().startswith(discarded_prefixes)
     ]
-    fragment = "\n".join(kept).replace("ALBEDO =", "output_albedo =")
+    fragment = "\n".join(kept)
+    fragment = fragment.replace("ALBEDO =", "result.albedo =")
+    fragment = fragment.replace("ROUGHNESS =", "result.roughness =")
+    fragment = fragment.replace("SPECULAR =", "result.specular =")
+    fragment = fragment.replace("METALLIC =", "result.metallic =")
     closing = fragment.rfind("}")
-    fragment = fragment[:closing] + "\treturn output_albedo;\n" + fragment[closing:]
+    fragment = fragment[:closing] + "\treturn result;\n" + fragment[closing:]
     return fragment
 
 
@@ -206,15 +232,112 @@ def generated_source(source: str) -> str:
         + r'''
 
 void main() {
-	vec3 albedo = clamp(production_fragment_albedo(), vec3(0.0), vec3(1.0));
+	ProductionMaterialResponse material = production_fragment_material();
+	vec3 albedo = clamp(material.albedo, vec3(0.0), vec3(1.0));
 	vec3 unit_normal = normalize(world_normal);
-	float light = 0.28 + 0.72 * abs(dot(
-		unit_normal, normalize(vec3(0.35, 0.70, 0.62))
-	));
-	output_color = vec4(albedo * light, 1.0);
+	vec3 unit_view = normalize(world_view_direction);
+	vec3 unit_light = normalize(vec3(0.35, 0.70, 0.62));
+	vec3 half_direction = normalize(unit_light + unit_view);
+	float n_dot_l = max(dot(unit_normal, unit_light), 0.0);
+	float n_dot_v = max(dot(unit_normal, unit_view), 0.0);
+	float l_dot_h = max(dot(unit_light, half_direction), 0.0);
+	float roughness = clamp(material.roughness, 0.0, 1.0);
+	float fd90 = 0.5 + 2.0 * l_dot_h * l_dot_h * roughness;
+	float light_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_l, 5.0);
+	float view_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_v, 5.0);
+	float diffuse_burley = n_dot_l * light_scatter * view_scatter;
+	vec3 bounded_light = vec3(0.20) + vec3(0.80) * diffuse_burley;
+	output_color = vec4(albedo * bounded_light, 1.0);
 }
 '''
     )
+
+
+def generated_water_source(source: str) -> str:
+    source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return f'''// Generated by tools/generate_gpu_production_material_shader.py
+// production_water_source_sha256={source_hash}
+
+#[vertex]
+#version 450
+
+#define MAX_VIEWS 2
+
+struct WtSceneDataMatrices {{
+\tmat4 projection_matrix;
+\tmat4 inv_projection_matrix;
+\tmat3x4 inv_view_matrix;
+\tmat3x4 view_matrix;
+#ifdef USE_DOUBLE_PRECISION
+\tvec4 inv_view_precision;
+#endif
+\tmat4 projection_matrix_view[MAX_VIEWS];
+}};
+
+layout(set = 0, binding = 0, std140) uniform SceneDataBlock {{
+\tWtSceneDataMatrices data;
+}} scene_data_block;
+
+layout(location = 0) in vec4 vertex_position;
+layout(location = 1) in vec4 vertex_normal;
+
+layout(push_constant, std430) uniform Params {{
+\tivec4 view;
+}} params;
+
+layout(location = 0) out vec3 world_normal;
+layout(location = 1) out vec3 world_view_direction;
+
+void main() {{
+\tmat4 view_matrix = transpose(mat4(
+\t\tscene_data_block.data.view_matrix[0],
+\t\tscene_data_block.data.view_matrix[1],
+\t\tscene_data_block.data.view_matrix[2],
+\t\tvec4(0.0, 0.0, 0.0, 1.0)
+\t));
+\tmat4 projection = scene_data_block.data.projection_matrix;
+\tif (params.view.y > 1) {{
+\t\tprojection = scene_data_block.data.projection_matrix_view[params.view.x];
+\t}}
+\tvec3 view_position = (view_matrix * vec4(vertex_position.xyz, 1.0)).xyz;
+\tworld_normal = normalize(vertex_normal.xyz);
+\tworld_view_direction = normalize(
+\t\ttranspose(mat3(view_matrix)) * -view_position
+\t);
+\tgl_Position = projection * vec4(view_position, 1.0);
+}}
+
+#[fragment]
+#version 450
+
+layout(location = 0) in vec3 world_normal;
+layout(location = 1) in vec3 world_view_direction;
+layout(location = 0) out vec4 output_color;
+
+layout(set = 1, binding = 0, std140) uniform ProductionWaterParams {{
+\tvec4 deep_color;
+\tvec4 edge_color;
+\tvec4 response;
+}} water_params;
+
+void main() {{
+\tfloat facing = abs(dot(
+\t\tnormalize(world_normal), normalize(world_view_direction)
+\t));
+\tfloat fresnel = pow(1.0 - facing, 5.0);
+\tvec3 tint = mix(water_params.deep_color.rgb, water_params.edge_color.rgb, fresnel);
+\tfloat tint_strength = mix(
+\t\twater_params.response.x, water_params.response.y, fresnel
+\t);
+\tif (!gl_FrontFacing) {{
+\t\ttint = water_params.deep_color.rgb;
+\t\ttint_strength = max(tint_strength, 0.58);
+\t}}
+\t// Standard alpha blending reproduces mix(background, tint, tint_strength).
+\t// Screen-space refraction remains an explicit unsupported response.
+\toutput_color = vec4(tint, tint_strength);
+}}
+'''
 
 
 def main() -> int:
@@ -223,13 +346,20 @@ def main() -> int:
     args = parser.parse_args()
     source = SOURCE.read_text(encoding="utf-8")
     generated = generated_source(source)
+    water_source = WATER_SOURCE.read_text(encoding="utf-8")
+    generated_water = generated_water_source(water_source)
     if args.check:
         if not TARGET.exists() or TARGET.read_text(encoding="utf-8") != generated:
             raise SystemExit("GPU production material shader is stale")
+        if not WATER_TARGET.exists() \
+                or WATER_TARGET.read_text(encoding="utf-8") != generated_water:
+            raise SystemExit("GPU production water shader is stale")
         print("GPU_PRODUCTION_MATERIAL_SHADER_PASS")
         return 0
     TARGET.write_text(generated, encoding="utf-8", newline="\n")
+    WATER_TARGET.write_text(generated_water, encoding="utf-8", newline="\n")
     print(f"generated {TARGET.relative_to(ROOT)}")
+    print(f"generated {WATER_TARGET.relative_to(ROOT)}")
     return 0
 
 

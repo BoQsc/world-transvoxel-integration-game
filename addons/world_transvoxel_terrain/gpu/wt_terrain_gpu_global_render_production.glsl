@@ -35,6 +35,7 @@ layout(location = 2) out vec4 generated_material_weights_low;
 layout(location = 3) out vec4 generated_material_weights_high;
 layout(location = 4) out vec4 authored_material_weights_low;
 layout(location = 5) out vec4 authored_material_weights_high;
+layout(location = 6) out vec3 world_view_direction;
 
 int material_weight_slot(int material) {
 	if (material == 1) return 0;
@@ -61,7 +62,11 @@ void main() {
 	}
 	world_position = vertex_position.xyz;
 	world_normal = normalize(vertex_normal.xyz);
-	gl_Position = projection * view_matrix * vec4(world_position, 1.0);
+	vec3 view_position = (view_matrix * vec4(world_position, 1.0)).xyz;
+	world_view_direction = normalize(
+		transpose(mat3(view_matrix)) * -view_position
+	);
+	gl_Position = projection * vec4(view_position, 1.0);
 	generated_material_weights_low = vec4(0.0);
 	generated_material_weights_high = vec4(0.0);
 	authored_material_weights_low = vec4(0.0);
@@ -88,6 +93,7 @@ layout(location = 2) in vec4 generated_material_weights_low;
 layout(location = 3) in vec4 generated_material_weights_high;
 layout(location = 4) in vec4 authored_material_weights_low;
 layout(location = 5) in vec4 authored_material_weights_high;
+layout(location = 6) in vec3 world_view_direction;
 layout(location = 0) out vec4 output_color;
 
 layout(set = 1, binding = 0, std140) uniform ProductionMaterialParams {
@@ -158,6 +164,13 @@ const float clean_roughness = 1.0;
 const float clean_specular = 0.0;
 const float PRODUCTION_TEXTURE_WORLD_SCALE = 0.125;
 const float PRODUCTION_TRIPLANAR_BLEND_SHARPNESS = 4.0;
+
+struct ProductionMaterialResponse {
+	vec3 albedo;
+	float roughness;
+	float specular;
+	float metallic;
+};
 
 float material_layer(float material_id) {
 	if (material_id > 0.5 && material_id < 1.5) {
@@ -668,8 +681,12 @@ vec3 material_clean_tint_from_weights(vec4 low_weights, vec4 high_weights) {
 	return tint / total;
 }
 
-vec3 production_fragment_albedo() {
-	vec3 output_albedo = vec3(0.0);
+ProductionMaterialResponse production_fragment_material() {
+	ProductionMaterialResponse result;
+	result.albedo = vec3(0.0);
+	result.roughness = 1.0;
+	result.specular = 0.0;
+	result.metallic = 0.0;
 	vec4 generated_low = max(generated_material_weights_low, vec4(0.0));
 	vec4 generated_high = max(generated_material_weights_high, vec4(0.0));
 	vec4 authored_low = max(authored_material_weights_low, vec4(0.0));
@@ -688,7 +705,10 @@ vec3 production_fragment_albedo() {
 				clamp(clean_material_variation_strength, 0.0, 1.0)
 			);
 		}
-		output_albedo = clean_color;
+		result.albedo = clean_color;
+		result.metallic = 0.0;
+		result.specular = clamp(clean_specular, 0.0, 1.0);
+		result.roughness = clamp(clean_roughness, 0.0, 1.0);
 	} else {
 		vec3 surface_normal = normalize(world_normal);
 		float generated_coverage = material_weight_sum(generated_low, generated_high);
@@ -803,16 +823,28 @@ vec3 production_fragment_albedo() {
 		float roughness_texel = mix(
 			generated_roughness, authored_roughness, authored_mix
 		);
-		output_albedo = albedo_texel.rgb;
+		result.albedo = albedo_texel.rgb;
+		result.specular = 0.0;
+		result.roughness = clamp(roughness_texel, 0.45, 0.98);
 	}
-	return output_albedo;
+	return result;
 }
 
 void main() {
-	vec3 albedo = clamp(production_fragment_albedo(), vec3(0.0), vec3(1.0));
+	ProductionMaterialResponse material = production_fragment_material();
+	vec3 albedo = clamp(material.albedo, vec3(0.0), vec3(1.0));
 	vec3 unit_normal = normalize(world_normal);
-	float light = 0.28 + 0.72 * abs(dot(
-		unit_normal, normalize(vec3(0.35, 0.70, 0.62))
-	));
-	output_color = vec4(albedo * light, 1.0);
+	vec3 unit_view = normalize(world_view_direction);
+	vec3 unit_light = normalize(vec3(0.35, 0.70, 0.62));
+	vec3 half_direction = normalize(unit_light + unit_view);
+	float n_dot_l = max(dot(unit_normal, unit_light), 0.0);
+	float n_dot_v = max(dot(unit_normal, unit_view), 0.0);
+	float l_dot_h = max(dot(unit_light, half_direction), 0.0);
+	float roughness = clamp(material.roughness, 0.0, 1.0);
+	float fd90 = 0.5 + 2.0 * l_dot_h * l_dot_h * roughness;
+	float light_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_l, 5.0);
+	float view_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_v, 5.0);
+	float diffuse_burley = n_dot_l * light_scatter * view_scatter;
+	vec3 bounded_light = vec3(0.20) + vec3(0.80) * diffuse_burley;
+	output_color = vec4(albedo * bounded_light, 1.0);
 }

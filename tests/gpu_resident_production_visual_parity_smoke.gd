@@ -85,9 +85,23 @@ func _run() -> void:
 			or bool(status.get("production_terrain_material_parity", true)) \
 			or not bool(status.get("production_terrain_material_payload_ready", false)) \
 			or not bool(status.get("production_terrain_albedo_mapping_parity", false)) \
+			or not bool(status.get("production_terrain_roughness_mapping_parity", false)) \
+			or not bool(status.get(
+				"production_terrain_accepted_normal_response_parity", false
+			)) \
+			or not bool(status.get(
+				"production_terrain_bounded_pbr_response_parity", false
+			)) \
 			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
 			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
 			or bool(status.get("production_static_water_material_parity", true)) \
+			or not bool(status.get(
+				"production_static_water_material_payload_ready", false
+			)) \
+			or not bool(status.get(
+				"production_static_water_fresnel_tint_parity", false
+			)) \
+			or bool(status.get("production_static_water_refraction_parity", true)) \
 			or str(status.get("production_material_source", "")) != PRODUCTION_SHADER \
 			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
 			or int(status.get("production_material_texture_count", 0)) != 5 \
@@ -107,8 +121,8 @@ func _run() -> void:
 			or int(status.get("recovery_count", -1)) != 0 \
 			or int(effect.get("geometry_readback_bytes", -1)) != 0 \
 			or bool(effect.get("cpu_chunk_finalization_used", true)) \
-			or not _capture_is_valid(overview) \
-			or not _capture_is_valid(near) \
+			or not _capture_is_valid(overview, 10) \
+			or not _capture_is_valid(near, 16) \
 			or str(overview.get("sha256", "")) == str(near.get("sha256", "")):
 		_fail("production visual parity contract failed: status=%s audit=%s overview=%s near=%s" \
 			% [str(status), str(lod_audit), str(overview), str(near)])
@@ -122,7 +136,8 @@ func _run() -> void:
 	print((
 		"%s lod0=%d lod1=%d lod2=%d active=%d overlap=0 " \
 		+ "terrain_albedo_mapping_parity=1 terrain_material_parity=0 " \
-		+ "water_material_parity=0 readback=0 " \
+		+ "roughness_mapping_parity=1 bounded_pbr_response_parity=1 " \
+		+ "water_fresnel_tint_parity=1 water_material_parity=0 readback=0 " \
 		+ "superseded=%d overview_pixels=%d near_pixels=%d " \
 		+ "overview_sha256=%s near_sha256=%s"
 	) % [
@@ -286,9 +301,9 @@ func _capture(name: String) -> Dictionary:
 	}
 
 
-func _capture_is_valid(capture: Dictionary) -> bool:
+func _capture_is_valid(capture: Dictionary, minimum_colors: int) -> bool:
 	return int(capture.get("foreground_pixels", 0)) >= 2000 \
-		and int(capture.get("quantized_color_count", 0)) >= 12 \
+		and int(capture.get("quantized_color_count", 0)) >= minimum_colors \
 		and not str(capture.get("sha256", "")).is_empty()
 
 

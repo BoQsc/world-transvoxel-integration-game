@@ -1,6 +1,9 @@
 extends SceneTree
 
 const MARKER := "GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS"
+const CAPTURE_ROOT := (
+	"res://.godot/world_transvoxel_captures/gpu_resident_production_lifecycle"
+)
 const TerrainWorld := preload(
 	"res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd"
 )
@@ -100,9 +103,10 @@ func _run() -> void:
 
 	var after_construct: Dictionary = _world.get_gpu_resident_render_status()
 	var construct_activated := int(after_construct.get("activated_chunks", 0))
+	var terrain_only_image := await _capture_image("terrain_only")
 	if not _world.submit_edit_batch(
 		_edit_batch(
-			EditOperation.Mode.PLACE_STATIC_WATER, Vector3(4, 12, 4), 2.0, 9
+			EditOperation.Mode.PLACE_STATIC_WATER, Vector3(4, 12, 4), 4.0, 9
 		),
 		6402
 	) or not await _wait_for_commit(2):
@@ -113,10 +117,13 @@ func _run() -> void:
 			% str(_world.get_gpu_resident_render_status()))
 		return
 
-	await RenderingServer.frame_post_draw
-	var image := root.get_texture().get_image()
+	var image := await _capture_image("static_water")
 	if image == null or image.is_empty():
 		_fail("resident production viewport could not be inspected")
+		return
+	if terrain_only_image == null or terrain_only_image.is_empty() \
+			or _image_sha256(terrain_only_image) == _image_sha256(image):
+		_fail("bounded static-water response did not alter the inspected viewport")
 		return
 	var status: Dictionary = _world.get_gpu_resident_render_status()
 	var native_metrics: Dictionary = status.get("native_metrics", {})
@@ -130,13 +137,30 @@ func _run() -> void:
 			or bool(status.get("production_terrain_material_parity", true)) \
 			or not bool(status.get("production_terrain_material_payload_ready", false)) \
 			or not bool(status.get("production_terrain_albedo_mapping_parity", false)) \
+			or not bool(status.get("production_terrain_roughness_mapping_parity", false)) \
+			or not bool(status.get(
+				"production_terrain_accepted_normal_response_parity", false
+			)) \
+			or not bool(status.get(
+				"production_terrain_bounded_pbr_response_parity", false
+			)) \
 			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
 			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
 			or bool(status.get("production_static_water_material_parity", true)) \
+			or not bool(status.get(
+				"production_static_water_material_payload_ready", false
+			)) \
+			or not bool(status.get(
+				"production_static_water_fresnel_tint_parity", false
+			)) \
+			or bool(status.get("production_static_water_refraction_parity", true)) \
 			or str(status.get("production_material_source", "")) \
 				!= "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader" \
 			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
 			or int(status.get("production_material_texture_count", 0)) != 5 \
+			or str(status.get("production_water_material_source", "")) \
+				!= "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader" \
+			or int(status.get("production_water_parameter_bytes", 0)) != 48 \
 			or int(status.get("rejected_chunks", -1)) != 0 \
 			or str(effect_status.get("resource_architecture", "")) \
 				!= "paged_shared_arena" \
@@ -189,9 +213,12 @@ func _run() -> void:
 	print(
 		(
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
-			+ "readback=0 terrain_albedo_mapping_parity=1 " \
+			+ "readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 " \
+			+ "accepted_normal_response_parity=1 bounded_pbr_response_parity=1 " \
 			+ "terrain_material_parity=0 water_material_parity=0 " \
-			+ "material_params=368 material_textures=5 arena=paged_shared native_packed=1 " \
+			+ "water_fresnel_tint_parity=1 water_refraction_parity=0 " \
+			+ "material_params=368 material_textures=5 water_params=48 " \
+			+ "arena=paged_shared native_packed=1 " \
 			+ "pre_mesh_admission=1 reservations=%d captures=%d released=%d"
 		) % [
 			MARKER,
@@ -205,6 +232,28 @@ func _run() -> void:
 	_world.queue_free()
 	await process_frame
 	quit(0)
+
+
+func _capture_image(name: String) -> Image:
+	for _frame in range(4):
+		await RenderingServer.frame_post_draw
+	var image := root.get_texture().get_image()
+	if image != null and not image.is_empty():
+		var driver := RenderingServer.get_current_rendering_driver_name().to_lower()
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(
+			CAPTURE_ROOT
+		))
+		image.save_png("%s/%s_%s.png" % [CAPTURE_ROOT, driver, name])
+	return image
+
+
+static func _image_sha256(image: Image) -> String:
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	if context.update(image.get_data()) != OK:
+		return ""
+	return context.finish().hex_encode()
 
 
 func _setup_viewport() -> void:

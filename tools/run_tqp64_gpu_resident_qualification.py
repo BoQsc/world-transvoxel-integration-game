@@ -204,14 +204,61 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
             bool(status.get("production_terrain_albedo_mapping_parity", False))
             for status in configured_material_statuses
         ),
+        "production_terrain_roughness_mapping_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get("production_terrain_roughness_mapping_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_accepted_normal_response_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get(
+                "production_terrain_accepted_normal_response_parity", False
+            ))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_bounded_pbr_response_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get(
+                "production_terrain_bounded_pbr_response_parity", False
+            ))
+            for status in configured_material_statuses
+        ),
         "production_static_water_material_parity_observed": any(
             bool(status.get("production_static_water_material_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_static_water_material_payload_ready": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get(
+                "production_static_water_material_payload_ready", False
+            ))
+            for status in configured_material_statuses
+        ),
+        "production_static_water_fresnel_tint_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get(
+                "production_static_water_fresnel_tint_parity", False
+            ))
+            for status in configured_material_statuses
+        ),
+        "production_static_water_refraction_parity_observed": any(
+            bool(status.get("production_static_water_refraction_parity", False))
             for status in configured_material_statuses
         ),
         "production_material_source": next((
             str(status.get("production_material_source", ""))
             for status in reversed(configured_material_statuses)
             if str(status.get("production_material_source", ""))
+        ), ""),
+        "production_water_material_source": next((
+            str(status.get("production_water_material_source", ""))
+            for status in reversed(configured_material_statuses)
+            if str(status.get("production_water_material_source", ""))
         ), ""),
         "native_request_handoff_decoupled": any(
             bool(status.get("native_request_handoff_decoupled", False))
@@ -450,7 +497,7 @@ def main(argv: list[str]) -> int:
     raw_root.mkdir(parents=True, exist_ok=True)
     output = args.output.resolve() if args.output else (
         project / "docs" / "evidence"
-        / "tqp64_large_world_gpu_production_visual_candidate_20260825"
+        / "tqp64_large_world_gpu_material_response_candidate_20260825"
         / "qualification.json"
     )
     results = {}
@@ -486,6 +533,24 @@ def main(argv: list[str]) -> int:
                 "production_terrain_albedo_mapping_parity": bool(
                     trace["production_terrain_albedo_mapping_parity_observed"]
                     and trace["production_terrain_albedo_mapping_parity_stable"]
+                ),
+                "production_terrain_roughness_mapping_parity": bool(
+                    trace["production_terrain_roughness_mapping_parity_stable"]
+                ),
+                "production_terrain_accepted_normal_response_parity": bool(
+                    trace[
+                        "production_terrain_accepted_normal_response_parity_stable"
+                    ]
+                ),
+                "production_terrain_bounded_pbr_response_parity": bool(
+                    trace[
+                        "production_terrain_bounded_pbr_response_parity_stable"
+                    ]
+                ),
+                "production_static_water_fresnel_tint_parity": bool(
+                    trace[
+                        "production_static_water_fresnel_tint_parity_stable"
+                    ]
                 ),
                 "production_static_water_material_parity": bool(
                     trace["production_static_water_material_parity_observed"]
@@ -565,6 +630,43 @@ def main(argv: list[str]) -> int:
             "production_terrain_albedo_mapping_parity": all(
                 bool(item["gpu_resident"]["trace"].get(
                     "production_terrain_albedo_mapping_parity_stable", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_terrain_roughness_mapping_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_roughness_mapping_parity_stable", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_terrain_accepted_normal_response_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_accepted_normal_response_parity_stable",
+                    False,
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_terrain_bounded_pbr_response_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_bounded_pbr_response_parity_stable",
+                    False,
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_static_water_fresnel_tint_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_static_water_fresnel_tint_parity_stable", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_static_water_refraction_parity": any(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_static_water_refraction_parity_observed", False
                 ))
                 for item in results.values()
                 if item.get("measurement_pass", False)
