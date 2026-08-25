@@ -13,6 +13,9 @@ const DebugSnapshot := preload("res://addons/world_transvoxel_terrain/debug/wt_t
 const GpuMeshingShadowController := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_shadow_controller.gd"
 )
+const GpuResidentRenderController := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd"
+)
 const VALIDATION_MARKERS := [
 	"a4_phase1_resource_semantics_only",
 	"GenerationBackend.start_backend_world",
@@ -60,6 +63,10 @@ signal readiness_changed(snapshot: Dictionary)
 @export var runtime_gpu_meshing_shadow_enabled: bool = false
 @export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
 @export_range(1, 3, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
+@export var runtime_gpu_resident_render_candidate_enabled: bool = false
+@export var runtime_gpu_resident_world_environment_path: NodePath
+@export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
+@export_range(1, 256, 1) var runtime_gpu_resident_chunk_capacity: int = 64
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
@@ -69,6 +76,7 @@ var _last_error: String = "ok"
 var _last_edit_submission_summary: Dictionary = {}
 var _runtime_state = RuntimeState.new()
 var _gpu_meshing_shadow_controller
+var _gpu_resident_render_controller
 
 func _ready() -> void:
 	if Engine.is_editor_hint() and auto_report_dependency_status:
@@ -142,7 +150,20 @@ func start_backend_world() -> bool:
 	if not profile_error.is_empty():
 		_last_error = profile_error
 		return false
-	if (runtime_gpu_meshing_shadow_enabled \
+	if runtime_gpu_resident_render_candidate_enabled and (\
+			runtime_gpu_meshing_shadow_enabled \
+			or runtime_gpu_meshing_publication_candidate_enabled):
+		_last_error = "GPU resident, shadow, and matched publication modes are exclusive"
+		return false
+	if runtime_gpu_resident_render_candidate_enabled:
+		var world_environment := _resolve_gpu_world_environment()
+		if world_environment == null or not begin_gpu_resident_render_publication(
+			world_environment,
+			runtime_gpu_resident_request_capacity,
+			runtime_gpu_resident_chunk_capacity
+		):
+			return false
+	elif (runtime_gpu_meshing_shadow_enabled \
 			or runtime_gpu_meshing_publication_candidate_enabled) \
 			and not begin_gpu_meshing_shadow(
 			runtime_gpu_meshing_shadow_capacity,
@@ -150,8 +171,11 @@ func start_backend_world() -> bool:
 	):
 		return false
 	var accepted := BackendOps.start_backend_world(self)
-	if not accepted and _gpu_meshing_shadow_controller != null:
-		end_gpu_meshing_shadow()
+	if not accepted:
+		if _gpu_meshing_shadow_controller != null:
+			end_gpu_meshing_shadow()
+		if _gpu_resident_render_controller != null:
+			end_gpu_resident_render_publication()
 	if accepted:
 		_transition_runtime(true, "world_started")
 	return accepted
@@ -160,6 +184,8 @@ func stop_world() -> bool:
 	return stop_backend_world()
 
 func stop_backend_world() -> bool:
+	if _gpu_resident_render_controller != null:
+		end_gpu_resident_render_publication()
 	if _gpu_meshing_shadow_controller != null:
 		end_gpu_meshing_shadow()
 	var accepted := BackendOps.stop_backend_world(self)
@@ -311,6 +337,67 @@ func get_gpu_meshing_shadow_status() -> Dictionary:
 			"gpu_resident_render_publication": false,
 		}
 	return _gpu_meshing_shadow_controller.get_status()
+
+
+func begin_gpu_resident_render_publication(
+	world_environment: WorldEnvironment,
+	request_capacity: int = 16,
+	resident_capacity: int = 64
+) -> bool:
+	if _gpu_resident_render_controller != null \
+			and _gpu_resident_render_controller.is_running():
+		return true
+	if not BackendOps.ensure_backend_terrain(self):
+		return false
+	_gpu_resident_render_controller = GpuResidentRenderController.new()
+	_gpu_resident_render_controller.name = "WT_GpuResidentRender"
+	add_child(_gpu_resident_render_controller)
+	if not _gpu_resident_render_controller.start(
+		_backend_terrain, world_environment, request_capacity, resident_capacity
+	):
+		_last_error = _gpu_resident_render_controller.get_status().get(
+			"last_error", "GPU resident renderer failed to start"
+		)
+		_gpu_resident_render_controller.queue_free()
+		_gpu_resident_render_controller = null
+		return false
+	_last_error = "ok"
+	return true
+
+
+func end_gpu_resident_render_publication() -> void:
+	if _gpu_resident_render_controller == null:
+		return
+	_gpu_resident_render_controller.stop()
+	_gpu_resident_render_controller.queue_free()
+	_gpu_resident_render_controller = null
+
+
+func get_gpu_resident_render_status() -> Dictionary:
+	if _gpu_resident_render_controller == null:
+		return {
+			"schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+			"running": false,
+			"gpu_resident_render_publication": false,
+			"cpu_collision_authority": true,
+		}
+	return _gpu_resident_render_controller.get_status()
+
+
+func _resolve_gpu_world_environment() -> WorldEnvironment:
+	if not runtime_gpu_resident_world_environment_path.is_empty():
+		return get_node_or_null(
+			runtime_gpu_resident_world_environment_path
+		) as WorldEnvironment
+	if get_tree() == null:
+		return null
+	for candidate in get_tree().root.find_children(
+		"*", "WorldEnvironment", true, false
+	):
+		var world_environment := candidate as WorldEnvironment
+		if world_environment != null and world_environment.get_viewport() == get_viewport():
+			return world_environment
+	return null
 
 
 func begin_cpu_causal_trace() -> bool:

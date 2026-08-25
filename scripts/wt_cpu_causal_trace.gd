@@ -357,6 +357,10 @@ func _pipeline_snapshot() -> Dictionary:
 		snapshot["gpu_meshing_shadow"] = _terrain_world.call(
 			"get_gpu_meshing_shadow_status"
 		)
+	if _terrain_world.has_method("get_gpu_resident_render_status"):
+		snapshot["gpu_resident_render"] = _terrain_world.call(
+			"get_gpu_resident_render_status"
+		)
 	if _target_enabled:
 		snapshot["target"] = _target_snapshot()
 	var elapsed_us := maxi(0, Time.get_ticks_usec() - started)

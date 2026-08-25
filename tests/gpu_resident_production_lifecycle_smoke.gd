@@ -1,0 +1,253 @@
+extends SceneTree
+
+const MARKER := "GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS"
+const TerrainWorld := preload(
+	"res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd"
+)
+const TerrainProfile := preload(
+	"res://addons/world_transvoxel_terrain/api/wt_terrain_profile.gd"
+)
+const RuntimeProfile := preload(
+	"res://addons/world_transvoxel_terrain/api/wt_terrain_runtime_profile.gd"
+)
+const GenerationProfile := preload(
+	"res://addons/world_transvoxel_terrain/generation/wt_terrain_generation_profile.gd"
+)
+const StorageProfile := preload(
+	"res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd"
+)
+const EditOperation := preload(
+	"res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd"
+)
+const EditBatch := preload(
+	"res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd"
+)
+
+var _world
+var _world_environment: WorldEnvironment
+var _committed_revisions: Array[int] = []
+
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+
+func _run() -> void:
+	_setup_viewport()
+	_world = TerrainWorld.new()
+	_world.terrain_profile = _terrain_profile()
+	_world.runtime_profile = _runtime_profile()
+	_world.generation_profile = _generation_profile()
+	_world.storage_profile = _storage_profile()
+	_world.runtime_gpu_resident_render_candidate_enabled = true
+	_world.runtime_gpu_meshing_shadow_capacity = 3
+	_world.runtime_gpu_resident_chunk_capacity = 4
+	root.add_child(_world)
+	_world.edit_committed.connect(_on_edit_committed)
+	if not _world.start_backend_world() or not await _wait_for_state("running"):
+		_fail("resident production world did not start: %s" % _world.get_last_error())
+		return
+	if not _world.update_viewer(1, 1, Vector3(8, 8, 8), 0, 0) \
+			or not _world.update_collision_viewer(2, 1, Vector3(8, 8, 8), 0):
+		_fail("resident production viewers were rejected")
+		return
+	if not await _wait_for_active_chunk(1, 1):
+		_fail("initial CPU visual was not replaced by a resident GPU chunk")
+		return
+	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
+	var initial_activated := int(initial_status.get("activated_chunks", 0))
+
+	if not _world.submit_edit_batch(
+		_edit_batch(EditOperation.Mode.CONSTRUCT, Vector3(8, 12, 8), 2.0, 3),
+		6401
+	) or not await _wait_for_commit(1):
+		_fail("resident construct edit did not commit")
+		return
+	if not await _wait_for_active_chunk(initial_activated + 1, 1):
+		_fail("edited resident generation did not replace the prior generation: %s" \
+			% str(_world.get_gpu_resident_render_status()))
+		return
+
+	var after_construct: Dictionary = _world.get_gpu_resident_render_status()
+	var construct_activated := int(after_construct.get("activated_chunks", 0))
+	if not _world.submit_edit_batch(
+		_edit_batch(
+			EditOperation.Mode.PLACE_STATIC_WATER, Vector3(4, 12, 4), 2.0, 9
+		),
+		6402
+	) or not await _wait_for_commit(2):
+		_fail("resident static-water edit did not commit")
+		return
+	if not await _wait_for_active_chunk(construct_activated + 1, 2):
+		_fail("terrain and water were not admitted as one complete resident chunk: %s" \
+			% str(_world.get_gpu_resident_render_status()))
+		return
+
+	await RenderingServer.frame_post_draw
+	var image := root.get_texture().get_image()
+	if image == null or image.is_empty():
+		_fail("resident production viewport could not be inspected")
+		return
+	var status: Dictionary = _world.get_gpu_resident_render_status()
+	var native_metrics: Dictionary = status.get("native_metrics", {})
+	var effect_status: Dictionary = status.get("effect_status", {})
+	var runtime_metrics: Dictionary = _world.get_runtime_metrics()
+	if not bool(status.get("running", false)) \
+			or not bool(status.get("production_chunk_replacement", false)) \
+			or not bool(status.get("cpu_collision_authority", false)) \
+			or bool(status.get("production_material_parity", true)) \
+			or int(status.get("rejected_chunks", -1)) != 0 \
+			or int(native_metrics.get("activated_chunks", 0)) < 3 \
+			or int(native_metrics.get("validation_rejections", -1)) != 0 \
+			or int(effect_status.get("active_entry_count", 0)) != 2 \
+			or int(effect_status.get("resident_entry_count", 0)) > 5 \
+			or int(effect_status.get("geometry_readback_bytes", -1)) != 0 \
+			or bool(effect_status.get("cpu_chunk_finalization_used", true)) \
+			or bool(effect_status.get("array_mesh_upload_used", true)) \
+			or not bool(effect_status.get("atomic_surface_set_activation", false)) \
+			or int(runtime_metrics.get("collision_resources", 0)) < 1:
+		_fail("resident production contract failed: %s" % str(status))
+		return
+
+	_world.end_gpu_resident_render_publication()
+	await process_frame
+	var backend: Node = _world.get_backend_terrain()
+	var recovery_metrics := Dictionary(backend.call(
+		"get_gpu_resident_render_metrics"
+	))
+	if bool(recovery_metrics.get("enabled", true)) \
+			or int(recovery_metrics.get("restored_cpu_chunks", 0)) < 1:
+		_fail("resident shutdown did not restore the CPU visual")
+		return
+	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
+		_fail("resident production world did not stop cleanly")
+		return
+	print(
+		(
+			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
+			+ "readback=0 material_parity=0"
+		) % [
+			MARKER,
+			int(native_metrics.get("activated_chunks", 0)),
+			int(recovery_metrics.get("restored_cpu_chunks", 0)),
+		]
+	)
+	_world.queue_free()
+	await process_frame
+	quit(0)
+
+
+func _setup_viewport() -> void:
+	root.size = Vector2i(640, 480)
+	root.content_scale_size = Vector2i(640, 480)
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.02, 0.025, 0.03, 1.0)
+	_world_environment = WorldEnvironment.new()
+	_world_environment.environment = environment
+	root.add_child(_world_environment)
+	var camera := Camera3D.new()
+	camera.position = Vector3(8, 12, 28)
+	root.add_child(camera)
+	camera.look_at(Vector3(8, 8, 8), Vector3.UP)
+	camera.current = true
+
+
+func _terrain_profile() -> Resource:
+	var profile := TerrainProfile.new()
+	profile.profile_id = &"gpu_resident_production_lifecycle_smoke"
+	profile.horizontal_cells = 16
+	profile.vertical_cells = 16
+	return profile
+
+
+func _runtime_profile() -> Resource:
+	var profile := RuntimeProfile.create_builtin(RuntimeProfile.Preset.LOW_POWER)
+	profile.procedural_generation_worker_count = 1
+	profile.meshing_worker_count = 1
+	return profile
+
+
+func _generation_profile() -> Resource:
+	var profile := GenerationProfile.new()
+	profile.source_mode = GenerationProfile.SourceMode.FLAT
+	profile.profile_id = &"gpu_resident_production_lifecycle_smoke"
+	profile.procedural_preset_id = &"flat"
+	profile.source_revision = 640201
+	profile.world_chunk_count_x = 1
+	profile.world_chunk_count_y = 1
+	profile.world_chunk_count_z = 1
+	return profile
+
+
+func _storage_profile() -> Resource:
+	var root_path := "user://gpu-resident-production-%d" % Time.get_ticks_usec()
+	var profile := StorageProfile.new()
+	profile.profile_id = &"gpu_resident_production_lifecycle_smoke"
+	profile.object_root_path = root_path
+	profile.world_manifest_path = root_path.path_join("world.wtworld")
+	profile.edit_journal_path = root_path.path_join("world.wtedit")
+	profile.snapshot_directory = root_path.path_join("snapshots")
+	return profile
+
+
+func _edit_batch(
+	mode: EditOperation.Mode, center: Vector3, radius: float, material: int
+) -> Resource:
+	var operation := EditOperation.new()
+	operation.mode = mode
+	operation.brush_shape = EditOperation.BrushShape.SPHERE
+	operation.center = center
+	operation.radius = radius
+	operation.material_id = material
+	operation.density_value = 1.0
+	var batch := EditBatch.new()
+	batch.add_operation(operation)
+	return batch
+
+
+func _wait_for_state(expected: String) -> bool:
+	for _frame in range(900):
+		if _world.get_world_state_name() == expected:
+			await process_frame
+			return true
+		await process_frame
+	return false
+
+
+func _wait_for_commit(revision: int) -> bool:
+	for _frame in range(1200):
+		if _committed_revisions.has(revision) \
+				and _world.get_world_revision() == revision:
+			return true
+		await process_frame
+	return false
+
+
+func _wait_for_active_chunk(activated_chunks: int, active_surfaces: int) -> bool:
+	for _frame in range(1800):
+		var status: Dictionary = _world.get_gpu_resident_render_status()
+		var effect_status: Dictionary = status.get("effect_status", {})
+		var idle: Dictionary = _world.get_cold_idle_summary()
+		if int(status.get("activated_chunks", 0)) >= activated_chunks \
+				and int(status.get("active_chunks", 0)) == 1 \
+				and int(status.get("rejected_chunks", 0)) == 0 \
+				and int(effect_status.get("active_entry_count", 0)) == active_surfaces \
+				and int(effect_status.get("draw_frames", 0)) >= 2 \
+				and bool(idle.get("cold_idle", false)) \
+				and int(idle.get("render_resources", 0)) >= 1 \
+				and int(idle.get("collision_resources", 0)) >= 1:
+			return true
+		await process_frame
+	return false
+
+
+func _on_edit_committed(revision: int) -> void:
+	_committed_revisions.append(revision)
+
+
+func _fail(message: String) -> void:
+	if _world != null:
+		_world.end_gpu_resident_render_publication()
+	push_error("GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_FAIL: " + message)
+	quit(1)

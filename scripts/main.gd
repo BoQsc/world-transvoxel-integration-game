@@ -151,6 +151,7 @@ var active_frame_cap := -1
 var frame_policy_update_counter := 0
 var gpu_meshing_shadow_requested := false
 var gpu_meshing_publication_candidate_requested := false
+var gpu_resident_render_candidate_requested := false
 
 
 func _ready() -> void:
@@ -158,6 +159,9 @@ func _ready() -> void:
 	gpu_meshing_shadow_requested = args.has("--gpu-meshing-shadow")
 	gpu_meshing_publication_candidate_requested = args.has(
 		"--gpu-meshing-publication-candidate"
+	)
+	gpu_resident_render_candidate_requested = args.has(
+		"--gpu-resident-render-candidate"
 	)
 	autonomous = args.has("--p2-autonomous")
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
@@ -440,10 +444,21 @@ func _start_profile() -> void:
 	game_world.runtime_collision_activation_distance = float(settings.get("runtime_collision_activation_distance", 0.0))
 	game_world.runtime_collision_deactivation_distance = float(settings.get("runtime_collision_deactivation_distance", 0.0))
 	game_world.runtime_gpu_meshing_shadow_enabled = \
-		gpu_meshing_shadow_requested and not gpu_meshing_publication_candidate_requested
+		gpu_meshing_shadow_requested \
+		and not gpu_meshing_publication_candidate_requested \
+		and not gpu_resident_render_candidate_requested
 	game_world.runtime_gpu_meshing_publication_candidate_enabled = \
-		gpu_meshing_publication_candidate_requested
+		gpu_meshing_publication_candidate_requested \
+		and not gpu_resident_render_candidate_requested
 	game_world.runtime_gpu_meshing_shadow_capacity = 3
+	game_world.runtime_gpu_resident_render_candidate_enabled = \
+		gpu_resident_render_candidate_requested
+	game_world.runtime_gpu_resident_request_capacity = int(settings.get(
+		"runtime_gpu_resident_request_capacity", 16
+	))
+	game_world.runtime_gpu_resident_chunk_capacity = int(settings.get(
+		"runtime_gpu_resident_chunk_capacity", 64
+	))
 	add_child(game_world)
 	player = _create_player(settings["start"])
 	player.game_world = game_world

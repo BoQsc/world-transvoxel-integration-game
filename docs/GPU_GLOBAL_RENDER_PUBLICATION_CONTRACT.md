@@ -76,14 +76,16 @@ effect reports zero render-target and geometry readback.
 
 ## Excluded Claims
 
-This proof does not replace production terrain chunks, execute the production
-large-world route, evaluate the production procedural field on GPU, reproduce
-production terrain or water materials, coordinate chunk unload/resize/device
-loss, demonstrate performance or power benefit, or complete TQP-64.
+This bounded proof itself does not replace production terrain chunks, execute
+the production large-world route, evaluate the production procedural field on
+GPU, reproduce production terrain or water materials, coordinate chunk
+unload/resize/device loss, demonstrate performance or power benefit, or
+complete TQP-64.
 
-The next stage must connect this default-off mechanism to exact accepted
-production chunk identities, add bounded resident retirement and recovery,
-retain CPU targeted collision, and measure the same large-world relocation and
-edit route against the frozen CPU baseline before any backend promotion.
+The subsequent default-off
+[production resident lifecycle](GPU_PRODUCTION_RESIDENT_LIFECYCLE_CONTRACT.md)
+connects exact accepted chunk identities and qualifies bounded retirement and
+CPU recovery. Its first large-world per-chunk allocation architecture is
+measured and rejected; that result does not weaken this global-device proof.
 
 Evidence: [TQP-64 global render publication proof](evidence/tqp64_gpu_global_render_publication_20260824/RESULT.md).

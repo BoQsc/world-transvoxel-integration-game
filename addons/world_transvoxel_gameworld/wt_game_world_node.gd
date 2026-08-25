@@ -59,6 +59,9 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export var runtime_gpu_meshing_shadow_enabled: bool = false
 @export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
 @export_range(1, 64, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
+@export var runtime_gpu_resident_render_candidate_enabled: bool = false
+@export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
+@export_range(1, 256, 1) var runtime_gpu_resident_chunk_capacity: int = 64
 
 var _profile_id: StringName = &""
 var _terrain_profile: Resource
@@ -488,6 +491,10 @@ func get_causal_trace_context() -> Dictionary:
 		"gpu_meshing_publication_candidate_enabled":
 			runtime_gpu_meshing_publication_candidate_enabled,
 		"gpu_meshing_shadow_capacity": runtime_gpu_meshing_shadow_capacity,
+		"gpu_resident_render_candidate_enabled":
+			runtime_gpu_resident_render_candidate_enabled,
+		"gpu_resident_request_capacity": runtime_gpu_resident_request_capacity,
+		"gpu_resident_chunk_capacity": runtime_gpu_resident_chunk_capacity,
 	}
 
 
@@ -915,6 +922,12 @@ func _apply_profiles() -> void:
 	terrain_world.runtime_gpu_meshing_publication_candidate_enabled = \
 		runtime_gpu_meshing_publication_candidate_enabled
 	terrain_world.runtime_gpu_meshing_shadow_capacity = runtime_gpu_meshing_shadow_capacity
+	terrain_world.runtime_gpu_resident_render_candidate_enabled = \
+		runtime_gpu_resident_render_candidate_enabled
+	terrain_world.runtime_gpu_resident_request_capacity = \
+		runtime_gpu_resident_request_capacity
+	terrain_world.runtime_gpu_resident_chunk_capacity = \
+		runtime_gpu_resident_chunk_capacity
 
 
 func _begin_streaming_burst() -> void:

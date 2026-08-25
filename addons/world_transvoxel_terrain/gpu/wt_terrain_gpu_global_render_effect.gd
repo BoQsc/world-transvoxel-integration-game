@@ -13,6 +13,7 @@ const RASTER_SHADER_FILE := preload(
 )
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 3
+const DEFAULT_RESIDENT_CAPACITY := 64
 const LOCAL_SIZE := 64
 const MAXIMUM_VERTICES_PER_CELL := 12
 const MAXIMUM_INDICES_PER_CELL := 36
@@ -26,10 +27,14 @@ var _rendering_device: RenderingDevice
 var _packer = MeshingCandidate.new()
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
+var _lifecycle_commands: Array[Dictionary] = []
+var _events: Array[Dictionary] = []
 var _latest_sequence_by_key: Dictionary = {}
 var _entries: Dictionary = {}
+var _active_sequence_by_key: Dictionary = {}
 var _framebuffers: Dictionary = {}
 var _next_request_id := 1
+var _resident_capacity := DEFAULT_RESIDENT_CAPACITY
 var _compute_shader := RID()
 var _compute_pipeline := RID()
 var _raster_shader := RID()
@@ -52,14 +57,22 @@ var _status := {
 	"device_local_index_copy_used": true,
 	"fallback_used": false,
 	"request_capacity": REQUEST_CAPACITY,
+	"resident_capacity": DEFAULT_RESIDENT_CAPACITY,
+	"resident_allocation_capacity": DEFAULT_RESIDENT_CAPACITY + REQUEST_CAPACITY,
 	"requested": 0,
 	"applied": 0,
 	"rejected": 0,
 	"stale_skips": 0,
 	"superseded_entries": 0,
+	"prepared_entries": 0,
+	"activated_entries": 0,
+	"retired_entries": 0,
+	"resident_capacity_rejections": 0,
 	"draw_frames": 0,
 	"indirect_draw_calls": 0,
 	"resident_entry_count": 0,
+	"active_entry_count": 0,
+	"event_count": 0,
 	"queued_request_count": 0,
 	"geometry_readback_bytes": 0,
 	"render_target_readback_bytes": 0,
@@ -67,6 +80,7 @@ var _status := {
 	"cpu_chunk_finalization_used": false,
 	"array_mesh_upload_used": false,
 	"cpu_collision_authority": true,
+	"atomic_surface_set_activation": true,
 	"production_chunk_replacement": false,
 	"production_material_parity": false,
 	"last_error": "",
@@ -89,7 +103,8 @@ func submit_explicit_samples(
 	material_authored: PackedByteArray,
 	cells: Array,
 	identity: Dictionary,
-	publication_sequence: int
+	publication_sequence: int,
+	activate_immediately: bool = true
 ) -> int:
 	var identity_error := _validate_identity(identity, publication_sequence)
 	if not identity_error.is_empty():
@@ -124,6 +139,7 @@ func submit_explicit_samples(
 		"key": key,
 		"publication_sequence": publication_sequence,
 		"identity": identity.duplicate(true),
+		"activate_immediately": activate_immediately,
 		"cell_count": int(packed.get("cell_count", 0)),
 		"input_buffers": Array(packed.get("input_buffers", [])).duplicate(),
 	})
@@ -132,6 +148,70 @@ func submit_explicit_samples(
 	_status["last_error"] = ""
 	_mutex.unlock()
 	return request_id
+
+
+func configure_resident_capacity(capacity: int) -> bool:
+	_mutex.lock()
+	if _status.get("initialized", false) or not _pending.is_empty() \
+			or not _entries.is_empty():
+		_status["last_error"] = "resident capacity cannot change after use"
+		_mutex.unlock()
+		return false
+	_resident_capacity = clampi(capacity, 1, 256)
+	_status["resident_capacity"] = _resident_capacity
+	_status["resident_allocation_capacity"] = \
+		_resident_capacity + REQUEST_CAPACITY
+	_mutex.unlock()
+	return true
+
+
+func activate_entry(identity: Dictionary, publication_sequence: int) -> bool:
+	return _queue_lifecycle_command("ACTIVATE", identity, publication_sequence)
+
+
+func activate_entries(entries: Array) -> bool:
+	if entries.is_empty():
+		_record_rejection("global render activation set is empty")
+		return false
+	var retained_entries: Array[Dictionary] = []
+	for entry_value in entries:
+		var entry := Dictionary(entry_value)
+		var identity := Dictionary(entry.get("identity", {}))
+		var publication_sequence := int(entry.get("publication_sequence", 0))
+		var identity_error := _validate_identity(identity, publication_sequence)
+		if not identity_error.is_empty():
+			_record_rejection(identity_error)
+			return false
+		retained_entries.append({
+			"identity": identity.duplicate(true),
+			"publication_sequence": publication_sequence,
+		})
+	_mutex.lock()
+	if _close_requested:
+		_status["last_error"] = "global render publication is closed"
+		_mutex.unlock()
+		return false
+	_lifecycle_commands.append({
+		"action": "ACTIVATE_GROUP",
+		"entries": retained_entries,
+	})
+	_mutex.unlock()
+	return true
+
+
+func retire_entry(identity: Dictionary, publication_sequence: int) -> bool:
+	return _queue_lifecycle_command("RETIRE", identity, publication_sequence)
+
+
+func pop_event() -> Dictionary:
+	_mutex.lock()
+	if _events.is_empty():
+		_mutex.unlock()
+		return {}
+	var event: Dictionary = _events.pop_front()
+	_status["event_count"] = _events.size()
+	_mutex.unlock()
+	return event
 
 
 func get_status() -> Dictionary:
@@ -148,6 +228,7 @@ func close() -> void:
 	_mutex.lock()
 	_close_requested = true
 	_pending.clear()
+	_lifecycle_commands.clear()
 	_status["queued_request_count"] = 0
 	_mutex.unlock()
 	RenderingServer.call_on_render_thread(Callable(self, "_close_on_render_thread"))
@@ -162,6 +243,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		_record_render_error("global RenderingDevice shader initialization failed")
 		return
 	_drain_pending_on_render_thread()
+	_drain_lifecycle_commands_on_render_thread()
 	_draw_entries_on_render_thread(render_data)
 
 
@@ -225,40 +307,168 @@ func _drain_pending_on_render_thread() -> void:
 	for request in requests:
 		var key := str(request.get("key", ""))
 		var sequence := int(request.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
 		_mutex.lock()
 		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
 		_mutex.unlock()
 		if sequence != latest_sequence:
+			_reject_request_on_render_thread(request, "request became stale before allocation")
+			continue
+		if _entries.size() >= _resident_capacity + REQUEST_CAPACITY:
 			_mutex.lock()
-			_status["stale_skips"] = int(_status["stale_skips"]) + 1
+			_status["resident_capacity_rejections"] = \
+				int(_status["resident_capacity_rejections"]) + 1
 			_mutex.unlock()
+			_reject_request_on_render_thread(request, "resident allocation capacity reached")
 			continue
 		var entry := _create_entry_on_render_thread(request)
 		if entry.is_empty():
+			_reject_request_on_render_thread(request, str(_status.get(
+				"last_error", "resident entry creation failed"
+			)))
 			continue
 		_mutex.lock()
 		latest_sequence = int(_latest_sequence_by_key.get(key, 0))
 		_mutex.unlock()
 		if sequence != latest_sequence:
 			_free_entry_on_render_thread(entry)
-			_mutex.lock()
-			_status["stale_skips"] = int(_status["stale_skips"]) + 1
-			_mutex.unlock()
+			_reject_request_on_render_thread(request, "request became stale before residency")
 			continue
-		if _entries.has(key):
-			_free_entry_on_render_thread(_entries[key])
-			_mutex.lock()
-			_status["superseded_entries"] = int(_status["superseded_entries"]) + 1
-			_mutex.unlock()
-		_entries[key] = entry
+		var activate_immediately := bool(request.get("activate_immediately", true))
+		entry["active"] = activate_immediately
+		_entries[token] = entry
+		if activate_immediately:
+			_activate_entry_on_render_thread(key, token, request)
+		else:
+			_push_event_on_render_thread("PREPARED", request)
 		_mutex.lock()
 		_status["applied"] = int(_status["applied"]) + 1
+		_status["prepared_entries"] = int(_status["prepared_entries"]) + 1
 		_status["resident_entry_count"] = _entries.size()
+		_status["active_entry_count"] = _active_sequence_by_key.size()
 		_status["last_applied_identity"] = Dictionary(
 			request.get("identity", {})
 		).duplicate(true)
 		_status["last_error"] = ""
 		_mutex.unlock()
+
+
+func _drain_lifecycle_commands_on_render_thread() -> void:
+	var commands: Array[Dictionary] = []
+	_mutex.lock()
+	commands.assign(_lifecycle_commands)
+	_lifecycle_commands.clear()
+	_mutex.unlock()
+	for command in commands:
+		var action := str(command.get("action", ""))
+		if action == "ACTIVATE_GROUP":
+			_activate_group_on_render_thread(command)
+			continue
+		var identity: Dictionary = command.get("identity", {})
+		var key := _identity_key(identity)
+		var sequence := int(command.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		if action == "ACTIVATE":
+			_mutex.lock()
+			var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+			_mutex.unlock()
+			if not _entries.has(token) or sequence != latest_sequence:
+				_push_event_on_render_thread("REJECTED", command, \
+					"prepared entry became stale before activation")
+				continue
+			var entry: Dictionary = _entries[token]
+			if Dictionary(entry.get("identity", {})) != identity:
+				_push_event_on_render_thread("REJECTED", command, \
+					"activation identity differs from prepared entry")
+				continue
+			entry["active"] = true
+			_entries[token] = entry
+			_activate_entry_on_render_thread(key, token, command)
+		elif action == "RETIRE":
+			_retire_entry_on_render_thread(key, token, command)
+
+
+func _activate_group_on_render_thread(command: Dictionary) -> void:
+	var validated: Array[Dictionary] = []
+	for source_value in Array(command.get("entries", [])):
+		var source := Dictionary(source_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var key := _identity_key(identity)
+		var sequence := int(source.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		_mutex.lock()
+		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+		_mutex.unlock()
+		if not _entries.has(token) or sequence != latest_sequence:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"prepared activation set became stale before activation"
+			)
+			return
+		var entry: Dictionary = _entries[token]
+		if Dictionary(entry.get("identity", {})) != identity:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"activation set identity differs from prepared entry"
+			)
+			return
+		validated.append({
+			"source": source,
+			"key": key,
+			"token": token,
+		})
+	for item in validated:
+		var token := str(item.get("token", ""))
+		var entry: Dictionary = _entries[token]
+		entry["active"] = true
+		_entries[token] = entry
+		_activate_entry_on_render_thread(
+			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
+		)
+
+
+func _activate_entry_on_render_thread(
+	key: String, token: String, source: Dictionary
+) -> void:
+	if _active_sequence_by_key.has(key):
+		var old_sequence := int(_active_sequence_by_key[key])
+		var old_token := _entry_token(key, old_sequence)
+		if old_token != token and _entries.has(old_token):
+			var old_entry: Dictionary = _entries[old_token]
+			_free_entry_on_render_thread(old_entry)
+			_entries.erase(old_token)
+			_mutex.lock()
+			_status["superseded_entries"] = \
+				int(_status["superseded_entries"]) + 1
+			_mutex.unlock()
+			_push_event_on_render_thread("SUPERSEDED", {
+				"identity": Dictionary(old_entry.get("identity", {})),
+				"publication_sequence": old_sequence,
+			})
+	_active_sequence_by_key[key] = int(source.get("publication_sequence", 0))
+	_mutex.lock()
+	_status["activated_entries"] = int(_status["activated_entries"]) + 1
+	_status["resident_entry_count"] = _entries.size()
+	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_mutex.unlock()
+	_push_event_on_render_thread("ACTIVE", source)
+
+
+func _retire_entry_on_render_thread(
+	key: String, token: String, source: Dictionary
+) -> void:
+	if _entries.has(token):
+		_free_entry_on_render_thread(_entries[token])
+		_entries.erase(token)
+	if int(_active_sequence_by_key.get(key, 0)) \
+			== int(source.get("publication_sequence", 0)):
+		_active_sequence_by_key.erase(key)
+	_mutex.lock()
+	_status["retired_entries"] = int(_status["retired_entries"]) + 1
+	_status["resident_entry_count"] = _entries.size()
+	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_mutex.unlock()
+	_push_event_on_render_thread("RETIRED", source)
 
 
 func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
@@ -391,6 +601,8 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		var push_bytes := PackedInt32Array([view, view_count, 0, 0]).to_byte_array()
 		for entry_value in _entries.values():
 			var entry: Dictionary = entry_value
+			if not bool(entry.get("active", false)):
+				continue
 			_rendering_device.draw_list_bind_vertex_array(
 				draw_list, entry.get("vertex_array", RID())
 			)
@@ -478,6 +690,7 @@ func _close_on_render_thread() -> void:
 	for entry in _entries.values():
 		_free_entry_on_render_thread(entry)
 	_entries.clear()
+	_active_sequence_by_key.clear()
 	for framebuffer in _framebuffers.values():
 		if framebuffer is RID and framebuffer.is_valid():
 			_rendering_device.free_rid(framebuffer)
@@ -491,6 +704,7 @@ func _close_on_render_thread() -> void:
 	_compute_shader = RID()
 	_mutex.lock()
 	_status["resident_entry_count"] = 0
+	_status["active_entry_count"] = 0
 	_close_completed = true
 	_mutex.unlock()
 
@@ -521,6 +735,55 @@ func _record_rejection(error: String) -> void:
 func _record_render_error(error: String) -> void:
 	_mutex.lock()
 	_status["last_error"] = error
+	_mutex.unlock()
+
+
+func _queue_lifecycle_command(
+	action: String, identity: Dictionary, publication_sequence: int
+) -> bool:
+	var identity_error := _validate_identity(identity, publication_sequence)
+	if not identity_error.is_empty():
+		_record_rejection(identity_error)
+		return false
+	_mutex.lock()
+	if _close_requested:
+		_status["last_error"] = "global render publication is closed"
+		_mutex.unlock()
+		return false
+	_lifecycle_commands.append({
+		"action": action,
+		"identity": identity.duplicate(true),
+		"publication_sequence": publication_sequence,
+	})
+	_mutex.unlock()
+	return true
+
+
+func _reject_request_on_render_thread(request: Dictionary, error: String) -> void:
+	_mutex.lock()
+	if error.contains("stale"):
+		_status["stale_skips"] = int(_status["stale_skips"]) + 1
+	else:
+		_status["rejected"] = int(_status["rejected"]) + 1
+	_status["last_error"] = error
+	_mutex.unlock()
+	_push_event_on_render_thread("REJECTED", request, error)
+
+
+func _push_event_on_render_thread(
+	event_status: String, source: Dictionary, error: String = ""
+) -> void:
+	var event := {
+		"schema": "world_transvoxel.terrain.gpu_global_render_event.v1",
+		"status": event_status,
+		"request_id": int(source.get("request_id", 0)),
+		"publication_sequence": int(source.get("publication_sequence", 0)),
+		"identity": Dictionary(source.get("identity", {})).duplicate(true),
+		"error": error,
+	}
+	_mutex.lock()
+	_events.append(event)
+	_status["event_count"] = _events.size()
 	_mutex.unlock()
 
 
@@ -555,6 +818,10 @@ static func _identity_key(identity: Dictionary) -> String:
 		int(identity.get("page_z", 0)),
 		int(identity.get("lod", 0)),
 	]
+
+
+static func _entry_token(key: String, publication_sequence: int) -> String:
+	return "%s@%d" % [key, publication_sequence]
 
 
 static func _validate_identity(identity: Dictionary, publication_sequence: int) -> String:

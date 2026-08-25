@@ -129,6 +129,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.append("--gpu-meshing-shadow")
     if args.gpu_meshing_publication_candidate:
         command.append("--gpu-meshing-publication-candidate")
+    if args.gpu_resident_render_candidate:
+        command.append("--gpu-resident-render-candidate")
     if inspect_marker is not None:
         command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
     if args.terrain_waterfall:
@@ -435,6 +437,15 @@ def main(argv: list[str]) -> int:
         help=(
             "Enable the default-off matched GPU-cell visual publication candidate. "
             "CPU world and collision authority remain unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--gpu-resident-render-candidate",
+        action="store_true",
+        help=(
+            "Enable default-off production chunk lifecycle publication through "
+            "the resident GPU renderer. CPU collision remains authoritative and "
+            "production material parity is not yet qualified."
         ),
     )
     parser.add_argument(

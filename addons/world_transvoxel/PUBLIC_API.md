@@ -184,11 +184,13 @@ Opt-in matched GPU-cell render publication:
 - `get_gpu_meshing_shadow_metrics() -> Dictionary`
 - `end_gpu_meshing_shadow()`
 
-The publication route is disabled by default. It requires worker differential,
-native finalization, exact CPU-authority equality, and current application
-identity before queuing a same-generation visual replacement. Collision stays
-CPU-authoritative. This stage is not GPU-resident and still requires CPU
-`ArrayMesh` upload.
+This default-off route accepts only GPU cell results that pass the worker
+differential, native finalization, exact CPU-authority render comparison, and
+current application-generation gates. It can queue a same-generation visual
+replacement but cannot publish collision. The current route still reads cells
+back, finalizes on CPU, and uploads a Godot `ArrayMesh`; it is not GPU-resident
+rendering or a performance claim. See
+`docs/contracts/GPU_MESHING_PUBLICATION_CONTRACT.md`.
 
 The metrics dictionary includes `pending_chunk_retirements`, the number of old
 chunk records/resources retained until the current replacement set is fully

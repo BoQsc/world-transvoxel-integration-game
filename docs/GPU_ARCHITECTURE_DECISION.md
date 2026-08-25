@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GLOBAL_VIEWPORT_PUBLICATION_QUALIFIED`
+Status: `TQP64_PRODUCTION_LIFECYCLE_QUALIFIED_CURRENT_LARGE_WORLD_ARCHITECTURE_REJECTED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -84,13 +84,26 @@ before visibility, retires a superseded resident entry, and draws into a live
 viewport. No geometry readback, CPU finalization, or ArrayMesh upload occurs.
 Vulkan and D3D12 produce the identical retained image signature.
 
-This proof remains deliberately disconnected from production terrain chunk
-replacement. The default runtime remains CPU-only, while shadow and matched
-publication modes retain normal CPU render and targeted CPU collision
-resources. Production chunk admission and retirement, GPU field evaluation,
-production terrain and water materials, targeted collision coordination,
-device recovery, large-world responsiveness benefit, performance and power
-benefit, and release packaging remain TQP-64 work.
+The default-off production
+[resident lifecycle](GPU_PRODUCTION_RESIDENT_LIFECYCLE_CONTRACT.md) now connects
+that mechanism to exact accepted chunk identities. Bounded Vulkan and D3D12
+tests qualify atomic terrain/static-water activation, replacement, retirement,
+CPU collision retention, and CPU visual recovery. Native request handoff is
+consumed separately from repeatable exact-generation readiness polling, so
+waiting for CPU publication does not occupy the bounded capture queue.
+
+The first large-world use of that lifecycle is rejected. Its per-surface
+21-buffer allocation and dispatch occur on the render thread while CPU meshing
+still runs. On the accepted G23 route it reached only 5.90% maximum GPU chunk
+coverage, recorded 3,147 native capacity rejections and 462 candidate chunk
+rejections, raised frame p95 from 21.88 ms to 453.60 ms, and raised maximum RSS
+from 1.55 GB to 2.96 GB. It has no production material parity. The measurement
+is valid, but every production-promotion gate fails.
+
+The default runtime therefore remains CPU-only. TQP-64 stays active and blocked
+on a replacement architecture: pooled or batched GPU storage with amortized
+allocation and true GPU field/Transvoxel generation, while retaining the now
+qualified production lifecycle and CPU recovery contract.
 
 ## Decision
 
