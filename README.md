@@ -72,10 +72,15 @@ Godot viewport without geometry readback, CPU finalization, or ArrayMesh upload
 on Vulkan and D3D12, with exact stale and supersession checks. A subsequent
 default-off production lifecycle uses a bounded shared arena and native-packed
 resident requests; it preserves exact chunk identity, atomic terrain/water
-activation, CPU visual recovery, and CPU collision authority. Its large-world
-Vulkan route remains rejected at 15.55% maximum GPU coverage with substantial
-capacity rejection and no production material parity, so CPU terrain remains
-the default production visual and collision authority.
+activation, CPU visual recovery, and CPU collision authority. Pre-mesh capture
+reservation, priority admission, and stale-generation queue coalescing are also
+retained. The latest large-world Vulkan route reaches 17.16% maximum GPU
+coverage with zero late native-capacity rejection, but frame p95 is 62.81 ms
+against 23.69 ms CPU and production material parity is absent. CPU terrain
+therefore remains the default production visual and collision authority. The
+next TQP-64 prerequisite is bounded compact draw submission and visibility
+culling, followed by production camera/material parity and GPU-first field and
+Transvoxel request generation.
 
 ## Critical edited-terrain LOD boundary
 

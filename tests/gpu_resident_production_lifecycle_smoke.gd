@@ -107,6 +107,10 @@ func _run() -> void:
 			or int(effect_status.get("packing_requests", -1)) != 0 \
 			or int(effect_status.get("native_packed_requests", 0)) < 4 \
 			or int(effect_status.get("native_packed_bytes_total", 0)) <= 0 \
+			or int(native_metrics.get("capture_reservation_attempts", 0)) < 3 \
+			or int(native_metrics.get("reserved_captures", 0)) < 4 \
+			or int(native_metrics.get("released_capture_slots", 0)) < 2 \
+			or int(native_metrics.get("reserved_capture_slots", -1)) != 0 \
 			or int(native_metrics.get("activated_chunks", 0)) < 3 \
 			or int(native_metrics.get("validation_rejections", -1)) != 0 \
 			or int(effect_status.get("active_entry_count", 0)) != 2 \
@@ -135,11 +139,15 @@ func _run() -> void:
 	print(
 		(
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
-			+ "readback=0 material_parity=0 arena=paged_shared native_packed=1"
+			+ "readback=0 material_parity=0 arena=paged_shared native_packed=1 " \
+			+ "pre_mesh_admission=1 reservations=%d captures=%d released=%d"
 		) % [
 			MARKER,
 			int(native_metrics.get("activated_chunks", 0)),
 			int(recovery_metrics.get("restored_cpu_chunks", 0)),
+			int(native_metrics.get("capture_reservation_attempts", 0)),
+			int(native_metrics.get("reserved_captures", 0)),
+			int(native_metrics.get("released_capture_slots", 0)),
 		]
 	)
 	_world.queue_free()

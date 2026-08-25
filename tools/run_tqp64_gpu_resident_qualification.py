@@ -57,6 +57,13 @@ NATIVE_COUNTERS = (
     "capacity",
     "captured_requests",
     "capacity_rejections",
+    "reserved_capture_slots",
+    "capture_reservation_attempts",
+    "capture_reservation_rejections",
+    "reserved_captures",
+    "released_capture_slots",
+    "priority_dequeues",
+    "dequeue_superseded_requests",
     "queued_requests",
     "in_flight_requests",
     "validation_attempts",
@@ -115,6 +122,10 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
                 int(status.get("active_chunks", 0)) / render_resources
             )
     final_status = snapshots[-1][1] if snapshots else {}
+    final_native = final_status.get("native_metrics", {}) \
+        if isinstance(final_status, dict) else {}
+    if not isinstance(final_native, dict):
+        final_native = {}
     return {
         "schema": trace.get("schema", ""),
         "reason": trace.get("reason", ""),
@@ -147,6 +158,9 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "maximum": _maximum(snapshots, STATUS_COUNTERS),
         "effect_maximum": _maximum(snapshots, EFFECT_COUNTERS, "effect_status"),
         "native_maximum": _maximum(snapshots, NATIVE_COUNTERS, "native_metrics"),
+        "native_final": {
+            key: int(final_native.get(key, 0)) for key in NATIVE_COUNTERS
+        },
         "maximum_gpu_chunk_coverage_ratio": max(coverage_ratios, default=0.0),
         "final_status": {
             "tracked_chunks": int(final_status.get("tracked_chunks", 0)),
@@ -244,6 +258,8 @@ def _load_mode(raw_root: pathlib.Path, driver: str, mode: str) -> dict[str, Any]
     if mode == "gpu_resident":
         maximum = trace.get("maximum", {})
         effect = trace.get("effect_maximum", {})
+        native = trace.get("native_maximum", {})
+        native_final = trace.get("native_final", {})
         requirements.update({
             "resident_route_observed": bool(trace.get("running_observed", False)),
             "cpu_collision_authoritative": bool(
@@ -260,6 +276,13 @@ def _load_mode(raw_root: pathlib.Path, driver: str, mode: str) -> dict[str, Any]
                 int(effect.get("arena_slot_releases", 0)) > 0
                 and int(effect.get("arena_slot_reuses", 0)) > 0
             ),
+            "pre_mesh_capture_admission_observed": (
+                int(native.get("capture_reservation_attempts", 0)) > 0
+                and int(native.get("reserved_captures", 0)) > 0
+            ),
+            "no_capture_reservation_leak": int(
+                native_final.get("reserved_capture_slots", -1)
+            ) == 0,
             "no_fail_closed_recovery": int(maximum.get("recovery_count", 0)) == 0,
             "no_geometry_readback": int(
                 effect.get("geometry_readback_bytes", -1)

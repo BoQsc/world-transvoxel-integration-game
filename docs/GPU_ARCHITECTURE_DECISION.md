@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_PAGED_ARENA_NATIVE_PACKING_QUALIFIED_GPU_FIRST_ARCHITECTURE_BLOCKED`
+Status: `TQP64_BOUNDED_ADMISSION_COALESCING_QUALIFIED_DRAW_ARCHITECTURE_BLOCKED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -119,10 +119,46 @@ requests, and production material parity is absent. The Vulkan promotion gate
 therefore fails and the D3D12 large-world rerun is intentionally deferred.
 
 The default runtime therefore remains CPU-only. TQP-64 stays active and blocked
-on GPU-first field/Transvoxel request generation and bounded admission that can
-sustain production coverage without duplicate CPU meshing or request floods.
-It must retain the now-qualified shared arena, production lifecycle, and CPU
-recovery contract.
+on bounded draw submission and visibility, production camera/material parity,
+and GPU-first field/Transvoxel request generation. It must retain the
+now-qualified shared arena, production lifecycle, admission/coalescing rules,
+and CPU recovery contract.
+
+### Bounded Admission And Coalescing
+
+The next retained intermediate reserves bounded native capture capacity before
+CPU meshing records a candidate. Reservations carry the complete authoritative
+job identity. A newer world/source revision, a newer generation of the same
+chunk, or higher scheduler priority may replace lower-value queued work before
+handoff. Dequeue uses the same ordering and removes queued obsolete global
+revisions and same-chunk generations. Unused and cancelled reservations are
+released; focused lifecycle and relocation tests finish with zero reservation
+leaks and zero late native-capacity rejection.
+
+On the retained 2,048 x 256 x 2,048 Vulkan route, 3,036 reservation attempts
+produce 2,520 captures. Native packing and GPU preparation fall to 278 exact
+requests, 60 queued obsolete requests are coalesced, and the shared arena
+reuses 214 slots. Maximum coverage improves to 17.16%, but 214 candidate
+chunks are still rejected. Against the fresh CPU baseline captured immediately
+before these candidate-only scheduling changes, frame p95 rises from 23.69 ms
+to 62.81 ms (+165.06%), p99 rises 94.85%, wall time rises 9.61%, and maximum
+RSS rises 5.87%. The admission mechanism is retained because it prevents
+unbounded duplicate handoff; the production backend remains rejected.
+
+Trace correlation isolates the next blocker. Frames without active GPU
+resident rendering have a 19.86 ms p95; frames with all 64 resident chunks have
+a 63.99 ms p95. The global renderer currently iterates every active entry and
+submits one indexed indirect command record per source cell, without visibility
+culling or compacted draw counts. At 32,768 cells per common chunk, 64 active
+chunks can expose roughly two million command records per frame even when most
+cells emit no geometry. This is a downstream render-submission architecture
+problem, not evidence against the Transvoxel tables or CPU authority.
+
+The next order is therefore strict: first bound draw work through compact or
+counted indirect submission and visibility culling; second establish production
+camera and material parity; third replace CPU-mesh capture with GPU-first field
+evaluation and Transvoxel extraction. Vulkan large-world promotion must pass
+before a D3D12 large-world run is admitted.
 
 ## Decision
 

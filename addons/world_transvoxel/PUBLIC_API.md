@@ -211,11 +211,32 @@ collision authority, or hide the CPU visual before native freshness/readiness
 validation and atomic surface-set activation succeed. A native packing failure
 is rejected immediately so it cannot retain bounded queue capacity.
 
-This route still records inputs while the CPU Transvoxel mesher produces the
-authoritative chunk. Native packing removes per-cell Godot Dictionaries and
-synchronous GDScript packing from production resident submission, but it does
-not eliminate duplicate CPU meshing or establish GPU field-generation
-authority.
+Before CPU meshing begins, the runtime reserves one bounded capture slot for a
+single-surface queue or two slots when the queue can represent the atomic
+terrain/static-water pair. If the reservation fails, CPU meshing proceeds
+without the recording wrapper. Unused slots are released when the prepared job
+finishes, including failure and cancellation paths. The resident metrics expose
+`reserved_capture_slots`, `capture_reservation_attempts`,
+`capture_reservation_rejections`, `reserved_captures`, and
+`released_capture_slots`.
+
+Reservations carry the authoritative scheduler job identity and priority. A
+newer source/world revision, newer generation of the same chunk, or
+higher-priority job may replace a complete lower-priority queued job before CPU
+meshing starts. In-flight work is never cancelled by this queue, and captures
+whose job identity differs from their reservation are rejected.
+
+Dequeue follows the same authoritative source revision, world revision, job
+priority, generation, and sequence ordering as admission. Before handing a
+request to Godot, it removes queued requests from older global revisions and
+older generations of the selected chunk. Metrics expose `priority_dequeues` and
+`dequeue_superseded_requests`; this coalescing never cancels in-flight work.
+
+Admitted inputs are still recorded while the CPU Transvoxel mesher produces the
+authoritative chunk. Reservations and native packing remove rejected recording
+work, per-cell Godot Dictionaries, and synchronous GDScript packing from
+production resident submission, but they do not eliminate duplicate CPU
+meshing or establish GPU field-generation authority.
 
 The metrics dictionary includes `pending_chunk_retirements`, the number of old
 chunk records/resources retained until the current replacement set is fully

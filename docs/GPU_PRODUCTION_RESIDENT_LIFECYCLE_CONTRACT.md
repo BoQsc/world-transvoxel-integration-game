@@ -1,6 +1,6 @@
 # GPU Production Resident Lifecycle Contract
 
-Status: `BOUNDED_LIFECYCLE_ARENA_NATIVE_PACKING_QUALIFIED_GPU_FIRST_BLOCKED`
+Status: `BOUNDED_LIFECYCLE_ADMISSION_COALESCING_QUALIFIED_DRAW_ARCHITECTURE_BLOCKED`
 
 Schema: `world_transvoxel.terrain.gpu_production_resident_lifecycle.v1`
 
@@ -88,13 +88,36 @@ rejections are 2,565, native capacity rejections are 612, and production
 material parity is absent. Faster native handoff exposes the deeper duplicate
 CPU-meshing and admission problem; it does not solve it.
 
+## Bounded Admission And Coalescing Follow-Up
+
+The retained native path now reserves capture capacity before CPU meshing can
+record a GPU candidate. Reservations include exact chunk, LOD, generation,
+source/world revision, transition mask, scheduler priority, and scheduler
+sequence. Higher-authority or higher-priority work can evict only complete
+queued work; in-flight work remains immutable. Dequeue applies the same order
+and removes obsolete queued revisions and older same-chunk generations.
+
+Focused Vulkan lifecycle and relocation tests pass with zero leaked
+reservations and zero late native-capacity rejection. The latest large-world
+route records 3,036 reservation attempts, 2,520 captures, 60 dequeue-time
+supersessions, 278 native-packed/prepared requests, 214 arena slot reuses, and
+17.16% maximum GPU coverage. Candidate rejections fall to 214, but frame p95
+is 62.81 ms versus 23.69 ms CPU. This qualifies bounded request admission and
+queue coalescing only; it does not qualify production performance.
+
 ## Required Replacement Architecture
 
-Do not increase capacities or tune queue order to promote this implementation.
-The next candidate must generate bounded production requests from GPU-first
-field evaluation and Transvoxel extraction instead of recording every CPU mesh
-cell and flooding native-packed duplicates. It must preserve the shared arena,
-this exact lifecycle, and CPU recovery contract, then pass Vulkan before a
-second large-world backend is measured.
+Do not increase capacities to promote this implementation. Queue coalescing is
+a retained correctness and bounded-work mechanism, not a promotion result. The
+next candidate must first compact or count emitted GPU draw commands and cull
+non-visible resident chunks so frame work is proportional to visible geometry,
+not resident source-cell capacity. It must then establish production
+camera/material parity before replacing CPU-mesh capture with GPU-first field
+evaluation and Transvoxel extraction. It must preserve the shared arena, exact
+lifecycle, admission rules, and CPU recovery contract, then pass Vulkan before
+a second large-world backend is measured.
 
-Evidence: [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md).
+Evidence:
+
+- [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md)
+- [TQP-64 bounded admission and queue-coalescing candidate](evidence/tqp64_large_world_gpu_coalesced_admission_candidate_20260825/RESULT.md)
