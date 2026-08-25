@@ -69,9 +69,13 @@ and a default-off
 [global render-thread publication proof](docs/GPU_GLOBAL_RENDER_PUBLICATION_CONTRACT.md).
 Compute-written vertex data and indexed indirect commands now reach a live
 Godot viewport without geometry readback, CPU finalization, or ArrayMesh upload
-on Vulkan and D3D12, with exact stale and supersession checks. The global proof
-is not connected to production chunk replacement or production materials, so
-the CPU terrain remains the production visual and collision authority.
+on Vulkan and D3D12, with exact stale and supersession checks. A subsequent
+default-off production lifecycle uses a bounded shared arena and native-packed
+resident requests; it preserves exact chunk identity, atomic terrain/water
+activation, CPU visual recovery, and CPU collision authority. Its large-world
+Vulkan route remains rejected at 15.55% maximum GPU coverage with substantial
+capacity rejection and no production material parity, so CPU terrain remains
+the default production visual and collision authority.
 
 ## Critical edited-terrain LOD boundary
 

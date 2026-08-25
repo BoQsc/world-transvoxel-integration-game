@@ -97,6 +97,16 @@ func _run() -> void:
 			or not bool(status.get("cpu_collision_authority", false)) \
 			or bool(status.get("production_material_parity", true)) \
 			or int(status.get("rejected_chunks", -1)) != 0 \
+			or str(effect_status.get("resource_architecture", "")) \
+				!= "paged_shared_arena" \
+			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 0 \
+			or int(effect_status.get("arena_page_count", 0)) < 1 \
+			or int(effect_status.get("arena_active_slot_count", -1)) != 2 \
+			or int(effect_status.get("arena_slot_leases", 0)) < 4 \
+			or int(effect_status.get("arena_slot_releases", 0)) < 2 \
+			or int(effect_status.get("packing_requests", -1)) != 0 \
+			or int(effect_status.get("native_packed_requests", 0)) < 4 \
+			or int(effect_status.get("native_packed_bytes_total", 0)) <= 0 \
 			or int(native_metrics.get("activated_chunks", 0)) < 3 \
 			or int(native_metrics.get("validation_rejections", -1)) != 0 \
 			or int(effect_status.get("active_entry_count", 0)) != 2 \
@@ -125,7 +135,7 @@ func _run() -> void:
 	print(
 		(
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
-			+ "readback=0 material_parity=0"
+			+ "readback=0 material_parity=0 arena=paged_shared native_packed=1"
 		) % [
 			MARKER,
 			int(native_metrics.get("activated_chunks", 0)),

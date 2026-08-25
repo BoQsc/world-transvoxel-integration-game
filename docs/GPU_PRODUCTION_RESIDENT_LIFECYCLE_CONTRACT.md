@@ -1,13 +1,14 @@
 # GPU Production Resident Lifecycle Contract
 
-Status: `BOUNDED_LIFECYCLE_QUALIFIED_LARGE_WORLD_ARCHITECTURE_REJECTED`
+Status: `BOUNDED_LIFECYCLE_ARENA_NATIVE_PACKING_QUALIFIED_GPU_FIRST_BLOCKED`
 
 Schema: `world_transvoxel.terrain.gpu_production_resident_lifecycle.v1`
 
 This contract records the default-off TQP-64 candidate that connects GPU
 resident render resources to accepted production terrain identities. It
-qualifies the ownership and recovery lifecycle in bounded tests. It does not
-qualify the current per-chunk allocation architecture for a large world.
+qualifies the ownership and recovery lifecycle in bounded tests. The retained
+shared-arena and native-packing follow-up removes the rejected per-chunk
+resource model, but it does not qualify a production GPU terrain backend.
 
 ## Authority Boundary
 
@@ -52,7 +53,7 @@ These results qualify the lifecycle state machine and fail-closed behavior only.
 They do not establish production material parity, large-world coverage,
 responsiveness, memory efficiency, frame pacing, or power benefit.
 
-## Large-World Rejection
+## Historical Per-Chunk Rejection
 
 The accepted G23 2,048 x 256 x 2,048 route completed with an intact trace and
 the three-logical-CPU limit, but the current implementation reached only 5.90%
@@ -66,14 +67,34 @@ ms, maximum RSS increased from 1.55 GB to 2.96 GB, and route time increased
 from 56.55 seconds to 101.06 seconds. Production material parity was also not
 implemented. The architecture therefore fails every production-promotion gate.
 
+## Shared-Arena And Native-Packing Follow-Up
+
+The retained Vulkan candidate replaces per-surface buffer inventories with a
+bounded shared arena containing four reusable surface slots per page. Compute
+dispatch uses explicit per-slot offsets; vertices and GPU-written indexed
+indirect commands keep local draw coordinates. Outward-and-return relocation
+passes with five slot reuses across two pages, while the exact retained global
+and resident viewport hashes remain unchanged.
+
+The native v2 resident request packs all 13 shader input buffers in C++ and no
+longer exports the diagnostic `cell_batch`. The production effect reports 2,632
+native-packed requests and zero GDScript-packed requests on the retained route.
+Frame p95 falls to 29.40 ms, wall time to 58.04 seconds, and maximum RSS to
+1.71 GB. Against the paired CPU run this is +11.48% p95, -13.80% wall time, and
++0.55% RSS.
+
+The candidate remains blocked. Maximum GPU chunk coverage is 15.55%, candidate
+rejections are 2,565, native capacity rejections are 612, and production
+material parity is absent. Faster native handoff exposes the deeper duplicate
+CPU-meshing and admission problem; it does not solve it.
+
 ## Required Replacement Architecture
 
 Do not increase capacities or tune queue order to promote this implementation.
-The next candidate must amortize rendering resources through a bounded pooled or
-batched GPU arena, eliminate per-surface render-thread allocation, and perform
-field evaluation and Transvoxel extraction on the GPU instead of duplicating
-the authoritative CPU meshing cost. It must preserve this exact lifecycle and
-CPU recovery contract, then rerun Vulkan before spending time on a second
-large-world backend.
+The next candidate must generate bounded production requests from GPU-first
+field evaluation and Transvoxel extraction instead of recording every CPU mesh
+cell and flooding native-packed duplicates. It must preserve the shared arena,
+this exact lifecycle, and CPU recovery contract, then pass Vulkan before a
+second large-world backend is measured.
 
-Evidence: [TQP-64 large-world GPU resident candidate](evidence/tqp64_large_world_gpu_resident_candidate_20260825/RESULT.md).
+Evidence: [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md).

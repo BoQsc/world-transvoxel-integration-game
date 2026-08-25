@@ -424,6 +424,12 @@ func _dispatch_compute(cell_count: int) -> void:
 	_rendering_device.compute_list_bind_uniform_set(
 		compute_list, _persistent_uniform_set, 0
 	)
+	var zero_offsets := PackedInt32Array()
+	zero_offsets.resize(16)
+	var push_bytes := zero_offsets.to_byte_array()
+	_rendering_device.compute_list_set_push_constant(
+		compute_list, push_bytes, push_bytes.size()
+	)
 	_rendering_device.compute_list_dispatch(
 		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
 	)

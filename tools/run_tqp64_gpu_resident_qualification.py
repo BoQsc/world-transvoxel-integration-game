@@ -39,6 +39,19 @@ EFFECT_COUNTERS = (
     "resident_capacity_rejections",
     "indirect_draw_calls",
     "geometry_readback_bytes",
+    "arena_page_count",
+    "arena_allocated_slot_count",
+    "arena_peak_active_slot_count",
+    "arena_allocated_bytes",
+    "arena_slot_leases",
+    "arena_slot_reuses",
+    "arena_slot_releases",
+    "packing_requests",
+    "packing_usec_total",
+    "packing_usec_max",
+    "packed_bytes_total",
+    "native_packed_requests",
+    "native_packed_bytes_total",
 )
 NATIVE_COUNTERS = (
     "capacity",
@@ -240,7 +253,13 @@ def _load_mode(raw_root: pathlib.Path, driver: str, mode: str) -> dict[str, Any]
                 trace.get("native_request_handoff_decoupled", False)
             ),
             "resident_chunk_activated": int(maximum.get("activated_chunks", 0)) > 0,
-            "resident_chunk_retired": int(maximum.get("retired_chunks", 0)) > 0,
+            "resident_entry_retired": int(
+                effect.get("retired_entries", 0)
+            ) > 0,
+            "arena_slot_reuse_observed": (
+                int(effect.get("arena_slot_releases", 0)) > 0
+                and int(effect.get("arena_slot_reuses", 0)) > 0
+            ),
             "no_fail_closed_recovery": int(maximum.get("recovery_count", 0)) == 0,
             "no_geometry_readback": int(
                 effect.get("geometry_readback_bytes", -1)
@@ -392,6 +411,7 @@ def main(argv: list[str]) -> int:
         "results": results,
         "claim_boundary": {
             "bounded_lifecycle_qualified_separately": True,
+            "whole_chunk_relocation_qualified_separately": True,
             "large_world_production_backend_qualified": promotion_pass,
             "cpu_collision_authority": True,
             "production_material_parity": False,

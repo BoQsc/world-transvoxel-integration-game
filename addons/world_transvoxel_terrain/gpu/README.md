@@ -39,6 +39,15 @@ geometry readback, CPU finalization, or ArrayMesh upload. Vulkan and D3D12
 produce the same retained image signature. It is not connected to production
 chunk replacement and uses a diagnostic material.
 
-Production chunk lifecycle integration, shared bounded residency, material
-parity, measured large-world benefit, device recovery, and release promotion
-remain TQP-64 work.
+The production lifecycle now uses the same global device through a bounded
+shared arena with four reusable surface slots per page. Native v2 resident
+requests provide 13 prepacked buffers and never export the diagnostic
+`cell_batch`; production GDScript packing must remain zero. Bounded Vulkan tests
+qualify exact activation, retirement, relocation reuse, CPU visual recovery,
+and unchanged CPU collision authority.
+
+The large-world Vulkan candidate is still rejected. Native packing removes the
+previous frame-time bottleneck, but CPU meshing still records every candidate
+cell and floods a bounded resident route that reaches only 15.55% maximum GPU
+chunk coverage. Production material parity and a demonstrated frame-pacing
+benefit also remain open. The default CPU terrain stays authoritative.

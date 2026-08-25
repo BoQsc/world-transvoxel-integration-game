@@ -1,0 +1,362 @@
+{
+  "claim_boundary": {
+    "bounded_lifecycle_qualified_separately": true,
+    "cpu_collision_authority": true,
+    "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+    "gpu_field_generation": false,
+    "large_world_production_backend_qualified": false,
+    "performance_promotion": false,
+    "production_material_parity": false,
+    "whole_chunk_relocation_qualified_separately": true
+  },
+  "classification": "BLOCKED_PRODUCTION_GPU_RESIDENT_ARCHITECTURE",
+  "drivers": [
+    "vulkan"
+  ],
+  "logical_cpu_limit": 3,
+  "material": "production_texture_array",
+  "measurement_pass": true,
+  "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+  "promotion_pass": false,
+  "results": {
+    "vulkan": {
+      "comparison": {
+        "frame_p95_ms": {
+          "candidate_change_percent": 11.483454080404073,
+          "cpu_baseline": 26.37055,
+          "gpu_resident": 29.398799999999998
+        },
+        "frame_p99_ms": {
+          "candidate_change_percent": 2.882311336435492,
+          "cpu_baseline": 33.23999,
+          "gpu_resident": 34.19807000000002
+        },
+        "gpu_board_power_mean_watts": {
+          "candidate_change_percent": 7.551697455295758,
+          "cpu_baseline": 29.720825688073397,
+          "gpu_resident": 31.965252525252524
+        },
+        "gpu_board_utilization_mean_percent": {
+          "candidate_change_percent": 33.9895928986838,
+          "cpu_baseline": 22.706422018348626,
+          "gpu_resident": 30.424242424242426
+        },
+        "process_cpu_percent_mean": {
+          "candidate_change_percent": 14.841457997123749,
+          "cpu_baseline": 143.89201877934272,
+          "gpu_resident": 165.2476923076923
+        },
+        "rss_bytes_maximum": {
+          "candidate_change_percent": 0.5547210171487629,
+          "cpu_baseline": 1704202240,
+          "gpu_resident": 1713655808
+        },
+        "wall_seconds": {
+          "candidate_change_percent": -13.798285180735842,
+          "cpu_baseline": 67.32883310000034,
+          "gpu_resident": 58.03860870000062
+        }
+      },
+      "cpu_baseline": {
+        "artifacts": {
+          "report": "vulkan_cpu_baseline_report.json",
+          "trace": "vulkan_cpu_baseline_trace.json",
+          "usage": "vulkan_cpu_baseline_usage.json"
+        },
+        "measurement_pass": true,
+        "report": {
+          "blocked_flight_frame_count": 0,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 536.0049230456351,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 10424.259,
+            "mean": 20.725068535825546,
+            "p50": 16.668,
+            "p95": 26.37055,
+            "p99": 33.23999
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "logical_cpu_limit": true,
+          "native_trace_complete": true,
+          "no_native_local_drops": true,
+          "no_native_trace_gaps": true,
+          "no_trace_drops": true,
+          "required_route_covered": true,
+          "single_complete_report": true,
+          "trace_final": true
+        },
+        "trace": {
+          "cpu_collision_authority": true,
+          "dropped_event_count": 0,
+          "effect_maximum": {
+            "activated_entries": 0,
+            "active_entry_count": 0,
+            "arena_allocated_bytes": 0,
+            "arena_allocated_slot_count": 0,
+            "arena_page_count": 0,
+            "arena_peak_active_slot_count": 0,
+            "arena_slot_leases": 0,
+            "arena_slot_releases": 0,
+            "arena_slot_reuses": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_draw_calls": 0,
+            "native_packed_bytes_total": 0,
+            "native_packed_requests": 0,
+            "packed_bytes_total": 0,
+            "packing_requests": 0,
+            "packing_usec_max": 0,
+            "packing_usec_total": 0,
+            "prepared_entries": 0,
+            "resident_capacity_rejections": 0,
+            "resident_entry_count": 0,
+            "retired_entries": 0
+          },
+          "final": true,
+          "final_status": {
+            "active_chunks": 0,
+            "last_error": "",
+            "tracked_chunks": 0
+          },
+          "maximum": {
+            "activated_chunks": 0,
+            "active_chunks": 0,
+            "application_wait_expirations": 0,
+            "recovery_count": 0,
+            "rejected_chunks": 0,
+            "retired_chunks": 0,
+            "submitted_surfaces": 0,
+            "tracked_chunks": 0,
+            "validated_surfaces": 0
+          },
+          "maximum_gpu_chunk_coverage_ratio": 0.0,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "activated_chunks": 0,
+            "capacity": 0,
+            "capacity_rejections": 0,
+            "captured_requests": 0,
+            "in_flight_requests": 0,
+            "queued_requests": 0,
+            "readiness_attempts": 0,
+            "readiness_ready": 0,
+            "readiness_stale": 0,
+            "readiness_waits": 0,
+            "restored_cpu_chunks": 0,
+            "retired_chunks": 0,
+            "stale_skips": 0,
+            "validation_attempts": 0,
+            "validation_ready": 0,
+            "validation_rejections": 0
+          },
+          "native_request_handoff_decoupled": false,
+          "production_material_parity": true,
+          "reason": "autonomous_route_complete",
+          "running_observed": false,
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "snapshot_count": 659
+        },
+        "usage": {
+          "average_active_logical_cores": 1.4389201877934272,
+          "gpu_board_power_watts": {
+            "count": 109,
+            "maximum": 39.94,
+            "mean": 29.720825688073397,
+            "median": 29.93
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 109,
+            "maximum": 40.0,
+            "mean": 22.706422018348626,
+            "median": 30.0
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 276.4,
+          "process_cpu_percent_mean": 143.89201877934272,
+          "rss_bytes_maximum": 1704202240,
+          "wall_seconds": 67.32883310000034
+        }
+      },
+      "gpu_resident": {
+        "artifacts": {
+          "report": "vulkan_gpu_resident_report.json",
+          "trace": "vulkan_gpu_resident_trace.json",
+          "usage": "vulkan_gpu_resident_usage.json"
+        },
+        "measurement_pass": true,
+        "report": {
+          "blocked_flight_frame_count": 0,
+          "classification": "CPU_PATH_NOT_EXHAUSTED_STANDARD_REMEDIATION_REMAINS",
+          "coverage": {
+            "has_carve": true,
+            "has_construction": true,
+            "has_flight": true,
+            "has_long_flight": true,
+            "has_relocated_edit": true
+          },
+          "flight_distance": 536.0053899884223,
+          "flight_frame_count": 1050,
+          "frame_ms": {
+            "maximum": 8244.971,
+            "mean": 20.526355410447763,
+            "p50": 16.667,
+            "p95": 29.398799999999998,
+            "p99": 34.19807000000002
+          },
+          "relocated_edit_count": 2,
+          "required_human_route_covered": true,
+          "trace_count": 1,
+          "trace_integrity_complete": true
+        },
+        "requirements": {
+          "arena_slot_reuse_observed": true,
+          "cpu_collision_authoritative": true,
+          "exact_handoff_decoupled": true,
+          "logical_cpu_limit": true,
+          "native_trace_complete": true,
+          "no_fail_closed_recovery": true,
+          "no_geometry_readback": true,
+          "no_native_local_drops": true,
+          "no_native_trace_gaps": true,
+          "no_trace_drops": true,
+          "required_route_covered": true,
+          "resident_chunk_activated": true,
+          "resident_entry_retired": true,
+          "resident_route_observed": true,
+          "single_complete_report": true,
+          "trace_final": true
+        },
+        "trace": {
+          "cpu_collision_authority": true,
+          "dropped_event_count": 0,
+          "effect_maximum": {
+            "activated_entries": 67,
+            "active_entry_count": 67,
+            "arena_allocated_bytes": 397231024,
+            "arena_allocated_slot_count": 67,
+            "arena_page_count": 17,
+            "arena_peak_active_slot_count": 67,
+            "arena_slot_leases": 271,
+            "arena_slot_releases": 204,
+            "arena_slot_reuses": 204,
+            "geometry_readback_bytes": 0,
+            "indirect_draw_calls": 143932,
+            "native_packed_bytes_total": 3813043456,
+            "native_packed_requests": 2632,
+            "packed_bytes_total": 0,
+            "packing_requests": 0,
+            "packing_usec_max": 0,
+            "packing_usec_total": 0,
+            "prepared_entries": 271,
+            "resident_capacity_rejections": 2361,
+            "resident_entry_count": 67,
+            "retired_entries": 2564
+          },
+          "final": true,
+          "final_status": {
+            "active_chunks": 58,
+            "last_error": "resident allocation capacity reached",
+            "tracked_chunks": 59
+          },
+          "maximum": {
+            "activated_chunks": 58,
+            "active_chunks": 58,
+            "application_wait_expirations": 0,
+            "recovery_count": 0,
+            "rejected_chunks": 2565,
+            "retired_chunks": 0,
+            "submitted_surfaces": 2632,
+            "tracked_chunks": 64,
+            "validated_surfaces": 271
+          },
+          "maximum_gpu_chunk_coverage_ratio": 0.1554959785522788,
+          "native_complete": true,
+          "native_consumer_gap_event_count": 0,
+          "native_local_dropped_event_count": 0,
+          "native_maximum": {
+            "activated_chunks": 58,
+            "capacity": 16,
+            "capacity_rejections": 612,
+            "captured_requests": 2661,
+            "in_flight_requests": 3,
+            "queued_requests": 5,
+            "readiness_attempts": 1140,
+            "readiness_ready": 92,
+            "readiness_stale": 204,
+            "readiness_waits": 844,
+            "restored_cpu_chunks": 0,
+            "retired_chunks": 0,
+            "stale_skips": 204,
+            "validation_attempts": 271,
+            "validation_ready": 271,
+            "validation_rejections": 2517
+          },
+          "native_request_handoff_decoupled": true,
+          "production_material_parity": false,
+          "reason": "autonomous_route_complete",
+          "running_observed": true,
+          "schema": "world_transvoxel.cpu_causal_trace.v2",
+          "snapshot_count": 530
+        },
+        "usage": {
+          "average_active_logical_cores": 1.652476923076923,
+          "gpu_board_power_watts": {
+            "count": 99,
+            "maximum": 47.99,
+            "mean": 31.965252525252524,
+            "median": 32.76
+          },
+          "gpu_board_telemetry_scope": "board_global_not_process_attributed",
+          "gpu_board_utilization_percent": {
+            "count": 99,
+            "maximum": 58.0,
+            "mean": 30.424242424242426,
+            "median": 41.0
+          },
+          "logical_cpu_affinity": [
+            0,
+            1,
+            2
+          ],
+          "logical_cpu_capacity": 3,
+          "process_cpu_percent_maximum": 283.2,
+          "process_cpu_percent_mean": 165.2476923076923,
+          "rss_bytes_maximum": 1713655808,
+          "wall_seconds": 58.03860870000062
+        }
+      },
+      "measurement_pass": true,
+      "promotion_gates": {
+        "at_least_95_percent_chunk_coverage": false,
+        "frame_p95_within_10_percent": false,
+        "no_candidate_rejections": false,
+        "no_native_capacity_rejections": false,
+        "production_material_parity": false,
+        "rss_within_25_percent": true,
+        "wall_time_within_25_percent": true
+      },
+      "promotion_pass": false
+    }
+  },
+  "schema": "world_transvoxel.tqp64_gpu_resident_qualification.v1"
+}

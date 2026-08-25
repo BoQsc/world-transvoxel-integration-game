@@ -3,6 +3,13 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+layout(push_constant, std430) uniform ArenaOffsets {
+	ivec4 input_a;
+	ivec4 input_b;
+	ivec4 output_a;
+	ivec4 output_b;
+} arena;
+
 layout(set = 0, binding = 0, std430) readonly buffer FieldValues {
 	vec4 values[];
 } field_values;
@@ -127,15 +134,20 @@ void transition_basis(int orientation, out vec3 axis_u, out vec3 axis_v, out vec
 
 void main() {
 	uint cell_index_u = gl_GlobalInvocationID.x;
-	int cell_count = config.values[0].x;
+	int config_base = arena.input_b.z;
+	int cell_count = config.values[config_base].x;
 	if (cell_index_u >= uint(cell_count)) {
 		return;
 	}
 	int cell_index = int(cell_index_u);
-	int vertex_base = cell_index * MAX_VERTICES;
-	int index_base = cell_index * MAX_INDICES;
-	output_draw_commands.values[cell_index] = DrawIndexedIndirectCommand(
-		0u, 0u, uint(index_base), vertex_base, 0u
+	int local_vertex_base = cell_index * MAX_VERTICES;
+	int local_index_base = cell_index * MAX_INDICES;
+	int vertex_base = arena.output_a.x + local_vertex_base;
+	int index_base = arena.output_a.y + local_index_base;
+	int cell_meta_index = arena.output_a.z + cell_index;
+	int draw_index = arena.output_b.x + cell_index;
+	output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
+		0u, 0u, uint(local_index_base), local_vertex_base, 0u
 	);
 	for (int index = 0; index < MAX_VERTICES; ++index) {
 		output_positions.values[vertex_base + index] = vec4(0.0);
@@ -147,14 +159,14 @@ void main() {
 		output_indices.values[index_base + index] = -1;
 	}
 	if (cell_index == 0) {
-		output_identity.values[0] = config.values[1];
-		output_identity.values[1] = config.values[2];
-		output_identity.values[2] = config.values[3];
+		output_identity.values[arena.output_a.w] = config.values[config_base + 1];
+		output_identity.values[arena.output_a.w + 1] = config.values[config_base + 2];
+		output_identity.values[arena.output_a.w + 2] = config.values[config_base + 3];
 	}
 
-	ivec4 header = cell_headers.values[cell_index];
-	vec4 origin_and_spacing = cell_origins.values[cell_index];
-	vec4 options = cell_options.values[cell_index];
+	ivec4 header = cell_headers.values[arena.input_a.z + cell_index];
+	vec4 origin_and_spacing = cell_origins.values[arena.input_a.w + cell_index];
+	vec4 options = cell_options.values[arena.input_b.x + cell_index];
 	int cell_type = header.x;
 	int orientation = header.y;
 	int reference_offset = header.z;
@@ -167,7 +179,7 @@ void main() {
 		(cell_type == CELL_TRANSITION && input_sample_count != 9) ||
 		spacing <= 0.0 ||
 		(cell_type == CELL_TRANSITION && (transition_width <= 0.0 || orientation < 0 || orientation > 5))) {
-		output_cell_meta.values[cell_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
+		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
 		return;
 	}
 
@@ -175,9 +187,11 @@ void main() {
 	ivec2 materials[13];
 	vec3 positions[13];
 	for (int index = 0; index < input_sample_count; ++index) {
-		int source_index = sample_references.values[reference_offset + index];
-		samples[index] = field_values.values[source_index];
-		materials[index] = field_meta.values[source_index].xy;
+		int source_index = sample_references.values[
+			arena.input_b.y + reference_offset + index
+		];
+		samples[index] = field_values.values[arena.input_a.x + source_index];
+		materials[index] = field_meta.values[arena.input_a.y + source_index].xy;
 	}
 
 	int case_code = 0;
@@ -198,7 +212,7 @@ void main() {
 			}
 		}
 		if (case_code == 0 || case_code == 255) {
-			output_cell_meta.values[cell_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
 			return;
 		}
 		class_code = regular_cell_class.values[case_code];
@@ -231,14 +245,14 @@ void main() {
 			}
 		}
 		if (case_code == 0 || case_code == 511) {
-			output_cell_meta.values[cell_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
 			return;
 		}
 		class_code = transition_cell_class.values[case_code];
 		reverse_winding = (class_code & 0x80) != 0;
 		class_code &= 0x7f;
 		if (class_code >= 56) {
-			output_cell_meta.values[cell_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
 			return;
 		}
 		class_data_offset = class_code * 37;
@@ -249,7 +263,7 @@ void main() {
 	int vertex_count = geometry_counts >> 4;
 	int source_index_count = (geometry_counts & 0x0f) * 3;
 	if (vertex_count > MAX_VERTICES || source_index_count > MAX_INDICES) {
-		output_cell_meta.values[cell_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
 		return;
 	}
 	for (int vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
@@ -260,12 +274,12 @@ void main() {
 		int endpoint_b = edge_code & 0x0f;
 		int topology_count = cell_type == CELL_REGULAR ? 8 : 13;
 		if (endpoint_a >= topology_count || endpoint_b >= topology_count) {
-			output_cell_meta.values[cell_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
 			return;
 		}
 		float alpha = regularized_alpha(samples[endpoint_a].x, samples[endpoint_b].x, isovalue);
 		if (alpha < 0.0) {
-			output_cell_meta.values[cell_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
 			return;
 		}
 		vec3 position = mix(positions[endpoint_a], positions[endpoint_b], alpha);
@@ -315,13 +329,13 @@ void main() {
 		output_index_count += 3;
 	}
 	if (output_index_count == 0) {
-		output_cell_meta.values[cell_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
 		return;
 	}
-	output_cell_meta.values[cell_index] = ivec4(
+	output_cell_meta.values[cell_meta_index] = ivec4(
 		STATUS_OK, case_code, vertex_count, output_index_count
 	);
-	output_draw_commands.values[cell_index] = DrawIndexedIndirectCommand(
-		uint(output_index_count), 1u, uint(index_base), vertex_base, 0u
+	output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
+		uint(output_index_count), 1u, uint(local_index_base), local_vertex_base, 0u
 	);
 }

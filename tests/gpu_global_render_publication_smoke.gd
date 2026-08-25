@@ -94,7 +94,9 @@ func _run() -> void:
 	viewport_image.convert(Image.FORMAT_RGBA8)
 	var foreground_pixels := _foreground_pixel_count(viewport_image)
 	if foreground_pixels < 64:
-		_fail("global resident mesh did not produce visible viewport pixels: %d" % foreground_pixels)
+		_fail("global resident mesh did not produce visible viewport pixels: %d status=%s" % [
+			foreground_pixels, str(_effect.get_status()),
+		])
 		return
 	var driver := RenderingServer.get_current_rendering_driver_name().to_lower()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CAPTURE_ROOT))
@@ -111,7 +113,16 @@ func _run() -> void:
 			or not bool(status.get("render_thread_owned", false)) \
 			or not bool(status.get("same_global_device_compute_raster", false)) \
 			or str(status.get("compositor_callback", "")) != "pre_transparent" \
-			or int(status.get("resident_buffer_count_per_entry", 0)) != 21 \
+			or str(status.get("resource_architecture", "")) != "paged_shared_arena" \
+			or int(status.get("resident_buffer_count_per_entry", -1)) != 0 \
+			or int(status.get("arena_binding_buffer_count_per_page", 0)) != 21 \
+			or int(status.get("arena_page_count", 0)) != 1 \
+			or int(status.get("arena_allocated_slot_count", 0)) != 4 \
+			or int(status.get("arena_active_slot_count", 0)) != 1 \
+			or int(status.get("arena_peak_active_slot_count", 0)) != 2 \
+			or int(status.get("arena_allocated_bytes", 0)) <= 0 \
+			or int(status.get("arena_slot_leases", 0)) != 2 \
+			or int(status.get("arena_slot_releases", 0)) != 1 \
 			or not bool(status.get("gpu_written_indirect_commands", false)) \
 			or not bool(status.get("device_local_index_copy_used", false)) \
 			or bool(status.get("fallback_used", true)) \

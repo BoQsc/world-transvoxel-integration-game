@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_PRODUCTION_LIFECYCLE_QUALIFIED_CURRENT_LARGE_WORLD_ARCHITECTURE_REJECTED`
+Status: `TQP64_PAGED_ARENA_NATIVE_PACKING_QUALIFIED_GPU_FIRST_ARCHITECTURE_BLOCKED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -100,10 +100,29 @@ rejections, raised frame p95 from 21.88 ms to 453.60 ms, and raised maximum RSS
 from 1.55 GB to 2.96 GB. It has no production material parity. The measurement
 is valid, but every production-promotion gate fails.
 
+The retained replacement slice removes that per-surface resource model. A
+bounded global arena owns 21 shared buffers per four-slot page, dispatches with
+per-slot offsets, and reuses retired slots. Bounded Vulkan tests retain the
+exact global and resident raster hashes, prove outward-and-return relocation,
+and record five slot reuses across two pages. The production native request is
+also versioned to v2 and returns 13 prepacked input buffers instead of thousands
+of per-cell Godot Dictionaries. Production GDScript packing is asserted to stay
+at zero.
+
+On the retained large-world Vulkan route, this reduces candidate frame p95 from
+the earlier 389 ms arena/GDScript-packing run to 29.40 ms and wall time from
+90.23 to 58.04 seconds. Against the paired CPU run, p95 is 11.48% higher, p99
+is 2.88% higher, RSS is 0.55% higher, and wall time is 13.80% lower. This is a
+material correction, not production qualification: maximum GPU chunk coverage
+is 15.55%, the candidate rejects 2,565 chunks, native capture rejects 612
+requests, and production material parity is absent. The Vulkan promotion gate
+therefore fails and the D3D12 large-world rerun is intentionally deferred.
+
 The default runtime therefore remains CPU-only. TQP-64 stays active and blocked
-on a replacement architecture: pooled or batched GPU storage with amortized
-allocation and true GPU field/Transvoxel generation, while retaining the now
-qualified production lifecycle and CPU recovery contract.
+on GPU-first field/Transvoxel request generation and bounded admission that can
+sustain production coverage without duplicate CPU meshing or request floods.
+It must retain the now-qualified shared arena, production lifecycle, and CPU
+recovery contract.
 
 ## Decision
 

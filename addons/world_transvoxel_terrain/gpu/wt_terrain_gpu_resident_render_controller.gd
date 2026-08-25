@@ -207,15 +207,11 @@ func _submit_native_captures() -> void:
 		if Dictionary(group.get("requests", {})).has(surface):
 			_reject_native_request(request, "duplicate resident chunk surface")
 			continue
-		var batch: Dictionary = request.get("cell_batch", {})
 		var sequence := _next_publication_sequence
 		_next_publication_sequence += 1
-		var render_request_id := int(_effect.submit_explicit_samples(
-			batch.get("densities", PackedFloat32Array()),
-			batch.get("gradients", PackedVector3Array()),
-			batch.get("materials", PackedInt32Array()),
-			batch.get("material_authored", PackedByteArray()),
-			batch.get("cells", []),
+		var render_request_id := int(_effect.submit_native_packed_input(
+			Array(request.get("gpu_input_buffers", [])),
+			int(request.get("cell_count", 0)),
 			identity,
 			sequence,
 			false
@@ -227,7 +223,10 @@ func _submit_native_captures() -> void:
 			continue
 		var requests: Dictionary = group.get("requests", {})
 		var sequences: Dictionary = group.get("sequences", {})
-		requests[surface] = request
+		requests[surface] = {
+			"request_id": int(request.get("request_id", 0)),
+			"identity": identity.duplicate(true),
+		}
 		sequences[surface] = sequence
 		group["requests"] = requests
 		group["sequences"] = sequences
@@ -568,17 +567,27 @@ static func _required_surfaces(group: Dictionary) -> Array[String]:
 
 static func _validate_native_request(request: Dictionary) -> String:
 	if str(request.get("schema", "")) \
-			!= "world_transvoxel.gpu_resident_render_request.v1" \
+			!= "world_transvoxel.gpu_resident_render_request.v2" \
 			or str(request.get("status", "")) != "PASS":
 		return "native GPU resident request contract failed"
 	if not bool(request.get("gpu_resident_render_publication", false)) \
 			or not bool(request.get("cpu_render_visible_until_activation", false)) \
-			or not bool(request.get("cpu_collision_publication_unchanged", false)):
+			or not bool(request.get("cpu_collision_publication_unchanged", false)) \
+			or not bool(request.get("native_input_packing", false)) \
+			or bool(request.get("cell_batch_exported", true)) \
+			or bool(request.get("fallback_used", true)):
 		return "native GPU resident request changed publication authority"
-	var batch: Dictionary = request.get("cell_batch", {})
-	if str(batch.get("status", "")) != "PASS" \
-			or bool(batch.get("fallback_used", true)):
-		return "native GPU resident cell batch is invalid"
+	var input_buffers := Array(request.get("gpu_input_buffers", []))
+	if input_buffers.size() != 13 or int(request.get("cell_count", 0)) <= 0:
+		return "native GPU resident input inventory is invalid"
+	var actual_bytes := 0
+	for buffer_value in input_buffers:
+		if not buffer_value is PackedByteArray \
+				or PackedByteArray(buffer_value).is_empty():
+			return "native GPU resident input buffer is invalid"
+		actual_bytes += PackedByteArray(buffer_value).size()
+	if actual_bytes != int(request.get("packed_byte_count", -1)):
+		return "native GPU resident packed byte count is invalid"
 	return ""
 
 

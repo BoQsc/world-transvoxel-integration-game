@@ -5,6 +5,9 @@ class_name WtTerrainGpuGlobalRenderEffect
 const MeshingCandidate := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing_candidate.gd"
 )
+const ResidentArena := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_arena.gd"
+)
 const COMPUTE_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing.glsl"
 )
@@ -14,9 +17,6 @@ const RASTER_SHADER_FILE := preload(
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 3
 const DEFAULT_RESIDENT_CAPACITY := 64
-const LOCAL_SIZE := 64
-const MAXIMUM_VERTICES_PER_CELL := 12
-const MAXIMUM_INDICES_PER_CELL := 36
 const DRAW_COMMAND_STRIDE := 20
 const REQUIRED_IDENTITY_FIELDS := [
 	"page_x", "page_y", "page_z", "lod", "generation", "source_revision",
@@ -25,6 +25,7 @@ const REQUIRED_IDENTITY_FIELDS := [
 
 var _rendering_device: RenderingDevice
 var _packer = MeshingCandidate.new()
+var _arena
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
 var _lifecycle_commands: Array[Dictionary] = []
@@ -52,7 +53,24 @@ var _status := {
 	"render_thread_owned": true,
 	"same_global_device_compute_raster": true,
 	"compositor_callback": "pre_transparent",
-	"resident_buffer_count_per_entry": 21,
+	"resource_architecture": "paged_shared_arena",
+	"resident_buffer_count_per_entry": 0,
+	"arena_binding_buffer_count_per_page": 21,
+	"arena_page_slot_capacity": 4,
+	"arena_page_count": 0,
+	"arena_allocated_slot_count": 0,
+	"arena_active_slot_count": 0,
+	"arena_peak_active_slot_count": 0,
+	"arena_allocated_bytes": 0,
+	"arena_slot_leases": 0,
+	"arena_slot_reuses": 0,
+	"arena_slot_releases": 0,
+	"packing_requests": 0,
+	"packing_usec_total": 0,
+	"packing_usec_max": 0,
+	"packed_bytes_total": 0,
+	"native_packed_requests": 0,
+	"native_packed_bytes_total": 0,
 	"gpu_written_indirect_commands": true,
 	"device_local_index_copy_used": true,
 	"fallback_used": false,
@@ -110,6 +128,7 @@ func submit_explicit_samples(
 	if not identity_error.is_empty():
 		_record_rejection(identity_error)
 		return 0
+	var packing_started_usec := Time.get_ticks_usec()
 	var packed: Dictionary = _packer.pack_explicit_samples_for_global_rendering(
 		densities,
 		gradients,
@@ -118,10 +137,77 @@ func submit_explicit_samples(
 		cells,
 		identity
 	)
+	var packing_usec := Time.get_ticks_usec() - packing_started_usec
+	var packed_bytes := 0
+	for packed_buffer in Array(packed.get("input_buffers", [])):
+		if packed_buffer is PackedByteArray:
+			packed_bytes += PackedByteArray(packed_buffer).size()
+	_mutex.lock()
+	_status["packing_requests"] = int(_status["packing_requests"]) + 1
+	_status["packing_usec_total"] = int(_status["packing_usec_total"]) + packing_usec
+	_status["packing_usec_max"] = maxi(
+		int(_status["packing_usec_max"]), packing_usec
+	)
+	_status["packed_bytes_total"] = int(_status["packed_bytes_total"]) + packed_bytes
+	_mutex.unlock()
 	if str(packed.get("status", "")) != "PASS" \
 			or bool(packed.get("fallback_used", true)):
 		_record_rejection(str(packed.get("error", "global request packing failed")))
 		return 0
+	return _queue_packed_request(
+		Array(packed.get("input_buffers", [])),
+		int(packed.get("cell_count", 0)),
+		identity,
+		publication_sequence,
+		activate_immediately
+	)
+
+
+func submit_native_packed_input(
+	input_buffers: Array,
+	cell_count: int,
+	identity: Dictionary,
+	publication_sequence: int,
+	activate_immediately: bool = true
+) -> int:
+	var identity_error := _validate_identity(identity, publication_sequence)
+	if not identity_error.is_empty():
+		_record_rejection(identity_error)
+		return 0
+	if input_buffers.size() != 13 or cell_count <= 0:
+		_record_rejection("native GPU input buffer inventory is invalid")
+		return 0
+	var packed_bytes := 0
+	for buffer_value in input_buffers:
+		if not buffer_value is PackedByteArray \
+				or PackedByteArray(buffer_value).is_empty():
+			_record_rejection("native GPU input buffer is empty or untyped")
+			return 0
+		packed_bytes += PackedByteArray(buffer_value).size()
+	_mutex.lock()
+	_status["native_packed_requests"] = int(
+		_status["native_packed_requests"]
+	) + 1
+	_status["native_packed_bytes_total"] = int(
+		_status["native_packed_bytes_total"]
+	) + packed_bytes
+	_mutex.unlock()
+	return _queue_packed_request(
+		input_buffers,
+		cell_count,
+		identity,
+		publication_sequence,
+		activate_immediately
+	)
+
+
+func _queue_packed_request(
+	input_buffers: Array,
+	cell_count: int,
+	identity: Dictionary,
+	publication_sequence: int,
+	activate_immediately: bool
+) -> int:
 	var key := _identity_key(identity)
 	_mutex.lock()
 	var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
@@ -140,8 +226,8 @@ func submit_explicit_samples(
 		"publication_sequence": publication_sequence,
 		"identity": identity.duplicate(true),
 		"activate_immediately": activate_immediately,
-		"cell_count": int(packed.get("cell_count", 0)),
-		"input_buffers": Array(packed.get("input_buffers", [])).duplicate(),
+		"cell_count": cell_count,
+		"input_buffers": input_buffers.duplicate(),
 	})
 	_status["requested"] = int(_status["requested"]) + 1
 	_status["queued_request_count"] = _pending.size()
@@ -291,6 +377,18 @@ func _ensure_shaders() -> bool:
 		2, RenderingDevice.DATA_FORMAT_R32G32B32A32_SINT
 	))
 	_vertex_format = _rendering_device.vertex_format_create(attributes)
+	if _vertex_format >= 0:
+		_arena = ResidentArena.new()
+		if not _arena.initialize(
+			_rendering_device,
+			_compute_shader,
+			_compute_pipeline,
+			_vertex_format,
+			_resident_capacity + REQUEST_CAPACITY
+		):
+			_record_render_error(_arena.get_last_error())
+			_arena = null
+			return false
 	_mutex.lock()
 	_status["initialized"] = _vertex_format >= 0
 	_mutex.unlock()
@@ -474,93 +572,17 @@ func _retire_entry_on_render_thread(
 func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
 	var input_buffers: Array = request.get("input_buffers", [])
 	var cell_count := int(request.get("cell_count", 0))
-	if input_buffers.size() != 13 or cell_count <= 0:
+	if input_buffers.size() != 13 or cell_count <= 0 or _arena == null:
 		_record_render_error("global render request buffer inventory changed")
 		return {}
-	var output_sizes := _output_buffer_sizes(cell_count)
-	var buffers: Array[RID] = []
-	for binding in range(21):
-		var data := PackedByteArray()
-		var size := 0
-		if binding < 13:
-			data = input_buffers[binding]
-			size = data.size()
-		else:
-			size = output_sizes[binding - 13]
-		var buffer := _create_buffer(binding, size, data)
-		if not buffer.is_valid():
-			_free_rids_on_render_thread(buffers)
-			_record_render_error("global render buffer creation failed at %d" % binding)
-			return {}
-		buffers.append(buffer)
-	var uniforms: Array[RDUniform] = []
-	for binding in range(buffers.size()):
-		var uniform := RDUniform.new()
-		uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
-		uniform.binding = binding
-		uniform.add_id(buffers[binding])
-		uniforms.append(uniform)
-	var compute_set := _rendering_device.uniform_set_create(
-		uniforms, _compute_shader, 0
-	)
-	if not compute_set.is_valid():
-		_free_rids_on_render_thread(buffers)
-		_record_render_error("global render compute uniform set creation failed")
+	var entry: Dictionary = _arena.lease_and_dispatch(input_buffers, cell_count)
+	_sync_arena_status_on_render_thread()
+	if entry.is_empty():
+		_record_render_error(_arena.get_last_error())
 		return {}
-	var index_count := cell_count * MAXIMUM_INDICES_PER_CELL
-	var raster_index_buffer := _rendering_device.index_buffer_create(
-		index_count, RenderingDevice.INDEX_BUFFER_FORMAT_UINT32
-	)
-	if not raster_index_buffer.is_valid():
-		_rendering_device.free_rid(compute_set)
-		_free_rids_on_render_thread(buffers)
-		_record_render_error("global render raster index buffer creation failed")
-		return {}
-	var vertex_buffers: Array[RID] = [buffers[13], buffers[14], buffers[15]]
-	var vertex_array := _rendering_device.vertex_array_create(
-		cell_count * MAXIMUM_VERTICES_PER_CELL,
-		_vertex_format,
-		vertex_buffers
-	)
-	var index_array := _rendering_device.index_array_create(
-		raster_index_buffer, 0, index_count
-	)
-	if not vertex_array.is_valid() or not index_array.is_valid():
-		_free_rids_on_render_thread([vertex_array, index_array, raster_index_buffer])
-		_rendering_device.free_rid(compute_set)
-		_free_rids_on_render_thread(buffers)
-		_record_render_error("global render vertex/index views failed")
-		return {}
-	var compute_list := _rendering_device.compute_list_begin()
-	_rendering_device.compute_list_bind_compute_pipeline(
-		compute_list, _compute_pipeline
-	)
-	_rendering_device.compute_list_bind_uniform_set(compute_list, compute_set, 0)
-	_rendering_device.compute_list_dispatch(
-		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
-	)
-	_rendering_device.compute_list_end()
-	var copy_error := _rendering_device.buffer_copy(
-		buffers[17], raster_index_buffer, 0, 0, index_count * 4
-	)
-	if copy_error != OK:
-		_free_rids_on_render_thread([vertex_array, index_array, raster_index_buffer])
-		_rendering_device.free_rid(compute_set)
-		_free_rids_on_render_thread(buffers)
-		_record_render_error(
-			"global render index copy failed: %s" % error_string(copy_error)
-		)
-		return {}
-	return {
-		"buffers": buffers,
-		"compute_set": compute_set,
-		"raster_index_buffer": raster_index_buffer,
-		"vertex_array": vertex_array,
-		"index_array": index_array,
-		"cell_count": cell_count,
-		"publication_sequence": int(request.get("publication_sequence", 0)),
-		"identity": Dictionary(request.get("identity", {})).duplicate(true),
-	}
+	entry["publication_sequence"] = int(request.get("publication_sequence", 0))
+	entry["identity"] = Dictionary(request.get("identity", {})).duplicate(true)
+	return entry
 
 
 func _draw_entries_on_render_thread(render_data: RenderData) -> void:
@@ -615,8 +637,8 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			_rendering_device.draw_list_draw_indirect(
 				draw_list,
 				true,
-				Array(entry.get("buffers", []))[20],
-				0,
+				entry.get("indirect_buffer", RID()),
+				int(entry.get("indirect_offset", 0)),
 				int(entry.get("cell_count", 0)),
 				DRAW_COMMAND_STRIDE
 			)
@@ -672,25 +694,15 @@ func _framebuffer_for(color: RID, depth: RID) -> RID:
 	return framebuffer
 
 
-func _create_buffer(binding: int, size: int, data: PackedByteArray) -> RID:
-	if size <= 0:
-		return RID()
-	if binding in [13, 14, 15]:
-		return _rendering_device.vertex_buffer_create(
-			size, data, RenderingDevice.BUFFER_CREATION_AS_STORAGE_BIT
-		)
-	if binding == 20:
-		return _rendering_device.storage_buffer_create(
-			size, data, RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT
-		)
-	return _rendering_device.storage_buffer_create(size, data)
-
-
 func _close_on_render_thread() -> void:
 	for entry in _entries.values():
 		_free_entry_on_render_thread(entry)
 	_entries.clear()
 	_active_sequence_by_key.clear()
+	if _arena != null:
+		_arena.close()
+		_sync_arena_status_on_render_thread()
+		_arena = null
 	for framebuffer in _framebuffers.values():
 		if framebuffer is RID and framebuffer.is_valid():
 			_rendering_device.free_rid(framebuffer)
@@ -710,13 +722,30 @@ func _close_on_render_thread() -> void:
 
 
 func _free_entry_on_render_thread(entry: Dictionary) -> void:
-	_free_rids_on_render_thread([
-		entry.get("vertex_array", RID()),
-		entry.get("index_array", RID()),
-		entry.get("raster_index_buffer", RID()),
-		entry.get("compute_set", RID()),
-	])
-	_free_rids_on_render_thread(Array(entry.get("buffers", [])))
+	if _arena != null:
+		_arena.release(entry)
+		_sync_arena_status_on_render_thread()
+
+
+func _sync_arena_status_on_render_thread() -> void:
+	if _arena == null:
+		return
+	var arena_status: Dictionary = _arena.get_status()
+	_mutex.lock()
+	_status["arena_status"] = arena_status
+	_status["arena_page_count"] = int(arena_status.get("page_count", 0))
+	_status["arena_allocated_slot_count"] = int(
+		arena_status.get("allocated_slots", 0)
+	)
+	_status["arena_active_slot_count"] = int(arena_status.get("active_slots", 0))
+	_status["arena_peak_active_slot_count"] = int(
+		arena_status.get("peak_active_slots", 0)
+	)
+	_status["arena_allocated_bytes"] = int(arena_status.get("allocated_bytes", 0))
+	_status["arena_slot_leases"] = int(arena_status.get("slot_leases", 0))
+	_status["arena_slot_reuses"] = int(arena_status.get("slot_reuses", 0))
+	_status["arena_slot_releases"] = int(arena_status.get("slot_releases", 0))
+	_mutex.unlock()
 
 
 func _free_rids_on_render_thread(rids: Array) -> void:
@@ -785,19 +814,6 @@ func _push_event_on_render_thread(
 	_events.append(event)
 	_status["event_count"] = _events.size()
 	_mutex.unlock()
-
-
-static func _output_buffer_sizes(cell_count: int) -> Array[int]:
-	return [
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * 16,
-		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
-		cell_count * 16,
-		48,
-		cell_count * DRAW_COMMAND_STRIDE,
-	]
 
 
 static func _vertex_attribute(location: int, format: int) -> RDVertexAttribute:
