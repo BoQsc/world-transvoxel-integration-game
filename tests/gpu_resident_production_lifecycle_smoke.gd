@@ -16,6 +16,15 @@ const GenerationProfile := preload(
 const StorageProfile := preload(
 	"res://addons/world_transvoxel_terrain/storage/wt_terrain_storage_profile.gd"
 )
+const MaterialProfile := preload(
+	"res://addons/world_transvoxel_terrain/material/wt_terrain_material_profile.gd"
+)
+const ReferenceScene := preload(
+	"res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.gd"
+)
+const GameMaterialApplicator := preload(
+	"res://addons/world_transvoxel_gameworld/material/wt_game_terrain_material_applicator.gd"
+)
 const EditOperation := preload(
 	"res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd"
 )
@@ -25,6 +34,8 @@ const EditBatch := preload(
 
 var _world
 var _world_environment: WorldEnvironment
+var _reference_scene
+var _material_applicator
 var _committed_revisions: Array[int] = []
 
 
@@ -39,13 +50,32 @@ func _run() -> void:
 	_world.runtime_profile = _runtime_profile()
 	_world.generation_profile = _generation_profile()
 	_world.storage_profile = _storage_profile()
+	_world.material_profile = MaterialProfile.new()
 	_world.runtime_gpu_resident_render_candidate_enabled = true
 	_world.runtime_gpu_meshing_shadow_capacity = 3
 	_world.runtime_gpu_resident_chunk_capacity = 4
-	root.add_child(_world)
+	_world.name = "TerrainWorld"
+	_reference_scene = ReferenceScene.new()
+	_reference_scene.name = "WtTerrainReferenceScene"
+	_reference_scene.refresh_on_ready = false
+	_reference_scene.add_child(_world)
+	root.add_child(_reference_scene)
+	_material_applicator = GameMaterialApplicator.new()
+	_material_applicator.name = "WtGameTerrainMaterialApplicator"
+	_material_applicator.auto_apply = false
+	_material_applicator.reference_scene_path = NodePath(
+		"../WtTerrainReferenceScene"
+	)
+	root.add_child(_material_applicator)
 	_world.edit_committed.connect(_on_edit_committed)
 	if not _world.start_backend_world() or not await _wait_for_state("running"):
 		_fail("resident production world did not start: %s" % _world.get_last_error())
+		return
+	var material_summary: Dictionary = _material_applicator.apply_materials_now()
+	if not bool(material_summary.get("native_render_material_override", false)) \
+			or not bool(material_summary.get("native_water_material_override", false)) \
+			or not bool(material_summary.get("production_texture_active", false)):
+		_fail("accepted game material was not installed: %s" % str(material_summary))
 		return
 	if not _world.update_viewer(1, 1, Vector3(8, 8, 8), 0, 0) \
 			or not _world.update_collision_viewer(2, 1, Vector3(8, 8, 8), 0):
@@ -97,6 +127,16 @@ func _run() -> void:
 			or str(status.get("native_position_space", "")) != "world" \
 			or not bool(status.get("cpu_collision_authority", false)) \
 			or bool(status.get("production_material_parity", true)) \
+			or bool(status.get("production_terrain_material_parity", true)) \
+			or not bool(status.get("production_terrain_material_payload_ready", false)) \
+			or not bool(status.get("production_terrain_albedo_mapping_parity", false)) \
+			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
+			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
+			or bool(status.get("production_static_water_material_parity", true)) \
+			or str(status.get("production_material_source", "")) \
+				!= "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader" \
+			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
+			or int(status.get("production_material_texture_count", 0)) != 5 \
 			or int(status.get("rejected_chunks", -1)) != 0 \
 			or str(effect_status.get("resource_architecture", "")) \
 				!= "paged_shared_arena" \
@@ -149,7 +189,9 @@ func _run() -> void:
 	print(
 		(
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
-			+ "readback=0 material_parity=0 arena=paged_shared native_packed=1 " \
+			+ "readback=0 terrain_albedo_mapping_parity=1 " \
+			+ "terrain_material_parity=0 water_material_parity=0 " \
+			+ "material_params=368 material_textures=5 arena=paged_shared native_packed=1 " \
 			+ "pre_mesh_admission=1 reservations=%d captures=%d released=%d"
 		) % [
 			MARKER,

@@ -1,6 +1,6 @@
 # GPU Production Resident Lifecycle Contract
 
-Status: `BOUNDED_LIFECYCLE_ADMISSION_COALESCING_QUALIFIED_DRAW_ARCHITECTURE_BLOCKED`
+Status: `BOUNDED_LIFECYCLE_ALBEDO_CAMERA_LOD_QUALIFIED_BACKEND_BLOCKED`
 
 Schema: `world_transvoxel.terrain.gpu_production_resident_lifecycle.v1`
 
@@ -49,9 +49,10 @@ multi-chunk activation, desired-set movement, retirement, replacement, and CPU
 restore. Vulkan and D3D12 pass both tests serially with zero geometry readback,
 CPU finalization, or ArrayMesh upload.
 
-These results qualify the lifecycle state machine and fail-closed behavior only.
-They do not establish production material parity, large-world coverage,
-responsiveness, memory efficiency, frame pacing, or power benefit.
+These results qualify the lifecycle state machine and fail-closed behavior.
+The later production-albedo fixture separately qualifies material payload,
+camera, and bounded LOD mapping. Full material response, large-world coverage,
+responsiveness, memory efficiency, frame pacing, and power benefit remain open.
 
 ## Historical Per-Chunk Rejection
 
@@ -114,14 +115,16 @@ uses authoritative world-space v3 requests, and conservatively culls non-visible
 surface bounds. The fresh large-world route avoids 409,393,450 source-cell
 records and has zero late resident-capacity rejection, but still misses the
 p95, coverage, rejection, and production-material gates. The next candidate
-must establish production material and camera/LOD visual parity before
-replacing CPU-mesh capture with GPU-first field evaluation and Transvoxel
-extraction. It must preserve the shared arena, exact lifecycle, admission
-rules, compact rendering, and CPU recovery contract, then pass Vulkan before a
-second large-world backend is measured.
+establishes production albedo/material mapping and bounded camera/LOD rendering,
+but full normal/PBR and static-water response remain open. CPU-mesh capture must
+then be replaced with GPU-first field evaluation and Transvoxel extraction. It
+must preserve the shared arena, exact lifecycle, admission rules, compact
+rendering, and CPU recovery contract, then pass Vulkan before a second
+large-world backend is measured.
 
 Evidence:
 
 - [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md)
 - [TQP-64 bounded admission and queue-coalescing candidate](evidence/tqp64_large_world_gpu_coalesced_admission_candidate_20260825/RESULT.md)
 - [TQP-64 compact world-space resident candidate](evidence/tqp64_large_world_gpu_resident_candidate_20260825/RESULT.md)
+- [TQP-64 production albedo, camera, and LOD candidate](evidence/tqp64_large_world_gpu_production_visual_candidate_20260825/RESULT.md)

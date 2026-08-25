@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_BOUNDED_ADMISSION_COALESCING_QUALIFIED_DRAW_ARCHITECTURE_BLOCKED`
+Status: `TQP64_PRODUCTION_ALBEDO_CAMERA_LOD_SLICE_QUALIFIED_BACKEND_BLOCKED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -171,10 +171,36 @@ collapse, but does not promote the backend: p95 is 28.03 ms versus 22.00 ms CPU
 (+27.42%), maximum coverage is 12.87%, 2,540 candidate chunks are rejected,
 and production material parity is absent.
 
-The next order is therefore strict: establish production material and
-camera/LOD visual parity, then replace CPU-mesh capture with GPU-first field
-evaluation and Transvoxel extraction. Vulkan large-world promotion must pass
-before a D3D12 large-world run is admitted.
+The next retained slice establishes production camera transforms, terrain
+albedo/material mapping, and bounded LOD0/1/2 rendering. Full normal/PBR and
+static-water material parity remain open before production promotion.
+
+### Production Albedo, Camera, And LOD Follow-Up
+
+The resident renderer now consumes the accepted game terrain texture arrays,
+generated/authored material weights, and world-space biome, depth, ore, and
+road parameters through a generated raw-RD shader. The generator pins the CPU
+shader source hash. Focused Vulkan and D3D12 fixtures retain live Godot camera
+transforms, simultaneous LOD0/1/2 inventory (`16 / 4 / 1`), zero coverage
+overlap, exact albedo mapping, and zero geometry readback. The fixture also
+corrects raw-RD front-face winding, stale-work classification, and a
+chunk-versus-two-surface allocation error.
+
+This is not full production material parity. The compositor does not reproduce
+Godot Forward+ normal mapping, roughness/PBR, shadows, or static-water response.
+Those gates remain explicitly false.
+
+The matched large-world Vulkan route records stable production albedo mapping,
+zero downstream rejection, and 17.16% maximum GPU chunk coverage. Frame p95 is
+31.13 ms versus 23.85 ms CPU (+30.51%); wall time is +9.45% and RSS is +1.84%.
+The active terrain set contains LOD0 and LOD3 but no LOD1/2. Native bounded
+admission rejects 570 reservations and 2,367 captured requests, while 213
+normal stale applications are reported separately as supersessions.
+
+The backend remains blocked on full terrain/static-water material response,
+large-world LOD and coverage completeness, native admission, frame p95, and
+GPU-first field/Transvoxel generation. Raising capacities alone is not an
+acceptable resolution.
 
 ## Decision
 

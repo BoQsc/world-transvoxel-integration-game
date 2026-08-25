@@ -14,9 +14,13 @@ const COMPUTE_SHADER_FILE := preload(
 const RASTER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render.glsl"
 )
+const PRODUCTION_RASTER_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_production.glsl"
+)
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 3
 const DEFAULT_RESIDENT_CAPACITY := 64
+const MAXIMUM_SURFACES_PER_CHUNK := 2
 const DRAW_COMMAND_STRIDE := 20
 const REQUIRED_IDENTITY_FIELDS := [
 	"page_x", "page_y", "page_z", "lod", "generation", "source_revision",
@@ -41,6 +45,14 @@ var _compute_pipeline := RID()
 var _raster_shader := RID()
 var _raster_pipeline := RID()
 var _raster_pipeline_format := -1
+var _production_raster_shader := RID()
+var _production_raster_pipeline := RID()
+var _production_raster_pipeline_format := -1
+var _production_material_sampler := RID()
+var _production_material_buffer := RID()
+var _production_material_set := RID()
+var _pending_production_material := {}
+var _production_material_resources: Array = []
 var _vertex_format := -1
 var _initialization_attempted := false
 var _close_requested := false
@@ -93,7 +105,9 @@ var _status := {
 	"fallback_used": false,
 	"request_capacity": REQUEST_CAPACITY,
 	"resident_capacity": DEFAULT_RESIDENT_CAPACITY,
-	"resident_allocation_capacity": DEFAULT_RESIDENT_CAPACITY + REQUEST_CAPACITY,
+	"resident_allocation_capacity": (
+		DEFAULT_RESIDENT_CAPACITY * MAXIMUM_SURFACES_PER_CHUNK + REQUEST_CAPACITY
+	),
 	"requested": 0,
 	"applied": 0,
 	"rejected": 0,
@@ -107,6 +121,8 @@ var _status := {
 	"indirect_draw_calls": 0,
 	"resident_entry_count": 0,
 	"active_entry_count": 0,
+	"active_terrain_lod_counts": {},
+	"active_static_water_lod_counts": {},
 	"event_count": 0,
 	"queued_request_count": 0,
 	"geometry_readback_bytes": 0,
@@ -118,6 +134,15 @@ var _status := {
 	"atomic_surface_set_activation": true,
 	"production_chunk_replacement": false,
 	"production_material_parity": false,
+	"production_terrain_material_payload_ready": false,
+	"production_terrain_albedo_mapping_parity": false,
+	"production_terrain_normal_mapping_parity": false,
+	"production_terrain_pbr_lighting_parity": false,
+	"production_terrain_material_parity": false,
+	"production_static_water_material_parity": false,
+	"production_material_source": "",
+	"production_material_parameter_bytes": 0,
+	"production_material_texture_count": 0,
 	"last_error": "",
 	"last_applied_identity": {},
 }
@@ -129,6 +154,33 @@ func _init() -> void:
 	access_resolved_depth = true
 	enabled = true
 	_rendering_device = RenderingServer.get_rendering_device()
+
+
+func configure_production_terrain_material(config: Dictionary) -> bool:
+	var parameter_bytes = config.get("parameter_bytes", PackedByteArray())
+	var texture_rids: Array = config.get("texture_rids", [])
+	var resources: Array = config.get("resources", [])
+	if not parameter_bytes is PackedByteArray \
+			or PackedByteArray(parameter_bytes).size() != 23 * 16:
+		_record_rejection("production material parameter block must be 368 bytes")
+		return false
+	if texture_rids.size() != 5 or resources.size() != 5:
+		_record_rejection("production material texture inventory must contain five entries")
+		return false
+	for texture_rid in texture_rids:
+		if not texture_rid is RID or not texture_rid.is_valid():
+			_record_rejection("production material contains an invalid RD texture")
+			return false
+	_mutex.lock()
+	_pending_production_material = config.duplicate(true)
+	_production_material_resources.assign(resources)
+	_status["production_material_source"] = str(config.get("source", ""))
+	_status["production_material_parameter_bytes"] = PackedByteArray(
+		parameter_bytes
+	).size()
+	_status["production_material_texture_count"] = texture_rids.size()
+	_mutex.unlock()
+	return true
 
 
 func submit_explicit_samples(
@@ -280,7 +332,7 @@ func configure_resident_capacity(capacity: int) -> bool:
 	_resident_capacity = clampi(capacity, 1, 256)
 	_status["resident_capacity"] = _resident_capacity
 	_status["resident_allocation_capacity"] = \
-		_resident_capacity + REQUEST_CAPACITY
+		_resident_allocation_capacity()
 	_mutex.unlock()
 	return true
 
@@ -362,6 +414,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	if _rendering_device == null or not _ensure_shaders():
 		_record_render_error("global RenderingDevice shader initialization failed")
 		return
+	_apply_pending_production_material_on_render_thread()
 	_drain_pending_on_render_thread()
 	_drain_lifecycle_commands_on_render_thread()
 	_draw_entries_on_render_thread(render_data)
@@ -369,6 +422,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 
 func _ensure_shaders() -> bool:
 	if _compute_pipeline.is_valid() and _raster_shader.is_valid() \
+			and _production_raster_shader.is_valid() \
 			and _vertex_format >= 0:
 		return true
 	if _initialization_attempted:
@@ -379,12 +433,16 @@ func _ensure_shaders() -> bool:
 	_mutex.unlock()
 	var compute_file := COMPUTE_SHADER_FILE as RDShaderFile
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
-	if compute_file == null or raster_file == null \
+	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
+	if compute_file == null or raster_file == null or production_raster_file == null \
 			or not compute_file.get_base_error().is_empty() \
-			or not raster_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s" % [
+			or not raster_file.get_base_error().is_empty() \
+			or not production_raster_file.get_base_error().is_empty():
+		_record_render_error("global render shader import is invalid: %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
+			production_raster_file.get_base_error() \
+				if production_raster_file != null else "production raster missing",
 		])
 		return false
 	_compute_shader = _rendering_device.shader_create_from_spirv(
@@ -399,6 +457,11 @@ func _ensure_shaders() -> bool:
 		raster_file.get_spirv()
 	)
 	if not _raster_shader.is_valid():
+		return false
+	_production_raster_shader = _rendering_device.shader_create_from_spirv(
+		production_raster_file.get_spirv()
+	)
+	if not _production_raster_shader.is_valid():
 		return false
 	var attributes: Array[RDVertexAttribute] = []
 	attributes.append(_vertex_attribute(
@@ -418,7 +481,7 @@ func _ensure_shaders() -> bool:
 			_compute_shader,
 			_compute_pipeline,
 			_vertex_format,
-			_resident_capacity + REQUEST_CAPACITY
+			_resident_allocation_capacity()
 		):
 			_record_render_error(_arena.get_last_error())
 			_arena = null
@@ -427,6 +490,75 @@ func _ensure_shaders() -> bool:
 	_status["initialized"] = _vertex_format >= 0
 	_mutex.unlock()
 	return _vertex_format >= 0
+
+
+func _apply_pending_production_material_on_render_thread() -> void:
+	var config := {}
+	_mutex.lock()
+	if not _pending_production_material.is_empty():
+		config = _pending_production_material
+		_pending_production_material = {}
+	_mutex.unlock()
+	if config.is_empty():
+		return
+	_free_rids_on_render_thread([
+		_production_material_set,
+		_production_material_buffer,
+		_production_material_sampler,
+	])
+	_production_material_set = RID()
+	_production_material_buffer = RID()
+	_production_material_sampler = RID()
+	var parameter_bytes := PackedByteArray(config.get(
+		"parameter_bytes", PackedByteArray()
+	))
+	_production_material_buffer = _rendering_device.uniform_buffer_create(
+		parameter_bytes.size(), parameter_bytes
+	)
+	var sampler_state := RDSamplerState.new()
+	sampler_state.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_state.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_state.mip_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_state.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_state.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_state.repeat_w = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	_production_material_sampler = _rendering_device.sampler_create(sampler_state)
+	if not _production_material_buffer.is_valid() \
+			or not _production_material_sampler.is_valid():
+		_record_render_error("production material buffer or sampler creation failed")
+		return
+	var uniforms: Array[RDUniform] = []
+	var parameters := RDUniform.new()
+	parameters.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
+	parameters.binding = 0
+	parameters.add_id(_production_material_buffer)
+	uniforms.append(parameters)
+	var texture_rids: Array = config.get("texture_rids", [])
+	for index in range(texture_rids.size()):
+		var texture := RDUniform.new()
+		texture.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+		texture.binding = index + 1
+		texture.add_id(_production_material_sampler)
+		texture.add_id(texture_rids[index])
+		uniforms.append(texture)
+	_production_material_set = _rendering_device.uniform_set_create(
+		uniforms, _production_raster_shader, 1
+	)
+	_mutex.lock()
+	_status["production_terrain_material_payload_ready"] = \
+		_production_material_set.is_valid()
+	_status["production_terrain_albedo_mapping_parity"] = \
+		_production_material_set.is_valid()
+	_status["production_terrain_material_parity"] = bool(
+		_status["production_terrain_albedo_mapping_parity"]
+	) and bool(_status["production_terrain_normal_mapping_parity"]) \
+		and bool(_status["production_terrain_pbr_lighting_parity"])
+	_status["production_material_parity"] = bool(
+		_status["production_terrain_material_parity"]
+	) and bool(_status["production_static_water_material_parity"])
+	if not _production_material_set.is_valid():
+		_status["last_error"] = "production material uniform set creation failed"
+	_mutex.unlock()
 
 
 func _drain_pending_on_render_thread() -> void:
@@ -446,7 +578,7 @@ func _drain_pending_on_render_thread() -> void:
 		if sequence != latest_sequence:
 			_reject_request_on_render_thread(request, "request became stale before allocation")
 			continue
-		if _entries.size() >= _resident_capacity + REQUEST_CAPACITY:
+		if _entries.size() >= _resident_allocation_capacity():
 			_mutex.lock()
 			_status["resident_capacity_rejections"] = \
 				int(_status["resident_capacity_rejections"]) + 1
@@ -582,6 +714,7 @@ func _activate_entry_on_render_thread(
 	_status["activated_entries"] = int(_status["activated_entries"]) + 1
 	_status["resident_entry_count"] = _entries.size()
 	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_sync_active_lod_inventory_locked()
 	_mutex.unlock()
 	_push_event_on_render_thread("ACTIVE", source)
 
@@ -599,8 +732,26 @@ func _retire_entry_on_render_thread(
 	_status["retired_entries"] = int(_status["retired_entries"]) + 1
 	_status["resident_entry_count"] = _entries.size()
 	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_sync_active_lod_inventory_locked()
 	_mutex.unlock()
 	_push_event_on_render_thread("RETIRED", source)
+
+
+func _sync_active_lod_inventory_locked() -> void:
+	var terrain_counts := {}
+	var water_counts := {}
+	for key_value in _active_sequence_by_key.keys():
+		var key := str(key_value)
+		var token := _entry_token(key, int(_active_sequence_by_key[key]))
+		if not _entries.has(token):
+			continue
+		var identity := Dictionary(Dictionary(_entries[token]).get("identity", {}))
+		var lod := str(int(identity.get("lod", 0)))
+		var counts := water_counts \
+			if str(identity.get("surface", "")) == "static_water" else terrain_counts
+		counts[lod] = int(counts.get(lod, 0)) + 1
+	_status["active_terrain_lod_counts"] = terrain_counts
+	_status["active_static_water_lod_counts"] = water_counts
 
 
 func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
@@ -664,7 +815,22 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		if not scene_set.is_valid():
 			_record_render_error("global render scene uniform set failed")
 			return
+		var production_scene_set := RID()
+		var production_ready := _production_material_set.is_valid()
+		if production_ready:
+			if not _ensure_production_raster_pipeline(
+				_rendering_device.framebuffer_get_format(framebuffer)
+			):
+				_record_render_error("production terrain raster pipeline failed")
+				return
+			production_scene_set = UniformSetCacheRD.get_cache(
+				_production_raster_shader, 0, [scene_uniform]
+			)
+			if not production_scene_set.is_valid():
+				_record_render_error("production render scene uniform set failed")
+				return
 		var draw_list := _rendering_device.draw_list_begin(framebuffer)
+		var production_pipeline_bound := false
 		_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
 		_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
 		var push_bytes := PackedInt32Array([view, view_count, 0, 0]).to_byte_array()
@@ -681,6 +847,28 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				view_records_avoided += source_cell_count
 				continue
 			visible_surfaces += 1
+			var use_production := production_ready and str(Dictionary(
+				entry.get("identity", {})
+			).get("surface", "")) == "terrain"
+			if use_production != production_pipeline_bound:
+				if use_production:
+					_rendering_device.draw_list_bind_render_pipeline(
+						draw_list, _production_raster_pipeline
+					)
+					_rendering_device.draw_list_bind_uniform_set(
+						draw_list, production_scene_set, 0
+					)
+					_rendering_device.draw_list_bind_uniform_set(
+						draw_list, _production_material_set, 1
+					)
+				else:
+					_rendering_device.draw_list_bind_render_pipeline(
+						draw_list, _raster_pipeline
+					)
+					_rendering_device.draw_list_bind_uniform_set(
+						draw_list, scene_set, 0
+					)
+				production_pipeline_bound = use_production
 			_rendering_device.draw_list_bind_vertex_array(
 				draw_list, entry.get("vertex_array", RID())
 			)
@@ -773,6 +961,38 @@ func _ensure_raster_pipeline(framebuffer_format: int) -> bool:
 	return _raster_pipeline.is_valid()
 
 
+func _ensure_production_raster_pipeline(framebuffer_format: int) -> bool:
+	if _production_raster_pipeline.is_valid() \
+			and _production_raster_pipeline_format == framebuffer_format:
+		return true
+	if _production_raster_pipeline.is_valid():
+		_rendering_device.free_rid(_production_raster_pipeline)
+		_production_raster_pipeline = RID()
+	var rasterization := RDPipelineRasterizationState.new()
+	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_BACK
+	rasterization.front_face = RenderingDevice.POLYGON_FRONT_FACE_COUNTER_CLOCKWISE
+	var depth_stencil := RDPipelineDepthStencilState.new()
+	depth_stencil.enable_depth_test = true
+	depth_stencil.enable_depth_write = true
+	depth_stencil.depth_compare_operator = RenderingDevice.COMPARE_OP_GREATER_OR_EQUAL
+	var color_attachment := RDPipelineColorBlendStateAttachment.new()
+	color_attachment.enable_blend = false
+	var color_blend := RDPipelineColorBlendState.new()
+	color_blend.attachments = [color_attachment]
+	_production_raster_pipeline = _rendering_device.render_pipeline_create(
+		_production_raster_shader,
+		framebuffer_format,
+		_vertex_format,
+		RenderingDevice.RENDER_PRIMITIVE_TRIANGLES,
+		rasterization,
+		RDPipelineMultisampleState.new(),
+		depth_stencil,
+		color_blend
+	)
+	_production_raster_pipeline_format = framebuffer_format
+	return _production_raster_pipeline.is_valid()
+
+
 func _framebuffer_for(color: RID, depth: RID) -> RID:
 	if not color.is_valid() or not depth.is_valid():
 		return RID()
@@ -801,8 +1021,16 @@ func _close_on_render_thread() -> void:
 			_rendering_device.free_rid(framebuffer)
 	_framebuffers.clear()
 	_free_rids_on_render_thread([
-		_raster_pipeline, _raster_shader, _compute_pipeline, _compute_shader,
+		_production_material_set, _production_material_buffer,
+		_production_material_sampler, _production_raster_pipeline,
+		_production_raster_shader, _raster_pipeline, _raster_shader,
+		_compute_pipeline, _compute_shader,
 	])
+	_production_material_set = RID()
+	_production_material_buffer = RID()
+	_production_material_sampler = RID()
+	_production_raster_pipeline = RID()
+	_production_raster_shader = RID()
 	_raster_pipeline = RID()
 	_raster_shader = RID()
 	_compute_pipeline = RID()
@@ -1035,6 +1263,10 @@ static func _identity_key(identity: Dictionary) -> String:
 
 static func _entry_token(key: String, publication_sequence: int) -> String:
 	return "%s@%d" % [key, publication_sequence]
+
+
+func _resident_allocation_capacity() -> int:
+	return _resident_capacity * MAXIMUM_SURFACES_PER_CHUNK + REQUEST_CAPACITY
 
 
 static func _validate_identity(identity: Dictionary, publication_sequence: int) -> String:

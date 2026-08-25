@@ -27,6 +27,7 @@ STATUS_COUNTERS = (
     "activated_chunks",
     "retired_chunks",
     "rejected_chunks",
+    "superseded_chunks",
     "recovery_count",
     "application_wait_expirations",
 )
@@ -113,6 +114,20 @@ def _maximum(
     return result
 
 
+def _maximum_lod_counts(
+    snapshots: list[tuple[dict[str, Any], dict[str, Any]]], key: str
+) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for _, status in snapshots:
+        effect = status.get("effect_status", {})
+        counts = effect.get(key, {}) if isinstance(effect, dict) else {}
+        if not isinstance(counts, dict):
+            continue
+        for lod, value in counts.items():
+            result[str(lod)] = max(result.get(str(lod), 0), int(value))
+    return result
+
+
 def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
     snapshots = _snapshots(trace)
     native_envelope = trace.get("native", {})
@@ -132,6 +147,12 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         if isinstance(final_status, dict) else {}
     if not isinstance(final_native, dict):
         final_native = {}
+    configured_material_statuses = [
+        status
+        for _, status in snapshots
+        if bool(status.get("running", False))
+        and bool(status.get("production_material_source", ""))
+    ]
     return {
         "schema": trace.get("schema", ""),
         "reason": trace.get("reason", ""),
@@ -157,6 +178,41 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
             for _, status in snapshots
             if bool(status.get("running", False))
         ),
+        "production_terrain_material_parity_observed": any(
+            bool(status.get("production_terrain_material_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_material_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get("production_terrain_material_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_material_payload_ready": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get("production_terrain_material_payload_ready", False))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_albedo_mapping_parity_observed": any(
+            bool(status.get("production_terrain_albedo_mapping_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_terrain_albedo_mapping_parity_stable": bool(
+            configured_material_statuses
+        ) and all(
+            bool(status.get("production_terrain_albedo_mapping_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_static_water_material_parity_observed": any(
+            bool(status.get("production_static_water_material_parity", False))
+            for status in configured_material_statuses
+        ),
+        "production_material_source": next((
+            str(status.get("production_material_source", ""))
+            for status in reversed(configured_material_statuses)
+            if str(status.get("production_material_source", ""))
+        ), ""),
         "native_request_handoff_decoupled": any(
             bool(status.get("native_request_handoff_decoupled", False))
             for _, status in snapshots
@@ -179,6 +235,12 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "native_final": {
             key: int(final_native.get(key, 0)) for key in NATIVE_COUNTERS
         },
+        "maximum_active_terrain_lod_counts": _maximum_lod_counts(
+            snapshots, "active_terrain_lod_counts"
+        ),
+        "maximum_active_static_water_lod_counts": _maximum_lod_counts(
+            snapshots, "active_static_water_lod_counts"
+        ),
         "maximum_gpu_chunk_coverage_ratio": max(coverage_ratios, default=0.0),
         "final_status": {
             "tracked_chunks": int(final_status.get("tracked_chunks", 0)),
@@ -388,7 +450,7 @@ def main(argv: list[str]) -> int:
     raw_root.mkdir(parents=True, exist_ok=True)
     output = args.output.resolve() if args.output else (
         project / "docs" / "evidence"
-        / "tqp64_large_world_gpu_resident_candidate_20260825"
+        / "tqp64_large_world_gpu_production_visual_candidate_20260825"
         / "qualification.json"
     )
     results = {}
@@ -417,12 +479,35 @@ def main(argv: list[str]) -> int:
                 "production_material_parity": bool(
                     trace["production_material_parity"]
                 ),
+                "production_terrain_material_parity": bool(
+                    trace["production_terrain_material_parity_observed"]
+                    and trace["production_terrain_material_parity_stable"]
+                ),
+                "production_terrain_albedo_mapping_parity": bool(
+                    trace["production_terrain_albedo_mapping_parity_observed"]
+                    and trace["production_terrain_albedo_mapping_parity_stable"]
+                ),
+                "production_static_water_material_parity": bool(
+                    trace["production_static_water_material_parity_observed"]
+                ),
+                "production_lod0_through_lod3_observed": all(
+                    int(trace["maximum_active_terrain_lod_counts"].get(
+                        str(lod), 0
+                    )) > 0
+                    for lod in range(4)
+                ),
                 "at_least_95_percent_chunk_coverage": (
                     float(trace["maximum_gpu_chunk_coverage_ratio"]) >= 0.95
                 ),
                 "no_candidate_rejections": int(maximum["rejected_chunks"]) == 0,
                 "no_native_capacity_rejections": (
                     int(native["capacity_rejections"]) == 0
+                ),
+                "no_native_capture_reservation_rejections": (
+                    int(native["capture_reservation_rejections"]) == 0
+                ),
+                "no_native_validation_rejections": (
+                    int(native["validation_rejections"]) == 0
                 ),
                 "frame_p95_within_10_percent": (
                     float(candidate["report"]["frame_ms"]["p95"])
@@ -470,7 +555,37 @@ def main(argv: list[str]) -> int:
             "whole_chunk_relocation_qualified_separately": True,
             "large_world_production_backend_qualified": promotion_pass,
             "cpu_collision_authority": True,
-            "production_material_parity": False,
+            "production_terrain_material_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_material_parity_stable", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_terrain_albedo_mapping_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_albedo_mapping_parity_stable", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_static_water_material_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_static_water_material_parity_observed", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
+            "production_material_parity": all(
+                bool(item["gpu_resident"]["trace"].get(
+                    "production_terrain_material_parity_stable", False
+                ))
+                and bool(item["gpu_resident"]["trace"].get(
+                    "production_static_water_material_parity_observed", False
+                ))
+                for item in results.values()
+                if item.get("measurement_pass", False)
+            ),
             "gpu_field_generation": False,
             "performance_promotion": False,
             "gpu_board_telemetry_scope": "board_global_not_process_attributed",

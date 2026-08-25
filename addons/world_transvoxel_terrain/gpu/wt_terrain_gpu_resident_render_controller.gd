@@ -15,6 +15,30 @@ const REQUIRED_BACKEND_METHODS := [
 	"set_gpu_resident_render_chunk_active",
 	"reconcile_gpu_resident_render_chunks",
 	"get_gpu_resident_render_metrics",
+	"get_render_material_override",
+]
+const PRODUCTION_TERRAIN_SHADER := (
+	"res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader"
+)
+const PRODUCTION_DEFAULT_ROAD_GRADES := [
+	Vector2(34.0, 39.0),
+	Vector2(39.0, 40.0),
+	Vector2(46.0, 39.0),
+	Vector2(39.0, 34.0),
+	Vector2(34.0, 33.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
+	Vector2(34.0, 34.0),
 ]
 const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
@@ -38,9 +62,11 @@ var _validated_surfaces := 0
 var _activated_chunks := 0
 var _retired_chunks := 0
 var _rejected_chunks := 0
+var _superseded_chunks := 0
 var _recovery_count := 0
 var _application_wait_expirations := 0
 var _process_frame := 0
+var _production_material_signature := ""
 
 
 func _ready() -> void:
@@ -155,6 +181,7 @@ func get_status() -> Dictionary:
 		"activated_chunks": _activated_chunks,
 		"retired_chunks": _retired_chunks,
 		"rejected_chunks": _rejected_chunks,
+		"superseded_chunks": _superseded_chunks,
 		"recovery_count": _recovery_count,
 		"application_wait_expirations": _application_wait_expirations,
 		"last_error": _last_error,
@@ -168,6 +195,33 @@ func get_status() -> Dictionary:
 		"cpu_collision_authority": true,
 		"atomic_surface_set_activation": true,
 		"production_material_parity": false,
+		"production_terrain_material_payload_ready": bool(effect_status.get(
+			"production_terrain_material_payload_ready", false
+		)),
+		"production_terrain_albedo_mapping_parity": bool(effect_status.get(
+			"production_terrain_albedo_mapping_parity", false
+		)),
+		"production_terrain_normal_mapping_parity": bool(effect_status.get(
+			"production_terrain_normal_mapping_parity", false
+		)),
+		"production_terrain_pbr_lighting_parity": bool(effect_status.get(
+			"production_terrain_pbr_lighting_parity", false
+		)),
+		"production_terrain_material_parity": bool(effect_status.get(
+			"production_terrain_material_parity", false
+		)),
+		"production_static_water_material_parity": bool(effect_status.get(
+			"production_static_water_material_parity", false
+		)),
+		"production_material_source": str(effect_status.get(
+			"production_material_source", ""
+		)),
+		"production_material_parameter_bytes": int(effect_status.get(
+			"production_material_parameter_bytes", 0
+		)),
+		"production_material_texture_count": int(effect_status.get(
+			"production_material_texture_count", 0
+		)),
 	}
 
 
@@ -175,6 +229,7 @@ func _process(_delta: float) -> void:
 	if not _running or _backend_terrain == null or _effect == null:
 		return
 	_process_frame += 1
+	_sync_production_terrain_material()
 	_drain_effect_events()
 	_retry_prepared_groups()
 	_reconcile_active_chunks()
@@ -184,6 +239,115 @@ func _process(_delta: float) -> void:
 			and not bool(effect_status.get("initialized", false)) \
 			and not str(effect_status.get("last_error", "")).is_empty():
 		_fail_closed(str(effect_status.get("last_error", "GPU renderer failed")))
+
+
+func _sync_production_terrain_material() -> void:
+	if _effect == null or _backend_terrain == null:
+		return
+	var material_value = _backend_terrain.call("get_render_material_override")
+	if not material_value is ShaderMaterial:
+		return
+	var material := material_value as ShaderMaterial
+	if material.shader == null \
+			or material.shader.resource_path != PRODUCTION_TERRAIN_SHADER:
+		return
+	var config := _production_material_config(material)
+	var signature := str(config.get("signature", ""))
+	if signature.is_empty() or signature == _production_material_signature:
+		return
+	if _effect.configure_production_terrain_material(config):
+		_production_material_signature = signature
+
+
+func _production_material_config(material: ShaderMaterial) -> Dictionary:
+	var texture_names := [
+		"checker_texture",
+		"terrain_albedo_array",
+		"terrain_normal_array",
+		"terrain_roughness_array",
+		"clean_albedo_texture",
+	]
+	var resources: Array = []
+	var texture_rids: Array[RID] = []
+	for index in range(texture_names.size()):
+		var texture = material.get_shader_parameter(texture_names[index])
+		if texture == null and texture_names[index] == "clean_albedo_texture":
+			texture = material.get_shader_parameter("checker_texture")
+		if not texture is Texture:
+			return {}
+		var rd_texture := RenderingServer.texture_get_rd_texture(
+			texture.get_rid(), index in [0, 1, 4]
+		)
+		if not rd_texture.is_valid():
+			return {}
+		resources.append(texture)
+		texture_rids.append(rd_texture)
+	var values := PackedFloat32Array()
+	_append_vec4(values, Vector4(
+		1.0 if bool(material.get_shader_parameter(
+			"procedural_ore_worldspace_blend_enabled"
+		)) else 0.0,
+		1.0 if bool(material.get_shader_parameter(
+			"procedural_rolling_exterior_surface_enabled"
+		)) else 0.0,
+		1.0 if bool(material.get_shader_parameter(
+			"procedural_road_worldspace_blend_enabled"
+		)) else 0.0,
+		1.0 if bool(material.get_shader_parameter(
+			"procedural_four_biome_world_enabled"
+		)) else 0.0
+	))
+	_append_vec4(values, Vector4(
+		float(material.get_shader_parameter("procedural_seed_phase")),
+		float(material.get_shader_parameter("procedural_ore_blend_width")),
+		float(material.get_shader_parameter("procedural_road_half_width")),
+		float(material.get_shader_parameter("procedural_road_shoulder_width"))
+	))
+	_append_vec4(values, Vector4(
+		float(material.get_shader_parameter("procedural_surface_cover_full_depth")),
+		float(material.get_shader_parameter("procedural_surface_cover_fade_depth")),
+		float(material.get_shader_parameter("procedural_surface_cover_normal_start")),
+		float(material.get_shader_parameter("procedural_surface_cover_normal_end"))
+	))
+	_append_vec4(values, Vector4(
+		float(material.get_shader_parameter(
+			"procedural_surface_biome_height_blend_width"
+		)),
+		float(material.get_shader_parameter(
+			"procedural_surface_biome_noise_blend_width"
+		)),
+		0.0,
+		0.0
+	))
+	var world_size: Vector2 = material.get_shader_parameter(
+		"procedural_world_size_xz"
+	)
+	_append_vec4(values, Vector4(world_size.x, world_size.y, 0.0, 0.0))
+	for index in range(18):
+		var grade_value = material.get_shader_parameter(
+			"procedural_road_grade_%d" % index
+		)
+		var grade: Vector2 = grade_value \
+			if grade_value is Vector2 else PRODUCTION_DEFAULT_ROAD_GRADES[index]
+		_append_vec4(values, Vector4(grade.x, grade.y, 0.0, 0.0))
+	var parameter_bytes := values.to_byte_array()
+	var signature_parts := [str(material.get_instance_id()), parameter_bytes.hex_encode()]
+	for texture in resources:
+		signature_parts.append(str(texture.get_instance_id()))
+	return {
+		"source": PRODUCTION_TERRAIN_SHADER,
+		"parameter_bytes": parameter_bytes,
+		"texture_rids": texture_rids,
+		"resources": resources,
+		"signature": ":".join(signature_parts),
+	}
+
+
+static func _append_vec4(values: PackedFloat32Array, value: Vector4) -> void:
+	values.append(value.x)
+	values.append(value.y)
+	values.append(value.z)
+	values.append(value.w)
 
 
 func _submit_native_captures() -> void:
@@ -286,6 +450,13 @@ func _try_validate_group(group_key: String) -> void:
 			Dictionary(request.get("identity", {}))
 		))
 		var validation_status := str(validation.get("status", ""))
+		if validation_status.begins_with("STALE"):
+			var stale_validated: Dictionary = group.get("native_validated", {})
+			stale_validated[surface] = true
+			group["native_validated"] = stale_validated
+			_groups[group_key] = group
+			_supersede_group(group_key)
+			return
 		if bool(validation.get("request_accepted", false)):
 			var native_validated: Dictionary = group.get("native_validated", {})
 			native_validated[surface] = true
@@ -324,6 +495,9 @@ func _try_validate_group(group_key: String) -> void:
 		return
 	if str(readiness.get("status", "")) != "READY" \
 			or not bool(readiness.get("ready", false)):
+		if str(readiness.get("status", "")).begins_with("STALE"):
+			_supersede_group(group_key)
+			return
 		_reject_group(group_key, str(readiness.get(
 			"error", "native resident chunk readiness rejected the chunk"
 		)))
@@ -367,6 +541,9 @@ func _try_activate_chunk(group_key: String) -> void:
 	))
 	if str(activation.get("status", "")) != "ACTIVE" \
 			or not bool(activation.get("active", false)):
+		if str(activation.get("status", "")).begins_with("STALE"):
+			_supersede_group(group_key)
+			return
 		_reject_group(group_key, str(activation.get(
 			"error", "native chunk activation became stale"
 		)))
@@ -417,6 +594,24 @@ func _reject_group(group_key: String, error: String) -> void:
 			var request_value = Dictionary(group.get("requests", {}))[surface]
 			var request := Dictionary(request_value)
 			_reject_native_request(request, error)
+	_begin_group_retirement(group_key)
+
+
+func _supersede_group(group_key: String) -> void:
+	if not _groups.has(group_key):
+		return
+	_superseded_chunks += 1
+	var group: Dictionary = _groups[group_key]
+	var native_validated: Dictionary = group.get("native_validated", {})
+	for surface in Dictionary(group.get("requests", {})):
+		if bool(native_validated.get(surface, false)):
+			continue
+		var request := Dictionary(Dictionary(group.get("requests", {}))[surface])
+		_backend_terrain.call(
+			"validate_gpu_resident_render_request",
+			int(request.get("request_id", 0)),
+			Dictionary(request.get("identity", {}))
+		)
 	_begin_group_retirement(group_key)
 
 
