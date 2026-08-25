@@ -1,6 +1,10 @@
 extends SceneTree
 
 const MARKER := "GPU_RESIDENT_MULTICHUNK_RELOCATION_SMOKE_PASS"
+const BACKGROUND := Color(0.02, 0.025, 0.03, 1.0)
+const CAPTURE_ROOT := (
+	"res://.godot/world_transvoxel_captures/gpu_resident_multichunk_relocation"
+)
 const TerrainWorld := preload(
 	"res://addons/world_transvoxel_terrain/runtime/wt_terrain_world.gd"
 )
@@ -74,12 +78,21 @@ func _run() -> void:
 
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
+	if image != null and not image.is_empty():
+		image.convert(Image.FORMAT_RGBA8)
+	var foreground_pixels := _foreground_pixel_count(image)
+	var image_sha256 := _sha256(image.get_data()) if image != null else ""
+	var driver := RenderingServer.get_current_rendering_driver_name().to_lower()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CAPTURE_ROOT))
+	if image != null and not image.is_empty():
+		image.save_png("%s/%s.png" % [CAPTURE_ROOT, driver])
 	var status: Dictionary = _world.get_gpu_resident_render_status()
 	var effect_status: Dictionary = status.get("effect_status", {})
 	var native_metrics: Dictionary = status.get("native_metrics", {})
 	var active_chunks := int(status.get("active_chunks", 0))
-	if image == null or image.is_empty() \
+	if image == null or image.is_empty() or foreground_pixels < 64 \
 			or not bool(status.get("running", false)) \
+			or str(status.get("native_position_space", "")) != "world" \
 			or int(status.get("retired_chunks", 0)) < 1 \
 			or int(status.get("rejected_chunks", -1)) != 0 \
 			or int(status.get("recovery_count", -1)) != 0 \
@@ -95,6 +108,14 @@ func _run() -> void:
 			or int(effect_status.get("packing_requests", -1)) != 0 \
 			or int(effect_status.get("native_packed_requests", 0)) < 8 \
 			or int(effect_status.get("native_packed_bytes_total", 0)) <= 0 \
+			or not bool(effect_status.get(
+				"compacted_surface_indirect_commands", false
+			)) \
+			or int(effect_status.get("indirect_commands_per_surface", 0)) != 1 \
+			or str(effect_status.get("visibility_bounds_position_space", "")) \
+				!= "world" \
+			or int(effect_status.get("visibility_test_count", 0)) <= 0 \
+			or int(effect_status.get("source_cell_indirect_records_avoided", 0)) <= 0 \
 			or int(native_metrics.get("capture_reservation_attempts", 0)) < 8 \
 			or int(native_metrics.get("reserved_captures", 0)) < 8 \
 			or int(native_metrics.get("released_capture_slots", 0)) < 8 \
@@ -121,7 +142,8 @@ func _run() -> void:
 	print((
 		"%s initial_active=%d activated=%d retired=%d active=%d restored=%d " \
 		+ "collision_authority=cpu readback=0 arena_reuses=%d pages=%d " \
-		+ "native_packed=1 pre_mesh_admission=1 reservations=%d captures=%d released=%d"
+		+ "native_packed=1 pre_mesh_admission=1 reservations=%d captures=%d released=%d " \
+		+ "foreground_pixels=%d image_sha256=%s"
 	) % [
 		MARKER,
 		initial_active,
@@ -134,6 +156,8 @@ func _run() -> void:
 		int(native_metrics.get("capture_reservation_attempts", 0)),
 		int(native_metrics.get("reserved_captures", 0)),
 		int(native_metrics.get("released_capture_slots", 0)),
+		foreground_pixels,
+		image_sha256,
 	])
 	_world.queue_free()
 	await process_frame
@@ -145,7 +169,7 @@ func _setup_viewport() -> void:
 	root.content_scale_size = Vector2i(640, 480)
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.02, 0.025, 0.03, 1.0)
+	environment.background_color = BACKGROUND
 	_world_environment = WorldEnvironment.new()
 	_world_environment.environment = environment
 	root.add_child(_world_environment)
@@ -218,6 +242,33 @@ func _wait_for_resident_state(minimum_activated: int, minimum_retired: int) -> b
 			return true
 		await process_frame
 	return false
+
+
+func _foreground_pixel_count(image: Image) -> int:
+	if image == null or image.is_empty():
+		return 0
+	var expected := BACKGROUND.to_rgba32()
+	var count := 0
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			if _color_distance(image.get_pixel(x, y).to_rgba32(), expected) > 24:
+				count += 1
+	return count
+
+
+static func _color_distance(left: int, right: int) -> int:
+	return abs(int((left >> 24) & 0xff) - int((right >> 24) & 0xff)) \
+		+ abs(int((left >> 16) & 0xff) - int((right >> 16) & 0xff)) \
+		+ abs(int((left >> 8) & 0xff) - int((right >> 8) & 0xff))
+
+
+static func _sha256(data: PackedByteArray) -> String:
+	var context := HashingContext.new()
+	if context.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	if context.update(data) != OK:
+		return ""
+	return context.finish().hex_encode()
 
 
 func _fail(message: String) -> void:

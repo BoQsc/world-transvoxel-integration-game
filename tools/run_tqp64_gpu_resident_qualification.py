@@ -52,6 +52,12 @@ EFFECT_COUNTERS = (
     "packed_bytes_total",
     "native_packed_requests",
     "native_packed_bytes_total",
+    "visibility_test_count",
+    "visibility_culled_count",
+    "compact_indirect_command_records",
+    "source_cell_indirect_records_avoided",
+    "max_compact_command_records_per_view",
+    "max_source_cell_records_avoided_per_view",
 )
 NATIVE_COUNTERS = (
     "capacity",
@@ -154,6 +160,18 @@ def summarize_trace(trace: dict[str, Any]) -> dict[str, Any]:
         "native_request_handoff_decoupled": any(
             bool(status.get("native_request_handoff_decoupled", False))
             for _, status in snapshots
+        ),
+        "native_world_position_space": bool(snapshots) and all(
+            str(status.get("native_position_space", "")) == "world"
+            for _, status in snapshots
+            if bool(status.get("running", False))
+        ),
+        "compacted_surface_indirect_commands": bool(snapshots) and all(
+            bool(status.get("effect_status", {}).get(
+                "compacted_surface_indirect_commands", False
+            ))
+            for _, status in snapshots
+            if bool(status.get("running", False))
         ),
         "maximum": _maximum(snapshots, STATUS_COUNTERS),
         "effect_maximum": _maximum(snapshots, EFFECT_COUNTERS, "effect_status"),
@@ -268,6 +286,21 @@ def _load_mode(raw_root: pathlib.Path, driver: str, mode: str) -> dict[str, Any]
             "exact_handoff_decoupled": bool(
                 trace.get("native_request_handoff_decoupled", False)
             ),
+            "native_world_position_space": bool(
+                trace.get("native_world_position_space", False)
+            ),
+            "compacted_surface_indirect_commands": bool(
+                trace.get("compacted_surface_indirect_commands", False)
+            ),
+            "compaction_observed": (
+                int(effect.get("compact_indirect_command_records", 0)) > 0
+                and int(effect.get(
+                    "source_cell_indirect_records_avoided", 0
+                )) > 0
+            ),
+            "visibility_tested": int(
+                effect.get("visibility_test_count", 0)
+            ) > 0,
             "resident_chunk_activated": int(maximum.get("activated_chunks", 0)) > 0,
             "resident_entry_retired": int(
                 effect.get("retired_entries", 0)

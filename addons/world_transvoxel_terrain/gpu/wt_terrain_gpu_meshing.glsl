@@ -79,7 +79,7 @@ struct DrawIndexedIndirectCommand {
 	int vertex_offset;
 	uint first_instance;
 };
-layout(set = 0, binding = 20, std430) writeonly buffer OutputDrawCommands {
+layout(set = 0, binding = 20, std430) buffer OutputDrawCommands {
 	DrawIndexedIndirectCommand values[];
 } output_draw_commands;
 
@@ -140,23 +140,28 @@ void main() {
 		return;
 	}
 	int cell_index = int(cell_index_u);
+	bool compact_surface = arena.output_b.y != 0;
 	int local_vertex_base = cell_index * MAX_VERTICES;
 	int local_index_base = cell_index * MAX_INDICES;
 	int vertex_base = arena.output_a.x + local_vertex_base;
 	int index_base = arena.output_a.y + local_index_base;
 	int cell_meta_index = arena.output_a.z + cell_index;
-	int draw_index = arena.output_b.x + cell_index;
-	output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
-		0u, 0u, uint(local_index_base), local_vertex_base, 0u
-	);
+	int draw_index = arena.output_b.x + (compact_surface ? 0 : cell_index);
+	if (!compact_surface) {
+		output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
+			0u, 0u, uint(local_index_base), local_vertex_base, 0u
+		);
+	}
 	for (int index = 0; index < MAX_VERTICES; ++index) {
 		output_positions.values[vertex_base + index] = vec4(0.0);
 		output_normals.values[vertex_base + index] = vec4(0.0);
 		output_vertex_meta.values[vertex_base + index] = ivec4(0);
 		output_reuse.values[vertex_base + index] = ivec4(0, cell_index, index, 1);
 	}
-	for (int index = 0; index < MAX_INDICES; ++index) {
-		output_indices.values[index_base + index] = -1;
+	if (!compact_surface) {
+		for (int index = 0; index < MAX_INDICES; ++index) {
+			output_indices.values[index_base + index] = -1;
+		}
 	}
 	if (cell_index == 0) {
 		output_identity.values[arena.output_a.w] = config.values[config_base + 1];
@@ -297,6 +302,7 @@ void main() {
 		output_reuse.values[output_index].x = (edge_code >> 8) & 0xff;
 	}
 
+	int emitted_indices[MAX_INDICES];
 	int output_index_count = 0;
 	for (int triangle = 0; triangle < source_index_count; triangle += 3) {
 		int first = cell_type == CELL_REGULAR
@@ -323,9 +329,9 @@ void main() {
 			dot(edge_c, edge_c) == 0.0 || dot(cross(edge_a, edge_b), cross(edge_a, edge_b)) == 0.0) {
 			continue;
 		}
-		output_indices.values[index_base + output_index_count] = first;
-		output_indices.values[index_base + output_index_count + 1] = second;
-		output_indices.values[index_base + output_index_count + 2] = third;
+		emitted_indices[output_index_count] = first;
+		emitted_indices[output_index_count + 1] = second;
+		emitted_indices[output_index_count + 2] = third;
 		output_index_count += 3;
 	}
 	if (output_index_count == 0) {
@@ -335,7 +341,22 @@ void main() {
 	output_cell_meta.values[cell_meta_index] = ivec4(
 		STATUS_OK, case_code, vertex_count, output_index_count
 	);
-	output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
-		uint(output_index_count), 1u, uint(local_index_base), local_vertex_base, 0u
-	);
+	if (compact_surface) {
+		uint compact_base = atomicAdd(
+			output_draw_commands.values[draw_index].index_count,
+			uint(output_index_count)
+		);
+		for (int index = 0; index < output_index_count; ++index) {
+			output_indices.values[
+				arena.output_a.y + int(compact_base) + index
+			] = local_vertex_base + emitted_indices[index];
+		}
+	} else {
+		for (int index = 0; index < output_index_count; ++index) {
+			output_indices.values[index_base + index] = emitted_indices[index];
+		}
+		output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
+			uint(output_index_count), 1u, uint(local_index_base), local_vertex_base, 0u
+		);
+	}
 }

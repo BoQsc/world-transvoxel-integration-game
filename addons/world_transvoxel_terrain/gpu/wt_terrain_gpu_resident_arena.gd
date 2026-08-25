@@ -91,6 +91,19 @@ func lease_and_dispatch(input_buffers: Array, cell_count: int) -> Dictionary:
 			]
 			return {}
 		_uploaded_bytes += bytes.size()
+	var indirect_offset := slot_index * int(strides[20])
+	var initial_command := PackedInt32Array([0, 1, 0, 0, 0]).to_byte_array()
+	var command_error := _rendering_device.buffer_update(
+		buffers[20], indirect_offset, initial_command.size(), initial_command
+	)
+	if command_error != OK:
+		free_slots.append(slot_index)
+		page["free_slots"] = free_slots
+		_pages[page_index] = page
+		_last_error = "resident arena indirect command initialization failed: %s" % [
+			error_string(command_error),
+		]
+		return {}
 	var push_bytes := _push_constant_bytes(strides, slot_index)
 	var compute_list := _rendering_device.compute_list_begin()
 	_rendering_device.compute_list_bind_compute_pipeline(
@@ -136,7 +149,8 @@ func lease_and_dispatch(input_buffers: Array, cell_count: int) -> Dictionary:
 		"vertex_array": slot.get("vertex_array", RID()),
 		"index_array": slot.get("index_array", RID()),
 		"indirect_buffer": buffers[20],
-		"indirect_offset": slot_index * int(strides[20]),
+		"indirect_offset": indirect_offset,
+		"indirect_draw_count": 1,
 		"cell_count": cell_count,
 	}
 
@@ -192,6 +206,8 @@ func get_status() -> Dictionary:
 		"slot_releases": _slot_releases,
 		"binding_buffer_count_per_page": BINDING_COUNT,
 		"resident_buffer_count_per_entry": 0,
+		"compacted_surface_indirect_commands": true,
+		"indirect_commands_per_surface": 1,
 		"allocated_bytes": _allocated_bytes,
 		"uploaded_bytes": _uploaded_bytes,
 		"dispatch_count": _dispatch_count,
@@ -384,7 +400,7 @@ func _push_constant_bytes(strides: Array, slot_index: int) -> PackedByteArray:
 		int(slot_index * int(strides[18]) / 16),
 		int(slot_index * int(strides[19]) / 16),
 		int(slot_index * int(strides[20]) / DRAW_COMMAND_STRIDE),
-		0,
+		1,
 		0,
 		0,
 	])
@@ -421,7 +437,7 @@ static func _output_buffer_sizes(cell_count: int) -> Array[int]:
 		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
 		cell_count * 16,
 		48,
-		cell_count * DRAW_COMMAND_STRIDE,
+		DRAW_COMMAND_STRIDE,
 	]
 
 

@@ -20,6 +20,7 @@ PASS_MARKER = "GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS"
 PROOF_PATTERN = re.compile(
     r"cells=(?P<cells>\d+).*draw_frames=(?P<draw_frames>\d+) "
     r"indirect_draw_calls=(?P<draw_calls>\d+) "
+    r"compacted=1 culling=1 avoided_records=(?P<avoided>\d+) "
     r"foreground_pixels=(?P<foreground>\d+) "
     r"image_sha256=(?P<sha256>[0-9a-f]{64})$"
 )
@@ -108,6 +109,7 @@ def run_profile(
             "cells": int(match.group("cells")),
             "draw_frames": int(match.group("draw_frames")),
             "draw_calls": int(match.group("draw_calls")),
+            "avoided": int(match.group("avoided")),
             "foreground": int(match.group("foreground")),
             "sha256": match.group("sha256"),
         }

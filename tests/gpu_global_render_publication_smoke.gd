@@ -105,6 +105,33 @@ func _run() -> void:
 		_fail("live viewport proof image could not be retained")
 		return
 	var image_sha256 := _sha256(viewport_image.get_data())
+	_camera.position = Vector3(8.0, 8.0, 40.0)
+	_camera.look_at(Vector3(8.0, 8.0, 8.0), Vector3.UP)
+	if not await _wait_for_status(
+		func(outside_visible_status: Dictionary) -> bool:
+			return int(outside_visible_status.get("last_visible_surface_count", 0)) >= 1,
+		10.0
+	):
+		_fail("resident surface was not visible from outside its bounds")
+		return
+	_camera.look_at(Vector3(8.0, 8.0, 60.0), Vector3.UP)
+	if not await _wait_for_status(
+		func(culled_status: Dictionary) -> bool:
+			return int(culled_status.get("last_visible_surface_count", -1)) == 0 \
+				and int(culled_status.get("last_culled_surface_count", 0)) >= 1,
+		10.0
+	):
+		_fail("resident surface was not culled behind the camera: %s" % _effect.get_status())
+		return
+	_camera.look_at(Vector3(8.0, 8.0, 8.0), Vector3.UP)
+	if not await _wait_for_status(
+		func(visible_status: Dictionary) -> bool:
+			return int(visible_status.get("last_visible_surface_count", 0)) >= 1 \
+				and int(visible_status.get("last_culled_surface_count", -1)) == 0,
+		10.0
+	):
+		_fail("resident surface did not return after camera culling: %s" % _effect.get_status())
+		return
 	var status: Dictionary = _effect.get_status()
 	if str(status.get("schema", "")) \
 			!= "world_transvoxel.terrain.gpu_global_render_publication.v1" \
@@ -124,7 +151,20 @@ func _run() -> void:
 			or int(status.get("arena_slot_leases", 0)) != 2 \
 			or int(status.get("arena_slot_releases", 0)) != 1 \
 			or not bool(status.get("gpu_written_indirect_commands", false)) \
+			or not bool(status.get("compacted_surface_indirect_commands", false)) \
+			or int(status.get("indirect_commands_per_surface", 0)) != 1 \
 			or not bool(status.get("device_local_index_copy_used", false)) \
+			or str(status.get("visibility_culling", "")) \
+				!= "conservative_aabb_frustum" \
+			or str(status.get("visibility_bounds_position_space", "")) != "world" \
+			or bool(status.get("visibility_culling_near_far", true)) \
+			or int(status.get("visibility_test_count", 0)) <= 0 \
+			or int(status.get("visibility_culled_count", 0)) <= 0 \
+			or int(status.get("last_visible_surface_count", 0)) != 1 \
+			or int(status.get("last_culled_surface_count", -1)) != 0 \
+			or int(status.get("max_compact_command_records_per_view", 0)) != 1 \
+			or int(status.get("max_source_cell_records_avoided_per_view", 0)) \
+				< EXPECTED_CELL_COUNT - 1 \
 			or bool(status.get("fallback_used", true)) \
 			or int(status.get("requested", 0)) != 3 \
 			or int(status.get("applied", 0)) != 2 \
@@ -135,6 +175,9 @@ func _run() -> void:
 			or int(status.get("queued_request_count", -1)) != 0 \
 			or int(status.get("draw_frames", 0)) < 4 \
 			or int(status.get("indirect_draw_calls", 0)) < 4 \
+			or int(status.get("compact_indirect_command_records", -1)) \
+				!= int(status.get("indirect_draw_calls", 0)) \
+			or int(status.get("source_cell_indirect_records_avoided", 0)) <= 0 \
 			or int(status.get("geometry_readback_bytes", -1)) != 0 \
 			or int(status.get("render_target_readback_bytes", -1)) != 0 \
 			or bool(status.get("cpu_meshing_used", true)) \
@@ -149,6 +192,9 @@ func _run() -> void:
 		return
 	var draw_frames := int(status.get("draw_frames", 0))
 	var indirect_draw_calls := int(status.get("indirect_draw_calls", 0))
+	var avoided_records := int(status.get(
+		"source_cell_indirect_records_avoided", 0
+	))
 	_effect.close()
 	_world_environment.compositor = null
 	if not await _wait_for_status(
@@ -163,11 +209,13 @@ func _run() -> void:
 		(
 			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 stale=1 " \
 			+ "superseded=1 draw_frames=%d indirect_draw_calls=%d " \
+			+ "compacted=1 culling=1 avoided_records=%d " \
 			+ "foreground_pixels=%d image_sha256=%s"
 		) % [
 			EXPECTED_CELL_COUNT,
 			draw_frames,
 			indirect_draw_calls,
+			avoided_records,
 			foreground_pixels,
 			image_sha256,
 		]

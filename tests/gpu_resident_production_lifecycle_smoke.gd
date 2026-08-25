@@ -94,6 +94,7 @@ func _run() -> void:
 	var runtime_metrics: Dictionary = _world.get_runtime_metrics()
 	if not bool(status.get("running", false)) \
 			or not bool(status.get("production_chunk_replacement", false)) \
+			or str(status.get("native_position_space", "")) != "world" \
 			or not bool(status.get("cpu_collision_authority", false)) \
 			or bool(status.get("production_material_parity", true)) \
 			or int(status.get("rejected_chunks", -1)) != 0 \
@@ -107,6 +108,15 @@ func _run() -> void:
 			or int(effect_status.get("packing_requests", -1)) != 0 \
 			or int(effect_status.get("native_packed_requests", 0)) < 4 \
 			or int(effect_status.get("native_packed_bytes_total", 0)) <= 0 \
+			or not bool(effect_status.get(
+				"compacted_surface_indirect_commands", false
+			)) \
+			or int(effect_status.get("indirect_commands_per_surface", 0)) != 1 \
+			or str(effect_status.get("visibility_bounds_position_space", "")) \
+				!= "world" \
+			or int(effect_status.get("visibility_test_count", 0)) <= 0 \
+			or int(effect_status.get("source_cell_indirect_records_avoided", 0)) <= 0 \
+			or int(effect_status.get("max_compact_command_records_per_view", 0)) > 2 \
 			or int(native_metrics.get("capture_reservation_attempts", 0)) < 3 \
 			or int(native_metrics.get("reserved_captures", 0)) < 4 \
 			or int(native_metrics.get("released_capture_slots", 0)) < 2 \

@@ -154,9 +154,25 @@ chunks can expose roughly two million command records per frame even when most
 cells emit no geometry. This is a downstream render-submission architecture
 problem, not evidence against the Transvoxel tables or CPU authority.
 
-The next order is therefore strict: first bound draw work through compact or
-counted indirect submission and visibility culling; second establish production
-camera and material parity; third replace CPU-mesh capture with GPU-first field
+### Compact World-Space Follow-Up
+
+The retained renderer now atomically compacts emitted indices into one
+GPU-written indirect command per resident surface and conservatively culls
+world-space surface bounds before submission. The native v3 request adds the
+CPU renderer's chunk-world offset to packed positions and bounds; earlier local
+resident placement evidence is invalid. Focused Vulkan publication retains the
+exact image signature, and nonzero multi-chunk relocation passes in world
+space.
+
+The fresh large-world route tests 99,942 surfaces, culls 36,240, submits 63,702
+compact commands, and avoids 409,393,450 source-cell records. Late resident
+capacity rejection is zero. This removes the immediate per-cell submission
+collapse, but does not promote the backend: p95 is 28.03 ms versus 22.00 ms CPU
+(+27.42%), maximum coverage is 12.87%, 2,540 candidate chunks are rejected,
+and production material parity is absent.
+
+The next order is therefore strict: establish production material and
+camera/LOD visual parity, then replace CPU-mesh capture with GPU-first field
 evaluation and Transvoxel extraction. Vulkan large-world promotion must pass
 before a D3D12 large-world run is admitted.
 

@@ -109,15 +109,19 @@ queue coalescing only; it does not qualify production performance.
 
 Do not increase capacities to promote this implementation. Queue coalescing is
 a retained correctness and bounded-work mechanism, not a promotion result. The
-next candidate must first compact or count emitted GPU draw commands and cull
-non-visible resident chunks so frame work is proportional to visible geometry,
-not resident source-cell capacity. It must then establish production
-camera/material parity before replacing CPU-mesh capture with GPU-first field
-evaluation and Transvoxel extraction. It must preserve the shared arena, exact
-lifecycle, admission rules, and CPU recovery contract, then pass Vulkan before
-a second large-world backend is measured.
+renderer now compacts emitted indices into one indirect command per surface,
+uses authoritative world-space v3 requests, and conservatively culls non-visible
+surface bounds. The fresh large-world route avoids 409,393,450 source-cell
+records and has zero late resident-capacity rejection, but still misses the
+p95, coverage, rejection, and production-material gates. The next candidate
+must establish production material and camera/LOD visual parity before
+replacing CPU-mesh capture with GPU-first field evaluation and Transvoxel
+extraction. It must preserve the shared arena, exact lifecycle, admission
+rules, compact rendering, and CPU recovery contract, then pass Vulkan before a
+second large-world backend is measured.
 
 Evidence:
 
 - [TQP-64 shared-arena and native-packing candidate](evidence/tqp64_large_world_gpu_resident_arena_candidate_20260825/RESULT.md)
 - [TQP-64 bounded admission and queue-coalescing candidate](evidence/tqp64_large_world_gpu_coalesced_admission_candidate_20260825/RESULT.md)
+- [TQP-64 compact world-space resident candidate](evidence/tqp64_large_world_gpu_resident_candidate_20260825/RESULT.md)

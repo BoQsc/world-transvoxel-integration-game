@@ -72,7 +72,24 @@ var _status := {
 	"native_packed_requests": 0,
 	"native_packed_bytes_total": 0,
 	"gpu_written_indirect_commands": true,
+	"compacted_surface_indirect_commands": true,
+	"indirect_commands_per_surface": 1,
 	"device_local_index_copy_used": true,
+	"visibility_culling": "conservative_aabb_frustum",
+	"visibility_bounds_position_space": "world",
+	"visibility_culling_near_far": false,
+	"visibility_test_count": 0,
+	"visibility_culled_count": 0,
+	"last_visible_surface_count": 0,
+	"last_culled_surface_count": 0,
+	"compact_indirect_command_records": 0,
+	"source_cell_indirect_records_avoided": 0,
+	"max_compact_command_records_per_view": 0,
+	"max_source_cell_records_avoided_per_view": 0,
+	"last_camera_origin": Vector3.ZERO,
+	"last_camera_basis_z": Vector3.ZERO,
+	"last_tested_bounds_min": Vector3.ZERO,
+	"last_tested_bounds_max": Vector3.ZERO,
 	"fallback_used": false,
 	"request_capacity": REQUEST_CAPACITY,
 	"resident_capacity": DEFAULT_RESIDENT_CAPACITY,
@@ -154,12 +171,18 @@ func submit_explicit_samples(
 			or bool(packed.get("fallback_used", true)):
 		_record_rejection(str(packed.get("error", "global request packing failed")))
 		return 0
+	var bounds := _bounds_for_cells(cells)
+	if not bool(bounds.get("valid", false)):
+		_record_rejection("explicit GPU input bounds are invalid")
+		return 0
 	return _queue_packed_request(
 		Array(packed.get("input_buffers", [])),
 		int(packed.get("cell_count", 0)),
 		identity,
 		publication_sequence,
-		activate_immediately
+		activate_immediately,
+		bounds.get("minimum", Vector3.ZERO),
+		bounds.get("maximum", Vector3.ZERO)
 	)
 
 
@@ -168,7 +191,9 @@ func submit_native_packed_input(
 	cell_count: int,
 	identity: Dictionary,
 	publication_sequence: int,
-	activate_immediately: bool = true
+	activate_immediately: bool = true,
+	bounds_min: Vector3 = Vector3.ZERO,
+	bounds_max: Vector3 = Vector3.ZERO
 ) -> int:
 	var identity_error := _validate_identity(identity, publication_sequence)
 	if not identity_error.is_empty():
@@ -176,6 +201,9 @@ func submit_native_packed_input(
 		return 0
 	if input_buffers.size() != 13 or cell_count <= 0:
 		_record_rejection("native GPU input buffer inventory is invalid")
+		return 0
+	if not _bounds_are_valid(bounds_min, bounds_max):
+		_record_rejection("native GPU input bounds are invalid")
 		return 0
 	var packed_bytes := 0
 	for buffer_value in input_buffers:
@@ -197,7 +225,9 @@ func submit_native_packed_input(
 		cell_count,
 		identity,
 		publication_sequence,
-		activate_immediately
+		activate_immediately,
+		bounds_min,
+		bounds_max
 	)
 
 
@@ -206,7 +236,9 @@ func _queue_packed_request(
 	cell_count: int,
 	identity: Dictionary,
 	publication_sequence: int,
-	activate_immediately: bool
+	activate_immediately: bool,
+	bounds_min: Vector3,
+	bounds_max: Vector3
 ) -> int:
 	var key := _identity_key(identity)
 	_mutex.lock()
@@ -227,6 +259,8 @@ func _queue_packed_request(
 		"identity": identity.duplicate(true),
 		"activate_immediately": activate_immediately,
 		"cell_count": cell_count,
+		"bounds_min": bounds_min,
+		"bounds_max": bounds_max,
 		"input_buffers": input_buffers.duplicate(),
 	})
 	_status["requested"] = int(_status["requested"]) + 1
@@ -582,6 +616,8 @@ func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
 		return {}
 	entry["publication_sequence"] = int(request.get("publication_sequence", 0))
 	entry["identity"] = Dictionary(request.get("identity", {})).duplicate(true)
+	entry["bounds_min"] = request.get("bounds_min", Vector3.ZERO)
+	entry["bounds_max"] = request.get("bounds_max", Vector3.ZERO)
 	return entry
 
 
@@ -598,7 +634,18 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		return
 	var view_count := scene_buffers.get_view_count()
 	var draw_calls := 0
+	var visibility_tests := 0
+	var culled_surfaces := 0
+	var visible_surfaces := 0
+	var compact_command_records := 0
+	var source_records_avoided := 0
+	var maximum_commands_per_view := 0
+	var maximum_records_avoided_per_view := 0
+	var last_tested_bounds_min := Vector3.ZERO
+	var last_tested_bounds_max := Vector3.ZERO
 	for view in range(view_count):
+		var view_command_records := 0
+		var view_records_avoided := 0
 		var color := scene_buffers.get_color_layer(view)
 		var depth := scene_buffers.get_depth_layer(view)
 		var framebuffer := _framebuffer_for(color, depth)
@@ -625,6 +672,15 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			var entry: Dictionary = entry_value
 			if not bool(entry.get("active", false)):
 				continue
+			visibility_tests += 1
+			var source_cell_count := int(entry.get("cell_count", 0))
+			last_tested_bounds_min = entry.get("bounds_min", Vector3.ZERO)
+			last_tested_bounds_max = entry.get("bounds_max", Vector3.ZERO)
+			if not _entry_visible_for_view(entry, scene_data, view):
+				culled_surfaces += 1
+				view_records_avoided += source_cell_count
+				continue
+			visible_surfaces += 1
 			_rendering_device.draw_list_bind_vertex_array(
 				draw_list, entry.get("vertex_array", RID())
 			)
@@ -639,14 +695,51 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				true,
 				entry.get("indirect_buffer", RID()),
 				int(entry.get("indirect_offset", 0)),
-				int(entry.get("cell_count", 0)),
+				int(entry.get("indirect_draw_count", 1)),
 				DRAW_COMMAND_STRIDE
 			)
 			draw_calls += 1
+			view_command_records += 1
+			view_records_avoided += maxi(0, source_cell_count - 1)
 		_rendering_device.draw_list_end()
+		compact_command_records += view_command_records
+		source_records_avoided += view_records_avoided
+		maximum_commands_per_view = maxi(
+			maximum_commands_per_view, view_command_records
+		)
+		maximum_records_avoided_per_view = maxi(
+			maximum_records_avoided_per_view, view_records_avoided
+		)
 	_mutex.lock()
 	_status["draw_frames"] = int(_status["draw_frames"]) + 1
 	_status["indirect_draw_calls"] = int(_status["indirect_draw_calls"]) + draw_calls
+	_status["visibility_test_count"] = int(
+		_status["visibility_test_count"]
+	) + visibility_tests
+	_status["visibility_culled_count"] = int(
+		_status["visibility_culled_count"]
+	) + culled_surfaces
+	_status["last_visible_surface_count"] = visible_surfaces
+	_status["last_culled_surface_count"] = culled_surfaces
+	var camera_transform := scene_data.get_cam_transform()
+	_status["last_camera_origin"] = camera_transform.origin
+	_status["last_camera_basis_z"] = camera_transform.basis.z
+	_status["last_tested_bounds_min"] = last_tested_bounds_min
+	_status["last_tested_bounds_max"] = last_tested_bounds_max
+	_status["compact_indirect_command_records"] = int(
+		_status["compact_indirect_command_records"]
+	) + compact_command_records
+	_status["source_cell_indirect_records_avoided"] = int(
+		_status["source_cell_indirect_records_avoided"]
+	) + source_records_avoided
+	_status["max_compact_command_records_per_view"] = maxi(
+		int(_status["max_compact_command_records_per_view"]),
+		maximum_commands_per_view
+	)
+	_status["max_source_cell_records_avoided_per_view"] = maxi(
+		int(_status["max_source_cell_records_avoided_per_view"]),
+		maximum_records_avoided_per_view
+	)
 	_mutex.unlock()
 
 
@@ -814,6 +907,110 @@ func _push_event_on_render_thread(
 	_events.append(event)
 	_status["event_count"] = _events.size()
 	_mutex.unlock()
+
+
+static func _bounds_for_cells(cells: Array) -> Dictionary:
+	var minimum := Vector3(INF, INF, INF)
+	var maximum := Vector3(-INF, -INF, -INF)
+	for cell_value in cells:
+		if not cell_value is Dictionary:
+			return {"valid": false}
+		var cell := Dictionary(cell_value)
+		var origin: Vector3 = cell.get("origin", Vector3.ZERO)
+		var spacing := float(cell.get(
+			"cell_size", cell.get("sample_spacing", 0.0)
+		))
+		var points: Array[Vector3] = []
+		if str(cell.get("type", "")) == "regular":
+			points.assign([
+				origin,
+				origin + Vector3(spacing, spacing, spacing),
+			])
+		else:
+			var axes := _transition_basis_vectors(int(cell.get("orientation", 0)))
+			var width := float(cell.get("transition_width", 0.0))
+			for u in [0.0, 2.0 * spacing]:
+				for v in [0.0, 2.0 * spacing]:
+					for w in [0.0, width]:
+						points.append(
+							origin + axes[0] * u + axes[1] * v + axes[2] * w
+						)
+		for point in points:
+			minimum = Vector3(
+				minf(minimum.x, point.x),
+				minf(minimum.y, point.y),
+				minf(minimum.z, point.z)
+			)
+			maximum = Vector3(
+				maxf(maximum.x, point.x),
+				maxf(maximum.y, point.y),
+				maxf(maximum.z, point.z)
+			)
+	return {
+		"valid": _bounds_are_valid(minimum, maximum),
+		"minimum": minimum,
+		"maximum": maximum,
+	}
+
+
+static func _transition_basis_vectors(orientation: int) -> Array[Vector3]:
+	match orientation:
+		0:
+			return [Vector3.UP, Vector3.FORWARD * -1.0, Vector3.RIGHT]
+		1:
+			return [Vector3.UP, Vector3.FORWARD, Vector3.LEFT]
+		2:
+			return [Vector3.BACK, Vector3.RIGHT, Vector3.UP]
+		3:
+			return [Vector3.BACK, Vector3.LEFT, Vector3.DOWN]
+		4:
+			return [Vector3.RIGHT, Vector3.UP, Vector3.BACK]
+		_:
+			return [Vector3.RIGHT, Vector3.DOWN, Vector3.FORWARD]
+
+
+static func _bounds_are_valid(minimum: Vector3, maximum: Vector3) -> bool:
+	return minimum.is_finite() and maximum.is_finite() \
+		and minimum.x <= maximum.x and minimum.y <= maximum.y \
+		and minimum.z <= maximum.z
+
+
+static func _entry_visible_for_view(
+	entry: Dictionary, scene_data: RenderSceneData, view: int
+) -> bool:
+	var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
+	var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
+	if not _bounds_are_valid(minimum, maximum):
+		return true
+	var camera_transform := scene_data.get_cam_transform()
+	var eye_offset := scene_data.get_view_eye_offset(view)
+	var eye_transform := Transform3D(
+		camera_transform.basis,
+		camera_transform.origin + camera_transform.basis * eye_offset
+	)
+	var world_to_view := eye_transform.affine_inverse()
+	var projection := scene_data.get_view_projection(view)
+	var behind := 0
+	var left := 0
+	var right := 0
+	var below := 0
+	var above := 0
+	for mask in range(8):
+		var corner := Vector3(
+			maximum.x if (mask & 1) != 0 else minimum.x,
+			maximum.y if (mask & 2) != 0 else minimum.y,
+			maximum.z if (mask & 4) != 0 else minimum.z
+		)
+		var view_point := world_to_view * corner
+		var clip: Vector4 = projection * Vector4(
+			view_point.x, view_point.y, view_point.z, 1.0
+		)
+		behind += 1 if view_point.z >= 0.0 else 0
+		left += 1 if clip.x < -clip.w else 0
+		right += 1 if clip.x > clip.w else 0
+		below += 1 if clip.y < -clip.w else 0
+		above += 1 if clip.y > clip.w else 0
+	return behind < 8 and left < 8 and right < 8 and below < 8 and above < 8
 
 
 static func _vertex_attribute(location: int, format: int) -> RDVertexAttribute:

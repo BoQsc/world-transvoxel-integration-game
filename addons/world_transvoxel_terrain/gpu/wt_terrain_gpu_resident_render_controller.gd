@@ -164,6 +164,7 @@ func get_status() -> Dictionary:
 		"gpu_resident_render_publication": true,
 		"production_chunk_replacement": true,
 		"native_request_handoff_decoupled": true,
+		"native_position_space": "world",
 		"cpu_collision_authority": true,
 		"atomic_surface_set_activation": true,
 		"production_material_parity": false,
@@ -214,7 +215,9 @@ func _submit_native_captures() -> void:
 			int(request.get("cell_count", 0)),
 			identity,
 			sequence,
-			false
+			false,
+			request.get("bounds_min", Vector3.ZERO),
+			request.get("bounds_max", Vector3.ZERO)
 		))
 		if render_request_id <= 0:
 			_reject_native_request(request, str(_effect.get_status().get(
@@ -567,9 +570,11 @@ static func _required_surfaces(group: Dictionary) -> Array[String]:
 
 static func _validate_native_request(request: Dictionary) -> String:
 	if str(request.get("schema", "")) \
-			!= "world_transvoxel.gpu_resident_render_request.v2" \
+			!= "world_transvoxel.gpu_resident_render_request.v3" \
 			or str(request.get("status", "")) != "PASS":
 		return "native GPU resident request contract failed"
+	if str(request.get("position_space", "")) != "world":
+		return "native GPU resident request is not in world position space"
 	if not bool(request.get("gpu_resident_render_publication", false)) \
 			or not bool(request.get("cpu_render_visible_until_activation", false)) \
 			or not bool(request.get("cpu_collision_publication_unchanged", false)) \
@@ -588,6 +593,16 @@ static func _validate_native_request(request: Dictionary) -> String:
 		actual_bytes += PackedByteArray(buffer_value).size()
 	if actual_bytes != int(request.get("packed_byte_count", -1)):
 		return "native GPU resident packed byte count is invalid"
+	var bounds_min_value = request.get("bounds_min", null)
+	var bounds_max_value = request.get("bounds_max", null)
+	if not bounds_min_value is Vector3 or not bounds_max_value is Vector3:
+		return "native GPU resident bounds are missing"
+	var bounds_min: Vector3 = bounds_min_value
+	var bounds_max: Vector3 = bounds_max_value
+	if not bounds_min.is_finite() or not bounds_max.is_finite() \
+			or bounds_min.x > bounds_max.x or bounds_min.y > bounds_max.y \
+			or bounds_min.z > bounds_max.z:
+		return "native GPU resident bounds are invalid"
 	return ""
 
 
