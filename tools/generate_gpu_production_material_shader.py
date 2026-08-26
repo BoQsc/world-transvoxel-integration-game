@@ -283,10 +283,12 @@ layout(location = 1) in vec4 vertex_normal;
 
 layout(push_constant, std430) uniform Params {{
 \tivec4 view;
+\tivec4 viewport;
 }} params;
 
 layout(location = 0) out vec3 world_normal;
 layout(location = 1) out vec3 world_view_direction;
+layout(location = 2) out vec3 view_normal;
 
 void main() {{
 \tmat4 view_matrix = transpose(mat4(
@@ -301,6 +303,7 @@ void main() {{
 \t}}
 \tvec3 view_position = (view_matrix * vec4(vertex_position.xyz, 1.0)).xyz;
 \tworld_normal = normalize(vertex_normal.xyz);
+\tview_normal = normalize(mat3(view_matrix) * world_normal);
 \tworld_view_direction = normalize(
 \t\ttranspose(mat3(view_matrix)) * -view_position
 \t);
@@ -312,13 +315,21 @@ void main() {{
 
 layout(location = 0) in vec3 world_normal;
 layout(location = 1) in vec3 world_view_direction;
+layout(location = 2) in vec3 view_normal;
 layout(location = 0) out vec4 output_color;
+
+layout(push_constant, std430) uniform Params {{
+\tivec4 view;
+\tivec4 viewport;
+}} params;
 
 layout(set = 1, binding = 0, std140) uniform ProductionWaterParams {{
 \tvec4 deep_color;
 \tvec4 edge_color;
 \tvec4 response;
 }} water_params;
+
+layout(set = 2, binding = 0) uniform sampler2D opaque_scene;
 
 void main() {{
 \tfloat facing = abs(dot(
@@ -333,9 +344,11 @@ void main() {{
 \t\ttint = water_params.deep_color.rgb;
 \t\ttint_strength = max(tint_strength, 0.58);
 \t}}
-\t// Standard alpha blending reproduces mix(background, tint, tint_strength).
-\t// Screen-space refraction remains an explicit unsupported response.
-\toutput_color = vec4(tint, tint_strength);
+\tvec2 screen_uv = gl_FragCoord.xy / vec2(params.viewport.xy);
+\tvec2 offset = view_normal.xy * water_params.response.z * (0.35 + 0.65 * fresnel);
+\tvec2 sample_uv = clamp(screen_uv + offset, vec2(0.001), vec2(0.999));
+\tvec3 background = textureLod(opaque_scene, sample_uv, 0.0).rgb;
+\toutput_color = vec4(mix(background, tint, tint_strength), 1.0);
 }}
 '''
 

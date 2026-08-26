@@ -20,6 +20,9 @@ const PRODUCTION_RASTER_SHADER_FILE := preload(
 const PRODUCTION_WATER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_water.glsl"
 )
+const SCENE_COLOR_COPY_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_scene_color_copy.glsl"
+)
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 3
 const DEFAULT_RESIDENT_CAPACITY := 64
@@ -63,6 +66,9 @@ var _production_water_buffer := RID()
 var _production_water_set := RID()
 var _pending_production_water := {}
 var _production_water_resource
+var _scene_color_copy_shader := RID()
+var _scene_color_copy_pipeline := RID()
+var _scene_color_sampler := RID()
 var _vertex_format := -1
 var _initialization_attempted := false
 var _close_requested := false
@@ -156,6 +162,7 @@ var _status := {
 	"production_static_water_material_payload_ready": false,
 	"production_static_water_fresnel_tint_parity": false,
 	"production_static_water_refraction_parity": false,
+	"production_static_water_scene_copy_ready": false,
 	"production_material_source": "",
 	"production_material_parameter_bytes": 0,
 	"production_material_texture_count": 0,
@@ -464,6 +471,7 @@ func _ensure_shaders() -> bool:
 	if _compute_pipeline.is_valid() and _raster_shader.is_valid() \
 			and _production_raster_shader.is_valid() \
 			and _production_water_shader.is_valid() \
+			and _scene_color_copy_pipeline.is_valid() \
 			and _vertex_format >= 0:
 		return true
 	if _initialization_attempted:
@@ -476,19 +484,24 @@ func _ensure_shaders() -> bool:
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
 	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
 	var production_water_file := PRODUCTION_WATER_SHADER_FILE as RDShaderFile
+	var scene_color_copy_file := SCENE_COLOR_COPY_SHADER_FILE as RDShaderFile
 	if compute_file == null or raster_file == null or production_raster_file == null \
 			or production_water_file == null \
+			or scene_color_copy_file == null \
 			or not compute_file.get_base_error().is_empty() \
 			or not raster_file.get_base_error().is_empty() \
 			or not production_raster_file.get_base_error().is_empty() \
-			or not production_water_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s %s %s" % [
+			or not production_water_file.get_base_error().is_empty() \
+			or not scene_color_copy_file.get_base_error().is_empty():
+		_record_render_error("global render shader import is invalid: %s %s %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
 			production_raster_file.get_base_error() \
 				if production_raster_file != null else "production raster missing",
 			production_water_file.get_base_error() \
 				if production_water_file != null else "production water missing",
+			scene_color_copy_file.get_base_error() \
+				if scene_color_copy_file != null else "scene color copy missing",
 		])
 		return false
 	_compute_shader = _rendering_device.shader_create_from_spirv(
@@ -513,6 +526,23 @@ func _ensure_shaders() -> bool:
 		production_water_file.get_spirv()
 	)
 	if not _production_water_shader.is_valid():
+		return false
+	_scene_color_copy_shader = _rendering_device.shader_create_from_spirv(
+		scene_color_copy_file.get_spirv()
+	)
+	if not _scene_color_copy_shader.is_valid():
+		return false
+	_scene_color_copy_pipeline = _rendering_device.compute_pipeline_create(
+		_scene_color_copy_shader
+	)
+	var scene_sampler_state := RDSamplerState.new()
+	scene_sampler_state.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	scene_sampler_state.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	scene_sampler_state.mip_filter = RenderingDevice.SAMPLER_FILTER_NEAREST
+	scene_sampler_state.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
+	scene_sampler_state.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE
+	_scene_color_sampler = _rendering_device.sampler_create(scene_sampler_state)
+	if not _scene_color_copy_pipeline.is_valid() or not _scene_color_sampler.is_valid():
 		return false
 	var attributes: Array[RDVertexAttribute] = []
 	attributes.append(_vertex_attribute(
@@ -656,8 +686,12 @@ func _apply_pending_production_water_on_render_thread() -> void:
 		_production_water_set.is_valid()
 	_status["production_static_water_fresnel_tint_parity"] = \
 		_production_water_set.is_valid()
-	_status["production_static_water_refraction_parity"] = false
-	_status["production_static_water_material_parity"] = false
+	_status["production_static_water_refraction_parity"] = bool(
+		_production_water_set.is_valid() and _scene_color_copy_pipeline.is_valid()
+	)
+	_status["production_static_water_material_parity"] = bool(
+		_status["production_static_water_fresnel_tint_parity"]
+	) and bool(_status["production_static_water_refraction_parity"])
 	_status["production_material_parity"] = bool(
 		_status["production_terrain_material_parity"]
 	) and bool(_status["production_static_water_material_parity"])
@@ -952,6 +986,9 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		var diagnostic_entries: Array[Dictionary] = []
 		var water_entries: Array[Dictionary] = []
 		var push_bytes := PackedInt32Array([view, view_count, 0, 0]).to_byte_array()
+		var water_push_bytes := PackedInt32Array([
+			view, view_count, 0, 0, size.x, size.y, 0, 0,
+		]).to_byte_array()
 		for entry_value in _entries.values():
 			var entry: Dictionary = entry_value
 			if not bool(entry.get("active", false)):
@@ -994,19 +1031,44 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
 			for entry in diagnostic_entries:
 				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
+		_rendering_device.draw_list_end()
 		if not water_entries.is_empty():
+			var opaque_scene := _copy_scene_color_on_render_thread(
+				scene_buffers, view, color, size, view_count
+			)
+			if not opaque_scene.is_valid():
+				_record_render_error("production water scene-color copy failed")
+				return
+			var water_texture := RDUniform.new()
+			water_texture.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+			water_texture.binding = 0
+			water_texture.add_id(_scene_color_sampler)
+			water_texture.add_id(opaque_scene)
+			var water_scene_texture_set: RID = UniformSetCacheRD.get_cache(
+				_production_water_shader, 2, [water_texture]
+			)
+			if not water_scene_texture_set.is_valid():
+				_record_render_error("production water scene texture set failed")
+				return
+			var water_draw_list := _rendering_device.draw_list_begin(framebuffer)
 			_rendering_device.draw_list_bind_render_pipeline(
-				draw_list, _production_water_pipeline
+				water_draw_list, _production_water_pipeline
 			)
 			_rendering_device.draw_list_bind_uniform_set(
-				draw_list, water_scene_set, 0
+				water_draw_list, water_scene_set, 0
 			)
 			_rendering_device.draw_list_bind_uniform_set(
-				draw_list, _production_water_set, 1
+				water_draw_list, _production_water_set, 1
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				water_draw_list, water_scene_texture_set, 2
 			)
 			for entry in water_entries:
-				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
-		_rendering_device.draw_list_end()
+				_draw_entry_on_render_thread(water_draw_list, entry, water_push_bytes)
+			_rendering_device.draw_list_end()
+			_mutex.lock()
+			_status["production_static_water_scene_copy_ready"] = true
+			_mutex.unlock()
 		draw_calls += view_command_records
 		compact_command_records += view_command_records
 		source_records_avoided += view_records_avoided
@@ -1069,6 +1131,67 @@ func _draw_entry_on_render_thread(
 		int(entry.get("indirect_draw_count", 1)),
 		DRAW_COMMAND_STRIDE
 	)
+
+
+func _copy_scene_color_on_render_thread(
+	scene_buffers: RenderSceneBuffersRD,
+	view: int,
+	color: RID,
+	size: Vector2i,
+	view_count: int
+) -> RID:
+	var usage := RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT \
+		| RenderingDevice.TEXTURE_USAGE_STORAGE_BIT
+	var texture := scene_buffers.create_texture(
+		"world_transvoxel",
+		"opaque_after_terrain",
+		RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT,
+		usage,
+		RenderingDevice.TEXTURE_SAMPLES_1,
+		size,
+		view_count,
+		1,
+		false,
+		false
+	)
+	if not texture.is_valid():
+		return RID()
+	var destination := scene_buffers.get_texture_slice(
+		"world_transvoxel", "opaque_after_terrain", view, 0, 1, 1
+	)
+	if not destination.is_valid():
+		return RID()
+	var source_uniform := RDUniform.new()
+	source_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+	source_uniform.binding = 0
+	source_uniform.add_id(_scene_color_sampler)
+	source_uniform.add_id(color)
+	var destination_uniform := RDUniform.new()
+	destination_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	destination_uniform.binding = 1
+	destination_uniform.add_id(destination)
+	var copy_set: RID = UniformSetCacheRD.get_cache(
+		_scene_color_copy_shader, 0, [source_uniform, destination_uniform]
+	)
+	if not copy_set.is_valid():
+		return RID()
+	var compute_list := _rendering_device.compute_list_begin()
+	_rendering_device.compute_list_bind_compute_pipeline(
+		compute_list, _scene_color_copy_pipeline
+	)
+	_rendering_device.compute_list_bind_uniform_set(compute_list, copy_set, 0)
+	var copy_push := PackedInt32Array([size.x, size.y, 0, 0]).to_byte_array()
+	_rendering_device.compute_list_set_push_constant(
+		compute_list, copy_push, copy_push.size()
+	)
+	_rendering_device.compute_list_dispatch(
+		compute_list,
+		ceili(float(size.x) / 8.0),
+		ceili(float(size.y) / 8.0),
+		1
+	)
+	_rendering_device.compute_list_end()
+	return destination
 
 
 func _ensure_raster_pipeline(framebuffer_format: int) -> bool:
@@ -1147,7 +1270,7 @@ func _ensure_production_water_pipeline(framebuffer_format: int) -> bool:
 	depth_stencil.enable_depth_write = true
 	depth_stencil.depth_compare_operator = RenderingDevice.COMPARE_OP_GREATER_OR_EQUAL
 	var color_attachment := RDPipelineColorBlendStateAttachment.new()
-	color_attachment.set_as_mix()
+	color_attachment.enable_blend = false
 	var color_blend := RDPipelineColorBlendState.new()
 	color_blend.attachments = [color_attachment]
 	_production_water_pipeline = _rendering_device.render_pipeline_create(
@@ -1196,7 +1319,9 @@ func _close_on_render_thread() -> void:
 		_production_material_sampler, _production_raster_pipeline,
 		_production_raster_shader, _production_water_set,
 		_production_water_buffer, _production_water_pipeline,
-		_production_water_shader, _raster_pipeline, _raster_shader,
+		_production_water_shader, _scene_color_copy_pipeline,
+		_scene_color_copy_shader, _scene_color_sampler,
+		_raster_pipeline, _raster_shader,
 		_compute_pipeline, _compute_shader,
 	])
 	_production_material_set = RID()
@@ -1208,6 +1333,9 @@ func _close_on_render_thread() -> void:
 	_production_water_buffer = RID()
 	_production_water_pipeline = RID()
 	_production_water_shader = RID()
+	_scene_color_copy_pipeline = RID()
+	_scene_color_copy_shader = RID()
+	_scene_color_sampler = RID()
 	_raster_pipeline = RID()
 	_raster_shader = RID()
 	_compute_pipeline = RID()

@@ -59,13 +59,24 @@ func _run() -> void:
 		_fail("production material was not installed: %s" % str(material_summary))
 		return
 	var viewer := Vector3(24.0, 30.0, 24.0)
-	if not _world.update_viewer(1, 1, viewer, 2, 2) \
-			or not _world.update_collision_viewer(2, 1, viewer, 0):
-		_fail("bounded LOD viewers were rejected: %s" % _world.get_last_error())
+	if not _world.update_viewer(1, 1, viewer, 2, 3):
+		_fail("bounded LOD3 viewer was rejected: %s" % _world.get_last_error())
+		return
+	if not await _wait_for_lod3_inventory():
+		_fail("LOD3 resident inventory did not settle: status=%s runtime=%s" \
+			% [str(_world.get_gpu_resident_render_status()), str(_world.get_runtime_metrics())])
+		return
+	var lod3_status: Dictionary = _world.get_gpu_resident_render_status()
+	var lod3_effect: Dictionary = lod3_status.get("effect_status", {})
+	var lod3_count := int(Dictionary(lod3_effect.get(
+		"active_terrain_lod_counts", {}
+	)).get("3", 0))
+	if not _world.update_viewer(1, 2, viewer, 2, 2):
+		_fail("bounded mixed-LOD viewer was rejected: %s" % _world.get_last_error())
 		return
 	if not await _wait_for_complete_lod_inventory():
-		_fail("LOD0/1/2 resident inventory did not settle: %s" \
-			% str(_world.get_gpu_resident_render_status()))
+		_fail("LOD0/1/2 resident inventory did not settle: status=%s runtime=%s" \
+			% [str(_world.get_gpu_resident_render_status()), str(_world.get_runtime_metrics())])
 		return
 
 	_camera.position = Vector3(112.0, 82.0, 170.0)
@@ -77,6 +88,7 @@ func _run() -> void:
 	var status: Dictionary = _world.get_gpu_resident_render_status()
 	var effect: Dictionary = status.get("effect_status", {})
 	var native: Dictionary = status.get("native_metrics", {})
+	var runtime_metrics: Dictionary = _world.get_runtime_metrics()
 	var terrain_lods: Dictionary = effect.get("active_terrain_lod_counts", {})
 	var water_lods: Dictionary = effect.get("active_static_water_lod_counts", {})
 	var lod_audit: Dictionary = LodAudit.collect(_world)
@@ -94,14 +106,14 @@ func _run() -> void:
 			)) \
 			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
 			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
-			or bool(status.get("production_static_water_material_parity", true)) \
+			or not bool(status.get("production_static_water_material_parity", false)) \
 			or not bool(status.get(
 				"production_static_water_material_payload_ready", false
 			)) \
 			or not bool(status.get(
 				"production_static_water_fresnel_tint_parity", false
 			)) \
-			or bool(status.get("production_static_water_refraction_parity", true)) \
+			or not bool(status.get("production_static_water_refraction_parity", false)) \
 			or str(status.get("production_material_source", "")) != PRODUCTION_SHADER \
 			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
 			or int(status.get("production_material_texture_count", 0)) != 5 \
@@ -113,7 +125,6 @@ func _run() -> void:
 			or str(lod_audit.get("status", "")) != "PASS" \
 			or int(lod_audit.get("coverage_overlap_count", -1)) != 0 \
 			or int(status.get("rejected_chunks", -1)) != 0 \
-			or int(status.get("superseded_chunks", 0)) < 1 \
 			or int(status.get("superseded_chunks", -1)) \
 				!= int(native.get("readiness_stale", -2)) \
 			or int(native.get("validation_rejections", -1)) != 0 \
@@ -121,11 +132,18 @@ func _run() -> void:
 			or int(status.get("recovery_count", -1)) != 0 \
 			or int(effect.get("geometry_readback_bytes", -1)) != 0 \
 			or bool(effect.get("cpu_chunk_finalization_used", true)) \
+			or int(native.get("cpu_visual_mesh_omitted_captures", -1)) \
+				!= int(native.get("pre_mesh_field_captures", -2)) \
+			or int(runtime_metrics.get(
+				"page_gpu_resident_visual_only_completions", 0
+			)) < active_lod_entries \
+			or int(runtime_metrics.get("resource_cache_mesh_entries", -1)) != 0 \
+			or int(runtime_metrics.get("resource_cache_collision_entries", -1)) != 0 \
 			or not _capture_is_valid(overview, 10) \
 			or not _capture_is_valid(near, 16) \
 			or str(overview.get("sha256", "")) == str(near.get("sha256", "")):
-		_fail("production visual parity contract failed: status=%s audit=%s overview=%s near=%s" \
-			% [str(status), str(lod_audit), str(overview), str(near)])
+		_fail("production visual parity contract failed: status=%s runtime=%s audit=%s overview=%s near=%s" \
+			% [str(status), str(runtime_metrics), str(lod_audit), str(overview), str(near)])
 		return
 
 	_world.end_gpu_resident_render_publication()
@@ -134,18 +152,23 @@ func _run() -> void:
 		_fail("bounded visual-parity world did not stop cleanly")
 		return
 	print((
-		"%s lod0=%d lod1=%d lod2=%d active=%d overlap=0 " \
+		"%s lod0=%d lod1=%d lod2=%d lod3_phase=%d active=%d overlap=0 " \
 		+ "terrain_albedo_mapping_parity=1 terrain_material_parity=0 " \
 		+ "roughness_mapping_parity=1 bounded_pbr_response_parity=1 " \
-		+ "water_fresnel_tint_parity=1 water_material_parity=0 readback=0 " \
-		+ "superseded=%d overview_pixels=%d near_pixels=%d " \
+		+ "water_fresnel_tint_parity=1 water_refraction_parity=1 " \
+		+ "water_material_parity=1 readback=0 " \
+		+ "gpu_only_completions=%d superseded=%d overview_pixels=%d near_pixels=%d " \
 		+ "overview_sha256=%s near_sha256=%s"
 	) % [
 		MARKER,
 		int(terrain_lods.get("0", 0)),
 		int(terrain_lods.get("1", 0)),
 		int(terrain_lods.get("2", 0)),
+		lod3_count,
 		active_lod_entries,
+		int(runtime_metrics.get(
+			"page_gpu_resident_visual_only_completions", 0
+		)),
 		int(status.get("superseded_chunks", 0)),
 		int(overview.get("foreground_pixels", 0)),
 		int(near.get("foreground_pixels", 0)),
@@ -212,7 +235,7 @@ func _runtime_profile() -> Resource:
 	var profile := RuntimeProfile.create_builtin(RuntimeProfile.Preset.REFERENCE)
 	profile.profile_id = &"gpu_resident_production_visual_parity"
 	profile.viewer_radius_chunks = 2
-	profile.maximum_lod = 2
+	profile.maximum_lod = 3
 	profile.collision_radius_chunks = 0
 	profile.active_chunk_capacity = 128
 	profile.demand_capacity_per_viewer = 256
@@ -275,6 +298,23 @@ func _wait_for_complete_lod_inventory() -> bool:
 				and int(counts.get("0", 0)) > 0 \
 				and int(counts.get("1", 0)) > 0 \
 				and int(counts.get("2", 0)) > 0 \
+				and int(status.get("rejected_chunks", 0)) == 0 \
+				and int(status.get("active_chunks", -1)) \
+					== int(effect.get("active_entry_count", -2)) \
+				and int(effect.get("draw_frames", 0)) >= 2:
+			return true
+		await process_frame
+	return false
+
+
+func _wait_for_lod3_inventory() -> bool:
+	for _frame in range(1800):
+		var status: Dictionary = _world.get_gpu_resident_render_status()
+		var effect: Dictionary = status.get("effect_status", {})
+		var counts: Dictionary = effect.get("active_terrain_lod_counts", {})
+		var idle: Dictionary = _world.get_cold_idle_summary()
+		if bool(idle.get("cold_idle", false)) \
+				and int(counts.get("3", 0)) > 0 \
 				and int(status.get("rejected_chunks", 0)) == 0 \
 				and int(status.get("active_chunks", -1)) \
 					== int(effect.get("active_entry_count", -2)) \

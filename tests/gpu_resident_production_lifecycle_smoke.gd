@@ -146,14 +146,17 @@ func _run() -> void:
 			)) \
 			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
 			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
-			or bool(status.get("production_static_water_material_parity", true)) \
+			or not bool(status.get("production_static_water_material_parity", false)) \
 			or not bool(status.get(
 				"production_static_water_material_payload_ready", false
 			)) \
 			or not bool(status.get(
 				"production_static_water_fresnel_tint_parity", false
 			)) \
-			or bool(status.get("production_static_water_refraction_parity", true)) \
+			or not bool(status.get("production_static_water_refraction_parity", false)) \
+			or not bool(effect_status.get(
+				"production_static_water_scene_copy_ready", false
+			)) \
 			or str(status.get("production_material_source", "")) \
 				!= "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader" \
 			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
@@ -186,8 +189,10 @@ func _run() -> void:
 			or int(native_metrics.get("released_capture_slots", 0)) < 2 \
 			or int(native_metrics.get("pre_mesh_field_captures", 0)) < 4 \
 			or bool(native_metrics.get("cpu_topology_input_dependency", true)) \
-			or not bool(native_metrics.get("cpu_field_sampling", false)) \
-			or bool(native_metrics.get("gpu_density_field_generation", true)) \
+			or bool(native_metrics.get("cpu_field_sampling", true)) \
+			or not bool(native_metrics.get("gpu_density_field_generation", false)) \
+			or not bool(native_metrics.get("gpu_material_field_generation", false)) \
+			or not bool(native_metrics.get("gpu_page_lattice_input", false)) \
 			or not bool(native_metrics.get("gpu_transvoxel_extraction", false)) \
 			or int(native_metrics.get("reserved_capture_slots", -1)) != 0 \
 			or int(native_metrics.get("activated_chunks", 0)) < 3 \
@@ -220,12 +225,12 @@ func _run() -> void:
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
 			+ "readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 " \
 			+ "accepted_normal_response_parity=1 bounded_pbr_response_parity=1 " \
-			+ "terrain_material_parity=0 water_material_parity=0 " \
-			+ "water_fresnel_tint_parity=1 water_refraction_parity=0 " \
+			+ "terrain_material_parity=0 water_material_parity=1 " \
+			+ "water_fresnel_tint_parity=1 water_refraction_parity=1 " \
 			+ "material_params=368 material_textures=5 water_params=48 " \
 			+ "arena=paged_shared native_packed=1 " \
 			+ "pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 " \
-			+ "cpu_field_sampling=1 gpu_density_generation=0 " \
+			+ "cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 " \
 			+ "reservations=%d captures=%d released=%d"
 		) % [
 			MARKER,

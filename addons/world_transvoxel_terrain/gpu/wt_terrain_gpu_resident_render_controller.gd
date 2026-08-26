@@ -198,6 +198,9 @@ func get_status() -> Dictionary:
 		"native_request_handoff_decoupled": true,
 		"native_position_space": "world",
 		"cpu_collision_authority": true,
+		"gpu_page_lattice_input": bool(native_metrics.get(
+			"gpu_page_lattice_input", false
+		)),
 		"atomic_surface_set_activation": true,
 		"production_material_parity": false,
 		"production_terrain_material_payload_ready": bool(effect_status.get(
@@ -235,6 +238,9 @@ func get_status() -> Dictionary:
 		)),
 		"production_static_water_refraction_parity": bool(effect_status.get(
 			"production_static_water_refraction_parity", false
+		)),
+		"production_static_water_scene_copy_ready": bool(effect_status.get(
+			"production_static_water_scene_copy_ready", false
 		)),
 		"production_material_source": str(effect_status.get(
 			"production_material_source", ""
@@ -840,26 +846,33 @@ static func _required_surfaces(group: Dictionary) -> Array[String]:
 
 static func _validate_native_request(request: Dictionary) -> String:
 	if str(request.get("schema", "")) \
-			!= "world_transvoxel.gpu_resident_render_request.v4" \
+			!= "world_transvoxel.gpu_resident_render_request.v6" \
 			or str(request.get("status", "")) != "PASS":
 		return "native GPU resident request contract failed"
 	if str(request.get("position_space", "")) != "world":
 		return "native GPU resident request is not in world position space"
 	if str(request.get("input_stage", "")) != "pre_mesh_field" \
 			or bool(request.get("cpu_topology_input_dependency", true)) \
-			or not bool(request.get("cpu_field_sampling", false)) \
-			or bool(request.get("gpu_density_field_generation", true)) \
+			or bool(request.get("cpu_field_sampling", true)) \
+			or not bool(request.get("gpu_density_field_generation", false)) \
+			or not bool(request.get("gpu_material_field_generation", false)) \
+			or not bool(request.get("gpu_page_lattice_input", false)) \
 			or not bool(request.get("gpu_transvoxel_extraction", false)):
-		return "native GPU resident request did not originate before CPU topology"
+		return "native GPU resident request is not a GPU page-field input"
+	var cpu_visual_mesh_omitted := bool(request.get(
+		"cpu_visual_mesh_omitted", false
+	))
 	if not bool(request.get("gpu_resident_render_publication", false)) \
-			or not bool(request.get("cpu_render_visible_until_activation", false)) \
+			or bool(request.get("cpu_render_visible_until_activation", false)) \
+				== cpu_visual_mesh_omitted \
 			or not bool(request.get("cpu_collision_publication_unchanged", false)) \
 			or not bool(request.get("native_input_packing", false)) \
 			or bool(request.get("cell_batch_exported", true)) \
 			or bool(request.get("fallback_used", true)):
 		return "native GPU resident request changed publication authority"
 	var input_buffers := Array(request.get("gpu_input_buffers", []))
-	if input_buffers.size() != 13 or int(request.get("cell_count", 0)) <= 0:
+	if input_buffers.size() != 13 or int(request.get("cell_count", 0)) <= 0 \
+			or int(request.get("page_count", 0)) <= 0:
 		return "native GPU resident input inventory is invalid"
 	var actual_bytes := 0
 	for buffer_value in input_buffers:
