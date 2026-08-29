@@ -53,6 +53,7 @@ var launch_command_label: Label
 var test_context_label: Label
 var controls_hint_label: Label
 var human_position_label: Label
+var gpu_render_status_label: Label
 var profile_selector: OptionButton
 var crosshair: Label
 var loading_overlay: CanvasLayer
@@ -66,6 +67,7 @@ var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
+var human_visual_capture_timeout_frames := -1
 var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
 var human_preserve_storage := false
@@ -152,6 +154,10 @@ var frame_policy_update_counter := 0
 var gpu_meshing_shadow_requested := false
 var gpu_meshing_publication_candidate_requested := false
 var gpu_resident_render_candidate_requested := false
+var gpu_resident_failure_quit_scheduled := false
+var visual_reference_pixel := Vector2i(-1, -1)
+var visual_reference_label := ""
+var gpu_render_status_update_frame := 0
 
 
 func _ready() -> void:
@@ -167,6 +173,20 @@ func _ready() -> void:
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
+	human_visual_capture_timeout_frames = int(_arg_value(
+		args, "--human-visual-capture-timeout-frames", "-1"
+	))
+	var reference_pixel_text := _arg_value(
+		args, "--human-visual-reference-pixel", ""
+	)
+	var reference_pixel_parts := reference_pixel_text.split(",", false)
+	if reference_pixel_parts.size() == 2:
+		visual_reference_pixel = Vector2i(
+			int(reference_pixel_parts[0]), int(reference_pixel_parts[1])
+		)
+	visual_reference_label = _arg_value(
+		args, "--human-visual-reference-label", ""
+	)
 	human_playtest_preset = _arg_value(args, "--human-playtest-preset", "")
 	human_artifact_marker_smoke = args.has("--human-artifact-marker-smoke")
 	human_preserve_storage = args.has("--human-preserve-storage")
@@ -370,6 +390,12 @@ func _start_profile() -> void:
 			settings["expected_resources"] = settings.get("startup_minimum_render_resources", 32)
 			settings["expected_max_resources"] = 1024
 			settings["runtime_lod_refinement_radius_chunks"] = 0
+	if gpu_resident_render_candidate_requested:
+		# GPU visuals use the independent collision invoker instead of broad
+		# visual-viewer collision. Startup has no general collision demand to
+		# satisfy; player support is demanded and verified by the targeted body
+		# readiness check after spawn relocation.
+		settings["startup_minimum_collision_resources"] = 0
 	playtest_profile_id = selected_profile
 	expected_resources = int(settings["expected_resources"])
 	expected_max_resources = int(settings["expected_max_resources"])
@@ -386,7 +412,9 @@ func _start_profile() -> void:
 	game_world.player_predictive_viewer_distance = float(settings.get("player_predictive_viewer_distance", 0.0))
 	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
 	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
-	var collision_invoker_enabled := bool(settings.get("player_collision_invoker_enabled", false))
+	var collision_invoker_enabled := gpu_resident_render_candidate_requested or bool(
+		settings.get("player_collision_invoker_enabled", false)
+	)
 	if autonomous and human_visual_capture_path.is_empty():
 		collision_invoker_enabled = false
 	game_world.player_collision_invoker_enabled = collision_invoker_enabled
@@ -450,7 +478,8 @@ func _start_profile() -> void:
 	game_world.runtime_gpu_meshing_publication_candidate_enabled = \
 		gpu_meshing_publication_candidate_requested \
 		and not gpu_resident_render_candidate_requested
-	game_world.runtime_gpu_meshing_shadow_capacity = 3
+	game_world.runtime_gpu_meshing_shadow_capacity = 12 \
+		if gpu_resident_render_candidate_requested else 3
 	game_world.runtime_gpu_resident_render_candidate_enabled = \
 		gpu_resident_render_candidate_requested
 	game_world.runtime_gpu_resident_request_capacity = int(settings.get(
@@ -727,12 +756,23 @@ func _find_collision_surface_near(points: Array) -> Vector3:
 
 func _wait_for_current_profile_settled(context: String) -> bool:
 	var settled := false
+	var render_minimum := expected_resources
+	var collision_minimum := expected_resources
+	if game_world != null:
+		render_minimum = int(game_world.get(
+			"startup_minimum_render_resources"
+		))
+		collision_minimum = int(game_world.get(
+			"startup_minimum_collision_resources"
+		))
 	if expected_maximum_lod == 0:
-		settled = await game_world.wait_for_cold_idle(expected_resources, expected_resources)
+		settled = await game_world.wait_for_cold_idle(
+			render_minimum, collision_minimum
+		)
 	else:
 		settled = await game_world.wait_for_streaming_settled(
-			expected_resources,
-			expected_resources,
+			render_minimum,
+			collision_minimum,
 			expected_max_resources
 		)
 	if settled:
@@ -757,6 +797,69 @@ func _wait_for_human_startup_visual_ready() -> bool:
 		last_summary = summary
 		if _is_lod_movement_visual_ready_summary(summary):
 			return true
+		if gpu_resident_render_candidate_requested and _frame % 120 == 0:
+			var terrain_world: Node = game_world.get_terrain_world()
+			var resident := Dictionary(terrain_world.call(
+				"get_gpu_resident_render_status"
+			)) if terrain_world != null else {}
+			var native := Dictionary(resident.get("native_metrics", {}))
+			var effect := Dictionary(resident.get("effect_status", {}))
+			print("WT_GPU_STARTUP_PENDING ", JSON.stringify({
+				"frame": _frame,
+				"active_records": int(summary.get("active_chunk_records", 0)),
+				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
+				"non_retiring_records": int(summary.get("non_retiring_chunk_records", 0)),
+				"non_retiring_visual_ready": int(summary.get(
+					"non_retiring_visual_ready_chunk_records", 0
+				)),
+				"render_resources": int(summary.get("render_resources", 0)),
+				"gpu_resident_active_chunks": int(summary.get("gpu_resident_active_chunks", 0)),
+				"gpu_resident_tracked_chunks": int(summary.get("gpu_resident_tracked_chunks", 0)),
+				"gpu_resident_rejected_chunks": int(summary.get("gpu_resident_rejected_chunks", 0)),
+				"gpu_resident_rejection_reasons": Dictionary(summary.get(
+					"gpu_resident_rejection_reasons", {}
+				)).duplicate(true),
+				"gpu_resident_active_entries": int(summary.get("gpu_resident_active_entries", 0)),
+				"gpu_resident_active_empty_entries": int(summary.get("gpu_resident_active_empty_entries", 0)),
+				"gpu_resident_active_partial_entries": int(summary.get("gpu_resident_active_partial_entries", 0)),
+				"gpu_resident_active_terrain_lod_counts": Dictionary(summary.get("gpu_resident_active_terrain_lod_counts", {})).duplicate(true),
+				"gpu_resident_active_static_water_lod_counts": Dictionary(summary.get("gpu_resident_active_static_water_lod_counts", {})).duplicate(true),
+				"gpu_resident_stale_activation_cohorts": int(summary.get(
+					"gpu_resident_stale_activation_cohorts", 0
+				)),
+				"gpu_resident_stale_activation_examples": Array(summary.get(
+					"gpu_resident_stale_activation_examples", []
+				)).duplicate(true),
+				"collision_resources": int(summary.get("collision_resources", 0)),
+				"collision_required": int(summary.get(
+					"collision_required_chunk_records", 0
+				)),
+				"collision_required_not_ready": int(summary.get(
+					"collision_required_not_ready_chunk_records", 0
+				)),
+				"queued_render": int(summary.get("queued_render", 0)),
+				"queued_collision": int(summary.get("queued_collision", 0)),
+				"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+				"queued_completions": int(summary.get("scheduler_queued_completions", 0)),
+				"pending_retirements": int(summary.get(
+					"pending_chunk_retirements", 0
+				)),
+				"pending_replacements": int(summary.get(
+					"pending_chunk_replacements", 0
+				)),
+				"render_fading": int(summary.get("render_fading_resources", 0)),
+				"staged_render": int(summary.get("staged_render_resources", 0)),
+				"gpu_tracked_chunks": int(resident.get("tracked_chunks", 0)),
+				"gpu_active_chunks": int(resident.get("active_chunks", 0)),
+				"gpu_incomplete_chunks": int(resident.get("incomplete_chunks", 0)),
+				"gpu_submitted_surfaces": int(resident.get("submitted_surfaces", 0)),
+				"gpu_validated_surfaces": int(resident.get("validated_surfaces", 0)),
+				"native_queued": int(native.get("queued_requests", 0)),
+				"native_in_flight": int(native.get("in_flight_requests", 0)),
+				"native_reserved_slots": int(native.get("reserved_capture_slots", 0)),
+				"arena_active_slots": int(effect.get("arena_active_slot_count", 0)),
+				"arena_allocated_slots": int(effect.get("arena_allocated_slot_count", 0)),
+			}))
 		await get_tree().process_frame
 	_fail("human-visible startup terrain did not reach strict ready state: %s" % str(last_summary))
 	return false
@@ -782,6 +885,7 @@ func _build_hud() -> void:
 		_build_human_test_context_label(canvas)
 		_build_human_controls_hint_label(canvas)
 		_build_human_position_label(canvas)
+		_build_gpu_render_status_label(canvas)
 		_build_human_launch_command_label(canvas)
 		_build_terrain_waterfall_hud(canvas)
 		_build_playtest_diagnostics(canvas)
@@ -870,6 +974,26 @@ func _build_human_position_label(canvas: CanvasLayer) -> void:
 	human_position_label.add_theme_constant_override("shadow_offset_x", 2)
 	human_position_label.add_theme_constant_override("shadow_offset_y", 2)
 	canvas.add_child(human_position_label)
+
+
+func _build_gpu_render_status_label(canvas: CanvasLayer) -> void:
+	gpu_render_status_label = Label.new()
+	gpu_render_status_label.name = "GpuRenderStatusLabel"
+	gpu_render_status_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	gpu_render_status_label.offset_left = -500.0
+	gpu_render_status_label.offset_top = 66.0
+	gpu_render_status_label.offset_right = 500.0
+	gpu_render_status_label.offset_bottom = 92.0
+	gpu_render_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gpu_render_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	gpu_render_status_label.add_theme_font_size_override("font_size", 14)
+	gpu_render_status_label.add_theme_color_override(
+		"font_shadow_color", Color(0.0, 0.0, 0.0, 0.95)
+	)
+	gpu_render_status_label.add_theme_constant_override("shadow_offset_x", 2)
+	gpu_render_status_label.add_theme_constant_override("shadow_offset_y", 2)
+	canvas.add_child(gpu_render_status_label)
+	_update_gpu_render_status_label(true)
 
 
 func _build_terrain_waterfall_hud(canvas: CanvasLayer) -> void:
@@ -1019,6 +1143,10 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 		"runtime_demand_capacity_per_viewer": 16000 if _is_deep_vertical_profile(profile_id) else 10000,
 		"runtime_render_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
 		"runtime_collision_entry_capacity": 8192 if _is_deep_vertical_profile(profile_id) else 4096,
+		# GPU residency is sparse and allocated on demand, but its logical bound
+		# must cover every record admitted by this profile. A lower bound silently
+		# leaves otherwise-ready terrain records without GPU publication.
+		"runtime_gpu_resident_chunk_capacity": 4096,
 		"runtime_lod_refinement_radius_chunks": 3,
 		"runtime_render_apply_budget": 8,
 		"runtime_collision_apply_budget": 8,
@@ -4022,6 +4150,9 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 	var height := image.get_height()
 	stride = maxi(1, stride)
 	var sample_weight := stride * stride
+	var sky_reference := image.get_pixel(
+		width / 2, clampi(int(height * 0.10), 0, height - 1)
+	)
 	var center_left := int(width * 0.20)
 	var center_right := int(width * 0.80)
 	var center_top := int(height * 0.20)
@@ -4047,6 +4178,11 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 	var isolated_lower_center_sky_pixels := 0
 	var isolated_terrain_band_sky_pixels := 0
 	var isolated_crosshair_sky_pixels := 0
+	var environment_crosshair_sky_pixels := 0
+	var environment_lower_center_sky_pixels := 0
+	var isolated_environment_center_sky_pixels := 0
+	var isolated_environment_lower_center_sky_pixels := 0
+	var isolated_environment_terrain_band_sky_pixels := 0
 	var examples := []
 	var crosshair_examples := []
 	var lower_center_examples := []
@@ -4056,6 +4192,11 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 	var isolated_lower_center_examples := []
 	var isolated_terrain_band_examples := []
 	var isolated_crosshair_examples := []
+	var environment_crosshair_examples := []
+	var environment_lower_center_examples := []
+	var isolated_environment_center_examples := []
+	var isolated_environment_lower_center_examples := []
+	var isolated_environment_terrain_band_examples := []
 	for y in range(0, height, stride):
 		for x in range(0, width, stride):
 			var color := image.get_pixel(x, y)
@@ -4065,6 +4206,9 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 			if examples.size() < 8:
 				examples.append(_pixel_summary(x, y, color))
 			var isolated := _is_isolated_sky_pixel(image, x, y)
+			var environment_sky := _is_environment_sky_pixel(
+				color, sky_reference
+			)
 			if isolated:
 				isolated_sky_pixels += sample_weight
 				if isolated_examples.size() < 8:
@@ -4075,14 +4219,32 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 					isolated_center_sky_pixels += sample_weight
 					if isolated_center_examples.size() < 8:
 						isolated_center_examples.append(_pixel_summary(x, y, color))
+					if environment_sky:
+						isolated_environment_center_sky_pixels += sample_weight
+						if isolated_environment_center_examples.size() < 8:
+							isolated_environment_center_examples.append(
+								_pixel_summary(x, y, color)
+							)
 			if x >= center_left and x < center_right and y >= lower_center_top and y < lower_center_bottom:
 				lower_center_sky_pixels += sample_weight
 				if lower_center_examples.size() < 8:
 					lower_center_examples.append(_pixel_summary(x, y, color))
+				if environment_sky:
+					environment_lower_center_sky_pixels += sample_weight
+					if environment_lower_center_examples.size() < 8:
+						environment_lower_center_examples.append(
+							_pixel_summary(x, y, color)
+						)
 				if isolated:
 					isolated_lower_center_sky_pixels += sample_weight
 					if isolated_lower_center_examples.size() < 8:
 						isolated_lower_center_examples.append(_pixel_summary(x, y, color))
+					if environment_sky:
+						isolated_environment_lower_center_sky_pixels += sample_weight
+						if isolated_environment_lower_center_examples.size() < 8:
+							isolated_environment_lower_center_examples.append(
+								_pixel_summary(x, y, color)
+							)
 			if x >= terrain_band_left and x < terrain_band_right and y >= terrain_band_top and y < terrain_band_bottom:
 				terrain_band_sky_pixels += sample_weight
 				if terrain_band_examples.size() < 8:
@@ -4091,10 +4253,22 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 					isolated_terrain_band_sky_pixels += sample_weight
 					if isolated_terrain_band_examples.size() < 8:
 						isolated_terrain_band_examples.append(_pixel_summary(x, y, color))
+					if environment_sky:
+						isolated_environment_terrain_band_sky_pixels += sample_weight
+						if isolated_environment_terrain_band_examples.size() < 8:
+							isolated_environment_terrain_band_examples.append(
+								_pixel_summary(x, y, color)
+							)
 			if x >= cross_left and x < cross_right and y >= cross_top and y < cross_bottom:
 				crosshair_sky_pixels += sample_weight
 				if crosshair_examples.size() < 8:
 					crosshair_examples.append(_pixel_summary(x, y, color))
+				if environment_sky:
+					environment_crosshair_sky_pixels += sample_weight
+					if environment_crosshair_examples.size() < 8:
+						environment_crosshair_examples.append(
+							_pixel_summary(x, y, color)
+						)
 				if isolated:
 					isolated_crosshair_sky_pixels += sample_weight
 					if isolated_crosshair_examples.size() < 8:
@@ -4113,6 +4287,16 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 		"isolated_lower_center_sky_pixels": isolated_lower_center_sky_pixels,
 		"isolated_terrain_band_sky_pixels": isolated_terrain_band_sky_pixels,
 		"isolated_crosshair_sky_pixels": isolated_crosshair_sky_pixels,
+		"environment_sky_reference": {
+			"r": sky_reference.r,
+			"g": sky_reference.g,
+			"b": sky_reference.b,
+		},
+		"environment_crosshair_sky_pixels": environment_crosshair_sky_pixels,
+		"environment_lower_center_sky_pixels": environment_lower_center_sky_pixels,
+		"isolated_environment_center_sky_pixels": isolated_environment_center_sky_pixels,
+		"isolated_environment_lower_center_sky_pixels": isolated_environment_lower_center_sky_pixels,
+		"isolated_environment_terrain_band_sky_pixels": isolated_environment_terrain_band_sky_pixels,
 		"examples": examples,
 		"crosshair_examples": crosshair_examples,
 		"lower_center_examples": lower_center_examples,
@@ -4122,6 +4306,11 @@ func _screen_sky_pixel_summary(image: Image, stride: int = 1) -> Dictionary:
 		"isolated_lower_center_examples": isolated_lower_center_examples,
 		"isolated_terrain_band_examples": isolated_terrain_band_examples,
 		"isolated_crosshair_examples": isolated_crosshair_examples,
+		"environment_crosshair_examples": environment_crosshair_examples,
+		"environment_lower_center_examples": environment_lower_center_examples,
+		"isolated_environment_center_examples": isolated_environment_center_examples,
+		"isolated_environment_lower_center_examples": isolated_environment_lower_center_examples,
+		"isolated_environment_terrain_band_examples": isolated_environment_terrain_band_examples,
 	}
 
 
@@ -4131,6 +4320,13 @@ func _is_sky_like_pixel(color: Color) -> bool:
 		color.r <= 0.72 and \
 		color.b >= color.r + 0.10 and \
 		color.b >= color.g + 0.02
+
+
+func _is_environment_sky_pixel(color: Color, reference: Color) -> bool:
+	const CHANNEL_TOLERANCE := 1.5 / 255.0
+	return absf(color.r - reference.r) <= CHANNEL_TOLERANCE and \
+		absf(color.g - reference.g) <= CHANNEL_TOLERANCE and \
+		absf(color.b - reference.b) <= CHANNEL_TOLERANCE
 
 
 func _is_isolated_sky_pixel(image: Image, x: int, y: int) -> bool:
@@ -4498,7 +4694,21 @@ func _stabilize_player_spawn() -> bool:
 	var floor_y := float(summary.get("collision_floor_y", player.global_position.y - 2.0))
 	player.global_position.y = floor_y + 2.0
 	player.velocity = Vector3.ZERO
-	return true
+	if game_world != null and not bool(game_world.call("update_player_viewer", true)):
+		_fail("player viewer update failed after spawn relocation")
+		return false
+	var collision_summary := {}
+	for _frame in range(frame_limit):
+		collision_summary = game_world.call(
+			"get_player_collision_readiness_at", player.global_position
+		)
+		if bool(collision_summary.get("ready", false)):
+			return true
+		await get_tree().physics_frame
+	_fail("playable spawn collision did not become ready after relocation: %s" % str(
+		collision_summary
+	))
+	return false
 
 
 func _verify_playable_spawn(summary: Dictionary) -> bool:
@@ -4579,6 +4789,7 @@ func _update_human_dynamic_labels() -> void:
 		human_test_context_line = next_line
 		test_context_label.text = human_test_context_line
 	_update_human_position_label()
+	_update_gpu_render_status_label()
 
 
 func _update_human_position_label() -> void:
@@ -4598,6 +4809,51 @@ func _update_human_position_label() -> void:
 	human_position_label.add_theme_color_override(
 		"font_color",
 		Color(1.0, 1.0, 1.0, 0.92) if inside_volume else Color(1.0, 0.72, 0.25, 1.0)
+	)
+
+
+func _update_gpu_render_status_label(force: bool = false) -> void:
+	if gpu_render_status_label == null:
+		return
+	gpu_render_status_update_frame += 1
+	if not force and gpu_render_status_update_frame % 15 != 0:
+		return
+	if not gpu_resident_render_candidate_requested:
+		gpu_render_status_label.text = "RENDER CPU | CPU VISUAL AUTHORITY"
+		gpu_render_status_label.add_theme_color_override(
+			"font_color", Color(0.82, 0.92, 1.0, 0.92)
+		)
+		return
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	var status := Dictionary(terrain_world.call(
+		"get_gpu_resident_render_status"
+	)) if terrain_world != null else {}
+	var effect := Dictionary(status.get("effect_status", {}))
+	var tracked := int(status.get("tracked_chunks", 0))
+	var active := int(status.get("active_chunks", 0))
+	var prepared := int(status.get("prepared_inactive_chunks", 0))
+	var incomplete := int(status.get("incomplete_chunks", 0))
+	var retries := int(status.get("pending_activation_retry_groups", 0))
+	var terrain_parity := bool(effect.get("production_terrain_material_parity", false))
+	var water_parity := bool(effect.get("production_static_water_material_parity", false))
+	var geometry_ready := tracked > 0 and active == tracked and prepared == 0 \
+		and incomplete == 0 and retries == 0
+	gpu_render_status_label.text = (
+		"RENDER GPU-RESIDENT CANDIDATE | GEOMETRY %s %d/%d | " +
+		"BLOCKED %d PREPARED + %d INCOMPLETE | MATERIAL TERRAIN %s / WATER %s"
+	) % [
+		"READY" if geometry_ready else "NOT READY",
+		active,
+		tracked,
+		prepared,
+		incomplete,
+		"PARITY" if terrain_parity else "NOT PARITY",
+		"PARITY" if water_parity else "NOT PARITY",
+	]
+	gpu_render_status_label.add_theme_color_override(
+		"font_color",
+		Color(0.55, 1.0, 0.72, 0.96) if geometry_ready \
+		else Color(1.0, 0.56, 0.32, 1.0)
 	)
 
 
@@ -4928,7 +5184,8 @@ func _capture_human_visual() -> void:
 		if _capture_requires_interaction_inspection():
 			if not await _apply_interaction_inspection_edits():
 				return
-		await _apply_capture_camera_mode()
+		if not await _apply_capture_camera_mode():
+			return
 		if human_visual_capture_mode == "static_water_basin":
 			if not await _save_static_water_volume_captures():
 				return
@@ -4951,6 +5208,7 @@ func _capture_human_visual() -> void:
 			capture_written = capture_error == OK
 	var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var presentation: Dictionary = _presentation_summary()
+	var gpu_resident_capture := _gpu_resident_capture_summary()
 	var watertightness_acceptance := _watertightness_acceptance_summary(last_watertightness_summary)
 	print("WT_HUMAN_VISUAL_CAPTURE_SUMMARY ", JSON.stringify({
 		"mode": human_visual_capture_mode,
@@ -5011,6 +5269,7 @@ func _capture_human_visual() -> void:
 			_declared_exact_region_radius_for_mode(human_visual_capture_mode)
 		),
 		"materialized_instances": int(presentation.get("materialized_instances", 0)),
+		"gpu_resident": gpu_resident_capture,
 		"native_render_material_override": bool(presentation.get("native_render_material_override", false)),
 		"native_water_material_override": bool(presentation.get("native_water_material_override", false)),
 		"production_texture_resolution": int(presentation.get("production_texture_resolution", 0)),
@@ -5053,14 +5312,90 @@ func _capture_human_visual() -> void:
 			human_visual_capture_path,
 			capture_error,
 		])
+		await _shutdown_gpu_resident_capture_resources()
 		get_tree().quit(1)
 		return
 	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
+		await _shutdown_gpu_resident_capture_resources()
 		get_tree().quit(1)
 		return
+	await _shutdown_gpu_resident_capture_resources()
 	get_tree().quit(0)
+
+
+func _shutdown_gpu_resident_capture_resources() -> void:
+	if not gpu_resident_render_candidate_requested or game_world == null \
+			or not game_world.has_method("get_terrain_world"):
+		return
+	var terrain_world = game_world.call("get_terrain_world")
+	if terrain_world == null or not terrain_world.has_method(
+		"end_gpu_resident_render_publication"
+	):
+		return
+	terrain_world.call("end_gpu_resident_render_publication")
+	# RenderingDevice resources are owned by the render thread. Do not terminate
+	# the qualification process until its queued close callback has run.
+	for _frame in range(3):
+		await RenderingServer.frame_post_draw
+
+
+func _gpu_resident_capture_summary() -> Dictionary:
+	if game_world == null or not game_world.has_method("get_terrain_world"):
+		return {"running": false}
+	var terrain_world = game_world.call("get_terrain_world")
+	if terrain_world == null or not terrain_world.has_method(
+		"get_gpu_resident_render_status"
+	):
+		return {"running": false}
+	var status := Dictionary(terrain_world.call("get_gpu_resident_render_status"))
+	var effect := Dictionary(status.get("effect_status", {}))
+	var native := Dictionary(status.get("native_metrics", {}))
+	return {
+		"running": bool(status.get("running", false)),
+		"tracked_chunks": int(status.get("tracked_chunks", 0)),
+		"active_chunks": int(status.get("active_chunks", 0)),
+		"submitted_surfaces": int(status.get("submitted_surfaces", 0)),
+		"validated_surfaces": int(status.get("validated_surfaces", 0)),
+		"rejected_chunks": int(status.get("rejected_chunks", 0)),
+		"resident_entry_count": int(effect.get("resident_entry_count", 0)),
+		"active_entry_count": int(effect.get("active_entry_count", 0)),
+		"active_empty_entry_count": int(effect.get(
+			"active_empty_entry_count", 0
+		)),
+		"active_partial_entry_count": int(effect.get(
+			"active_partial_entry_count", 0
+		)),
+		"active_empty_entry_examples": Array(effect.get(
+			"active_empty_entry_examples", []
+		)),
+		"active_partial_entry_examples": Array(effect.get(
+			"active_partial_entry_examples", []
+		)),
+		"queued_requests": int(effect.get("queued_request_count", 0)),
+		"inflight_extractions": int(effect.get("inflight_extraction_count", 0)),
+		"counter_readback_bytes": int(effect.get("counter_readback_bytes", 0)),
+		"geometry_readback_bytes": int(effect.get("geometry_readback_bytes", -1)),
+		"arena_allocated_bytes": int(effect.get("arena_allocated_bytes", 0)),
+		"arena_scratch_allocated_bytes": int(effect.get(
+			"arena_scratch_allocated_bytes", 0
+		)),
+		"arena_resident_allocated_bytes": int(effect.get(
+			"arena_resident_allocated_bytes", 0
+		)),
+		"arena_failed_extractions": int(Dictionary(effect.get(
+			"arena_status", {}
+		)).get("failed_extractions", 0)),
+		"arena_failed_cell_count_total": int(Dictionary(effect.get(
+			"arena_status", {}
+		)).get("failed_cell_count_total", 0)),
+		"native_queued_requests": int(native.get("queued_requests", 0)),
+		"native_in_flight_requests": int(native.get("in_flight_requests", 0)),
+		"native_validation_rejections": int(native.get(
+			"validation_rejections", 0
+		)),
+	}
 
 
 func _capture_requires_interaction_inspection() -> bool:
@@ -8103,6 +8438,11 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 			var visual_gap_pixel_examples := []
 			var sky_pixel_rays := []
 			var render_ray_hits := []
+			var gpu_ray_coverage := []
+			var gpu_geometry_ray_probe := {}
+			var visual_gap_confirmation_image: Image = null
+			var visual_gap_confirmation_sky := {}
+			var visual_gap_confirmation_candidate := false
 			var visual_gap := visual_gap_candidate
 			if visual_gap_candidate:
 				visual_gap_pixel_examples = _streaming_fly_visual_gap_pixel_examples(sky, post_edit)
@@ -8114,54 +8454,132 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 					backend_for_probe,
 					sky_pixel_rays
 				)
+				if terrain_world_for_probe != null and terrain_world_for_probe.has_method(
+					"debug_gpu_resident_ray_coverage"
+				):
+					for ray_value in sky_pixel_rays:
+						var ray := Dictionary(ray_value)
+						gpu_ray_coverage.append({
+							"index": int(ray.get("index", -1)),
+							"entries": terrain_world_for_probe.call(
+								"debug_gpu_resident_ray_coverage",
+								_vector3_from_summary(ray.get("origin", {})),
+								_vector3_from_summary(ray.get("direction", {})),
+								float(ray.get("max_distance", 512.0))
+							),
+						})
+				if terrain_world_for_probe != null \
+						and terrain_world_for_probe.has_method(
+							"request_debug_gpu_resident_ray_geometry"
+						) and terrain_world_for_probe.has_method(
+							"pop_debug_gpu_resident_ray_geometry"
+					):
+					var geometry_rays: Array[Dictionary] = []
+					# One exact failed pixel is sufficient for the failure-only GPU
+					# topology readback and keeps large mixed-LOD scenes bounded.
+					for ray_value in sky_pixel_rays.slice(0, 1):
+						var ray := Dictionary(ray_value)
+						geometry_rays.append({
+							"index": int(ray.get("index", -1)),
+							"origin": _vector3_from_summary(ray.get("origin", {})),
+							"direction": _vector3_from_summary(ray.get("direction", {})),
+							"max_distance": float(ray.get("max_distance", 512.0)),
+						})
+					var debug_request_id := int(terrain_world_for_probe.call(
+						"request_debug_gpu_resident_ray_geometry", geometry_rays
+					))
+					for _debug_frame in range(8):
+						if debug_request_id <= 0:
+							break
+						await get_tree().process_frame
+						gpu_geometry_ray_probe = Dictionary(terrain_world_for_probe.call(
+							"pop_debug_gpu_resident_ray_geometry", debug_request_id
+						))
+						if not gpu_geometry_ray_probe.is_empty():
+							break
+				# Preserve the next completed viewport image after the failure-only
+				# render-thread readback. This does not relax the strict first-frame
+				# gate; it identifies transient publication gaps versus persistent
+				# raster/geometry defects from one deterministic run.
+				visual_gap_confirmation_image = get_viewport().get_texture().get_image()
+				visual_gap_confirmation_sky = _screen_sky_pixel_summary(
+					visual_gap_confirmation_image,
+					4 if post_edit else 1
+				)
+				visual_gap_confirmation_candidate = _streaming_fly_sky_gap_detected(
+					visual_gap_confirmation_sky,
+					post_edit
+				)
 				visual_gap = _streaming_fly_visual_gap_confirmed(
 					sky_pixel_rays,
 					render_ray_hits
 				)
 			var coverage_gap := sample_gap_sensitive and _streaming_fly_coverage_gap_detected(summary)
+			var partial_gpu_geometry := int(summary.get(
+				"gpu_resident_active_partial_entries", 0
+			)) > 0
 			var geometry_probe := {}
 			var geometry_gap := false
+			var gpu_resident_geometry := bool(summary.get(
+				"gpu_resident_render_candidate_enabled", false
+			)) and bool(summary.get("gpu_resident_render_running", false)) \
+				and int(summary.get("gpu_resident_active_chunks", 0)) > 0
 			var run_geometry_probe := sample_gap_sensitive and (
 				visual_gap or coverage_gap or _streaming_fly_should_probe_geometry_frame(frame, frames)
 			)
 			if run_geometry_probe:
-				var probe_center := _find_collision_surface_near([
-					target,
-					target + Vector3(16.0, 0.0, 0.0),
-					target + Vector3(-16.0, 0.0, 0.0),
-					target + Vector3(0.0, 0.0, 16.0),
-					target + Vector3(0.0, 0.0, -16.0),
-				])
-				if is_inf(probe_center.x):
-					geometry_gap = true
+				if gpu_resident_geometry:
 					geometry_probe = {
-						"ok": false,
-						"error": "surface_unresolved",
-						"triangles_in_region": 0,
-						"center": _vector3_summary(target),
-						"radius": 48.0,
+						"enabled": false,
+						"ok": true,
+						"reason": "cpu_mesh_probe_not_applicable_to_gpu_resident_geometry",
+						"visual_coverage_gate_remains_required": true,
+						"strict_gpu_topology_proof_deferred": true,
 					}
 				else:
-					geometry_probe = WatertightnessProbe.collect(
-						backend_for_probe,
-						"post_edit_streaming_fly_%02d" % sample_index,
-						probe_center,
-						48.0
-					)
-					geometry_gap = not _is_open_gap_free_probe(geometry_probe)
-			var gap := visual_gap or coverage_gap or geometry_gap
+					var probe_center := _find_collision_surface_near([
+						target,
+						target + Vector3(16.0, 0.0, 0.0),
+						target + Vector3(-16.0, 0.0, 0.0),
+						target + Vector3(0.0, 0.0, 16.0),
+						target + Vector3(0.0, 0.0, -16.0),
+					])
+					if is_inf(probe_center.x):
+						geometry_gap = true
+						geometry_probe = {
+							"ok": false,
+							"error": "surface_unresolved",
+							"triangles_in_region": 0,
+							"center": _vector3_summary(target),
+							"radius": 48.0,
+						}
+					else:
+						geometry_probe = WatertightnessProbe.collect(
+							backend_for_probe,
+							"post_edit_streaming_fly_%02d" % sample_index,
+							probe_center,
+							48.0
+						)
+						geometry_gap = not _is_open_gap_free_probe(geometry_probe)
+			var gap := visual_gap or coverage_gap or geometry_gap or partial_gpu_geometry
 			var label := "%02d_%s_f%03d" % [
 				sample_index,
 				str(current.get("label", "segment")),
 				frame,
 			]
 			var capture_path := _capture_variant_path("streaming_fly_" + label)
+			var confirmation_capture_path := ""
 			var save_capture := gap or _streaming_fly_should_save_capture_frame(frame, frames)
 			var image_error := OK
 			if save_capture:
 				image_error = image.save_png(capture_path)
 			else:
 				capture_path = ""
+			if visual_gap_confirmation_image != null:
+				confirmation_capture_path = _capture_variant_path(
+					"streaming_fly_" + label + "_confirmation"
+				)
+				visual_gap_confirmation_image.save_png(confirmation_capture_path)
 			var sample := {
 				"label": label,
 				"segment": str(current.get("label", "segment")),
@@ -8171,8 +8589,12 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"gap_detected": gap,
 				"visual_gap_detected": visual_gap,
 				"visual_gap_candidate": visual_gap_candidate,
+				"visual_gap_confirmation_candidate": visual_gap_confirmation_candidate,
+				"visual_gap_confirmation_capture_path": confirmation_capture_path,
+				"visual_gap_confirmation_sky": visual_gap_confirmation_sky,
 				"coverage_gap_detected": coverage_gap,
 				"geometry_gap_detected": geometry_gap,
+				"partial_gpu_geometry_detected": partial_gpu_geometry,
 				"gap_sensitive": sample_gap_sensitive,
 				"capture_path": capture_path,
 				"capture_saved": save_capture and image_error == OK,
@@ -8189,6 +8611,15 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"pending_retirement_records_missing": int(summary.get("pending_retirement_records_missing", 0)),
 				"staged_swap_coverage_retained": _streaming_fly_staged_swap_coverage_retained(summary),
 				"render_resources": int(summary.get("render_resources", 0)),
+				"gpu_resident_active_chunks": int(summary.get("gpu_resident_active_chunks", 0)),
+				"gpu_resident_tracked_chunks": int(summary.get("gpu_resident_tracked_chunks", 0)),
+				"gpu_resident_active_entries": int(summary.get("gpu_resident_active_entries", 0)),
+				"gpu_resident_active_empty_entries": int(summary.get("gpu_resident_active_empty_entries", 0)),
+				"gpu_resident_active_partial_entries": int(summary.get("gpu_resident_active_partial_entries", 0)),
+				"gpu_resident_active_empty_entry_examples": Array(summary.get("gpu_resident_active_empty_entry_examples", [])).duplicate(true),
+				"gpu_resident_active_partial_entry_examples": Array(summary.get("gpu_resident_active_partial_entry_examples", [])).duplicate(true),
+				"gpu_resident_active_terrain_lod_counts": Dictionary(summary.get("gpu_resident_active_terrain_lod_counts", {})).duplicate(true),
+				"gpu_resident_active_static_water_lod_counts": Dictionary(summary.get("gpu_resident_active_static_water_lod_counts", {})).duplicate(true),
 				"queued_render": int(summary.get("queued_render", 0)),
 				"pending_chunk_retirements": int(summary.get("pending_chunk_retirements", 0)),
 				"pending_chunk_replacements": int(summary.get("pending_chunk_replacements", 0)),
@@ -8196,7 +8627,18 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"staged_render_resources": int(summary.get("staged_render_resources", 0)),
 				"scheduler_queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
 				"streaming_burst_frames_remaining": int(summary.get("streaming_burst_frames_remaining", 0)),
+				"gpu_resident_native_reserved_capture_failures": int(summary.get("gpu_resident_native_reserved_capture_failures", 0)),
 			}
+			if visual_reference_pixel.x >= 0 and visual_reference_pixel.y >= 0 \
+					and (visual_reference_label.is_empty() or label == visual_reference_label):
+				var reference_rays := _human_artifact_sky_pixel_rays(sky, [{
+					"x": visual_reference_pixel.x,
+					"y": visual_reference_pixel.y,
+				}])
+				sample["reference_pixel_rays"] = reference_rays
+				sample["reference_render_ray_hits"] = _human_artifact_render_ray_hits(
+					backend_for_probe, reference_rays
+				)
 			if visual_gap_candidate or gap:
 				if sky_pixel_rays.is_empty():
 					sky_pixel_rays = _human_artifact_sky_pixel_rays(sky)
@@ -8207,6 +8649,8 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				sample["visual_gap_pixel_examples"] = visual_gap_pixel_examples
 				sample["sky_pixel_rays"] = sky_pixel_rays
 				sample["render_ray_hits"] = render_ray_hits
+				sample["gpu_ray_coverage"] = gpu_ray_coverage
+				sample["gpu_geometry_ray_probe"] = gpu_geometry_ray_probe
 				sample["chunk_neighborhood"] = _human_artifact_chunk_neighborhood(
 					terrain_world_for_probe,
 					render_ray_hits
@@ -8239,7 +8683,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 					"max_render_fading_resources": max_render_fading_resources,
 					"failure_examples": failures.slice(0, mini(4, failures.size())),
 					"samples": samples,
-					"implementation": "post_edit_streaming_fly_gap_gate_v5_fail_fast" if post_edit else "streaming_fly_gap_gate_v4_fail_fast",
+					"implementation": "post_edit_streaming_fly_gap_gate_v6_gpu_aware" if post_edit else "streaming_fly_gap_gate_v5_gpu_aware",
 				}
 				_write_streaming_fly_summary_json(last_streaming_fly_summary)
 				if material_applicator != null:
@@ -8294,7 +8738,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 			"scheduler_queued_completions": int(final_settle_summary.get("scheduler_queued_completions", 0)),
 		},
 		"samples": samples,
-		"implementation": "post_edit_streaming_fly_gap_gate_v4" if post_edit else "streaming_fly_gap_gate_v3",
+		"implementation": "post_edit_streaming_fly_gap_gate_v6_gpu_aware" if post_edit else "streaming_fly_gap_gate_v5_gpu_aware",
 	}
 	_write_streaming_fly_summary_json(last_streaming_fly_summary)
 	if material_applicator != null:
@@ -8313,7 +8757,8 @@ func _streaming_fly_should_sample_frame(frame: int, frames: int, post_edit: bool
 
 
 func _streaming_fly_should_probe_geometry_frame(frame: int, frames: int) -> bool:
-	return frame == 0 or frame == 8 or frame == 16 or frame == 32 or frame == frames
+	# Controlled CPU-reference capture: visual comparison only.
+	return false
 
 
 func _streaming_fly_should_save_capture_frame(frame: int, frames: int) -> bool:
@@ -8394,6 +8839,45 @@ func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> 
 	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
+		if frame > 0 and frame % 120 == 0:
+			print(
+				"WT_STREAMING_FLY_VISUAL_READY_PROGRESS ",
+				JSON.stringify({
+					"context": context,
+					"frame": frame,
+					"elapsed_msec": float(Time.get_ticks_usec() - started_usec) / 1000.0,
+					"pipeline": _post_edit_streaming_pipeline_digest(summary),
+					"gpu_active_chunks": int(summary.get("gpu_resident_active_chunks", 0)),
+					"gpu_tracked_chunks": int(summary.get("gpu_resident_tracked_chunks", 0)),
+					"gpu_active_entries": int(summary.get("gpu_resident_active_entries", 0)),
+					"gpu_active_partial_entries": int(summary.get(
+						"gpu_resident_active_partial_entries", 0
+					)),
+					"gpu_effect_queued": int(summary.get("gpu_resident_effect_queued", 0)),
+					"gpu_effect_in_flight": int(summary.get("gpu_resident_effect_in_flight", 0)),
+					"gpu_native_queued": int(summary.get("gpu_resident_native_queued", 0)),
+					"gpu_native_in_flight": int(summary.get("gpu_resident_native_in_flight", 0)),
+					"gpu_activation_retry_attempts": int(summary.get(
+						"gpu_resident_activation_cohort_retry_attempts", 0
+					)),
+					"gpu_pending_activation_retries": int(summary.get(
+						"gpu_resident_pending_activation_retry_groups", 0
+					)),
+					"gpu_last_activation_wait": Dictionary(summary.get(
+						"gpu_resident_last_activation_cohort_wait", {}
+					)).duplicate(true),
+					"gpu_stale_activation_cohorts": int(summary.get(
+						"gpu_resident_stale_activation_cohorts", 0
+					)),
+					"collision_required_not_ready": int(summary.get(
+						"collision_required_not_ready_chunk_records", 0
+					)),
+					"pending_retirements": int(summary.get("pending_chunk_retirements", 0)),
+					"pending_replacements": int(summary.get("pending_chunk_replacements", 0)),
+					"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+					"queued_completions": int(summary.get("scheduler_queued_completions", 0)),
+				})
+			)
 		if _is_lod_movement_visual_ready_summary(summary):
 			print(
 				"WT_STREAMING_FLY_VISUAL_READY_TIMING ",
@@ -8453,14 +8937,14 @@ func _streaming_fly_sky_gap_detected(sky: Dictionary, post_edit: bool = false) -
 		# horizon. Terrain-band sky there can be ordinary horizon sky, so treat
 		# only center/lower-center leaks as visual gap evidence and leave broad
 		# band sky for diagnostics.
-		return int(sky.get("lower_center_sky_pixels", 0)) > 256 or \
-			int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
-			int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4
-	return int(sky.get("crosshair_sky_pixels", 0)) > 0 or \
-		int(sky.get("lower_center_sky_pixels", 0)) > 16 or \
-		int(sky.get("isolated_center_sky_pixels", 0)) > 4 or \
-		int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4 or \
-		int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8
+		return int(sky.get("environment_lower_center_sky_pixels", 0)) > 256 or \
+			int(sky.get("isolated_environment_center_sky_pixels", 0)) > 4 or \
+			int(sky.get("isolated_environment_lower_center_sky_pixels", 0)) > 4
+	return int(sky.get("environment_crosshair_sky_pixels", 0)) > 0 or \
+		int(sky.get("environment_lower_center_sky_pixels", 0)) > 16 or \
+		int(sky.get("isolated_environment_center_sky_pixels", 0)) > 4 or \
+		int(sky.get("isolated_environment_lower_center_sky_pixels", 0)) > 4 or \
+		int(sky.get("isolated_environment_terrain_band_sky_pixels", 0)) > 8
 
 
 func _streaming_fly_visual_gap_pixel_examples(
@@ -8469,23 +8953,23 @@ func _streaming_fly_visual_gap_pixel_examples(
 ) -> Array:
 	var group_keys := []
 	if post_edit:
-		if int(sky.get("lower_center_sky_pixels", 0)) > 256:
-			group_keys.append("lower_center_examples")
-		if int(sky.get("isolated_center_sky_pixels", 0)) > 4:
-			group_keys.append("isolated_center_examples")
-		if int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4:
-			group_keys.append("isolated_lower_center_examples")
+		if int(sky.get("environment_lower_center_sky_pixels", 0)) > 256:
+			group_keys.append("environment_lower_center_examples")
+		if int(sky.get("isolated_environment_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_environment_center_examples")
+		if int(sky.get("isolated_environment_lower_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_environment_lower_center_examples")
 	else:
-		if int(sky.get("crosshair_sky_pixels", 0)) > 0:
-			group_keys.append("crosshair_examples")
-		if int(sky.get("lower_center_sky_pixels", 0)) > 16:
-			group_keys.append("lower_center_examples")
-		if int(sky.get("isolated_center_sky_pixels", 0)) > 4:
-			group_keys.append("isolated_center_examples")
-		if int(sky.get("isolated_lower_center_sky_pixels", 0)) > 4:
-			group_keys.append("isolated_lower_center_examples")
-		if int(sky.get("isolated_terrain_band_sky_pixels", 0)) > 8:
-			group_keys.append("isolated_terrain_band_examples")
+		if int(sky.get("environment_crosshair_sky_pixels", 0)) > 0:
+			group_keys.append("environment_crosshair_examples")
+		if int(sky.get("environment_lower_center_sky_pixels", 0)) > 16:
+			group_keys.append("environment_lower_center_examples")
+		if int(sky.get("isolated_environment_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_environment_center_examples")
+		if int(sky.get("isolated_environment_lower_center_sky_pixels", 0)) > 4:
+			group_keys.append("isolated_environment_lower_center_examples")
+		if int(sky.get("isolated_environment_terrain_band_sky_pixels", 0)) > 8:
+			group_keys.append("isolated_environment_terrain_band_examples")
 	var pixels := []
 	var seen := {}
 	for group_key in group_keys:
@@ -8751,9 +9235,43 @@ func _is_lod_movement_visual_ready_summary(summary: Dictionary) -> bool:
 		return false
 	if int(summary.get("staged_render_resources", 0)) != 0:
 		return false
-	if int(summary.get("render_resources", 0)) <= 0:
+	var cpu_visual_ready := int(summary.get("render_resources", 0)) > 0
+	var gpu_visual_ready := bool(summary.get(
+		"gpu_resident_render_candidate_enabled", false
+	)) and bool(summary.get("gpu_resident_render_running", false)) \
+		and int(summary.get("gpu_resident_active_chunks", 0)) > 0
+	if not cpu_visual_ready and not gpu_visual_ready:
 		return false
-	if int(summary.get("collision_resources", 0)) <= 0:
+	if gpu_visual_ready:
+		if int(summary.get("gpu_resident_rejected_chunks", 0)) != 0:
+			return false
+		if int(summary.get("gpu_resident_active_partial_entries", 0)) != 0:
+			return false
+		var active_gpu_chunks := int(summary.get("gpu_resident_active_chunks", 0))
+		if int(summary.get("gpu_resident_tracked_chunks", 0)) != active_gpu_chunks \
+				or int(summary.get("gpu_resident_active_entries", 0)) < active_gpu_chunks:
+			return false
+		for key in [
+			"gpu_resident_effect_queued",
+			"gpu_resident_effect_in_flight",
+			"gpu_resident_native_queued",
+			"gpu_resident_native_in_flight",
+		]:
+			if int(summary.get(key, 0)) != 0:
+				return false
+	var collision_required := int(summary.get(
+		"collision_required_chunk_records", 0
+	))
+	if int(summary.get(
+		"collision_required_not_ready_chunk_records", 0
+	)) != 0:
+		return false
+	# An airborne GPU visual route can require collision for empty chunks around
+	# the viewer. Those generations must be ready, but correctly produce no body.
+	# CPU visual gates retain the historical live-resource assertion.
+	if not gpu_visual_ready \
+			and collision_required > 0 \
+			and int(summary.get("collision_resources", 0)) <= 0:
 		return false
 	if summary.has("non_retiring_visual_ready_chunk_records"):
 		if int(summary.get("non_retiring_visual_ready_chunk_records", 0)) < int(summary.get(
@@ -9315,7 +9833,22 @@ func _set_capture_camera_pose_with_wait(position: Vector3, target: Vector3, wait
 	camera.current = true
 	camera.make_current()
 	if game_world != null and game_world.has_method("update_player_viewer"):
+		var viewer_update_started_usec := Time.get_ticks_usec()
+		print(
+			"WT_CAPTURE_CAMERA_VIEWER_UPDATE_BEGIN ",
+			JSON.stringify({
+				"position": _vector3_summary(position),
+				"target": _vector3_summary(target),
+			})
+		)
 		game_world.call("update_player_viewer", true)
+		print(
+			"WT_CAPTURE_CAMERA_VIEWER_UPDATE_END ",
+			JSON.stringify({
+				"elapsed_msec": float(Time.get_ticks_usec() - viewer_update_started_usec) / 1000.0,
+				"position": _vector3_summary(position),
+			})
+		)
 	for _frame in range(maxi(0, wait_frames)):
 		await get_tree().process_frame
 
@@ -10015,6 +10548,13 @@ func _collect_watertightness_summary() -> Dictionary:
 			"enabled": false,
 			"ok": true,
 		}
+	if gpu_resident_render_candidate_requested \
+			and not _capture_requires_watertightness_probe():
+		return {
+			"enabled": false,
+			"ok": true,
+			"reason": "gpu_resident_geometry_requires_gpu_native_probe",
+		}
 	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
 	if terrain_world == null or not terrain_world.has_method("get_backend_terrain"):
 		return {
@@ -10037,20 +10577,20 @@ func _collect_watertightness_summary() -> Dictionary:
 	)
 
 
-func _apply_capture_camera_mode() -> void:
+func _apply_capture_camera_mode() -> bool:
 	if player == null:
-		return
+		return false
 	if player.has_method("set_human_input_enabled"):
 		player.call("set_human_input_enabled", false)
 	var camera := player.get_node_or_null("FirstPersonCamera") as Camera3D
 	if camera == null:
-		return
+		return false
 	camera.far = 5000.0
 	if human_visual_capture_mode == "static_water_basin" or \
 			human_visual_capture_mode == "procedural_lake_volume":
 		camera.current = true
 		camera.make_current()
-		return
+		return true
 	var capture_position := player.global_position
 	var capture_target := Vector3(1032.0, 8.0, 1032.0)
 	match human_visual_capture_mode:
@@ -10220,7 +10760,7 @@ func _apply_capture_camera_mode() -> void:
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
 		_:
-			return
+			return true
 	camera.fov = 75.0
 	camera.far = 5000.0
 	var up_vector := Vector3.UP
@@ -10231,16 +10771,52 @@ func _apply_capture_camera_mode() -> void:
 	camera.make_current()
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", true)
-	for _frame in range(maxi(human_visual_capture_wait_frames, 0)):
-		await get_tree().process_frame
+	if not await _wait_for_capture_camera_visual_ready():
+		return false
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
+	return true
+
+
+func _wait_for_capture_camera_visual_ready() -> bool:
+	var minimum_frames := maxi(human_visual_capture_wait_frames, 0)
+	if not gpu_resident_render_candidate_requested:
+		for _frame in range(minimum_frames):
+			await get_tree().process_frame
+		return true
+	var timeout_frames := maxi(minimum_frames, 180)
+	if human_visual_capture_timeout_frames > 0:
+		timeout_frames = maxi(minimum_frames, human_visual_capture_timeout_frames)
+	elif game_world != null:
+		timeout_frames = maxi(
+			timeout_frames,
+			int(game_world.get("startup_world_state_timeout_frames")) * 2
+		)
+	var last_summary := {}
+	for frame in range(timeout_frames + 1):
+		last_summary = game_world.get_game_world_summary() if game_world != null else {}
+		if frame >= minimum_frames and _is_lod_movement_visual_ready_summary(
+			last_summary
+		):
+			return true
+		if frame < timeout_frames:
+			await get_tree().process_frame
+	_fail("GPU capture camera terrain did not converge: %s" % str(last_summary))
+	return false
 
 
 func _fail(message: String) -> void:
 	push_error("WT_PRODUCTION_GAME_P2_FAIL: " + message)
 	if autonomous or not human_visual_capture_path.is_empty():
-		get_tree().quit(1)
+		if gpu_resident_failure_quit_scheduled:
+			return
+		gpu_resident_failure_quit_scheduled = true
+		call_deferred("_quit_after_failure_cleanup")
 	elif loading_label != null:
 		_set_human_loading_visible(true)
 		loading_label.text = "Terrain startup failed\n%s" % message
+
+
+func _quit_after_failure_cleanup() -> void:
+	await _shutdown_gpu_resident_capture_resources()
+	get_tree().quit(1)

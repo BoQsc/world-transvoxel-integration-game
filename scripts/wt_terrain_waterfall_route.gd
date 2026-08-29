@@ -79,6 +79,8 @@ func _flight_leg(
 	var start_position := _player.global_position
 	var accepted_frames := 0
 	var blocked_frames := 0
+	var first_blocked_status: Dictionary = {}
+	var last_blocked_status: Dictionary = {}
 	for _frame in range(frame_count):
 		var accepted := bool(_player.call(
 			"diagnostic_flight_step",
@@ -89,6 +91,16 @@ func _flight_leg(
 			accepted_frames += 1
 		else:
 			blocked_frames += 1
+			last_blocked_status = Dictionary(
+				_player.call("get_streaming_collision_status")
+			).duplicate(true)
+			if first_blocked_status.is_empty():
+				first_blocked_status = last_blocked_status.duplicate(true)
+				_trace.call("record", &"flight_collision_readiness_blocked", {
+					"label": label,
+					"phase_frame": _frame,
+					"status": first_blocked_status,
+				}, true)
 		await _host.get_tree().physics_frame
 	return {
 		"label": label,
@@ -99,6 +111,8 @@ func _flight_leg(
 		"distance": start_position.distance_to(_player.global_position),
 		"start": _vector3_summary(start_position),
 		"end": _vector3_summary(_player.global_position),
+		"first_blocked_status": first_blocked_status,
+		"last_blocked_status": last_blocked_status,
 	}
 
 
@@ -106,14 +120,16 @@ func _wait_for_surface() -> Vector3:
 	_trace.call(
 		"begin_phase", "relocation_surface_wait", "waterfall:surface", true
 	)
+	_player.velocity = Vector3.ZERO
+	_game_world.call("update_player_viewer", false)
+	var probe_points := [
+		Vector3(_player.global_position.x, 0.0, _player.global_position.z),
+		Vector3(_player.global_position.x + 8.0, 0.0, _player.global_position.z),
+		Vector3(_player.global_position.x, 0.0, _player.global_position.z + 8.0),
+		Vector3(_player.global_position.x - 8.0, 0.0, _player.global_position.z),
+	]
 	for _frame in range(900):
-		var center := Vector3(_player.global_position.x, 0.0, _player.global_position.z)
-		var target := _find_collision_surface_near([
-			center,
-			center + Vector3(8.0, 0.0, 0.0),
-			center + Vector3(0.0, 0.0, 8.0),
-			center + Vector3(-8.0, 0.0, 0.0),
-		])
+		var target := _find_collision_surface_near(probe_points)
 		if not is_inf(target.x):
 			_player.global_position = target + Vector3(0.0, 2.0, 0.0)
 			_player.velocity = Vector3.ZERO
@@ -121,6 +137,10 @@ func _wait_for_surface() -> Vector3:
 			_game_world.call("update_player_viewer", true)
 			return target
 		await _capture_wait_frame()
+	_trace.call(
+		"record", &"relocation_surface_unavailable",
+		_surface_failure_diagnostics(probe_points), true
+	)
 	return Vector3(INF, INF, INF)
 
 
@@ -139,6 +159,70 @@ func _find_collision_surface_near(points: Array) -> Vector3:
 		if not hit.is_empty():
 			return hit["position"]
 	return Vector3(INF, INF, INF)
+
+
+func _surface_failure_diagnostics(points: Array) -> Dictionary:
+	var result := {
+		"player_position": _vector3_summary(_player.global_position),
+		"probe_columns": [],
+		"collision_nodes": [],
+	}
+	var active_states := Array(_terrain_world.call("query_active_chunk_states"))
+	for point_value in points:
+		var point: Vector3 = point_value
+		var covering_states: Array = []
+		for state_value in active_states:
+			var state: RefCounted = state_value
+			var coordinate: Vector3i = state.call("get_chunk_coordinate")
+			var lod := int(state.call("get_lod"))
+			var extent := 16.0 * float(1 << lod)
+			var minimum := Vector3(coordinate) * extent
+			var maximum := minimum + Vector3.ONE * extent
+			if point.x < minimum.x or point.x >= maximum.x \
+					or point.z < minimum.z or point.z >= maximum.z:
+				continue
+			covering_states.append({
+				"coordinate": {
+					"x": coordinate.x, "y": coordinate.y, "z": coordinate.z,
+				},
+				"lod": lod,
+				"generation": int(state.call("get_generation")),
+				"visual_required": bool(state.call("is_visual_required")),
+				"visual_ready": bool(state.call("is_visual_ready")),
+				"render_generation": int(state.call("get_render_generation")),
+				"collision_required": bool(state.call("is_collision_required")),
+				"collision_ready": bool(state.call("is_collision_ready")),
+				"collision_generation": int(state.call("get_collision_generation")),
+				"staged_collision_generation": int(
+					state.call("get_staged_collision_generation")
+				),
+			})
+		result["probe_columns"].append({
+			"point": _vector3_summary(point),
+			"covering_states": covering_states,
+		})
+	var backend: Node = _terrain_world.call("get_backend_terrain")
+	if backend != null:
+		for child in backend.get_children():
+			if not child is StaticBody3D \
+					or not str(child.name).begins_with("WT_Collision_"):
+				continue
+			var collision_shape := child.get_node_or_null("Shape") as CollisionShape3D
+			var face_count := -1
+			if collision_shape != null \
+					and collision_shape.shape is ConcavePolygonShape3D:
+				face_count = (
+					collision_shape.shape as ConcavePolygonShape3D
+				).get_faces().size()
+			result["collision_nodes"].append({
+				"name": str(child.name),
+				"position": _vector3_summary(child.position),
+				"inside_tree": child.is_inside_tree(),
+				"shape_present": collision_shape != null \
+					and collision_shape.shape != null,
+				"face_count": face_count,
+			})
+	return result
 
 
 func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
@@ -195,6 +279,7 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 
 func _capture_wait_frame() -> void:
 	await _host.get_tree().physics_frame
+	_game_world.call("update_player_viewer", false)
 	if _trace == null or not bool(_trace.call("is_active")):
 		return
 	_trace.call(

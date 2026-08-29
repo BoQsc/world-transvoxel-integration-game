@@ -8,6 +8,9 @@ layout(push_constant, std430) uniform ArenaOffsets {
 	ivec4 input_b;
 	ivec4 output_a;
 	ivec4 output_b;
+	ivec4 compact_output;
+	vec4 quantization_min;
+	vec4 quantization_extent;
 } arena;
 
 layout(set = 0, binding = 0, std430) readonly buffer FieldValues {
@@ -51,25 +54,25 @@ layout(set = 0, binding = 12, std430) readonly buffer TransitionVertexData {
 } transition_vertex_data;
 
 layout(set = 0, binding = 13, std430) buffer OutputPositions {
-	vec4 values[];
+	uint values[];
 } output_positions;
 layout(set = 0, binding = 14, std430) writeonly buffer OutputNormals {
-	vec4 values[];
+	uint values[];
 } output_normals;
 layout(set = 0, binding = 15, std430) writeonly buffer OutputVertexMeta {
-	ivec4 values[];
+	uint values[];
 } output_vertex_meta;
 layout(set = 0, binding = 16, std430) writeonly buffer OutputReuse {
-	ivec4 values[];
+	uint values[];
 } output_reuse;
 layout(set = 0, binding = 17, std430) writeonly buffer OutputIndices {
 	int values[];
 } output_indices;
 layout(set = 0, binding = 18, std430) writeonly buffer OutputCellMeta {
-	ivec4 values[];
+	uint values[];
 } output_cell_meta;
 layout(set = 0, binding = 19, std430) writeonly buffer OutputIdentity {
-	ivec4 values[];
+	uint values[];
 } output_identity;
 
 struct DrawIndexedIndirectCommand {
@@ -92,6 +95,10 @@ const int MAX_VERTICES = 12;
 const int MAX_INDICES = 36;
 const int PAGE_DIMENSION = 19;
 const int PAGE_SAMPLE_COUNT = 6859;
+const int CHUNK_CELLS = 16;
+const int AXIS_EDGE_COUNT = CHUNK_CELLS * (CHUNK_CELLS + 1) * (CHUNK_CELLS + 1);
+const int CHUNK_EDGE_COUNT = 3 * AXIS_EDGE_COUNT;
+const float POSITION_SNAP_SCALE = 65536.0;
 const float NO_STATIC_WATER_DENSITY = 3.0e38;
 const int STATIC_WATER_MATERIAL = 9;
 
@@ -100,12 +107,187 @@ vec3 normalized_or_zero(vec3 value) {
 	return squared_length > 0.0 ? value * inversesqrt(squared_length) : vec3(0.0);
 }
 
+vec2 octahedral_normal(vec3 normal) {
+	vec3 unit_normal = normalized_or_zero(normal);
+	unit_normal /= max(
+		abs(unit_normal.x) + abs(unit_normal.y) + abs(unit_normal.z), 1.0e-8
+	);
+	vec2 encoded = unit_normal.xy;
+	if (unit_normal.z < 0.0) {
+		encoded = (1.0 - abs(encoded.yx)) * sign(encoded.xy);
+	}
+	return clamp(encoded, vec2(-1.0), vec2(1.0));
+}
+
+void store_legacy_position(int index, vec4 value) {
+	int base = index * 4;
+	output_positions.values[base] = floatBitsToUint(value.x);
+	output_positions.values[base + 1] = floatBitsToUint(value.y);
+	output_positions.values[base + 2] = floatBitsToUint(value.z);
+	output_positions.values[base + 3] = floatBitsToUint(value.w);
+}
+
+void store_legacy_normal(int index, vec4 value) {
+	int base = index * 4;
+	output_normals.values[base] = floatBitsToUint(value.x);
+	output_normals.values[base + 1] = floatBitsToUint(value.y);
+	output_normals.values[base + 2] = floatBitsToUint(value.z);
+	output_normals.values[base + 3] = floatBitsToUint(value.w);
+}
+
+void store_legacy_vertex_meta(int index, ivec4 value) {
+	int base = index * 4;
+	output_vertex_meta.values[base] = uint(value.x);
+	output_vertex_meta.values[base + 1] = uint(value.y);
+	output_vertex_meta.values[base + 2] = uint(value.z);
+	output_vertex_meta.values[base + 3] = uint(value.w);
+}
+
+void store_legacy_reuse(int index, ivec4 value) {
+	int base = index * 4;
+	output_reuse.values[base] = uint(value.x);
+	output_reuse.values[base + 1] = uint(value.y);
+	output_reuse.values[base + 2] = uint(value.z);
+	output_reuse.values[base + 3] = uint(value.w);
+}
+
+void store_legacy_identity(int index, ivec4 value) {
+	int base = index * 4;
+	output_identity.values[base] = uint(value.x);
+	output_identity.values[base + 1] = uint(value.y);
+	output_identity.values[base + 2] = uint(value.z);
+	output_identity.values[base + 3] = uint(value.w);
+}
+
+void store_cell_meta(bool compact_surface, int index, ivec4 value) {
+	if (compact_surface) {
+		if (value.x == STATUS_FAILURE) {
+			atomicAdd(
+				output_draw_commands.values[arena.output_b.x].first_index,
+				1u
+			);
+		}
+	} else {
+		int base = index * 4;
+		output_cell_meta.values[base] = uint(value.x);
+		output_cell_meta.values[base + 1] = uint(value.y);
+		output_cell_meta.values[base + 2] = uint(value.z);
+		output_cell_meta.values[base + 3] = uint(value.w);
+	}
+}
+
 float regularized_alpha(float density_a, float density_b, float isovalue) {
 	float denominator = density_b - density_a;
 	if (denominator == 0.0) {
 		return -1.0;
 	}
 	return clamp((isovalue - density_a) / denominator, 1.0 / 32.0, 31.0 / 32.0);
+}
+
+vec3 snap_position(vec3 position) {
+	return round(position * POSITION_SNAP_SCALE) / POSITION_SNAP_SCALE;
+}
+
+bool position_precedes(vec3 a, vec3 b) {
+	if (a.x != b.x) return a.x < b.x;
+	if (a.y != b.y) return a.y < b.y;
+	return a.z < b.z;
+}
+
+void face_distance_and_inward(
+	vec3 position,
+	int face,
+	float extent,
+	out float distance,
+	out vec3 inward
+) {
+	if (face == 0) {
+		distance = position.x;
+		inward = vec3(1.0, 0.0, 0.0);
+	} else if (face == 1) {
+		distance = extent - position.x;
+		inward = vec3(-1.0, 0.0, 0.0);
+	} else if (face == 2) {
+		distance = position.y;
+		inward = vec3(0.0, 1.0, 0.0);
+	} else if (face == 3) {
+		distance = extent - position.y;
+		inward = vec3(0.0, -1.0, 0.0);
+	} else if (face == 4) {
+		distance = position.z;
+		inward = vec3(0.0, 0.0, 1.0);
+	} else {
+		distance = extent - position.z;
+		inward = vec3(0.0, 0.0, -1.0);
+	}
+}
+
+vec3 deform_chunk_position(
+	vec3 position,
+	vec3 normal,
+	int transition_mask,
+	float cell_size,
+	float width,
+	float extent,
+	int primary_transition_face
+) {
+	vec3 primary = position;
+	float transition_factor = 1.0;
+	if (primary_transition_face >= 0) {
+		float primary_distance;
+		vec3 primary_inward;
+		face_distance_and_inward(
+			position,
+			primary_transition_face,
+			extent,
+			primary_distance,
+			primary_inward
+		);
+		transition_factor = clamp(primary_distance / width, 0.0, 1.0);
+		primary = position - primary_inward * primary_distance;
+	}
+
+	int near_face_mask = 0;
+	if (primary.x < cell_size) near_face_mask |= 1 << 0;
+	if (primary.x > extent - cell_size) near_face_mask |= 1 << 1;
+	if (primary.y < cell_size) near_face_mask |= 1 << 2;
+	if (primary.y > extent - cell_size) near_face_mask |= 1 << 3;
+	if (primary.z < cell_size) near_face_mask |= 1 << 4;
+	if (primary.z > extent - cell_size) near_face_mask |= 1 << 5;
+
+	int vertex_border_mask = 0;
+	if (primary.x == 0.0) vertex_border_mask |= 1 << 0;
+	if (primary.x == extent) vertex_border_mask |= 1 << 1;
+	if (primary.y == 0.0) vertex_border_mask |= 1 << 2;
+	if (primary.y == extent) vertex_border_mask |= 1 << 3;
+	if (primary.z == 0.0) vertex_border_mask |= 1 << 4;
+	if (primary.z == extent) vertex_border_mask |= 1 << 5;
+
+	bool has_active_transition = (near_face_mask & transition_mask) != 0;
+	bool touches_same_lod_face = (vertex_border_mask & ~transition_mask) != 0;
+	if (!has_active_transition || touches_same_lod_face) {
+		return primary;
+	}
+
+	vec3 offset = vec3(0.0);
+	if (primary.x < cell_size) {
+		offset.x = width * (1.0 - primary.x / cell_size);
+	} else if (primary.x > extent - cell_size) {
+		offset.x = -width * (1.0 - (extent - primary.x) / cell_size);
+	}
+	if (primary.y < cell_size) {
+		offset.y = width * (1.0 - primary.y / cell_size);
+	} else if (primary.y > extent - cell_size) {
+		offset.y = -width * (1.0 - (extent - primary.y) / cell_size);
+	}
+	if (primary.z < cell_size) {
+		offset.z = width * (1.0 - primary.z / cell_size);
+	} else if (primary.z > extent - cell_size) {
+		offset.z = -width * (1.0 - (extent - primary.z) / cell_size);
+	}
+	float normal_offset = dot(normal, offset);
+	vec3 projected = offset - normal * normal_offset;
+	return primary + transition_factor * projected;
 }
 
 void transition_basis(int orientation, out vec3 axis_u, out vec3 axis_v, out vec3 axis_w) {
@@ -300,6 +482,191 @@ bool page_cell_sample(
 	return true;
 }
 
+bool page_edge_index(
+	int page_index,
+	ivec3 endpoint_a,
+	ivec3 endpoint_b,
+	out int edge_index,
+	out bool reversed
+) {
+	edge_index = 0;
+	reversed = false;
+	vec4 page_origin = cell_origins.values[arena.input_a.w + page_index];
+	int spacing = int(round(page_origin.w));
+	if (spacing <= 0) return false;
+	ivec3 difference = endpoint_b - endpoint_a;
+	int axis = -1;
+	for (int candidate = 0; candidate < 3; ++candidate) {
+		if (difference[candidate] == 0) continue;
+		if (axis >= 0 || abs(difference[candidate]) != spacing) return false;
+		axis = candidate;
+	}
+	if (axis < 0) return false;
+	reversed = difference[axis] < 0;
+	ivec3 start = reversed ? endpoint_b : endpoint_a;
+	ivec3 relative = start - ivec3(round(page_origin.xyz));
+	if (any(notEqual(relative % spacing, ivec3(0)))) return false;
+	ivec3 coordinate = relative / spacing;
+	if (any(lessThan(coordinate, ivec3(0))) ||
+			any(greaterThan(coordinate, ivec3(CHUNK_CELLS))) ||
+			coordinate[axis] >= CHUNK_CELLS) {
+		return false;
+	}
+	int local = 0;
+	if (axis == 0) {
+		local = (coordinate.z * (CHUNK_CELLS + 1) + coordinate.y) *
+			CHUNK_CELLS + coordinate.x;
+	} else if (axis == 1) {
+		local = (coordinate.z * CHUNK_CELLS + coordinate.y) *
+			(CHUNK_CELLS + 1) + coordinate.x;
+	} else {
+		local = (coordinate.z * (CHUNK_CELLS + 1) + coordinate.y) *
+			(CHUNK_CELLS + 1) + coordinate.x;
+	}
+	edge_index = axis * AXIS_EDGE_COUNT + local;
+	return edge_index >= 0 && edge_index < CHUNK_EDGE_COUNT;
+}
+
+bool page_surface_shift_record(
+	int page_index,
+	int edge_index,
+	float isovalue,
+	out int unit_offset,
+	out vec4 sample_a,
+	out vec4 sample_b,
+	out ivec2 material_a,
+	out ivec2 material_b
+) {
+	ivec4 header = cell_headers.values[arena.input_a.z + page_index];
+	if (header.w != 1 || intBitsToFloat(header.z) != isovalue || header.y <= 0) {
+		return false;
+	}
+	int low = 0;
+	int high = header.y;
+	while (low < high) {
+		int middle = low + (high - low) / 2;
+		int reference = arena.input_b.y + header.x + middle * 4;
+		int candidate = sample_references.values[reference];
+		if (candidate < edge_index) low = middle + 1;
+		else high = middle;
+	}
+	if (low >= header.y) return false;
+	int reference = arena.input_b.y + header.x + low * 4;
+	if (sample_references.values[reference] != edge_index) return false;
+	unit_offset = sample_references.values[reference + 1];
+	int sample_a_index = sample_references.values[reference + 2];
+	int sample_b_index = sample_references.values[reference + 3];
+	sample_a = field_values.values[arena.input_a.x + sample_a_index];
+	sample_b = field_values.values[arena.input_a.x + sample_b_index];
+	material_a = field_meta.values[arena.input_a.y + sample_a_index].xy;
+	material_b = field_meta.values[arena.input_a.y + sample_b_index].xy;
+	return true;
+}
+
+bool resolve_surface_shift_edge(
+	ivec3 endpoint_a,
+	ivec3 endpoint_b,
+	float isovalue,
+	out ivec3 resolved_a,
+	out ivec3 resolved_b,
+	out vec4 sample_a,
+	out vec4 sample_b,
+	out ivec2 material_a,
+	out ivec2 material_b
+) {
+	bool found = false;
+	int page_count = config.values[arena.input_b.z].z;
+	for (int page_index = 0; page_index < page_count; ++page_index) {
+		int edge_index;
+		bool reversed;
+		if (!page_edge_index(
+				page_index, endpoint_a, endpoint_b, edge_index, reversed)) {
+			continue;
+		}
+		int unit_offset;
+		vec4 candidate_sample_a;
+		vec4 candidate_sample_b;
+		ivec2 candidate_material_a;
+		ivec2 candidate_material_b;
+		if (!page_surface_shift_record(
+				page_index,
+				edge_index,
+				isovalue,
+				unit_offset,
+				candidate_sample_a,
+				candidate_sample_b,
+				candidate_material_a,
+				candidate_material_b
+			)) {
+			return false;
+		}
+		ivec3 difference = endpoint_b - endpoint_a;
+		int axis = difference.x != 0 ? 0 : (difference.y != 0 ? 1 : 2);
+		ivec3 coarse_start = reversed ? endpoint_b : endpoint_a;
+		ivec3 candidate_a = coarse_start;
+		candidate_a[axis] += unit_offset;
+		ivec3 candidate_b = candidate_a;
+		candidate_b[axis] += 1;
+		if (reversed) {
+			ivec3 swapped_endpoint = candidate_a;
+			candidate_a = candidate_b;
+			candidate_b = swapped_endpoint;
+			vec4 swapped_sample = candidate_sample_a;
+			candidate_sample_a = candidate_sample_b;
+			candidate_sample_b = swapped_sample;
+			ivec2 swapped_material = candidate_material_a;
+			candidate_material_a = candidate_material_b;
+			candidate_material_b = swapped_material;
+		}
+		if (found && (any(notEqual(resolved_a, candidate_a)) ||
+				any(notEqual(resolved_b, candidate_b)) ||
+				any(notEqual(sample_a, candidate_sample_a)) ||
+				any(notEqual(sample_b, candidate_sample_b)) ||
+				any(notEqual(material_a, candidate_material_a)) ||
+				any(notEqual(material_b, candidate_material_b)))) {
+			return false;
+		}
+		resolved_a = candidate_a;
+		resolved_b = candidate_b;
+		sample_a = candidate_sample_a;
+		sample_b = candidate_sample_b;
+		material_a = candidate_material_a;
+		material_b = candidate_material_b;
+		found = true;
+	}
+	return found &&
+		((sample_a.x < isovalue) != (sample_b.x < isovalue));
+}
+
+bool resolve_material_volume_edge(
+	ivec3 endpoint_a,
+	ivec3 endpoint_b,
+	float isovalue,
+	int surface_mode,
+	out ivec3 resolved_a,
+	out ivec3 resolved_b,
+	out vec4 sample_a,
+	out vec4 sample_b,
+	out ivec2 material_a,
+	out ivec2 material_b
+) {
+	ivec3 difference = endpoint_b - endpoint_a;
+	int edge_length = abs(difference.x) + abs(difference.y) +
+		abs(difference.z);
+	if (edge_length <= 0 ||
+			!page_cell_sample(
+				endpoint_a, edge_length, surface_mode, sample_a, material_a
+			) ||
+			!page_cell_sample(
+				endpoint_b, edge_length, surface_mode, sample_b, material_b
+			)) {
+		return false;
+	}
+	resolved_a = endpoint_a;
+	resolved_b = endpoint_b;
+	return (sample_a.x < isovalue) != (sample_b.x < isovalue);
+}
+
 int transition_face_for_cell(int transition_index, int transition_mask, out int face_cell) {
 	int remaining = transition_index;
 	for (int face = 0; face < 6; ++face) {
@@ -337,7 +704,8 @@ void main() {
 	int local_vertex_base = cell_index * MAX_VERTICES;
 	int local_index_base = cell_index * MAX_INDICES;
 	int vertex_base = arena.output_a.x + local_vertex_base;
-	int index_base = arena.output_a.y + local_index_base;
+	int index_base = (compact_surface ? arena.compact_output.w : arena.output_a.y) +
+		local_index_base;
 	int cell_meta_index = arena.output_a.z + cell_index;
 	int draw_index = arena.output_b.x + (compact_surface ? 0 : cell_index);
 	if (!compact_surface) {
@@ -345,24 +713,37 @@ void main() {
 			0u, 0u, uint(local_index_base), local_vertex_base, 0u
 		);
 	}
-	for (int index = 0; index < MAX_VERTICES; ++index) {
-		output_positions.values[vertex_base + index] = vec4(0.0);
-		output_normals.values[vertex_base + index] = vec4(0.0);
-		output_vertex_meta.values[vertex_base + index] = ivec4(0);
-		output_reuse.values[vertex_base + index] = ivec4(0, cell_index, index, 1);
-	}
 	if (!compact_surface) {
+		for (int index = 0; index < MAX_VERTICES; ++index) {
+			store_legacy_position(vertex_base + index, vec4(0.0));
+			store_legacy_normal(vertex_base + index, vec4(0.0));
+			store_legacy_vertex_meta(vertex_base + index, ivec4(0));
+			store_legacy_reuse(
+				vertex_base + index,
+				ivec4(0, cell_index, index, 1)
+			);
+		}
 		for (int index = 0; index < MAX_INDICES; ++index) {
 			output_indices.values[index_base + index] = -1;
 		}
 	}
-	if (cell_index == 0) {
-		output_identity.values[arena.output_a.w] = config.values[config_base + 1];
-		output_identity.values[arena.output_a.w + 1] = config.values[config_base + 2];
-		output_identity.values[arena.output_a.w + 2] = config.values[config_base + 3];
+	if (!compact_surface && cell_index == 0) {
+		store_legacy_identity(
+			arena.output_a.w,
+			config.values[config_base + 1]
+		);
+		store_legacy_identity(
+			arena.output_a.w + 1,
+			config.values[config_base + 2]
+		);
+		store_legacy_identity(
+			arena.output_a.w + 2,
+			config.values[config_base + 3]
+		);
 	}
 
 	bool page_field_mode = config.values[config_base].w == 1;
+	int surface_mode = config.values[config_base + 3].z;
 	ivec4 header = ivec4(0, 0, 0, 8);
 	vec4 origin_and_spacing = vec4(0.0);
 	vec4 options = vec4(0.0, 0.0, 0.0, 0.0);
@@ -395,7 +776,14 @@ void main() {
 				cell_index - 4096, transition_mask, face_cell
 			);
 			if (face < 0 || coarse_spacing < 2) {
-				output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
+				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
+				return;
+			}
+			// Cached support can contain more faces than the current render
+			// variant. CPU authority appends only active transition buffers.
+			int active_transition_mask = config.values[config_base + 3].y;
+			if ((active_transition_mask & (1 << face)) == 0) {
+				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_EMPTY, 0, 0, 0));
 				return;
 			}
 			cell_type = CELL_TRANSITION;
@@ -430,13 +818,14 @@ void main() {
 		(cell_type == CELL_TRANSITION && input_sample_count != 9) ||
 		spacing <= 0.0 ||
 		(cell_type == CELL_TRANSITION && (transition_width <= 0.0 || orientation < 0 || orientation > 5))) {
-		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
+		store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
 		return;
 	}
 
 	vec4 samples[13];
 	ivec2 materials[13];
 	vec3 positions[13];
+	ivec3 endpoint_grid_points[13];
 	for (int index = 0; index < input_sample_count; ++index) {
 		if (page_field_mode) {
 			ivec3 sample_point;
@@ -454,13 +843,14 @@ void main() {
 			if (!page_cell_sample(
 					sample_point,
 					int(round(spacing)),
-					config.values[config_base + 3].z,
+					surface_mode,
 					samples[index],
 					materials[index]
 				)) {
-				output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
+				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
 				return;
 			}
+			endpoint_grid_points[index] = sample_point;
 		} else {
 			int source_index = sample_references.values[
 				arena.input_b.y + reference_offset + index
@@ -488,7 +878,7 @@ void main() {
 			}
 		}
 		if (case_code == 0 || case_code == 255) {
-			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_EMPTY, case_code, 0, 0));
 			return;
 		}
 		class_code = regular_cell_class.values[case_code];
@@ -514,15 +904,18 @@ void main() {
 			materials[topology_index] = materials[source_index];
 			positions[topology_index] = positions[source_index] + axis_w * transition_width;
 			if (page_field_mode) {
+				endpoint_grid_points[topology_index] = endpoint_grid_points[source_index];
+			}
+			if (page_field_mode) {
 				ivec3 sample_point = ivec3(round(positions[source_index]));
 				if (!page_cell_sample(
 						sample_point,
 						int(round(spacing * 2.0)),
-						config.values[config_base + 3].z,
+						surface_mode,
 						samples[topology_index],
 						materials[topology_index]
 					)) {
-					output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, 0, 0, 0);
+					store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
 					return;
 				}
 			}
@@ -534,14 +927,14 @@ void main() {
 			}
 		}
 		if (case_code == 0 || case_code == 511) {
-			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_EMPTY, case_code, 0, 0));
 			return;
 		}
 		class_code = transition_cell_class.values[case_code];
 		reverse_winding = (class_code & 0x80) != 0;
 		class_code &= 0x7f;
 		if (class_code >= 56) {
-			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
 			return;
 		}
 		class_data_offset = class_code * 37;
@@ -552,9 +945,12 @@ void main() {
 	int vertex_count = geometry_counts >> 4;
 	int source_index_count = (geometry_counts & 0x0f) * 3;
 	if (vertex_count > MAX_VERTICES || source_index_count > MAX_INDICES) {
-		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+		store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
 		return;
 	}
+	vec3 emitted_positions[MAX_VERTICES];
+	vec3 emitted_normals[MAX_VERTICES];
+	ivec2 emitted_materials[MAX_VERTICES];
 	for (int vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
 		int edge_code = cell_type == CELL_REGULAR
 			? regular_vertex_data.values[vertex_data_offset + vertex_index]
@@ -563,27 +959,115 @@ void main() {
 		int endpoint_b = edge_code & 0x0f;
 		int topology_count = cell_type == CELL_REGULAR ? 8 : 13;
 		if (endpoint_a >= topology_count || endpoint_b >= topology_count) {
-			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
 			return;
 		}
-		float alpha = regularized_alpha(samples[endpoint_a].x, samples[endpoint_b].x, isovalue);
+		vec4 sample_a = samples[endpoint_a];
+		vec4 sample_b = samples[endpoint_b];
+		ivec2 material_a = materials[endpoint_a];
+		ivec2 material_b = materials[endpoint_b];
+		vec3 position_a = positions[endpoint_a];
+		vec3 position_b = positions[endpoint_b];
+		if (page_field_mode) {
+			ivec3 grid_difference = endpoint_grid_points[endpoint_b] -
+				endpoint_grid_points[endpoint_a];
+			int edge_length = abs(grid_difference.x) + abs(grid_difference.y) +
+				abs(grid_difference.z);
+			if (edge_length > 1) {
+				ivec3 resolved_a;
+				ivec3 resolved_b;
+				bool resolved = surface_mode == 1 ?
+					resolve_material_volume_edge(
+						endpoint_grid_points[endpoint_a],
+						endpoint_grid_points[endpoint_b],
+						isovalue,
+						surface_mode,
+						resolved_a,
+						resolved_b,
+						sample_a,
+						sample_b,
+						material_a,
+						material_b
+					) :
+					resolve_surface_shift_edge(
+						endpoint_grid_points[endpoint_a],
+						endpoint_grid_points[endpoint_b],
+						isovalue,
+						resolved_a,
+						resolved_b,
+						sample_a,
+						sample_b,
+						material_a,
+						material_b
+					);
+				if (!resolved) {
+					store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
+					return;
+				}
+				vec3 endpoint_a_offset = position_a -
+					vec3(endpoint_grid_points[endpoint_a]);
+				vec3 endpoint_b_offset = position_b -
+					vec3(endpoint_grid_points[endpoint_b]);
+				position_a = vec3(resolved_a) + endpoint_a_offset;
+				position_b = vec3(resolved_b) + endpoint_b_offset;
+			}
+		}
+		// The CPU authority canonicalizes every shared edge before deduplication.
+		// Keep both GPU copies of an edge on the same arithmetic path even when
+		// Transvoxel table records name its endpoints in opposite orders.
+		if (position_precedes(position_b, position_a)) {
+			vec3 swapped_position = position_a;
+			position_a = position_b;
+			position_b = swapped_position;
+			vec4 swapped_sample = sample_a;
+			sample_a = sample_b;
+			sample_b = swapped_sample;
+			ivec2 swapped_material = material_a;
+			material_a = material_b;
+			material_b = swapped_material;
+		}
+		float alpha = regularized_alpha(sample_a.x, sample_b.x, isovalue);
 		if (alpha < 0.0) {
-			output_cell_meta.values[cell_meta_index] = ivec4(STATUS_FAILURE, case_code, 0, 0);
+			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
 			return;
 		}
-		vec3 position = mix(positions[endpoint_a], positions[endpoint_b], alpha);
-		vec3 normal = normalized_or_zero(mix(samples[endpoint_a].yzw, samples[endpoint_b].yzw, alpha));
-		int solid_endpoint = samples[endpoint_a].x < isovalue ? endpoint_a : endpoint_b;
+		vec3 position = mix(position_a, position_b, alpha);
+		vec3 normal = normalized_or_zero(mix(sample_a.yzw, sample_b.yzw, alpha));
+		ivec2 surface_material = sample_a.x < isovalue ? material_a : material_b;
+		if (page_field_mode) {
+			float coarse_cell_size = cell_type == CELL_TRANSITION ? spacing * 2.0 : spacing;
+			float extent = float(CHUNK_CELLS) * coarse_cell_size;
+			float width = coarse_cell_size * 0.25;
+			vec3 local_position = snap_position(position - vec3(chunk_origin));
+			local_position = deform_chunk_position(
+				local_position,
+				normal,
+				config.values[config_base + 3].y,
+				coarse_cell_size,
+				width,
+				extent,
+				cell_type == CELL_TRANSITION ? orientation : -1
+			);
+			position = vec3(chunk_origin) + snap_position(local_position);
+		}
 		int output_index = vertex_base + vertex_index;
-		output_positions.values[output_index] = vec4(position, 1.0);
-		output_normals.values[output_index] = vec4(normal, 0.0);
-		output_vertex_meta.values[output_index] = ivec4(
-			materials[solid_endpoint].x,
-			materials[solid_endpoint].y,
-			endpoint_a,
-			endpoint_b
-		);
-		output_reuse.values[output_index].x = (edge_code >> 8) & 0xff;
+		emitted_positions[vertex_index] = position;
+		emitted_normals[vertex_index] = normal;
+		emitted_materials[vertex_index] = surface_material;
+		if (!compact_surface) {
+			store_legacy_position(output_index, vec4(position, 1.0));
+			store_legacy_normal(output_index, vec4(normal, 0.0));
+			store_legacy_vertex_meta(
+				output_index,
+				ivec4(
+					surface_material.x,
+					surface_material.y,
+					endpoint_a,
+					endpoint_b
+				)
+			);
+			output_reuse.values[output_index * 4] = uint((edge_code >> 8) & 0xff);
+		}
 	}
 
 	int emitted_indices[MAX_INDICES];
@@ -603,9 +1087,9 @@ void main() {
 			first = third;
 			third = swap;
 		}
-		vec3 p0 = output_positions.values[vertex_base + first].xyz;
-		vec3 p1 = output_positions.values[vertex_base + second].xyz;
-		vec3 p2 = output_positions.values[vertex_base + third].xyz;
+		vec3 p0 = emitted_positions[first];
+		vec3 p1 = emitted_positions[second];
+		vec3 p2 = emitted_positions[third];
 		vec3 edge_a = p1 - p0;
 		vec3 edge_b = p2 - p0;
 		vec3 edge_c = p2 - p1;
@@ -619,21 +1103,49 @@ void main() {
 		output_index_count += 3;
 	}
 	if (output_index_count == 0) {
-		output_cell_meta.values[cell_meta_index] = ivec4(STATUS_EMPTY, case_code, 0, 0);
+		store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_EMPTY, case_code, 0, 0));
 		return;
 	}
-	output_cell_meta.values[cell_meta_index] = ivec4(
-		STATUS_OK, case_code, vertex_count, output_index_count
+	store_cell_meta(
+		compact_surface,
+		cell_meta_index,
+		ivec4(STATUS_OK, case_code, vertex_count, output_index_count)
 	);
 	if (compact_surface) {
-		uint compact_base = atomicAdd(
+		uint compact_vertex_base = atomicAdd(
+			output_draw_commands.values[draw_index].first_instance,
+			uint(vertex_count)
+		);
+		uint compact_index_base = atomicAdd(
 			output_draw_commands.values[draw_index].index_count,
 			uint(output_index_count)
 		);
+		for (int vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
+			int compact_vertex_index = int(compact_vertex_base) + vertex_index;
+			int packed_position_index = arena.compact_output.x +
+				compact_vertex_index * 3;
+			output_positions.values[packed_position_index] = floatBitsToUint(
+				emitted_positions[vertex_index].x
+			);
+			output_positions.values[packed_position_index + 1] = floatBitsToUint(
+				emitted_positions[vertex_index].y
+			);
+			output_positions.values[packed_position_index + 2] = floatBitsToUint(
+				emitted_positions[vertex_index].z
+			);
+			output_normals.values[
+				arena.compact_output.y + compact_vertex_index
+			] = packSnorm2x16(octahedral_normal(emitted_normals[vertex_index]));
+			ivec2 material = emitted_materials[vertex_index];
+			output_vertex_meta.values[
+				arena.compact_output.z + compact_vertex_index
+			] = (uint(material.x) & 0xffffu) |
+				((uint(material.y) & 0xffffu) << 16);
+		}
 		for (int index = 0; index < output_index_count; ++index) {
 			output_indices.values[
-				arena.output_a.y + int(compact_base) + index
-			] = local_vertex_base + emitted_indices[index];
+				arena.compact_output.w + int(compact_index_base) + index
+			] = int(compact_vertex_base) + emitted_indices[index];
 		}
 	} else {
 		for (int index = 0; index < output_index_count; ++index) {

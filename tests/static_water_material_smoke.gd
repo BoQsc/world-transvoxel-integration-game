@@ -4,6 +4,10 @@ const MARKER := "WT_STATIC_WATER_MATERIAL_PASS"
 const WATER_SHADER := preload(
 	"res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader"
 )
+const GPU_WATER_SHADER_PATH := (
+	"res://addons/world_transvoxel_terrain/gpu/"
+	+ "wt_terrain_gpu_global_render_water.glsl"
+)
 
 
 func _initialize() -> void:
@@ -25,6 +29,16 @@ func _initialize() -> void:
 		return
 	if "FRONT_FACING" not in shader_code:
 		_fail("water must distinguish exterior and interior boundary shading")
+		return
+	var gpu_shader_code := FileAccess.get_file_as_string(GPU_WATER_SHADER_PATH)
+	if gpu_shader_code.is_empty():
+		_fail("generated GPU water shader is unavailable")
+		return
+	if "signed_facing < 0.0" not in gpu_shader_code:
+		_fail("GPU water must classify the logical boundary from authority normals")
+		return
+	if "gl_FrontFacing" in gpu_shader_code:
+		_fail("raw GPU table winding is not a logical water-boundary authority")
 		return
 	print("%s exterior=front interior=exit composition=single_shell" % MARKER)
 	quit(0)

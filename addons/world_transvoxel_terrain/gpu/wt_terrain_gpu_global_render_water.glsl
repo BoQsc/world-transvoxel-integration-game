@@ -21,12 +21,14 @@ layout(set = 0, binding = 0, std140) uniform SceneDataBlock {
 	WtSceneDataMatrices data;
 } scene_data_block;
 
-layout(location = 0) in vec4 vertex_position;
-layout(location = 1) in vec4 vertex_normal;
+layout(location = 0) in vec3 vertex_position;
+layout(location = 1) in vec2 vertex_normal;
 
 layout(push_constant, std430) uniform Params {
 	ivec4 view;
 	ivec4 viewport;
+	vec4 quantization_min;
+	vec4 quantization_extent;
 } params;
 
 layout(location = 0) out vec3 world_normal;
@@ -44,8 +46,18 @@ void main() {
 	if (params.view.y > 1) {
 		projection = scene_data_block.data.projection_matrix_view[params.view.x];
 	}
-	vec3 view_position = (view_matrix * vec4(vertex_position.xyz, 1.0)).xyz;
-	world_normal = normalize(vertex_normal.xyz);
+	vec3 world_position = vertex_position;
+	vec3 view_position = (view_matrix * vec4(world_position, 1.0)).xyz;
+	vec2 octahedral = vertex_normal;
+	vec3 decoded_normal = vec3(
+		octahedral,
+		1.0 - abs(octahedral.x) - abs(octahedral.y)
+	);
+	if (decoded_normal.z < 0.0) {
+		decoded_normal.xy = (1.0 - abs(decoded_normal.yx)) *
+			sign(decoded_normal.xy);
+	}
+	world_normal = normalize(decoded_normal);
 	view_normal = normalize(mat3(view_matrix) * world_normal);
 	world_view_direction = normalize(
 		transpose(mat3(view_matrix)) * -view_position
@@ -64,6 +76,8 @@ layout(location = 0) out vec4 output_color;
 layout(push_constant, std430) uniform Params {
 	ivec4 view;
 	ivec4 viewport;
+	vec4 quantization_min;
+	vec4 quantization_extent;
 } params;
 
 layout(set = 1, binding = 0, std140) uniform ProductionWaterParams {
@@ -75,15 +89,16 @@ layout(set = 1, binding = 0, std140) uniform ProductionWaterParams {
 layout(set = 2, binding = 0) uniform sampler2D opaque_scene;
 
 void main() {
-	float facing = abs(dot(
+	float signed_facing = dot(
 		normalize(world_normal), normalize(world_view_direction)
-	));
+	);
+	float facing = abs(signed_facing);
 	float fresnel = pow(1.0 - facing, 5.0);
 	vec3 tint = mix(water_params.deep_color.rgb, water_params.edge_color.rgb, fresnel);
 	float tint_strength = mix(
 		water_params.response.x, water_params.response.y, fresnel
 	);
-	if (!gl_FrontFacing) {
+	if (signed_facing < 0.0) {
 		tint = water_params.deep_color.rgb;
 		tint_strength = max(tint_strength, 0.58);
 	}

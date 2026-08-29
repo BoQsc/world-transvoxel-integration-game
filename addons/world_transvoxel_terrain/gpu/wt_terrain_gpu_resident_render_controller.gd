@@ -11,6 +11,9 @@ const REQUIRED_BACKEND_METHODS := [
 	"pop_gpu_resident_render_request",
 	"validate_gpu_resident_render_request",
 	"get_gpu_resident_render_chunk_readiness",
+	"prepare_gpu_resident_render_chunk",
+	"get_gpu_resident_render_activation_cohort",
+	"activate_gpu_resident_render_cohort",
 	"reject_gpu_resident_render_request",
 	"set_gpu_resident_render_chunk_active",
 	"reconcile_gpu_resident_render_chunks",
@@ -46,29 +49,50 @@ const PRODUCTION_DEFAULT_ROAD_GRADES := [
 ]
 const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
-const RENDER_SUBMISSION_CAPACITY := 3
+const RENDER_SUBMISSION_CAPACITY := 16
+const ACTIVATION_COHORT_RETRY_CAPACITY := 8
 
 var _backend_terrain: Node
 var _world_environment: WorldEnvironment
+var _directional_light: DirectionalLight3D
 var _previous_compositor: Compositor
 var _compositor: Compositor
 var _effect
 var _groups: Dictionary = {}
 var _render_request_routes: Dictionary = {}
 var _entry_routes: Dictionary = {}
+var _prepared_group_routes: Dictionary = {}
+var _activation_cohorts: Dictionary = {}
+var _activation_retry_queue: Array[String] = []
+var _activation_retry_membership: Dictionary = {}
 var _running := false
 var _native_request_capacity := 16
 var _resident_capacity := 64
 var _next_publication_sequence := 1
+var _next_activation_cohort_id := 1
 var _last_error := ""
 var _submitted_surfaces := 0
 var _validated_surfaces := 0
 var _activated_chunks := 0
 var _retired_chunks := 0
 var _rejected_chunks := 0
+var _rejection_reasons: Dictionary = {}
+var _rejection_examples: Array = []
 var _superseded_chunks := 0
 var _recovery_count := 0
 var _application_wait_expirations := 0
+var _coverage_retained_reconciliation_deferrals := 0
+var _retirement_confirmation_deferrals := 0
+var _retirement_candidate_cancellations := 0
+var _stale_incomplete_groups_superseded := 0
+var _activation_cohorts_queued := 0
+var _activation_cohorts_committed := 0
+var _activation_cohort_retry_attempts := 0
+var _last_activation_cohort_wait: Dictionary = {}
+var _stale_activation_cohorts_retained := 0
+var _stale_activation_examples: Array = []
+var _unrouted_effect_events := 0
+var _unrouted_effect_event_examples: Array = []
 var _process_frame := 0
 var _production_material_signature := ""
 var _production_water_signature := ""
@@ -94,7 +118,7 @@ func start(
 			_last_error = "native terrain backend lacks %s" % method_name
 			return false
 	_native_request_capacity = clampi(native_request_capacity, 1, 16)
-	_resident_capacity = clampi(resident_capacity, 1, 256)
+	_resident_capacity = clampi(resident_capacity, 1, 4096)
 	_effect = GlobalRenderEffect.new()
 	if not _effect.configure_resident_capacity(_resident_capacity):
 		_last_error = str(_effect.get_status().get(
@@ -124,9 +148,16 @@ func start(
 		return false
 	_backend_terrain = backend_terrain
 	_world_environment = world_environment
+	_directional_light = _resolve_directional_light()
 	_groups.clear()
 	_render_request_routes.clear()
 	_entry_routes.clear()
+	_prepared_group_routes.clear()
+	_activation_cohorts.clear()
+	_activation_retry_queue.clear()
+	_activation_retry_membership.clear()
+	_unrouted_effect_events = 0
+	_unrouted_effect_event_examples.clear()
 	_running = true
 	_last_error = ""
 	set_process(true)
@@ -149,8 +180,13 @@ func stop() -> void:
 	_groups.clear()
 	_render_request_routes.clear()
 	_entry_routes.clear()
+	_prepared_group_routes.clear()
+	_activation_cohorts.clear()
+	_activation_retry_queue.clear()
+	_activation_retry_membership.clear()
 	_backend_terrain = null
 	_world_environment = null
+	_directional_light = null
 	_previous_compositor = null
 	_compositor = null
 	_effect = null
@@ -170,9 +206,25 @@ func get_status() -> Dictionary:
 	if _effect != null:
 		effect_status = _effect.get_status()
 	var active_groups := 0
+	var incomplete_groups := 0
+	var prepared_inactive_groups := 0
+	var activation_queued_groups := 0
+	var oldest_inactive_age_frames := 0
 	for group_value in _groups.values():
-		if bool(Dictionary(group_value).get("active", false)):
+		var group := Dictionary(group_value)
+		if bool(group.get("active", false)):
 			active_groups += 1
+		elif not bool(group.get("retiring", false)):
+			oldest_inactive_age_frames = maxi(
+				oldest_inactive_age_frames,
+				_process_frame - int(group.get("created_frame", _process_frame))
+			)
+			if bool(group.get("activation_queued", false)):
+				activation_queued_groups += 1
+			if _surface_set_complete(group, "prepared"):
+				prepared_inactive_groups += 1
+			else:
+				incomplete_groups += 1
 	return {
 		"schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
 		"running": _running,
@@ -181,14 +233,41 @@ func get_status() -> Dictionary:
 		"resident_capacity": _resident_capacity,
 		"tracked_chunks": _groups.size(),
 		"active_chunks": active_groups,
+		"incomplete_chunks": incomplete_groups,
+		"prepared_inactive_chunks": prepared_inactive_groups,
+		"activation_queued_chunks": activation_queued_groups,
+		"oldest_inactive_age_frames": oldest_inactive_age_frames,
+		"inactive_chunk_examples": _inactive_group_examples(8),
 		"submitted_surfaces": _submitted_surfaces,
 		"validated_surfaces": _validated_surfaces,
 		"activated_chunks": _activated_chunks,
 		"retired_chunks": _retired_chunks,
 		"rejected_chunks": _rejected_chunks,
+		"rejection_reasons": _rejection_reasons.duplicate(true),
+		"rejection_examples": _rejection_examples.duplicate(true),
 		"superseded_chunks": _superseded_chunks,
 		"recovery_count": _recovery_count,
 		"application_wait_expirations": _application_wait_expirations,
+		"coverage_retained_reconciliation_deferrals": (
+			_coverage_retained_reconciliation_deferrals
+		),
+		"retirement_confirmation_deferrals": _retirement_confirmation_deferrals,
+		"retirement_candidate_cancellations": _retirement_candidate_cancellations,
+		"stale_incomplete_groups_superseded": (
+			_stale_incomplete_groups_superseded
+		),
+		"activation_cohorts_queued": _activation_cohorts_queued,
+		"activation_cohorts_committed": _activation_cohorts_committed,
+		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
+		"pending_activation_retry_groups": _activation_retry_membership.size(),
+		"last_activation_cohort_wait": _last_activation_cohort_wait.duplicate(true),
+		"stale_activation_cohorts_retained": _stale_activation_cohorts_retained,
+		"stale_activation_examples": _stale_activation_examples.duplicate(true),
+		"unrouted_effect_events": _unrouted_effect_events,
+		"unrouted_effect_event_examples": (
+			_unrouted_effect_event_examples.duplicate(true)
+		),
+		"pending_activation_cohorts": _activation_cohorts.size(),
 		"last_error": _last_error,
 		"native_metrics": native_metrics,
 		"effect_status": effect_status,
@@ -202,7 +281,9 @@ func get_status() -> Dictionary:
 			"gpu_page_lattice_input", false
 		)),
 		"atomic_surface_set_activation": true,
-		"production_material_parity": false,
+		"production_material_parity": bool(effect_status.get(
+			"production_material_parity", false
+		)),
 		"production_terrain_material_payload_ready": bool(effect_status.get(
 			"production_terrain_material_payload_ready", false
 		)),
@@ -218,6 +299,11 @@ func get_status() -> Dictionary:
 		"production_terrain_bounded_pbr_response_parity": bool(effect_status.get(
 			"production_terrain_bounded_pbr_response_parity", false
 		)),
+		"production_terrain_directional_ambient_lighting_parity": bool(
+			effect_status.get(
+				"production_terrain_directional_ambient_lighting_parity", false
+			)
+		),
 		"production_terrain_normal_mapping_parity": bool(effect_status.get(
 			"production_terrain_normal_mapping_parity", false
 		)),
@@ -265,10 +351,26 @@ func _process(_delta: float) -> void:
 		return
 	_process_frame += 1
 	_sync_production_materials()
+	if not _running:
+		return
 	_drain_effect_events()
+	if not _running:
+		return
+	_supersede_stale_incomplete_groups()
+	if not _running:
+		return
 	_retry_prepared_groups()
-	_reconcile_active_chunks()
+	if not _running:
+		return
+	_drain_activation_cohort_retries()
+	if not _running:
+		return
 	_submit_native_captures()
+	if not _running:
+		return
+	_reconcile_active_chunks()
+	if not _running:
+		return
 	var effect_status: Dictionary = _effect.get_status()
 	if bool(effect_status.get("initialization_attempted", false)) \
 			and not bool(effect_status.get("initialized", false)) \
@@ -314,12 +416,18 @@ func _sync_production_water_material() -> void:
 		deep_color = Color(0.015, 0.14, 0.20, 1.0)
 	if not edge_color is Color:
 		edge_color = Color(0.08, 0.38, 0.46, 1.0)
+	var deep_linear: Color = deep_color.srgb_to_linear()
+	var edge_linear: Color = edge_color.srgb_to_linear()
 	var deep_tint = material.get_shader_parameter("deep_tint")
 	var edge_tint = material.get_shader_parameter("edge_tint")
 	var refraction_strength = material.get_shader_parameter("refraction_strength")
 	var values := PackedFloat32Array()
-	_append_vec4(values, Vector4(deep_color.r, deep_color.g, deep_color.b, 1.0))
-	_append_vec4(values, Vector4(edge_color.r, edge_color.g, edge_color.b, 1.0))
+	_append_vec4(values, Vector4(
+		deep_linear.r, deep_linear.g, deep_linear.b, 1.0
+	))
+	_append_vec4(values, Vector4(
+		edge_linear.r, edge_linear.g, edge_linear.b, 1.0
+	))
 	_append_vec4(values, Vector4(
 		float(deep_tint) if deep_tint is float else 0.34,
 		float(edge_tint) if edge_tint is float else 0.52,
@@ -411,6 +519,30 @@ func _production_material_config(material: ShaderMaterial) -> Dictionary:
 		var grade: Vector2 = grade_value \
 			if grade_value is Vector2 else PRODUCTION_DEFAULT_ROAD_GRADES[index]
 		_append_vec4(values, Vector4(grade.x, grade.y, 0.0, 0.0))
+	var lighting := _production_scene_lighting()
+	var ambient_color: Color = lighting.get("ambient_color", Color.BLACK)
+	var directional_color: Color = lighting.get("directional_color", Color.BLACK)
+	var directional_direction: Vector3 = lighting.get(
+		"directional_direction", Vector3.UP
+	)
+	_append_vec4(values, Vector4(
+		ambient_color.r,
+		ambient_color.g,
+		ambient_color.b,
+		float(lighting.get("ambient_energy", 0.0))
+	))
+	_append_vec4(values, Vector4(
+		directional_color.r,
+		directional_color.g,
+		directional_color.b,
+		float(lighting.get("directional_energy", 0.0))
+	))
+	_append_vec4(values, Vector4(
+		directional_direction.x,
+		directional_direction.y,
+		directional_direction.z,
+		1.0 if bool(lighting.get("supported", false)) else 0.0
+	))
 	var parameter_bytes := values.to_byte_array()
 	var signature_parts := [str(material.get_instance_id()), parameter_bytes.hex_encode()]
 	for texture in resources:
@@ -420,8 +552,76 @@ func _production_material_config(material: ShaderMaterial) -> Dictionary:
 		"parameter_bytes": parameter_bytes,
 		"texture_rids": texture_rids,
 		"resources": resources,
+		"scene_lighting_supported": bool(lighting.get("supported", false)),
 		"signature": ":".join(signature_parts),
 	}
+
+
+func _production_scene_lighting() -> Dictionary:
+	var result := {
+		"ambient_color": Color.BLACK,
+		"ambient_energy": 0.0,
+		"directional_color": Color.BLACK,
+		"directional_energy": 0.0,
+		"directional_direction": Vector3.UP,
+		"supported": false,
+	}
+	if _world_environment == null or not is_instance_valid(_world_environment):
+		return result
+	var environment := _world_environment.environment
+	if environment == null \
+			or environment.ambient_light_source != Environment.AMBIENT_SOURCE_COLOR \
+			or environment.fog_enabled:
+		return result
+	var ambient_linear := environment.ambient_light_color.srgb_to_linear()
+	result["ambient_color"] = ambient_linear
+	result["ambient_energy"] = environment.ambient_light_energy
+	var active_directional_lights: Array[DirectionalLight3D] = []
+	for candidate in get_tree().root.find_children(
+		"*", "DirectionalLight3D", true, false
+	):
+		var light := candidate as DirectionalLight3D
+		if light == null or light.get_viewport() != get_viewport() \
+				or not light.is_visible_in_tree() or light.light_energy <= 0.0:
+			continue
+		if light.light_negative or light.shadow_enabled:
+			return result
+		active_directional_lights.append(light)
+	if active_directional_lights.size() > 1:
+		return result
+	for light_type in ["OmniLight3D", "SpotLight3D"]:
+		for candidate in get_tree().root.find_children("*", light_type, true, false):
+			var local_light := candidate as Light3D
+			if local_light != null and local_light.get_viewport() == get_viewport() \
+					and local_light.is_visible_in_tree() \
+					and local_light.light_energy > 0.0:
+				return result
+	result["supported"] = true
+	if active_directional_lights.is_empty():
+		return result
+	_directional_light = active_directional_lights[0]
+	var directional_linear := _directional_light.light_color.srgb_to_linear()
+	result["directional_color"] = directional_linear
+	result["directional_energy"] = _directional_light.light_energy
+	result["directional_direction"] = \
+		_directional_light.global_transform.basis.z.normalized()
+	return result
+
+
+func _resolve_directional_light() -> DirectionalLight3D:
+	if get_tree() == null:
+		return null
+	var selected: DirectionalLight3D
+	for candidate in get_tree().root.find_children(
+		"*", "DirectionalLight3D", true, false
+	):
+		var light := candidate as DirectionalLight3D
+		if light == null or light.get_viewport() != get_viewport() \
+				or not light.is_visible_in_tree() or light.light_negative:
+			continue
+		if selected == null or light.light_energy > selected.light_energy:
+			selected = light
+	return selected
 
 
 static func _append_vec4(values: PackedFloat32Array, value: Vector4) -> void:
@@ -462,7 +662,8 @@ func _submit_native_captures() -> void:
 			sequence,
 			false,
 			request.get("bounds_min", Vector3.ZERO),
-			request.get("bounds_max", Vector3.ZERO)
+			request.get("bounds_max", Vector3.ZERO),
+			bool(request.get("proven_empty", false))
 		))
 		if render_request_id <= 0:
 			_reject_native_request(request, str(_effect.get_status().get(
@@ -474,6 +675,8 @@ func _submit_native_captures() -> void:
 		requests[surface] = {
 			"request_id": int(request.get("request_id", 0)),
 			"identity": identity.duplicate(true),
+			"bounds_min": request.get("bounds_min", Vector3.ZERO),
+			"bounds_max": request.get("bounds_max", Vector3.ZERO),
 		}
 		sequences[surface] = sequence
 		group["requests"] = requests
@@ -492,19 +695,63 @@ func _drain_effect_events() -> void:
 			return
 		var route := _route_for_event(event)
 		if route.is_empty():
+			_unrouted_effect_events += 1
+			if _unrouted_effect_event_examples.size() < 8:
+				_unrouted_effect_event_examples.append(event.duplicate(true))
 			continue
 		var group_key := str(route.get("group_key", ""))
 		if not _groups.has(group_key):
 			continue
 		match str(event.get("status", "")):
 			"PREPARED":
+				_record_surface_details(
+					group_key, str(route.get("surface", "")), event
+				)
 				_mark_surface(group_key, "prepared", str(route.get("surface", "")))
-				_try_validate_group(group_key)
+				if not bool(Dictionary(_groups.get(group_key, {})).get(
+					"retiring", false
+				)):
+					_try_validate_group(group_key)
 			"ACTIVE":
 				_mark_surface(group_key, "activated", str(route.get("surface", "")))
-				_try_activate_chunk(group_key)
+				if not bool(Dictionary(_groups.get(group_key, {})).get(
+					"retiring", false
+				)):
+					_try_finish_activation_cohort(group_key)
+			"ACTIVATION_STAGED":
+				_mark_surface(
+					group_key, "activation_staged", str(route.get("surface", ""))
+				)
+				if not bool(Dictionary(_groups.get(group_key, {})).get(
+					"retiring", false
+				)):
+					_try_commit_activation_cohort(group_key)
 			"REJECTED":
-				_reject_group(group_key, str(event.get("error", "GPU entry rejected")))
+				var rejection_error := str(event.get(
+					"error", "GPU entry rejected"
+				))
+				if bool(Dictionary(_groups.get(group_key, {})).get(
+					"activation_queued", false
+				)):
+					var rejected_group := Dictionary(_groups[group_key])
+					var rejected_cohort_id := int(rejected_group.get(
+						"activation_cohort_id", 0
+					))
+					if rejected_cohort_id > 0 and _activation_cohorts.has(
+						rejected_cohort_id
+					) and bool(Dictionary(_activation_cohorts[
+						rejected_cohort_id
+					]).get("native_committed", false)):
+						_fail_closed(
+							"committed GPU activation failed: %s" % rejection_error
+						)
+						return
+					_reject_activation_cohort(group_key, rejection_error)
+					continue
+				if _is_stale_render_event(rejection_error):
+					_supersede_group(group_key)
+				else:
+					_reject_group(group_key, rejection_error)
 			"RETIRED", "SUPERSEDED":
 				_mark_surface(group_key, "retired", str(route.get("surface", "")))
 				_try_finish_retirement(group_key)
@@ -514,7 +761,9 @@ func _try_validate_group(group_key: String) -> void:
 	if not _groups.has(group_key):
 		return
 	var group: Dictionary = _groups[group_key]
-	if bool(group.get("validated", false)) or not _surface_set_complete(
+	if bool(group.get("retiring", false)) \
+			or bool(group.get("validated", false)) \
+			or not _surface_set_complete(
 		group, "prepared"
 	):
 		return
@@ -584,57 +833,422 @@ func _try_validate_group(group_key: String) -> void:
 		)))
 		return
 	group["validated"] = true
+	var preparation := Dictionary(_backend_terrain.call(
+		"prepare_gpu_resident_render_chunk", _group_identities(group)
+	))
+	var preparation_status := str(preparation.get("status", ""))
+	if preparation_status.begins_with("STALE"):
+		_groups[group_key] = group
+		_supersede_group(group_key)
+		return
+	if preparation_status != "PREPARED" \
+			or not bool(preparation.get("prepared", false)):
+		_groups[group_key] = group
+		_reject_group(group_key, str(preparation.get(
+			"error", "native resident preparation rejected the chunk"
+		)))
+		return
+	group["native_prepared"] = true
 	_groups[group_key] = group
-	var sequences: Dictionary = group.get("sequences", {})
-	var activation_entries: Array[Dictionary] = []
-	for surface in _required_surfaces(group):
-		var request: Dictionary = requests.get(surface, {})
-		activation_entries.append({
-			"identity": Dictionary(request.get("identity", {})),
-			"publication_sequence": int(sequences.get(surface, 0)),
-		})
-	if not _effect.activate_entries(activation_entries):
-		_reject_group(group_key, "global renderer rejected chunk activation set")
+	_prepared_group_routes[_activation_chunk_key(Dictionary(
+		terrain_request.get("identity", {})
+	))] = group_key
+	_try_queue_activation_cohort(group_key)
 
 
 func _retry_prepared_groups() -> void:
+	var group_keys := _groups.keys()
+	var queued_cohort_retries := 0
+	for group_key_value in group_keys:
+		var group_key := str(group_key_value)
+		if not _groups.has(group_key):
+			continue
+		var group: Dictionary = _groups[group_key]
+		if bool(group.get("retiring", false)):
+			continue
+		if not bool(group.get("validated", false)):
+			_try_validate_group(group_key)
+		if not _groups.has(group_key):
+			continue
+		group = Dictionary(_groups[group_key])
+		if queued_cohort_retries >= ACTIVATION_COHORT_RETRY_CAPACITY \
+				or bool(group.get("retiring", false)) \
+				or bool(group.get("active", false)) \
+				or bool(group.get("activation_queued", false)) \
+				or not bool(group.get("native_prepared", false)) \
+				or _activation_retry_membership.has(group_key):
+			continue
+		_queue_activation_cohort_retry(group_key)
+		queued_cohort_retries += 1
+
+
+func _supersede_stale_incomplete_groups() -> void:
 	var group_keys := _groups.keys()
 	for group_key_value in group_keys:
 		var group_key := str(group_key_value)
 		if not _groups.has(group_key):
 			continue
 		var group: Dictionary = _groups[group_key]
-		if not bool(group.get("validated", false)) \
-				and not bool(group.get("retiring", false)):
-			_try_validate_group(group_key)
+		if bool(group.get("active", false)) \
+				or bool(group.get("retiring", false)) \
+				or _surface_set_complete(group, "prepared") \
+				or _process_frame < int(group.get(
+					"next_incomplete_probe_frame", 0
+				)):
+			continue
+		var requests: Dictionary = group.get("requests", {})
+		if requests.is_empty():
+			continue
+		var request: Dictionary = requests.get("terrain", {})
+		if request.is_empty():
+			request = Dictionary(requests.values()[0])
+		var readiness := Dictionary(_backend_terrain.call(
+			"get_gpu_resident_render_chunk_readiness",
+			Dictionary(request.get("identity", {}))
+		))
+		var readiness_status := str(readiness.get("status", ""))
+		group["last_incomplete_status"] = readiness_status
+		group["next_incomplete_probe_frame"] = (
+			_process_frame + APPLICATION_WAIT_RETRY_FRAMES
+		)
+		_groups[group_key] = group
+		if readiness_status.begins_with("STALE"):
+			_stale_incomplete_groups_superseded += 1
+			_supersede_group(group_key)
 
 
-func _try_activate_chunk(group_key: String) -> void:
+func _try_queue_activation_cohort(group_key: String) -> void:
 	if not _groups.has(group_key):
 		return
 	var group: Dictionary = _groups[group_key]
-	if bool(group.get("active", false)) or not _surface_set_complete(
-		group, "activated"
-	):
+	if bool(group.get("retiring", false)) \
+			or bool(group.get("active", false)) \
+			or bool(group.get("activation_queued", false)) \
+			or not bool(group.get("native_prepared", false)):
 		return
-	var activation := Dictionary(_backend_terrain.call(
-		"set_gpu_resident_render_chunk_active", _group_identities(group), true
+	var terrain_identity := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {})).get("identity", {})
+	var cohort := Dictionary(_backend_terrain.call(
+		"get_gpu_resident_render_activation_cohort", terrain_identity
 	))
-	if str(activation.get("status", "")) != "ACTIVE" \
-			or not bool(activation.get("active", false)):
-		if str(activation.get("status", "")).begins_with("STALE"):
-			_supersede_group(group_key)
-			return
-		_reject_group(group_key, str(activation.get(
-			"error", "native chunk activation became stale"
+	var cohort_status := str(cohort.get("status", ""))
+	if cohort_status == "WAITING_COHORT":
+		_record_activation_cohort_wait(cohort)
+		_queue_activation_cohort_retry(group_key)
+		return
+	if cohort_status.begins_with("STALE"):
+		_supersede_group(group_key)
+		return
+	if cohort_status != "READY" or not bool(cohort.get("ready", false)):
+		_reject_group(group_key, str(cohort.get(
+			"error", "native activation cohort rejected prepared GPU geometry"
 		)))
 		return
-	group["active"] = true
-	_groups[group_key] = group
-	_activated_chunks += 1
+	var native_precommitted := false
+	if bool(cohort.get("regional", false)):
+		var regional_activation := Dictionary(_backend_terrain.call(
+			"activate_gpu_resident_render_cohort",
+			_prepared_inventory_pool(),
+			terrain_identity
+		))
+		var regional_status := str(regional_activation.get("status", ""))
+		if regional_status == "WAITING_COHORT":
+			_record_activation_cohort_wait(regional_activation)
+			_queue_activation_cohort_retry(group_key)
+			return
+		if regional_status.begins_with("STALE"):
+			_supersede_group(group_key)
+			return
+		if regional_status != "ACTIVE" \
+				or not bool(regional_activation.get("active", false)):
+			_fail_closed(str(regional_activation.get(
+				"error", "native regional activation transaction failed"
+			)))
+			return
+		cohort["chunks"] = Array(regional_activation.get(
+			"chunks", []
+		)).duplicate(true)
+		native_precommitted = true
+	var group_keys: Array[String] = []
+	var cohort_member_group_keys: Array[String] = []
+	var activation_entries: Array[Dictionary] = []
+	var inventories: Array = []
+	for member_value in Array(cohort.get("chunks", [])):
+		var member := Dictionary(member_value)
+		var member_group_key := str(_prepared_group_routes.get(
+			_activation_chunk_key(member), ""
+		))
+		if member_group_key.is_empty() or not _groups.has(member_group_key):
+			_queue_activation_cohort_retry(group_key)
+			return
+		var member_group := Dictionary(_groups[member_group_key])
+		cohort_member_group_keys.append(member_group_key)
+		var activation_required := bool(member.get("activation_required", true))
+		if bool(member_group.get("retiring", false)):
+			_queue_activation_cohort_retry(group_key)
+			return
+		if activation_required:
+			if bool(member_group.get("active", false)) \
+					or bool(member_group.get("activation_queued", false)) \
+					or not bool(member_group.get("native_prepared", false)):
+				_queue_activation_cohort_retry(group_key)
+				return
+			group_keys.append(member_group_key)
+		elif not bool(member_group.get("active", false)) \
+				or not bool(member_group.get("native_active", false)):
+			_queue_activation_cohort_retry(group_key)
+			return
+		var requests: Dictionary = member_group.get("requests", {})
+		var sequences: Dictionary = member_group.get("sequences", {})
+		var member_identities := _group_identities(member_group)
+		var routed_terrain_identity := Dictionary(requests.get(
+			"terrain", {}
+		)).get("identity", {})
+		if _activation_chunk_key(routed_terrain_identity) != \
+				_activation_chunk_key(member):
+			_fail_closed("GPU activation cohort route changed chunk identity")
+			return
+		inventories.append(member_identities)
+		if activation_required:
+			for surface in _required_surfaces(member_group):
+				var request := Dictionary(requests.get(surface, {}))
+				activation_entries.append({
+					"identity": Dictionary(request.get("identity", {})),
+					"publication_sequence": int(sequences.get(surface, 0)),
+				})
+	if inventories.is_empty():
+		_queue_activation_cohort_retry(group_key)
+		return
+	if group_keys.is_empty():
+		if not native_precommitted:
+			var retained_activation := Dictionary(_backend_terrain.call(
+				"activate_gpu_resident_render_cohort", inventories
+			))
+			if str(retained_activation.get("status", "")) != "ACTIVE" \
+					or not bool(retained_activation.get("active", false)):
+				_fail_closed(str(retained_activation.get(
+					"error", "retained GPU activation cohort commit failed"
+				)))
+				return
+		for member_group_key in cohort_member_group_keys:
+			_activation_retry_membership.erase(member_group_key)
+		_activation_cohorts_committed += 1
+		return
+	var cohort_id := _next_activation_cohort_id
+	_next_activation_cohort_id += 1
+	_activation_cohorts[cohort_id] = {
+		"group_keys": group_keys.duplicate(),
+		"inventories": inventories.duplicate(true),
+		"activation_entries": activation_entries.duplicate(true),
+		"selected_chunks": Array(cohort.get("chunks", [])).duplicate(true),
+		"native_committed": native_precommitted,
+		"regional": bool(cohort.get("regional", false)),
+	}
+	for member_group_key in cohort_member_group_keys:
+		_activation_retry_membership.erase(member_group_key)
+	for member_group_key in group_keys:
+		var member_group := Dictionary(_groups[member_group_key])
+		member_group["activation_queued"] = true
+		member_group["activation_cohort_id"] = cohort_id
+		if native_precommitted:
+			member_group["native_active"] = true
+		_groups[member_group_key] = member_group
+	_activation_cohorts_queued += 1
+	if native_precommitted:
+		if not _effect.activate_entries(activation_entries):
+			_fail_closed("global renderer rejected committed regional activation cohort")
+		return
+	# Every entry emitted PREPARED only after its compact resident buffers were
+	# created and validated on the render thread. Revalidating them through a
+	# second render-thread round trip allowed the native publication region to
+	# change between cohort selection and commit, starving moving LOD regions.
+	# Commit the freshly selected authority cohort synchronously, then ask the
+	# render thread to expose exactly those already-prepared entries.
+	_try_commit_activation_cohort(group_key)
+
+
+func _prepared_inventory_pool() -> Array:
+	var inventories: Array = []
+	for group_value in _groups.values():
+		var group := Dictionary(group_value)
+		if bool(group.get("retiring", false)) \
+				or (not bool(group.get("native_prepared", false)) \
+				and not bool(group.get("native_active", false))):
+			continue
+		var requests := Dictionary(group.get("requests", {}))
+		if not _surface_set_complete(group, "prepared") \
+				or requests.size() != _required_surfaces(group).size():
+			continue
+		inventories.append(_group_identities(group))
+	return inventories
+
+
+func _record_activation_cohort_wait(wait: Dictionary) -> void:
+	_last_activation_cohort_wait = wait.duplicate(true)
+	var member := Dictionary(wait.get("waiting_member", {}))
+	if member.is_empty():
+		return
+	var route_key := _activation_chunk_key(member)
+	var group_key := str(_prepared_group_routes.get(route_key, ""))
+	_last_activation_cohort_wait["waiting_member_route_key"] = route_key
+	_last_activation_cohort_wait["waiting_member_group_key"] = group_key
+	_last_activation_cohort_wait["waiting_member_group_present"] = (
+		not group_key.is_empty() and _groups.has(group_key)
+	)
+	if group_key.is_empty() or not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	_last_activation_cohort_wait["waiting_member_group"] = {
+		"active": bool(group.get("active", false)),
+		"retiring": bool(group.get("retiring", false)),
+		"validated": bool(group.get("validated", false)),
+		"native_prepared": bool(group.get("native_prepared", false)),
+		"native_active": bool(group.get("native_active", false)),
+		"activation_queued": bool(group.get("activation_queued", false)),
+		"activation_retry_queued": _activation_retry_membership.has(group_key),
+		"prepared_surfaces": Dictionary(group.get("prepared", {})).keys(),
+		"native_validated_surfaces": Dictionary(
+			group.get("native_validated", {})
+		).keys(),
+		"identities": _group_identities(group),
+	}
+
+
+func _queue_activation_cohort_retry(group_key: String) -> void:
+	if group_key.is_empty() or _activation_retry_membership.has(group_key):
+		return
+	_activation_retry_membership[group_key] = true
+	_activation_retry_queue.append(group_key)
+
+
+func _drain_activation_cohort_retries() -> void:
+	if _activation_retry_queue.is_empty():
+		return
+	var pending: Array[String] = _activation_retry_queue
+	_activation_retry_queue = []
+	var attempts := 0
+	for group_key in pending:
+		if not _activation_retry_membership.has(group_key):
+			continue
+		if attempts >= ACTIVATION_COHORT_RETRY_CAPACITY:
+			_activation_retry_queue.append(group_key)
+			continue
+		_activation_retry_membership.erase(group_key)
+		if not _groups.has(group_key):
+			continue
+		var group := Dictionary(_groups[group_key])
+		if bool(group.get("retiring", false)) \
+				or bool(group.get("active", false)) \
+				or bool(group.get("activation_queued", false)) \
+				or not bool(group.get("native_prepared", false)):
+			continue
+		attempts += 1
+		_activation_cohort_retry_attempts += 1
+		_try_queue_activation_cohort(group_key)
+
+
+func _try_commit_activation_cohort(group_key: String) -> void:
+	if not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	var cohort_id := int(group.get("activation_cohort_id", 0))
+	if cohort_id <= 0 or not _activation_cohorts.has(cohort_id):
+		return
+	var cohort := Dictionary(_activation_cohorts[cohort_id])
+	if bool(cohort.get("native_committed", false)):
+		return
+	var group_keys: Array = cohort.get("group_keys", [])
+	for member_group_key_value in group_keys:
+		var member_group_key := str(member_group_key_value)
+		if not _groups.has(member_group_key):
+			_fail_closed("GPU activation cohort lost a prepared chunk")
+			return
+	var inventories: Array = cohort.get("inventories", [])
+	var activation := Dictionary(_backend_terrain.call(
+		"activate_gpu_resident_render_cohort", inventories
+	))
+	var activation_status := str(activation.get("status", ""))
+	if activation_status != "ACTIVE" or not bool(activation.get("active", false)):
+		if activation_status.begins_with("STALE"):
+			_stale_activation_cohorts_retained += 1
+			if _stale_activation_examples.size() < 8:
+				_stale_activation_examples.append({
+					"status": activation_status,
+					"error": str(activation.get("error", "")),
+					"activation": activation.duplicate(true),
+					"selected_chunks": Array(cohort.get(
+						"selected_chunks", []
+					)).duplicate(true),
+					"inventories": inventories.duplicate(true),
+				})
+			# Prepared entries remain invisible. Keep them resident and retry
+			# against the newly authoritative regional cohort.
+			_activation_cohorts.erase(cohort_id)
+			for member_group_key_value in group_keys:
+				var member_group_key := str(member_group_key_value)
+				if not _groups.has(member_group_key):
+					continue
+				var member_group := Dictionary(_groups[member_group_key])
+				member_group["activation_queued"] = false
+				member_group["activation_cohort_id"] = 0
+				member_group["activation_staged"] = {}
+				_groups[member_group_key] = member_group
+				_queue_activation_cohort_retry(member_group_key)
+			return
+		_fail_closed(str(activation.get(
+			"error", "native activation cohort commit failed"
+		)))
+		return
+	for member_group_key_value in group_keys:
+		var member_group_key := str(member_group_key_value)
+		var member_group := Dictionary(_groups[member_group_key])
+		member_group["native_active"] = true
+		_groups[member_group_key] = member_group
+	cohort["native_committed"] = true
+	_activation_cohorts[cohort_id] = cohort
+	if not _effect.activate_entries(Array(cohort.get("activation_entries", []))):
+		_fail_closed("global renderer rejected committed activation cohort")
+
+
+func _try_finish_activation_cohort(group_key: String) -> void:
+	if not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	var cohort_id := int(group.get("activation_cohort_id", 0))
+	if cohort_id <= 0 or not _activation_cohorts.has(cohort_id):
+		return
+	var cohort := Dictionary(_activation_cohorts[cohort_id])
+	if not bool(cohort.get("native_committed", false)):
+		_fail_closed("GPU entries activated before native cohort commit")
+		return
+	var group_keys: Array = cohort.get("group_keys", [])
+	for member_group_key_value in group_keys:
+		var member_group_key := str(member_group_key_value)
+		if not _groups.has(member_group_key):
+			_fail_closed("GPU activation cohort lost a committed chunk")
+			return
+		if not _surface_set_complete(
+				Dictionary(_groups[member_group_key]), "activated"
+		):
+			return
+	for member_group_key_value in group_keys:
+		var member_group_key := str(member_group_key_value)
+		var member_group := Dictionary(_groups[member_group_key])
+		member_group["active"] = true
+		member_group["activation_queued"] = false
+		member_group["activation_cohort_id"] = 0
+		_groups[member_group_key] = member_group
+		_activated_chunks += 1
+	_activation_cohorts.erase(cohort_id)
+	_activation_cohorts_committed += 1
 
 
 func _reconcile_active_chunks() -> void:
+	if not _resident_replacement_batch_ready():
+		_coverage_retained_reconciliation_deferrals += 1
+		_clear_retirement_candidates()
+		return
 	var terrain_identities: Array = []
 	var group_by_identity: Dictionary = {}
 	for group_key in _groups:
@@ -654,11 +1268,164 @@ func _reconcile_active_chunks() -> void:
 	if str(reconciliation.get("status", "")) != "PASS":
 		_fail_closed("native resident reconciliation failed")
 		return
+	var retire_group_keys := {}
 	for identity_value in Array(reconciliation.get("retire", [])):
 		var identity := Dictionary(identity_value)
 		var group_key := str(group_by_identity.get(_group_key(identity), ""))
 		if not group_key.is_empty():
+			retire_group_keys[group_key] = true
+	for group_key_value in group_by_identity.values():
+		var group_key := str(group_key_value)
+		if not _groups.has(group_key):
+			continue
+		var group: Dictionary = _groups[group_key]
+		var candidate_frame := int(group.get("retirement_candidate_frame", -1))
+		if not retire_group_keys.has(group_key):
+			if candidate_frame >= 0:
+				group["retirement_candidate_frame"] = -1
+				_groups[group_key] = group
+				_retirement_candidate_cancellations += 1
+			continue
+		if candidate_frame >= 0 and candidate_frame < _process_frame:
 			_begin_group_retirement(group_key)
+			continue
+		group["retirement_candidate_frame"] = _process_frame
+		_groups[group_key] = group
+		_retirement_confirmation_deferrals += 1
+
+
+func _clear_retirement_candidates() -> void:
+	for group_key_value in _groups.keys():
+		var group_key := str(group_key_value)
+		var group: Dictionary = _groups[group_key]
+		if int(group.get("retirement_candidate_frame", -1)) < 0:
+			continue
+		group["retirement_candidate_frame"] = -1
+		_groups[group_key] = group
+		_retirement_candidate_cancellations += 1
+
+
+func _resident_replacement_batch_ready() -> bool:
+	for group_value in _groups.values():
+		var group := Dictionary(group_value)
+		if not bool(group.get("active", false)) \
+				and not bool(group.get("retiring", false)):
+			return false
+	var effect_status := Dictionary(_effect.get_status())
+	if int(effect_status.get("queued_request_count", 0)) != 0 \
+			or int(effect_status.get("inflight_extraction_count", 0)) != 0 \
+			or int(effect_status.get("event_count", 0)) != 0:
+		return false
+	var native_metrics := Dictionary(_backend_terrain.call(
+		"get_gpu_resident_render_metrics"
+	))
+	return not bool(native_metrics.get("coverage_staging_blocked", false)) \
+		and int(native_metrics.get("queued_requests", 0)) == 0 \
+		and int(native_metrics.get("in_flight_requests", 0)) == 0
+
+
+func debug_ray_coverage(
+	origin: Vector3, direction: Vector3, maximum_distance: float
+) -> Array:
+	var hits: Array = []
+	var unit_direction := direction.normalized()
+	if not origin.is_finite() or not unit_direction.is_finite() \
+			or unit_direction.is_zero_approx() or maximum_distance <= 0.0:
+		return hits
+	for group_key_value in _groups.keys():
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups[group_key])
+		var terrain_request := Dictionary(
+			Dictionary(group.get("requests", {})).get("terrain", {})
+		)
+		if terrain_request.is_empty():
+			continue
+		var distance := _ray_aabb_distance(
+			origin,
+			unit_direction,
+			terrain_request.get("bounds_min", Vector3.ZERO),
+			terrain_request.get("bounds_max", Vector3.ZERO),
+			maximum_distance
+		)
+		if distance < 0.0:
+			continue
+		var details := Dictionary(
+			Dictionary(group.get("surface_details", {})).get("terrain", {})
+		)
+		hits.append({
+			"distance": distance,
+			"identity": Dictionary(terrain_request.get("identity", {})).duplicate(true),
+			"bounds_min": terrain_request.get("bounds_min", Vector3.ZERO),
+			"bounds_max": terrain_request.get("bounds_max", Vector3.ZERO),
+			"active": bool(group.get("active", false)),
+			"retiring": bool(group.get("retiring", false)),
+			"empty": bool(details.get("empty", false)),
+			"vertex_count": int(details.get("vertex_count", 0)),
+			"index_count": int(details.get("index_count", 0)),
+			"failure_cell_count": int(details.get("failure_cell_count", 0)),
+		})
+	hits.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		return float(left.get("distance", INF)) < float(right.get("distance", INF))
+	)
+	return hits.slice(0, mini(16, hits.size()))
+
+
+func request_debug_ray_geometry(rays: Array) -> int:
+	if _effect == null or not _effect.has_method("request_debug_ray_geometry"):
+		return 0
+	return int(_effect.request_debug_ray_geometry(rays))
+
+
+func pop_debug_ray_geometry(request_id: int) -> Dictionary:
+	if _effect == null or not _effect.has_method("pop_debug_ray_geometry"):
+		return {}
+	return Dictionary(_effect.pop_debug_ray_geometry(request_id))
+
+
+func _record_surface_details(
+	group_key: String, surface: String, event: Dictionary
+) -> void:
+	if not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	var details := Dictionary(group.get("surface_details", {}))
+	details[surface] = {
+		"empty": bool(event.get("entry_empty", false)),
+		"vertex_count": int(event.get("entry_vertex_count", 0)),
+		"index_count": int(event.get("entry_index_count", 0)),
+		"failure_cell_count": int(event.get("entry_failure_cell_count", 0)),
+	}
+	group["surface_details"] = details
+	_groups[group_key] = group
+
+
+static func _ray_aabb_distance(
+	origin: Vector3,
+	direction: Vector3,
+	minimum: Vector3,
+	maximum: Vector3,
+	maximum_distance: float
+) -> float:
+	var near_distance := 0.0
+	var far_distance := maximum_distance
+	for axis in range(3):
+		var axis_origin := origin[axis]
+		var axis_direction := direction[axis]
+		if absf(axis_direction) <= 0.000001:
+			if axis_origin < minimum[axis] or axis_origin > maximum[axis]:
+				return -1.0
+			continue
+		var first := (minimum[axis] - axis_origin) / axis_direction
+		var second := (maximum[axis] - axis_origin) / axis_direction
+		if first > second:
+			var swap := first
+			first = second
+			second = swap
+		near_distance = maxf(near_distance, first)
+		far_distance = minf(far_distance, second)
+		if near_distance > far_distance:
+			return -1.0
+	return near_distance if far_distance >= 0.0 else -1.0
 
 
 func _reject_group(group_key: String, error: String) -> void:
@@ -667,6 +1434,19 @@ func _reject_group(group_key: String, error: String) -> void:
 	_last_error = error
 	_rejected_chunks += 1
 	var group: Dictionary = _groups[group_key]
+	_rejection_reasons[error] = int(_rejection_reasons.get(error, 0)) + 1
+	if _rejection_examples.size() < 16:
+		var requests: Dictionary = group.get("requests", {})
+		var request: Dictionary = requests.get("terrain", {})
+		if request.is_empty() and not requests.is_empty():
+			request = Dictionary(requests.values()[0])
+		_rejection_examples.append({
+			"error": error,
+			"identity": Dictionary(request.get("identity", {})).duplicate(true),
+			"prepared_surfaces": Dictionary(group.get("prepared", {})).duplicate(true),
+			"validated_surfaces": Dictionary(group.get("native_validated", {})).duplicate(true),
+			"activated_surfaces": Dictionary(group.get("activated", {})).duplicate(true),
+		})
 	if not bool(group.get("validated", false)):
 		var native_validated: Dictionary = group.get("native_validated", {})
 		for surface in Dictionary(group.get("requests", {})):
@@ -678,8 +1458,15 @@ func _reject_group(group_key: String, error: String) -> void:
 	_begin_group_retirement(group_key)
 
 
+static func _is_stale_render_event(error: String) -> bool:
+	return error.contains("became stale")
+
+
 func _supersede_group(group_key: String) -> void:
 	if not _groups.has(group_key):
+		return
+	if bool(Dictionary(_groups[group_key]).get("activation_queued", false)):
+		_supersede_activation_cohort(group_key)
 		return
 	_superseded_chunks += 1
 	var group: Dictionary = _groups[group_key]
@@ -694,6 +1481,38 @@ func _supersede_group(group_key: String) -> void:
 			Dictionary(request.get("identity", {}))
 		)
 	_begin_group_retirement(group_key)
+
+
+func _reject_activation_cohort(group_key: String, error: String) -> void:
+	var group := Dictionary(_groups.get(group_key, {}))
+	var cohort_id := int(group.get("activation_cohort_id", 0))
+	var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+	_activation_cohorts.erase(cohort_id)
+	for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
+		var member_group_key := str(member_group_key_value)
+		if not _groups.has(member_group_key):
+			continue
+		var member_group := Dictionary(_groups[member_group_key])
+		member_group["activation_queued"] = false
+		member_group["activation_cohort_id"] = 0
+		_groups[member_group_key] = member_group
+		_reject_group(member_group_key, error)
+
+
+func _supersede_activation_cohort(group_key: String) -> void:
+	var group := Dictionary(_groups.get(group_key, {}))
+	var cohort_id := int(group.get("activation_cohort_id", 0))
+	var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+	_activation_cohorts.erase(cohort_id)
+	for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
+		var member_group_key := str(member_group_key_value)
+		if not _groups.has(member_group_key):
+			continue
+		var member_group := Dictionary(_groups[member_group_key])
+		member_group["activation_queued"] = false
+		member_group["activation_cohort_id"] = 0
+		_groups[member_group_key] = member_group
+		_supersede_group(member_group_key)
 
 
 func _begin_group_retirement(group_key: String) -> void:
@@ -719,10 +1538,11 @@ func _try_finish_retirement(group_key: String) -> void:
 	var group: Dictionary = _groups[group_key]
 	if not _surface_set_complete(group, "retired", false):
 		return
-	if bool(group.get("active", false)):
+	if bool(group.get("native_active", false)):
 		_backend_terrain.call(
 			"set_gpu_resident_render_chunk_active", _group_identities(group), false
 		)
+		group["native_active"] = false
 		_retired_chunks += 1
 	_cleanup_group(group_key)
 
@@ -732,7 +1552,7 @@ func _restore_cpu_and_release_native_requests() -> void:
 		return
 	for group_value in _groups.values():
 		var group := Dictionary(group_value)
-		if bool(group.get("active", false)):
+		if bool(group.get("native_active", false)):
 			_backend_terrain.call(
 				"set_gpu_resident_render_chunk_active", _group_identities(group), false
 			)
@@ -748,6 +1568,7 @@ func _restore_cpu_and_release_native_requests() -> void:
 func _fail_closed(error: String) -> void:
 	_last_error = error
 	_recovery_count += 1
+	push_error("WT_GPU_RESIDENT_FAIL_CLOSED: %s" % error)
 	stop()
 
 
@@ -765,7 +1586,16 @@ func _reject_native_request(request: Dictionary, error: String) -> void:
 func _cleanup_group(group_key: String) -> void:
 	if not _groups.has(group_key):
 		return
+	_activation_retry_membership.erase(group_key)
 	var group: Dictionary = _groups[group_key]
+	var terrain_request := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {}))
+	if not terrain_request.is_empty():
+		var terrain_identity := Dictionary(terrain_request.get("identity", {}))
+		var activation_key := _activation_chunk_key(terrain_identity)
+		if str(_prepared_group_routes.get(activation_key, "")) == group_key:
+			_prepared_group_routes.erase(activation_key)
 	for request_value in Dictionary(group.get("requests", {})).values():
 		var request := Dictionary(request_value)
 		var identity: Dictionary = request.get("identity", {})
@@ -821,20 +1651,71 @@ func _group_identities(group: Dictionary) -> Array:
 	return identities
 
 
-static func _new_group(identity: Dictionary) -> Dictionary:
+func _inactive_group_examples(limit: int) -> Array:
+	var examples: Array = []
+	for group_key_value in _groups.keys():
+		if examples.size() >= limit:
+			break
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups[group_key])
+		if bool(group.get("active", false)) or bool(group.get("retiring", false)):
+			continue
+		var requests: Dictionary = group.get("requests", {})
+		var identities := {}
+		for surface_value in requests.keys():
+			var surface := str(surface_value)
+			identities[surface] = Dictionary(requests[surface]).get("identity", {})
+		examples.append({
+			"group_key": group_key,
+			"age_frames": _process_frame - int(group.get("created_frame", _process_frame)),
+			"water_expected": bool(group.get("water_expected", false)),
+			"request_surfaces": requests.keys(),
+			"prepared_surfaces": Dictionary(group.get("prepared", {})).keys(),
+			"native_validated_surfaces": Dictionary(
+				group.get("native_validated", {})
+			).keys(),
+			"validated": bool(group.get("validated", false)),
+			"native_prepared": bool(group.get("native_prepared", false)),
+			"native_active": bool(group.get("native_active", false)),
+			"activation_queued": bool(group.get("activation_queued", false)),
+			"activation_cohort_id": int(group.get("activation_cohort_id", 0)),
+			"activation_retry_queued": _activation_retry_membership.has(group_key),
+			"activation_staged_surfaces": Dictionary(
+				group.get("activation_staged", {})
+			).keys(),
+			"activated_surfaces": Dictionary(group.get("activated", {})).keys(),
+			"last_incomplete_status": str(group.get(
+				"last_incomplete_status", ""
+			)),
+			"identities": identities,
+		})
+	return examples
+
+
+func _new_group(identity: Dictionary) -> Dictionary:
 	return {
 		"water_expected": bool(identity.get("static_water_surface_expected", false)),
 		"requests": {},
 		"sequences": {},
 		"prepared": {},
+		"activation_staged": {},
 		"activated": {},
 		"retired": {},
 		"native_validated": {},
+		"surface_details": {},
 		"validated": false,
+		"native_prepared": false,
+		"native_active": false,
 		"active": false,
+		"activation_queued": false,
+		"activation_cohort_id": 0,
 		"retiring": false,
+		"retirement_candidate_frame": -1,
 		"application_wait_started_frame": -1,
 		"next_validation_frame": 0,
+		"created_frame": _process_frame,
+		"next_incomplete_probe_frame": 0,
+		"last_incomplete_status": "",
 	}
 
 
@@ -907,6 +1788,17 @@ static func _group_key(identity: Dictionary) -> String:
 		int(identity.get("generation", 0)),
 		int(identity.get("source_revision", 0)),
 		int(identity.get("world_revision", 0)),
+		int(identity.get("transition_mask", 0)),
+	]
+
+
+static func _activation_chunk_key(identity: Dictionary) -> String:
+	return "%d:%d:%d:%d:g%d:t%d" % [
+		int(identity.get("page_x", 0)),
+		int(identity.get("page_y", 0)),
+		int(identity.get("page_z", 0)),
+		int(identity.get("lod", 0)),
+		int(identity.get("generation", 0)),
 		int(identity.get("transition_mask", 0)),
 	]
 

@@ -20,12 +20,14 @@ layout(set = 0, binding = 0, std140) uniform SceneDataBlock {
 	WtSceneDataMatrices data;
 } scene_data_block;
 
-layout(location = 0) in vec4 vertex_position;
-layout(location = 1) in vec4 vertex_normal;
-layout(location = 2) in ivec4 vertex_meta;
+layout(location = 0) in vec3 vertex_position;
+layout(location = 1) in vec2 vertex_normal;
+layout(location = 2) in uvec2 vertex_meta;
 
 layout(push_constant, std430) uniform Params {
 	ivec4 view;
+	vec4 quantization_min;
+	vec4 quantization_extent;
 } params;
 
 layout(location = 0) out vec3 normal;
@@ -42,9 +44,19 @@ void main() {
 	if (params.view.y > 1) {
 		projection = scene_data_block.data.projection_matrix_view[params.view.x];
 	}
-	gl_Position = projection * view_matrix * vec4(vertex_position.xyz, 1.0);
-	normal = vertex_normal.xyz;
-	material_id = vertex_meta.x;
+	vec3 world_position = vertex_position;
+	vec2 octahedral = vertex_normal;
+	vec3 decoded_normal = vec3(
+		octahedral,
+		1.0 - abs(octahedral.x) - abs(octahedral.y)
+	);
+	if (decoded_normal.z < 0.0) {
+		decoded_normal.xy = (1.0 - abs(decoded_normal.yx)) *
+			sign(decoded_normal.xy);
+	}
+	gl_Position = projection * view_matrix * vec4(world_position, 1.0);
+	normal = normalize(decoded_normal);
+	material_id = int(vertex_meta.x);
 }
 
 #[fragment]

@@ -140,8 +140,9 @@ func _run() -> void:
 			or not bool(status.get("render_thread_owned", false)) \
 			or not bool(status.get("same_global_device_compute_raster", false)) \
 			or str(status.get("compositor_callback", "")) != "pre_transparent" \
-			or str(status.get("resource_architecture", "")) != "paged_shared_arena" \
-			or int(status.get("resident_buffer_count_per_entry", -1)) != 0 \
+			or str(status.get("resource_architecture", "")) \
+				!= "bounded_scratch_compact_residency" \
+			or int(status.get("resident_buffer_count_per_entry", -1)) != 5 \
 			or int(status.get("arena_binding_buffer_count_per_page", 0)) != 21 \
 			or int(status.get("arena_page_count", 0)) != 1 \
 			or int(status.get("arena_allocated_slot_count", 0)) != 4 \
@@ -149,7 +150,8 @@ func _run() -> void:
 			or int(status.get("arena_peak_active_slot_count", 0)) != 2 \
 			or int(status.get("arena_allocated_bytes", 0)) <= 0 \
 			or int(status.get("arena_slot_leases", 0)) != 2 \
-			or int(status.get("arena_slot_releases", 0)) != 1 \
+			or int(status.get("arena_slot_releases", 0)) < 2 \
+			or int(status.get("counter_readback_bytes", 0)) != 40 \
 			or not bool(status.get("gpu_written_indirect_commands", false)) \
 			or not bool(status.get("compacted_surface_indirect_commands", false)) \
 			or int(status.get("indirect_commands_per_surface", 0)) != 1 \

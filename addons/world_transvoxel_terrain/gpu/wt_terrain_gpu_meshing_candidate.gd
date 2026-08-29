@@ -425,7 +425,7 @@ func _dispatch_compute(cell_count: int) -> void:
 		compute_list, _persistent_uniform_set, 0
 	)
 	var zero_offsets := PackedInt32Array()
-	zero_offsets.resize(16)
+	zero_offsets.resize(28)
 	var push_bytes := zero_offsets.to_byte_array()
 	_rendering_device.compute_list_set_push_constant(
 		compute_list, push_bytes, push_bytes.size()

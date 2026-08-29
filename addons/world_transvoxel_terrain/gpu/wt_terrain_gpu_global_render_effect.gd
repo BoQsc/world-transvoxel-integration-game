@@ -24,7 +24,7 @@ const SCENE_COLOR_COPY_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_scene_color_copy.glsl"
 )
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
-const REQUEST_CAPACITY := 3
+const REQUEST_CAPACITY := 16
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
 const DRAW_COMMAND_STRIDE := 20
@@ -38,13 +38,17 @@ var _packer = MeshingCandidate.new()
 var _arena
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
+var _inflight_extractions: Dictionary = {}
 var _lifecycle_commands: Array[Dictionary] = []
 var _events: Array[Dictionary] = []
+var _debug_geometry_requests: Array[Dictionary] = []
+var _debug_geometry_results: Dictionary = {}
 var _latest_sequence_by_key: Dictionary = {}
 var _entries: Dictionary = {}
 var _active_sequence_by_key: Dictionary = {}
 var _framebuffers: Dictionary = {}
 var _next_request_id := 1
+var _next_debug_geometry_request_id := 1
 var _resident_capacity := DEFAULT_RESIDENT_CAPACITY
 var _compute_shader := RID()
 var _compute_pipeline := RID()
@@ -81,8 +85,8 @@ var _status := {
 	"render_thread_owned": true,
 	"same_global_device_compute_raster": true,
 	"compositor_callback": "pre_transparent",
-	"resource_architecture": "paged_shared_arena",
-	"resident_buffer_count_per_entry": 0,
+	"resource_architecture": "bounded_scratch_compact_residency",
+	"resident_buffer_count_per_entry": 5,
 	"arena_binding_buffer_count_per_page": 21,
 	"arena_page_slot_capacity": 4,
 	"arena_page_count": 0,
@@ -93,6 +97,10 @@ var _status := {
 	"arena_slot_leases": 0,
 	"arena_slot_reuses": 0,
 	"arena_slot_releases": 0,
+	"arena_scratch_in_flight": 0,
+	"arena_scratch_allocated_bytes": 0,
+	"arena_resident_allocated_bytes": 0,
+	"arena_counter_readback_bytes": 0,
 	"packing_requests": 0,
 	"packing_usec_total": 0,
 	"packing_usec_max": 0,
@@ -139,8 +147,14 @@ var _status := {
 	"active_entry_count": 0,
 	"active_terrain_lod_counts": {},
 	"active_static_water_lod_counts": {},
+	"active_empty_entry_count": 0,
+	"active_partial_entry_count": 0,
+	"active_empty_entry_examples": [],
+	"active_partial_entry_examples": [],
 	"event_count": 0,
 	"queued_request_count": 0,
+	"inflight_extraction_count": 0,
+	"counter_readback_bytes": 0,
 	"geometry_readback_bytes": 0,
 	"render_target_readback_bytes": 0,
 	"cpu_meshing_used": false,
@@ -155,6 +169,7 @@ var _status := {
 	"production_terrain_roughness_mapping_parity": false,
 	"production_terrain_accepted_normal_response_parity": false,
 	"production_terrain_bounded_pbr_response_parity": false,
+	"production_terrain_directional_ambient_lighting_parity": false,
 	"production_terrain_normal_mapping_parity": false,
 	"production_terrain_pbr_lighting_parity": false,
 	"production_terrain_material_parity": false,
@@ -186,8 +201,8 @@ func configure_production_terrain_material(config: Dictionary) -> bool:
 	var texture_rids: Array = config.get("texture_rids", [])
 	var resources: Array = config.get("resources", [])
 	if not parameter_bytes is PackedByteArray \
-			or PackedByteArray(parameter_bytes).size() != 23 * 16:
-		_record_rejection("production material parameter block must be 368 bytes")
+			or PackedByteArray(parameter_bytes).size() != 26 * 16:
+		_record_rejection("production material parameter block must be 416 bytes")
 		return false
 	if texture_rids.size() != 5 or resources.size() != 5:
 		_record_rejection("production material texture inventory must contain five entries")
@@ -291,7 +306,8 @@ func submit_native_packed_input(
 	publication_sequence: int,
 	activate_immediately: bool = true,
 	bounds_min: Vector3 = Vector3.ZERO,
-	bounds_max: Vector3 = Vector3.ZERO
+	bounds_max: Vector3 = Vector3.ZERO,
+	proven_empty: bool = false
 ) -> int:
 	var identity_error := _validate_identity(identity, publication_sequence)
 	if not identity_error.is_empty():
@@ -325,7 +341,8 @@ func submit_native_packed_input(
 		publication_sequence,
 		activate_immediately,
 		bounds_min,
-		bounds_max
+		bounds_max,
+		proven_empty
 	)
 
 
@@ -336,7 +353,8 @@ func _queue_packed_request(
 	publication_sequence: int,
 	activate_immediately: bool,
 	bounds_min: Vector3,
-	bounds_max: Vector3
+	bounds_max: Vector3,
+	proven_empty: bool = false
 ) -> int:
 	var key := _identity_key(identity)
 	_mutex.lock()
@@ -359,6 +377,7 @@ func _queue_packed_request(
 		"cell_count": cell_count,
 		"bounds_min": bounds_min,
 		"bounds_max": bounds_max,
+		"proven_empty": proven_empty,
 		"input_buffers": input_buffers.duplicate(),
 	})
 	_status["requested"] = int(_status["requested"]) + 1
@@ -375,7 +394,7 @@ func configure_resident_capacity(capacity: int) -> bool:
 		_status["last_error"] = "resident capacity cannot change after use"
 		_mutex.unlock()
 		return false
-	_resident_capacity = clampi(capacity, 1, 256)
+	_resident_capacity = clampi(capacity, 1, 4096)
 	_status["resident_capacity"] = _resident_capacity
 	_status["resident_allocation_capacity"] = \
 		_resident_allocation_capacity()
@@ -387,9 +406,17 @@ func activate_entry(identity: Dictionary, publication_sequence: int) -> bool:
 	return _queue_lifecycle_command("ACTIVATE", identity, publication_sequence)
 
 
+func stage_activation_entries(entries: Array) -> bool:
+	return _queue_activation_group_command("STAGE_ACTIVATION_GROUP", entries)
+
+
 func activate_entries(entries: Array) -> bool:
+	return _queue_activation_group_command("ACTIVATE_GROUP", entries)
+
+
+func _queue_activation_group_command(action: String, entries: Array) -> bool:
 	if entries.is_empty():
-		_record_rejection("global render activation set is empty")
+		_record_rejection("global render activation group is empty")
 		return false
 	var retained_entries: Array[Dictionary] = []
 	for entry_value in entries:
@@ -410,10 +437,13 @@ func activate_entries(entries: Array) -> bool:
 		_mutex.unlock()
 		return false
 	_lifecycle_commands.append({
-		"action": "ACTIVATE_GROUP",
+		"action": action,
 		"entries": retained_entries,
 	})
 	_mutex.unlock()
+	RenderingServer.call_on_render_thread(
+		Callable(self, "_drain_lifecycle_commands_on_render_thread")
+	)
 	return true
 
 
@@ -432,11 +462,50 @@ func pop_event() -> Dictionary:
 	return event
 
 
+func request_debug_ray_geometry(rays: Array) -> int:
+	if rays.is_empty():
+		return 0
+	var retained: Array[Dictionary] = []
+	for ray_value in rays:
+		var ray := Dictionary(ray_value)
+		var origin: Vector3 = ray.get("origin", Vector3.ZERO)
+		var direction: Vector3 = ray.get("direction", Vector3.ZERO)
+		var maximum_distance := float(ray.get("max_distance", 0.0))
+		if not origin.is_finite() or not direction.is_finite() \
+				or direction.is_zero_approx() or maximum_distance <= 0.0:
+			return 0
+		retained.append({
+			"index": int(ray.get("index", retained.size())),
+			"origin": origin,
+			"direction": direction.normalized(),
+			"max_distance": maximum_distance,
+		})
+	_mutex.lock()
+	if _close_requested or _debug_geometry_requests.size() >= 4:
+		_mutex.unlock()
+		return 0
+	var request_id := _next_debug_geometry_request_id
+	_next_debug_geometry_request_id += 1
+	_debug_geometry_requests.append({"request_id": request_id, "rays": retained})
+	_mutex.unlock()
+	return request_id
+
+
+func pop_debug_ray_geometry(request_id: int) -> Dictionary:
+	_mutex.lock()
+	var result := Dictionary(_debug_geometry_results.get(request_id, {})).duplicate(true)
+	if not result.is_empty():
+		_debug_geometry_results.erase(request_id)
+	_mutex.unlock()
+	return result
+
+
 func get_status() -> Dictionary:
 	_mutex.lock()
 	var result := _status.duplicate(true)
 	result["close_requested"] = _close_requested
 	result["close_completed"] = _close_completed
+	result["pending_lifecycle_command_count"] = _lifecycle_commands.size()
 	_mutex.unlock()
 	return result
 
@@ -458,11 +527,20 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	if _rendering_device == null:
 		_rendering_device = RenderingServer.get_rendering_device()
 	if _rendering_device == null or not _ensure_shaders():
-		_record_render_error("global RenderingDevice shader initialization failed")
+		_mutex.lock()
+		var have_specific_error := not str(_status.get("last_error", "")).is_empty()
+		_mutex.unlock()
+		if not have_specific_error:
+			_record_render_error("global RenderingDevice shader initialization failed")
 		return
 	_apply_pending_production_material_on_render_thread()
 	_apply_pending_production_water_on_render_thread()
+	_drain_arena_readbacks_on_render_thread()
 	_drain_pending_on_render_thread()
+	# Failure probes are requested from the main thread after it reads the last
+	# completed frame. Inspect the still-published entries before applying the
+	# next lifecycle batch so the geometry result describes that captured frame.
+	_drain_debug_geometry_requests_on_render_thread()
 	_drain_lifecycle_commands_on_render_thread()
 	_draw_entries_on_render_thread(render_data)
 
@@ -503,6 +581,36 @@ func _ensure_shaders() -> bool:
 			scene_color_copy_file.get_base_error() \
 				if scene_color_copy_file != null else "scene color copy missing",
 		])
+		return false
+	var shader_compile_error := _shader_file_compile_error(
+		compute_file, RenderingDevice.SHADER_STAGE_COMPUTE
+	)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			raster_file, RenderingDevice.SHADER_STAGE_VERTEX
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			raster_file, RenderingDevice.SHADER_STAGE_FRAGMENT
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			production_raster_file, RenderingDevice.SHADER_STAGE_VERTEX
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			production_raster_file, RenderingDevice.SHADER_STAGE_FRAGMENT
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			production_water_file, RenderingDevice.SHADER_STAGE_VERTEX
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			production_water_file, RenderingDevice.SHADER_STAGE_FRAGMENT
+		)
+	if not shader_compile_error.is_empty():
+		_record_render_error(shader_compile_error)
 		return false
 	_compute_shader = _rendering_device.shader_create_from_spirv(
 		compute_file.get_spirv()
@@ -546,13 +654,13 @@ func _ensure_shaders() -> bool:
 		return false
 	var attributes: Array[RDVertexAttribute] = []
 	attributes.append(_vertex_attribute(
-		0, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+		0, RenderingDevice.DATA_FORMAT_R32G32B32_SFLOAT, 12
 	))
 	attributes.append(_vertex_attribute(
-		1, RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+		1, RenderingDevice.DATA_FORMAT_R16G16_SNORM, 4
 	))
 	attributes.append(_vertex_attribute(
-		2, RenderingDevice.DATA_FORMAT_R32G32B32A32_SINT
+		2, RenderingDevice.DATA_FORMAT_R16G16_UINT, 4
 	))
 	_vertex_format = _rendering_device.vertex_format_create(attributes)
 	if _vertex_format >= 0:
@@ -562,7 +670,7 @@ func _ensure_shaders() -> bool:
 			_compute_shader,
 			_compute_pipeline,
 			_vertex_format,
-			_resident_allocation_capacity()
+			REQUEST_CAPACITY
 		):
 			_record_render_error(_arena.get_last_error())
 			_arena = null
@@ -571,6 +679,14 @@ func _ensure_shaders() -> bool:
 	_status["initialized"] = _vertex_format >= 0
 	_mutex.unlock()
 	return _vertex_format >= 0
+
+
+static func _shader_file_compile_error(
+	shader_file: RDShaderFile, stage: int
+) -> String:
+	if shader_file == null:
+		return "GPU shader resource is unavailable"
+	return str(shader_file.get_spirv().get_stage_compile_error(stage)).strip_edges()
 
 
 func _apply_pending_production_material_on_render_thread() -> void:
@@ -636,8 +752,17 @@ func _apply_pending_production_material_on_render_thread() -> void:
 	# NORMAL_MAP. Preserving geometric normals is therefore the exact response.
 	_status["production_terrain_accepted_normal_response_parity"] = \
 		_production_material_set.is_valid()
+	_status["production_terrain_normal_mapping_parity"] = \
+		_production_material_set.is_valid()
 	_status["production_terrain_bounded_pbr_response_parity"] = \
 		_production_material_set.is_valid()
+	_status["production_terrain_directional_ambient_lighting_parity"] = bool(
+		_production_material_set.is_valid() \
+		and config.get("scene_lighting_supported", false)
+	)
+	_status["production_terrain_pbr_lighting_parity"] = bool(
+		_status["production_terrain_bounded_pbr_response_parity"]
+	) and bool(_status["production_terrain_directional_ambient_lighting_parity"])
 	_status["production_terrain_material_parity"] = bool(
 		_status["production_terrain_albedo_mapping_parity"]
 	) and bool(_status["production_terrain_normal_mapping_parity"]) \
@@ -700,6 +825,40 @@ func _apply_pending_production_water_on_render_thread() -> void:
 	_mutex.unlock()
 
 
+func _drain_arena_readbacks_on_render_thread() -> void:
+	if _arena == null:
+		return
+	for completion in _arena.pop_completed_readbacks():
+		var ticket := int(completion.get("ticket", 0))
+		if not _inflight_extractions.has(ticket):
+			_arena.discard_readback(ticket)
+			continue
+		var request: Dictionary = _inflight_extractions[ticket]
+		_inflight_extractions.erase(ticket)
+		var key := str(request.get("key", ""))
+		var sequence := int(request.get("publication_sequence", 0))
+		_mutex.lock()
+		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+		_status["inflight_extraction_count"] = _inflight_extractions.size()
+		_mutex.unlock()
+		if sequence != latest_sequence:
+			_arena.discard_readback(ticket)
+			_reject_request_on_render_thread(
+				request, "request became stale during GPU extraction"
+			)
+			continue
+		var entry: Dictionary = _arena.finalize_readback(
+			ticket, completion.get("data", PackedByteArray())
+		)
+		_sync_arena_status_on_render_thread()
+		if entry.is_empty():
+			_reject_request_on_render_thread(
+				request, _arena.get_last_error()
+			)
+			continue
+		_finish_entry_on_render_thread(request, entry)
+
+
 func _drain_pending_on_render_thread() -> void:
 	var requests: Array[Dictionary] = []
 	_mutex.lock()
@@ -707,53 +866,113 @@ func _drain_pending_on_render_thread() -> void:
 	_pending.clear()
 	_status["queued_request_count"] = 0
 	_mutex.unlock()
+	var deferred: Array[Dictionary] = []
 	for request in requests:
 		var key := str(request.get("key", ""))
 		var sequence := int(request.get("publication_sequence", 0))
-		var token := _entry_token(key, sequence)
 		_mutex.lock()
 		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
 		_mutex.unlock()
 		if sequence != latest_sequence:
-			_reject_request_on_render_thread(request, "request became stale before allocation")
+			_reject_request_on_render_thread(
+				request, "request became stale before GPU extraction"
+			)
 			continue
 		if _entries.size() >= _resident_allocation_capacity():
 			_mutex.lock()
 			_status["resident_capacity_rejections"] = \
 				int(_status["resident_capacity_rejections"]) + 1
 			_mutex.unlock()
-			_reject_request_on_render_thread(request, "resident allocation capacity reached")
+			_reject_request_on_render_thread(
+				request, "resident entry capacity reached"
+			)
 			continue
-		var entry := _create_entry_on_render_thread(request)
-		if entry.is_empty():
-			_reject_request_on_render_thread(request, str(_status.get(
-				"last_error", "resident entry creation failed"
-			)))
+		if bool(request.get("proven_empty", false)):
+			var empty_entry: Dictionary = _arena.create_proven_empty(
+				int(request.get("cell_count", 0))
+			)
+			_sync_arena_status_on_render_thread()
+			if empty_entry.is_empty():
+				_reject_request_on_render_thread(request, _arena.get_last_error())
+				continue
+			_finish_entry_on_render_thread(request, empty_entry)
 			continue
+		if _inflight_extractions.size() >= REQUEST_CAPACITY:
+			deferred.append(request)
+			continue
+		var extraction: Dictionary = _arena.lease_and_dispatch(
+			Array(request.get("input_buffers", [])),
+			int(request.get("cell_count", 0)),
+			request.get("bounds_min", Vector3.ZERO),
+			request.get("bounds_max", Vector3.ZERO)
+		)
+		_sync_arena_status_on_render_thread()
+		if extraction.is_empty():
+			if _arena.get_last_error() == "resident arena scratch capacity is busy":
+				deferred.append(request)
+				continue
+			_reject_request_on_render_thread(request, _arena.get_last_error())
+			continue
+		var ticket := int(extraction.get("arena_ticket", 0))
+		if ticket <= 0:
+			_reject_request_on_render_thread(
+				request, "resident arena did not return an extraction ticket"
+			)
+			continue
+		_inflight_extractions[ticket] = request
+	if not deferred.is_empty():
 		_mutex.lock()
-		latest_sequence = int(_latest_sequence_by_key.get(key, 0))
+		_pending.append_array(deferred)
+		_status["queued_request_count"] = _pending.size()
 		_mutex.unlock()
-		if sequence != latest_sequence:
-			_free_entry_on_render_thread(entry)
-			_reject_request_on_render_thread(request, "request became stale before residency")
-			continue
-		var activate_immediately := bool(request.get("activate_immediately", true))
-		entry["active"] = activate_immediately
-		_entries[token] = entry
-		if activate_immediately:
-			_activate_entry_on_render_thread(key, token, request)
-		else:
-			_push_event_on_render_thread("PREPARED", request)
-		_mutex.lock()
-		_status["applied"] = int(_status["applied"]) + 1
-		_status["prepared_entries"] = int(_status["prepared_entries"]) + 1
-		_status["resident_entry_count"] = _entries.size()
-		_status["active_entry_count"] = _active_sequence_by_key.size()
-		_status["last_applied_identity"] = Dictionary(
-			request.get("identity", {})
-		).duplicate(true)
-		_status["last_error"] = ""
-		_mutex.unlock()
+	_mutex.lock()
+	_status["inflight_extraction_count"] = _inflight_extractions.size()
+	_mutex.unlock()
+
+
+func _finish_entry_on_render_thread(
+	request: Dictionary, entry: Dictionary
+) -> void:
+	var key := str(request.get("key", ""))
+	var sequence := int(request.get("publication_sequence", 0))
+	var token := _entry_token(key, sequence)
+	_mutex.lock()
+	var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+	_mutex.unlock()
+	if sequence != latest_sequence:
+		_free_entry_on_render_thread(entry)
+		_reject_request_on_render_thread(
+			request, "request became stale before compact residency"
+		)
+		return
+	entry["publication_sequence"] = sequence
+	entry["identity"] = Dictionary(request.get("identity", {})).duplicate(true)
+	entry["bounds_min"] = request.get("bounds_min", Vector3.ZERO)
+	entry["bounds_max"] = request.get("bounds_max", Vector3.ZERO)
+	var activate_immediately := bool(request.get("activate_immediately", true))
+	entry["active"] = activate_immediately
+	_entries[token] = entry
+	if activate_immediately:
+		_activate_entry_on_render_thread(key, token, request)
+	else:
+		var prepared_source := request.duplicate(true)
+		prepared_source["entry_empty"] = bool(entry.get("empty", false))
+		prepared_source["entry_vertex_count"] = int(entry.get("vertex_count", 0))
+		prepared_source["entry_index_count"] = int(entry.get("index_count", 0))
+		prepared_source["entry_failure_cell_count"] = int(entry.get(
+			"failure_cell_count", 0
+		))
+		_push_event_on_render_thread("PREPARED", prepared_source)
+	_mutex.lock()
+	_status["applied"] = int(_status["applied"]) + 1
+	_status["prepared_entries"] = int(_status["prepared_entries"]) + 1
+	_status["resident_entry_count"] = _entries.size()
+	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_status["last_applied_identity"] = Dictionary(
+		request.get("identity", {})
+	).duplicate(true)
+	_status["last_error"] = ""
+	_mutex.unlock()
 
 
 func _drain_lifecycle_commands_on_render_thread() -> void:
@@ -764,6 +983,9 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 	_mutex.unlock()
 	for command in commands:
 		var action := str(command.get("action", ""))
+		if action == "STAGE_ACTIVATION_GROUP":
+			_stage_activation_group_on_render_thread(command)
+			continue
 		if action == "ACTIVATE_GROUP":
 			_activate_group_on_render_thread(command)
 			continue
@@ -789,6 +1011,35 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 			_activate_entry_on_render_thread(key, token, command)
 		elif action == "RETIRE":
 			_retire_entry_on_render_thread(key, token, command)
+
+
+func _stage_activation_group_on_render_thread(command: Dictionary) -> void:
+	for source_value in Array(command.get("entries", [])):
+		var source := Dictionary(source_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var key := _identity_key(identity)
+		var sequence := int(source.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		_mutex.lock()
+		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+		_mutex.unlock()
+		if not _entries.has(token) or sequence != latest_sequence:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"prepared activation set became stale before staging"
+			)
+			return
+		var entry: Dictionary = _entries[token]
+		if Dictionary(entry.get("identity", {})) != identity:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"staged activation identity differs from prepared entry"
+			)
+			return
+	for source_value in Array(command.get("entries", [])):
+		_push_event_on_render_thread(
+			"ACTIVATION_STAGED", Dictionary(source_value)
+		)
 
 
 func _activate_group_on_render_thread(command: Dictionary) -> void:
@@ -879,18 +1130,39 @@ func _retire_entry_on_render_thread(
 func _sync_active_lod_inventory_locked() -> void:
 	var terrain_counts := {}
 	var water_counts := {}
+	var empty_count := 0
+	var partial_count := 0
+	var empty_examples: Array = []
+	var partial_examples: Array = []
 	for key_value in _active_sequence_by_key.keys():
 		var key := str(key_value)
 		var token := _entry_token(key, int(_active_sequence_by_key[key]))
 		if not _entries.has(token):
 			continue
 		var identity := Dictionary(Dictionary(_entries[token]).get("identity", {}))
+		var entry: Dictionary = _entries[token]
+		if bool(entry.get("empty", false)):
+			empty_count += 1
+			if empty_examples.size() < 32:
+				empty_examples.append(identity.duplicate(true))
+		if int(entry.get("failure_cell_count", 0)) > 0:
+			partial_count += 1
+			if partial_examples.size() < 32:
+				var example := identity.duplicate(true)
+				example["failure_cell_count"] = int(
+					entry.get("failure_cell_count", 0)
+				)
+				partial_examples.append(example)
 		var lod := str(int(identity.get("lod", 0)))
 		var counts := water_counts \
 			if str(identity.get("surface", "")) == "static_water" else terrain_counts
 		counts[lod] = int(counts.get(lod, 0)) + 1
 	_status["active_terrain_lod_counts"] = terrain_counts
 	_status["active_static_water_lod_counts"] = water_counts
+	_status["active_empty_entry_count"] = empty_count
+	_status["active_partial_entry_count"] = partial_count
+	_status["active_empty_entry_examples"] = empty_examples
+	_status["active_partial_entry_examples"] = partial_examples
 
 
 func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
@@ -899,7 +1171,12 @@ func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
 	if input_buffers.size() != 13 or cell_count <= 0 or _arena == null:
 		_record_render_error("global render request buffer inventory changed")
 		return {}
-	var entry: Dictionary = _arena.lease_and_dispatch(input_buffers, cell_count)
+	var entry: Dictionary = _arena.lease_and_dispatch(
+		input_buffers,
+		cell_count,
+		request.get("bounds_min", Vector3.ZERO),
+		request.get("bounds_max", Vector3.ZERO)
+	)
 	_sync_arena_status_on_render_thread()
 	if entry.is_empty():
 		_record_render_error(_arena.get_last_error())
@@ -909,6 +1186,92 @@ func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
 	entry["bounds_min"] = request.get("bounds_min", Vector3.ZERO)
 	entry["bounds_max"] = request.get("bounds_max", Vector3.ZERO)
 	return entry
+
+
+func _drain_debug_geometry_requests_on_render_thread() -> void:
+	var requests: Array[Dictionary] = []
+	_mutex.lock()
+	requests.assign(_debug_geometry_requests)
+	_debug_geometry_requests.clear()
+	_mutex.unlock()
+	for request in requests:
+		var ray_results: Array[Dictionary] = []
+		var total_readback_bytes := 0
+		for ray_value in Array(request.get("rays", [])):
+			var ray := Dictionary(ray_value)
+			var origin: Vector3 = ray.get("origin", Vector3.ZERO)
+			var direction: Vector3 = ray.get("direction", Vector3.ZERO)
+			var maximum_distance := float(ray.get("max_distance", 0.0))
+			var entry_results: Array[Dictionary] = []
+			for entry_value in _entries.values():
+				var entry := Dictionary(entry_value)
+				var identity := Dictionary(entry.get("identity", {}))
+				if not bool(entry.get("active", false)) \
+						or str(identity.get("surface", "terrain")) != "terrain" \
+						or bool(entry.get("empty", false)):
+					continue
+				var bounds_distance := _debug_ray_aabb_distance(
+					origin,
+					direction,
+					entry.get("bounds_min", Vector3.ZERO),
+					entry.get("bounds_max", Vector3.ZERO),
+					maximum_distance
+				)
+				if bounds_distance < 0.0:
+					continue
+				var probe := Dictionary(_arena.debug_ray_intersection(
+					entry, origin, direction, maximum_distance
+				))
+				total_readback_bytes += int(probe.get("geometry_readback_bytes", 0))
+				probe["bounds_distance"] = bounds_distance
+				probe["identity"] = identity.duplicate(true)
+				entry_results.append(probe)
+			entry_results.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+				return float(left.get("bounds_distance", INF)) < \
+					float(right.get("bounds_distance", INF))
+			)
+			ray_results.append({
+				"index": int(ray.get("index", -1)),
+				"entries": entry_results,
+			})
+		var result := {
+			"request_id": int(request.get("request_id", 0)),
+			"rays": ray_results,
+			"geometry_readback_bytes": total_readback_bytes,
+		}
+		_mutex.lock()
+		_status["geometry_readback_bytes"] = int(
+			_status.get("geometry_readback_bytes", 0)
+		) + total_readback_bytes
+		_debug_geometry_results[int(request.get("request_id", 0))] = result
+		_mutex.unlock()
+
+
+static func _debug_ray_aabb_distance(
+	origin: Vector3,
+	direction: Vector3,
+	minimum: Vector3,
+	maximum: Vector3,
+	maximum_distance: float
+) -> float:
+	var near_distance := 0.0
+	var far_distance := maximum_distance
+	for axis in range(3):
+		if absf(direction[axis]) <= 0.000001:
+			if origin[axis] < minimum[axis] or origin[axis] > maximum[axis]:
+				return -1.0
+			continue
+		var first := (minimum[axis] - origin[axis]) / direction[axis]
+		var second := (maximum[axis] - origin[axis]) / direction[axis]
+		if first > second:
+			var swap := first
+			first = second
+			second = swap
+		near_distance = maxf(near_distance, first)
+		far_distance = minf(far_distance, second)
+		if near_distance > far_distance:
+			return -1.0
+	return near_distance if far_distance >= 0.0 else -1.0
 
 
 func _draw_entries_on_render_thread(render_data: RenderData) -> void:
@@ -985,13 +1348,10 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		var production_entries: Array[Dictionary] = []
 		var diagnostic_entries: Array[Dictionary] = []
 		var water_entries: Array[Dictionary] = []
-		var push_bytes := PackedInt32Array([view, view_count, 0, 0]).to_byte_array()
-		var water_push_bytes := PackedInt32Array([
-			view, view_count, 0, 0, size.x, size.y, 0, 0,
-		]).to_byte_array()
 		for entry_value in _entries.values():
 			var entry: Dictionary = entry_value
-			if not bool(entry.get("active", false)):
+			if not bool(entry.get("active", false)) \
+					or bool(entry.get("empty", false)):
 				continue
 			visibility_tests += 1
 			var source_cell_count := int(entry.get("cell_count", 0))
@@ -1025,12 +1385,20 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				draw_list, _production_material_set, 1
 			)
 			for entry in production_entries:
-				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
+				_draw_entry_on_render_thread(
+					draw_list,
+					entry,
+					_entry_push_bytes(entry, view, view_count, size, false)
+				)
 		if not diagnostic_entries.is_empty():
 			_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
 			_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
 			for entry in diagnostic_entries:
-				_draw_entry_on_render_thread(draw_list, entry, push_bytes)
+				_draw_entry_on_render_thread(
+					draw_list,
+					entry,
+					_entry_push_bytes(entry, view, view_count, size, false)
+				)
 		_rendering_device.draw_list_end()
 		if not water_entries.is_empty():
 			var opaque_scene := _copy_scene_color_on_render_thread(
@@ -1064,7 +1432,11 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				water_draw_list, water_scene_texture_set, 2
 			)
 			for entry in water_entries:
-				_draw_entry_on_render_thread(water_draw_list, entry, water_push_bytes)
+				_draw_entry_on_render_thread(
+					water_draw_list,
+					entry,
+					_entry_push_bytes(entry, view, view_count, size, true)
+				)
 			_rendering_device.draw_list_end()
 			_mutex.lock()
 			_status["production_static_water_scene_copy_ready"] = true
@@ -1131,6 +1503,32 @@ func _draw_entry_on_render_thread(
 		int(entry.get("indirect_draw_count", 1)),
 		DRAW_COMMAND_STRIDE
 	)
+
+
+static func _entry_push_bytes(
+	entry: Dictionary,
+	view: int,
+	view_count: int,
+	viewport: Vector2i,
+	include_viewport: bool
+) -> PackedByteArray:
+	var bounds_min: Vector3 = entry.get("bounds_min", Vector3.ZERO)
+	var bounds_max: Vector3 = entry.get("bounds_max", Vector3.ONE)
+	var extent := bounds_max - bounds_min
+	var bounds_offset := 32 if include_viewport else 16
+	var bytes := PackedByteArray()
+	bytes.resize(bounds_offset + 32)
+	bytes.encode_s32(0, view)
+	bytes.encode_s32(4, view_count)
+	if include_viewport:
+		bytes.encode_s32(16, viewport.x)
+		bytes.encode_s32(20, viewport.y)
+	for component in range(3):
+		bytes.encode_float(bounds_offset + component * 4, bounds_min[component])
+		bytes.encode_float(
+			bounds_offset + 16 + component * 4, extent[component]
+		)
+	return bytes
 
 
 func _copy_scene_color_on_render_thread(
@@ -1201,6 +1599,9 @@ func _ensure_raster_pipeline(framebuffer_format: int) -> bool:
 		_rendering_device.free_rid(_raster_pipeline)
 		_raster_pipeline = RID()
 	var rasterization := RDPipelineRasterizationState.new()
+	# CPU authority normalizes connected triangle components after deformation.
+	# Keep every authoritative GPU triangle visible until that global pass has a
+	# GPU equivalent; local per-triangle flips can break shared-edge winding.
 	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_DISABLED
 	var depth_stencil := RDPipelineDepthStencilState.new()
 	depth_stencil.enable_depth_test = true
@@ -1232,8 +1633,7 @@ func _ensure_production_raster_pipeline(framebuffer_format: int) -> bool:
 		_rendering_device.free_rid(_production_raster_pipeline)
 		_production_raster_pipeline = RID()
 	var rasterization := RDPipelineRasterizationState.new()
-	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_BACK
-	rasterization.front_face = RenderingDevice.POLYGON_FRONT_FACE_COUNTER_CLOCKWISE
+	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_DISABLED
 	var depth_stencil := RDPipelineDepthStencilState.new()
 	depth_stencil.enable_depth_test = true
 	depth_stencil.enable_depth_write = true
@@ -1264,6 +1664,9 @@ func _ensure_production_water_pipeline(framebuffer_format: int) -> bool:
 		_rendering_device.free_rid(_production_water_pipeline)
 		_production_water_pipeline = RID()
 	var rasterization := RDPipelineRasterizationState.new()
+	# The CPU authority orients connected components to interpolated normals.
+	# GPU publication performs that facing decision in the fragment shader so
+	# inconsistent raw table winding cannot punch holes into the water surface.
 	rasterization.cull_mode = RenderingDevice.POLYGON_CULL_DISABLED
 	var depth_stencil := RDPipelineDepthStencilState.new()
 	depth_stencil.enable_depth_test = true
@@ -1305,6 +1708,7 @@ func _close_on_render_thread() -> void:
 	for entry in _entries.values():
 		_free_entry_on_render_thread(entry)
 	_entries.clear()
+	_inflight_extractions.clear()
 	_active_sequence_by_key.clear()
 	if _arena != null:
 		_arena.close()
@@ -1343,6 +1747,7 @@ func _close_on_render_thread() -> void:
 	_mutex.lock()
 	_status["resident_entry_count"] = 0
 	_status["active_entry_count"] = 0
+	_status["inflight_extraction_count"] = 0
 	_close_completed = true
 	_mutex.unlock()
 
@@ -1371,6 +1776,21 @@ func _sync_arena_status_on_render_thread() -> void:
 	_status["arena_slot_leases"] = int(arena_status.get("slot_leases", 0))
 	_status["arena_slot_reuses"] = int(arena_status.get("slot_reuses", 0))
 	_status["arena_slot_releases"] = int(arena_status.get("slot_releases", 0))
+	_status["arena_scratch_in_flight"] = int(
+		arena_status.get("scratch_in_flight", 0)
+	)
+	_status["arena_scratch_allocated_bytes"] = int(
+		arena_status.get("scratch_allocated_bytes", 0)
+	)
+	_status["arena_resident_allocated_bytes"] = int(
+		arena_status.get("resident_allocated_bytes", 0)
+	)
+	_status["arena_counter_readback_bytes"] = int(
+		arena_status.get("counter_readback_bytes", 0)
+	)
+	_status["counter_readback_bytes"] = int(
+		arena_status.get("counter_readback_bytes", 0)
+	)
 	_mutex.unlock()
 
 
@@ -1411,6 +1831,9 @@ func _queue_lifecycle_command(
 		"publication_sequence": publication_sequence,
 	})
 	_mutex.unlock()
+	RenderingServer.call_on_render_thread(
+		Callable(self, "_drain_lifecycle_commands_on_render_thread")
+	)
 	return true
 
 
@@ -1434,6 +1857,12 @@ func _push_event_on_render_thread(
 		"request_id": int(source.get("request_id", 0)),
 		"publication_sequence": int(source.get("publication_sequence", 0)),
 		"identity": Dictionary(source.get("identity", {})).duplicate(true),
+		"entry_empty": bool(source.get("entry_empty", false)),
+		"entry_vertex_count": int(source.get("entry_vertex_count", 0)),
+		"entry_index_count": int(source.get("entry_index_count", 0)),
+		"entry_failure_cell_count": int(source.get(
+			"entry_failure_cell_count", 0
+		)),
 		"error": error,
 	}
 	_mutex.lock()
@@ -1546,12 +1975,14 @@ static func _entry_visible_for_view(
 	return behind < 8 and left < 8 and right < 8 and below < 8 and above < 8
 
 
-static func _vertex_attribute(location: int, format: int) -> RDVertexAttribute:
+static func _vertex_attribute(
+	location: int, format: int, stride: int
+) -> RDVertexAttribute:
 	var attribute := RDVertexAttribute.new()
 	attribute.location = location
 	attribute.offset = 0
 	attribute.format = format
-	attribute.stride = 16
+	attribute.stride = stride
 	attribute.frequency = RenderingDevice.VERTEX_FREQUENCY_VERTEX
 	return attribute
 

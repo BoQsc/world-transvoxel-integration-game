@@ -99,8 +99,8 @@ func _run() -> void:
 			or active_chunks < 2 or active_chunks > 9 \
 			or int(effect_status.get("active_entry_count", -1)) != active_chunks \
 			or str(effect_status.get("resource_architecture", "")) \
-				!= "paged_shared_arena" \
-			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 0 \
+				!= "bounded_scratch_compact_residency" \
+			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 5 \
 			or int(effect_status.get("arena_active_slot_count", -1)) != active_chunks \
 			or int(effect_status.get("arena_page_count", 0)) > 3 \
 			or int(effect_status.get("arena_slot_reuses", 0)) < 2 \
@@ -122,6 +122,7 @@ func _run() -> void:
 			or int(native_metrics.get("reserved_capture_slots", -1)) != 0 \
 			or int(effect_status.get("resident_entry_count", 0)) > 15 \
 			or int(effect_status.get("geometry_readback_bytes", -1)) != 0 \
+			or int(effect_status.get("counter_readback_bytes", 0)) <= 0 \
 			or int(native_metrics.get("validation_rejections", -1)) != 0 \
 			or int(_world.get_runtime_metrics().get("collision_resources", 0)) < 1:
 		_fail("resident relocation contract failed: %s" % str(status))
@@ -231,12 +232,18 @@ func _wait_for_resident_state(minimum_activated: int, minimum_retired: int) -> b
 	for _frame in range(2400):
 		var status: Dictionary = _world.get_gpu_resident_render_status()
 		var effect_status: Dictionary = status.get("effect_status", {})
+		var native_metrics: Dictionary = status.get("native_metrics", {})
 		var active_chunks := int(status.get("active_chunks", 0))
 		var idle: Dictionary = _world.get_cold_idle_summary()
 		if int(status.get("activated_chunks", 0)) >= minimum_activated \
 				and int(status.get("retired_chunks", 0)) >= minimum_retired \
 				and active_chunks >= 2 \
 				and int(effect_status.get("active_entry_count", -1)) == active_chunks \
+				and int(effect_status.get("resident_entry_count", -1)) == active_chunks \
+				and int(effect_status.get("queued_request_count", -1)) == 0 \
+				and int(effect_status.get("inflight_extraction_count", -1)) == 0 \
+				and int(native_metrics.get("queued_requests", -1)) == 0 \
+				and int(native_metrics.get("in_flight_requests", -1)) == 0 \
 				and int(status.get("rejected_chunks", 0)) == 0 \
 				and bool(idle.get("cold_idle", false)):
 			return true

@@ -43,6 +43,26 @@ class MockTerrain:
 		return states.get(Vector4i(coordinate.x, coordinate.y, coordinate.z, lod))
 
 
+class MockRuntimeScene:
+	extends Node
+
+	var collision_updates: Array[Dictionary] = []
+
+	func update_runtime_collision_viewer(
+		viewer_id: int,
+		revision: int,
+		position: Vector3,
+		radius_chunks: int
+	) -> bool:
+		collision_updates.append({
+			"viewer_id": viewer_id,
+			"revision": revision,
+			"position": position,
+			"radius_chunks": radius_chunks,
+		})
+		return true
+
+
 func _initialize() -> void:
 	call_deferred("_run_test")
 
@@ -116,7 +136,33 @@ func _run_test() -> void:
 	if Array(negative_coverage.get("preserved_ancestor_lods", [])) != [1]:
 		_fail("negative-coordinate parent coverage used truncation: %s" % negative_coverage)
 		return
-	print("%s interior=1 boundary=%d transition_guard=pass" % [
+	var runtime_scene := MockRuntimeScene.new()
+	root.add_child(runtime_scene)
+	game_world.set("_reference_scene", runtime_scene)
+	if not bool(game_world.call(
+		"_submit_player_collision_invokers",
+		Vector3(8.0, 8.0, 8.0),
+		Vector3(40.0, 8.0, 8.0),
+		false
+	)) or runtime_scene.collision_updates.size() != 2:
+		_fail("anchored and predictive collision viewers were not both submitted")
+		return
+	var anchored: Dictionary = runtime_scene.collision_updates[0]
+	var predictive: Dictionary = runtime_scene.collision_updates[1]
+	if int(anchored.get("viewer_id", 0)) == int(predictive.get("viewer_id", 0)) or \
+			anchored.get("position") != Vector3(8.0, 8.0, 8.0) or \
+			predictive.get("position") != Vector3(40.0, 8.0, 8.0):
+		_fail("collision viewer roles were not spatially independent")
+		return
+	if not bool(game_world.call(
+		"_submit_player_collision_invokers",
+		Vector3(9.0, 8.0, 8.0),
+		Vector3(41.0, 8.0, 8.0),
+		false
+	)) or runtime_scene.collision_updates.size() != 2:
+		_fail("same-chunk collision viewer updates did not coalesce independently")
+		return
+	print("%s interior=1 boundary=%d transition_guard=pass dual_invokers=pass" % [
 		MARKER,
 		boundary.size(),
 	])

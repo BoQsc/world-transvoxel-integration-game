@@ -21,12 +21,14 @@ layout(set = 0, binding = 0, std140) uniform SceneDataBlock {
 	WtSceneDataMatrices data;
 } scene_data_block;
 
-layout(location = 0) in vec4 vertex_position;
-layout(location = 1) in vec4 vertex_normal;
-layout(location = 2) in ivec4 vertex_meta;
+layout(location = 0) in vec3 vertex_position;
+layout(location = 1) in vec2 vertex_normal;
+layout(location = 2) in uvec2 vertex_meta;
 
 layout(push_constant, std430) uniform Params {
 	ivec4 view;
+	vec4 quantization_min;
+	vec4 quantization_extent;
 } params;
 
 layout(location = 0) out vec3 world_position;
@@ -60,8 +62,17 @@ void main() {
 	if (params.view.y > 1) {
 		projection = scene_data_block.data.projection_matrix_view[params.view.x];
 	}
-	world_position = vertex_position.xyz;
-	world_normal = normalize(vertex_normal.xyz);
+	world_position = vertex_position;
+	vec2 octahedral = vertex_normal;
+	vec3 decoded_normal = vec3(
+		octahedral,
+		1.0 - abs(octahedral.x) - abs(octahedral.y)
+	);
+	if (decoded_normal.z < 0.0) {
+		decoded_normal.xy = (1.0 - abs(decoded_normal.yx)) *
+			sign(decoded_normal.xy);
+	}
+	world_normal = normalize(decoded_normal);
 	vec3 view_position = (view_matrix * vec4(world_position, 1.0)).xyz;
 	world_view_direction = normalize(
 		transpose(mat3(view_matrix)) * -view_position
@@ -71,11 +82,11 @@ void main() {
 	generated_material_weights_high = vec4(0.0);
 	authored_material_weights_low = vec4(0.0);
 	authored_material_weights_high = vec4(0.0);
-	int slot = material_weight_slot(vertex_meta.x);
+	int slot = material_weight_slot(int(vertex_meta.x));
 	if (slot < 0) {
 		return;
 	}
-	if (vertex_meta.y != 0) {
+	if (vertex_meta.y != 0u) {
 		if (slot < 4) authored_material_weights_low[slot] = 1.0;
 		else authored_material_weights_high[slot - 4] = 1.0;
 	} else {
@@ -103,6 +114,9 @@ layout(set = 1, binding = 0, std140) uniform ProductionMaterialParams {
 	vec4 scalar_2;
 	vec4 world_size;
 	vec4 road_grades[18];
+	vec4 ambient_light;
+	vec4 directional_light;
+	vec4 directional_direction;
 } material_params;
 layout(set = 1, binding = 1) uniform sampler2D checker_texture;
 layout(set = 1, binding = 2) uniform sampler2DArray terrain_albedo_array;
@@ -835,7 +849,7 @@ void main() {
 	vec3 albedo = clamp(material.albedo, vec3(0.0), vec3(1.0));
 	vec3 unit_normal = normalize(world_normal);
 	vec3 unit_view = normalize(world_view_direction);
-	vec3 unit_light = normalize(vec3(0.35, 0.70, 0.62));
+	vec3 unit_light = normalize(material_params.directional_direction.xyz);
 	vec3 half_direction = normalize(unit_light + unit_view);
 	float n_dot_l = max(dot(unit_normal, unit_light), 0.0);
 	float n_dot_v = max(dot(unit_normal, unit_view), 0.0);
@@ -845,6 +859,9 @@ void main() {
 	float light_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_l, 5.0);
 	float view_scatter = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_v, 5.0);
 	float diffuse_burley = n_dot_l * light_scatter * view_scatter;
-	vec3 bounded_light = vec3(0.20) + vec3(0.80) * diffuse_burley;
-	output_color = vec4(albedo * bounded_light, 1.0);
+	vec3 ambient_response = material_params.ambient_light.rgb *
+		material_params.ambient_light.a;
+	vec3 directional_response = material_params.directional_light.rgb *
+		material_params.directional_light.a * diffuse_burley;
+	output_color = vec4(albedo * (ambient_response + directional_response), 1.0);
 }

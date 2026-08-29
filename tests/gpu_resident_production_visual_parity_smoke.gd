@@ -94,7 +94,7 @@ func _run() -> void:
 	var lod_audit: Dictionary = LodAudit.collect(_world)
 	var active_lod_entries := _sum_counts(terrain_lods)
 	if not bool(status.get("running", false)) \
-			or bool(status.get("production_terrain_material_parity", true)) \
+			or not bool(status.get("production_terrain_material_parity", false)) \
 			or not bool(status.get("production_terrain_material_payload_ready", false)) \
 			or not bool(status.get("production_terrain_albedo_mapping_parity", false)) \
 			or not bool(status.get("production_terrain_roughness_mapping_parity", false)) \
@@ -104,8 +104,11 @@ func _run() -> void:
 			or not bool(status.get(
 				"production_terrain_bounded_pbr_response_parity", false
 			)) \
-			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
-			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
+			or not bool(status.get(
+				"production_terrain_directional_ambient_lighting_parity", false
+			)) \
+			or not bool(status.get("production_terrain_normal_mapping_parity", false)) \
+			or not bool(status.get("production_terrain_pbr_lighting_parity", false)) \
 			or not bool(status.get("production_static_water_material_parity", false)) \
 			or not bool(status.get(
 				"production_static_water_material_payload_ready", false
@@ -115,7 +118,7 @@ func _run() -> void:
 			)) \
 			or not bool(status.get("production_static_water_refraction_parity", false)) \
 			or str(status.get("production_material_source", "")) != PRODUCTION_SHADER \
-			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
+			or int(status.get("production_material_parameter_bytes", 0)) != 416 \
 			or int(status.get("production_material_texture_count", 0)) != 5 \
 			or int(terrain_lods.get("0", 0)) < 1 \
 			or int(terrain_lods.get("1", 0)) < 1 \
@@ -153,7 +156,7 @@ func _run() -> void:
 		return
 	print((
 		"%s lod0=%d lod1=%d lod2=%d lod3_phase=%d active=%d overlap=0 " \
-		+ "terrain_albedo_mapping_parity=1 terrain_material_parity=0 " \
+		+ "terrain_albedo_mapping_parity=1 terrain_material_parity=1 " \
 		+ "roughness_mapping_parity=1 bounded_pbr_response_parity=1 " \
 		+ "water_fresnel_tint_parity=1 water_refraction_parity=1 " \
 		+ "water_material_parity=1 readback=0 " \
@@ -187,9 +190,18 @@ func _setup_viewport() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = BACKGROUND
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.72, 0.76, 0.80)
+	environment.ambient_light_energy = 0.55
 	_world_environment = WorldEnvironment.new()
 	_world_environment.environment = environment
 	root.add_child(_world_environment)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
+	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.light_energy = 1.25
+	sun.shadow_enabled = false
+	root.add_child(sun)
 	_camera = Camera3D.new()
 	_camera.fov = 62.0
 	_camera.position = Vector3(112.0, 82.0, 170.0)

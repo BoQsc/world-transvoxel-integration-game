@@ -61,7 +61,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export_range(1, 64, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export var runtime_gpu_resident_render_candidate_enabled: bool = false
 @export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
-@export_range(1, 256, 1) var runtime_gpu_resident_chunk_capacity: int = 64
+@export_range(1, 4096, 1) var runtime_gpu_resident_chunk_capacity: int = 64
 
 var _profile_id: StringName = &""
 var _terrain_profile: Resource
@@ -79,10 +79,12 @@ var _player_viewer_id := 1
 var _player_predictive_viewer_id := 64
 var _player_focus_viewer_id := 65
 var _player_collision_viewer_id := 66
+var _player_predictive_collision_viewer_id := 67
 var _last_player_viewer_position := Vector3(INF, INF, INF)
 var _last_predictive_viewer_position := Vector3(INF, INF, INF)
 var _last_focus_viewer_position := Vector3(INF, INF, INF)
 var _last_collision_viewer_position := Vector3(INF, INF, INF)
+var _last_predictive_collision_viewer_position := Vector3(INF, INF, INF)
 var _last_collision_observation_position := Vector3(INF, INF, INF)
 var _pending_collision_motion := Vector3.ZERO
 var _pending_collision_motion_valid := false
@@ -90,6 +92,7 @@ var _accepted_player_viewer_updates := 0
 var _accepted_predictive_viewer_updates := 0
 var _accepted_focus_viewer_updates := 0
 var _accepted_collision_viewer_updates := 0
+var _accepted_predictive_collision_viewer_updates := 0
 var _foreground_support_revision := 0
 var _foreground_focus_revision := 0
 var _last_foreground_support_keys: Array = []
@@ -390,13 +393,56 @@ func wait_for_minimum_resources(render_count: int, collision_count: int) -> bool
 	var terrain_world := get_terrain_world()
 	if terrain_world == null:
 		return false
-	for _frame in range(startup_world_state_timeout_frames):
+	var timeout_frames := startup_world_state_timeout_frames * 2 \
+		if runtime_gpu_resident_render_candidate_enabled \
+		else startup_world_state_timeout_frames
+	for _frame in range(timeout_frames):
 		var summary: Dictionary = terrain_world.call("get_cold_idle_summary")
+		if runtime_gpu_resident_render_candidate_enabled:
+			summary.merge(Dictionary(terrain_world.call("get_runtime_metrics")), true)
+			summary.merge(_gpu_resident_settle_summary(terrain_world), true)
 		_last_cold_idle_summary = summary
+		var render_minimum_ready := int(summary.get(
+			"render_resources", -1
+		)) >= render_count
+		if bool(summary.get("gpu_resident_settle_enabled", false)):
+			var active_gpu_chunks := int(summary.get(
+				"gpu_resident_active_chunks", 0
+			))
+			var active_gpu_entries := int(summary.get(
+				"gpu_resident_active_entries", 0
+			))
+			var tracked_gpu_chunks := int(summary.get(
+				"gpu_resident_tracked_chunks", 0
+			))
+			render_minimum_ready = bool(summary.get(
+				"gpu_resident_running", false
+			)) and active_gpu_chunks > 0 \
+				and tracked_gpu_chunks == active_gpu_chunks \
+				and active_gpu_entries >= active_gpu_chunks \
+				and int(summary.get("gpu_resident_resident_entries", 0)) \
+					>= active_gpu_entries \
+				and int(summary.get("gpu_resident_rejected_chunks", 0)) == 0 \
+				and int(summary.get("gpu_resident_failed_cells", 0)) == 0 \
+				and int(summary.get("gpu_resident_native_rejections", 0)) == 0 \
+				and int(summary.get("gpu_resident_effect_queued", 0)) == 0 \
+				and int(summary.get("gpu_resident_effect_in_flight", 0)) == 0 \
+				and int(summary.get("gpu_resident_native_queued", 0)) == 0 \
+				and int(summary.get("gpu_resident_native_in_flight", 0)) == 0 \
+				and int(summary.get("scheduler_queued_jobs", 0)) == 0 \
+				and int(summary.get("scheduler_queued_completions", 0)) == 0 \
+				and int(summary.get("storage_queued_requests", 0)) == 0 \
+				and int(summary.get("storage_queued_completions", 0)) == 0 \
+				and int(summary.get("storage_active_requests", 0)) == 0 \
+				and int(summary.get("storage_in_flight_requests", 0)) == 0 \
+				and int(summary.get("pending_chunk_replacements", 0)) == 0 \
+				and int(summary.get("staged_render_resources", 0)) == 0 \
+				and int(summary.get("non_retiring_visual_ready_chunk_records", 0)) \
+					>= int(summary.get("non_retiring_chunk_records", 1))
 		if bool(summary.get("world_running", false)) and \
 				int(summary.get("queued_render", 0)) == 0 and \
 				int(summary.get("queued_collision", 0)) == 0 and \
-				int(summary.get("render_resources", -1)) >= render_count and \
+				render_minimum_ready and \
 				int(summary.get("collision_resources", -1)) >= collision_count:
 			await get_tree().process_frame
 			return true
@@ -415,11 +461,15 @@ func wait_for_streaming_settled(
 	for _frame in range(startup_world_state_timeout_frames):
 		var metrics: Dictionary = terrain_world.call("get_runtime_metrics")
 		var summary := _streaming_settled_summary(metrics)
+		if runtime_gpu_resident_render_candidate_enabled:
+			summary.merge(_gpu_resident_settle_summary(terrain_world), true)
 		_last_cold_idle_summary = summary
 		if _is_streaming_settled(summary, render_count, collision_count, active_record_limit):
 			await get_tree().process_frame
 			metrics = terrain_world.call("get_runtime_metrics")
 			summary = _streaming_settled_summary(metrics)
+			if runtime_gpu_resident_render_candidate_enabled:
+				summary.merge(_gpu_resident_settle_summary(terrain_world), true)
 			_last_cold_idle_summary = summary
 			return _is_streaming_settled(summary, render_count, collision_count, active_record_limit)
 		await get_tree().process_frame
@@ -479,9 +529,14 @@ func get_causal_trace_context() -> Dictionary:
 		"predictive_viewer_updates": _accepted_predictive_viewer_updates,
 		"focus_viewer_updates": _accepted_focus_viewer_updates,
 		"collision_viewer_updates": _accepted_collision_viewer_updates,
+		"predictive_collision_viewer_updates":
+			_accepted_predictive_collision_viewer_updates,
 		"coalesced_player_viewer_updates": _coalesced_player_viewer_updates,
 		"last_player_viewer_position": _vector3_summary(_last_player_viewer_position),
 		"last_collision_viewer_position": _vector3_summary(_last_collision_viewer_position),
+		"last_predictive_collision_viewer_position": _vector3_summary(
+			_last_predictive_collision_viewer_position
+		),
 		"edit_submission_count": _edit_submission_count,
 		"edit_accept_count": _edit_accept_count,
 		"edit_commit_count": _edit_commit_count,
@@ -505,8 +560,19 @@ func get_last_settle_summary() -> Dictionary:
 func get_game_world_summary() -> Dictionary:
 	var terrain_world := get_terrain_world()
 	var metrics: Dictionary = {}
+	var gpu_resident_status: Dictionary = {}
+	var gpu_resident_effect_status: Dictionary = {}
+	var gpu_resident_native_metrics: Dictionary = {}
 	if terrain_world != null:
 		metrics = terrain_world.call("get_runtime_metrics")
+		if terrain_world.has_method("get_gpu_resident_render_status"):
+			gpu_resident_status = terrain_world.call("get_gpu_resident_render_status")
+			gpu_resident_effect_status = Dictionary(gpu_resident_status.get(
+				"effect_status", {}
+			))
+			gpu_resident_native_metrics = Dictionary(gpu_resident_status.get(
+				"native_metrics", {}
+			))
 	return {
 		"addon_id": ADDON_ID,
 		"api_version": API_VERSION,
@@ -532,6 +598,8 @@ func get_game_world_summary() -> Dictionary:
 		"player_collision_invoker_radius_chunks": player_collision_invoker_radius_chunks,
 		"player_collision_prediction_distance": player_collision_prediction_distance,
 		"player_collision_viewer_updates": _accepted_collision_viewer_updates,
+		"player_predictive_collision_viewer_updates":
+			_accepted_predictive_collision_viewer_updates,
 		"player_foreground_priority_enabled": player_foreground_priority_enabled,
 		"player_foreground_priority_update_interval_ms": player_foreground_priority_update_interval_ms,
 		"player_foreground_support_updates": _accepted_foreground_support_updates,
@@ -559,6 +627,104 @@ func get_game_world_summary() -> Dictionary:
 		"runtime_edit_burst_collision_apply_budget": runtime_edit_burst_collision_apply_budget,
 		"runtime_edit_burst_frames": runtime_edit_burst_frames,
 		"streaming_burst_frames_remaining": _streaming_burst_frames_remaining,
+		"gpu_resident_render_candidate_enabled":
+			runtime_gpu_resident_render_candidate_enabled,
+		"gpu_resident_render_running": bool(gpu_resident_status.get("running", false)),
+		"gpu_resident_active_chunks": int(gpu_resident_status.get("active_chunks", 0)),
+		"gpu_resident_tracked_chunks": int(gpu_resident_status.get("tracked_chunks", 0)),
+		"gpu_resident_incomplete_chunks": int(gpu_resident_status.get(
+			"incomplete_chunks", 0
+		)),
+		"gpu_resident_inactive_chunk_examples": Array(gpu_resident_status.get(
+			"inactive_chunk_examples", []
+		)),
+		"gpu_resident_rejected_chunks": int(gpu_resident_status.get("rejected_chunks", 0)),
+		"gpu_resident_rejection_reasons": Dictionary(gpu_resident_status.get(
+			"rejection_reasons", {}
+		)).duplicate(true),
+		"gpu_resident_rejection_examples": Array(gpu_resident_status.get(
+			"rejection_examples", []
+		)).duplicate(true),
+		"gpu_resident_stale_incomplete_groups_superseded": int(
+			gpu_resident_status.get("stale_incomplete_groups_superseded", 0)
+		),
+		"gpu_resident_activation_cohort_retry_attempts": int(
+			gpu_resident_status.get("activation_cohort_retry_attempts", 0)
+		),
+		"gpu_resident_pending_activation_retry_groups": int(
+			gpu_resident_status.get("pending_activation_retry_groups", 0)
+		),
+		"gpu_resident_last_activation_cohort_wait": Dictionary(
+			gpu_resident_status.get("last_activation_cohort_wait", {})
+		).duplicate(true),
+		"gpu_resident_stale_activation_cohorts": int(
+			gpu_resident_status.get("stale_activation_cohorts_retained", 0)
+		),
+		"gpu_resident_stale_activation_examples": Array(
+			gpu_resident_status.get("stale_activation_examples", [])
+		).duplicate(true),
+		"gpu_resident_coverage_retained_reconciliation_deferrals": int(
+			gpu_resident_status.get(
+				"coverage_retained_reconciliation_deferrals", 0
+			)
+		),
+		"gpu_resident_retirement_confirmation_deferrals": int(
+			gpu_resident_status.get("retirement_confirmation_deferrals", 0)
+		),
+		"gpu_resident_retirement_candidate_cancellations": int(
+			gpu_resident_status.get("retirement_candidate_cancellations", 0)
+		),
+		"gpu_resident_active_entries": int(gpu_resident_effect_status.get(
+			"active_entry_count", 0
+		)),
+		"gpu_resident_effect_queued": int(gpu_resident_effect_status.get(
+			"queued_request_count", 0
+		)),
+		"gpu_resident_effect_in_flight": int(gpu_resident_effect_status.get(
+			"inflight_extraction_count", 0
+		)),
+		"gpu_resident_native_queued": int(gpu_resident_native_metrics.get(
+			"queued_requests", 0
+		)),
+		"gpu_resident_native_in_flight": int(gpu_resident_native_metrics.get(
+			"in_flight_requests", 0
+		)),
+		"gpu_resident_native_captured_requests": int(
+			gpu_resident_native_metrics.get("captured_requests", 0)
+		),
+		"gpu_resident_native_capacity_rejections": int(
+			gpu_resident_native_metrics.get("capacity_rejections", 0)
+		),
+		"gpu_resident_native_capture_reservation_attempts": int(
+			gpu_resident_native_metrics.get("capture_reservation_attempts", 0)
+		),
+		"gpu_resident_native_capture_reservation_rejections": int(
+			gpu_resident_native_metrics.get("capture_reservation_rejections", 0)
+		),
+		"gpu_resident_native_reserved_captures": int(
+			gpu_resident_native_metrics.get("reserved_captures", 0)
+		),
+		"gpu_resident_native_reserved_capture_failures": int(
+			gpu_resident_native_metrics.get("reserved_capture_failures", 0)
+		),
+		"gpu_resident_active_empty_entries": int(gpu_resident_effect_status.get(
+			"active_empty_entry_count", 0
+		)),
+		"gpu_resident_active_partial_entries": int(gpu_resident_effect_status.get(
+			"active_partial_entry_count", 0
+		)),
+		"gpu_resident_active_empty_entry_examples": Array(
+			gpu_resident_effect_status.get("active_empty_entry_examples", [])
+		).duplicate(true),
+		"gpu_resident_active_partial_entry_examples": Array(
+			gpu_resident_effect_status.get("active_partial_entry_examples", [])
+		).duplicate(true),
+		"gpu_resident_active_terrain_lod_counts": Dictionary(
+			gpu_resident_effect_status.get("active_terrain_lod_counts", {})
+		).duplicate(true),
+		"gpu_resident_active_static_water_lod_counts": Dictionary(
+			gpu_resident_effect_status.get("active_static_water_lod_counts", {})
+		).duplicate(true),
 		"runtime_collision_activation_distance": runtime_collision_activation_distance,
 		"runtime_collision_deactivation_distance": runtime_collision_deactivation_distance,
 		"expected_resource_count": _expected_resource_count,
@@ -568,6 +734,19 @@ func get_game_world_summary() -> Dictionary:
 		"non_retiring_chunk_records": int(metrics.get("non_retiring_chunk_records", 0)),
 		"non_retiring_visual_ready_chunk_records": int(metrics.get("non_retiring_visual_ready_chunk_records", 0)),
 		"non_retiring_fully_ready_chunk_records": int(metrics.get("non_retiring_fully_ready_chunk_records", 0)),
+		"non_retiring_visual_not_ready_chunk_records": int(metrics.get("non_retiring_visual_not_ready_chunk_records", 0)),
+		"first_visual_not_ready_key": Vector4i(
+			int(metrics.get("first_visual_not_ready_key_x", 0)),
+			int(metrics.get("first_visual_not_ready_key_y", 0)),
+			int(metrics.get("first_visual_not_ready_key_z", 0)),
+			int(metrics.get("first_visual_not_ready_key_lod", 0))
+		),
+		"first_visual_not_ready_generation": int(metrics.get("first_visual_not_ready_generation", 0)),
+		"first_visual_not_ready_visual_generation": int(metrics.get("first_visual_not_ready_visual_generation", 0)),
+		"first_visual_not_ready_render_generation": int(metrics.get("first_visual_not_ready_render_generation", 0)),
+		"first_visual_not_ready_staged_render_generation": int(metrics.get("first_visual_not_ready_staged_render_generation", 0)),
+		"first_visual_not_ready_staged": bool(metrics.get("first_visual_not_ready_staged", false)),
+		"first_visual_not_ready_external_activation_required": bool(metrics.get("first_visual_not_ready_external_activation_required", false)),
 		"collision_required_chunk_records": int(metrics.get("collision_required_chunk_records", 0)),
 		"collision_ready_chunk_records": int(metrics.get("collision_ready_chunk_records", 0)),
 		"collision_required_not_ready_chunk_records": int(metrics.get("collision_required_not_ready_chunk_records", 0)),
@@ -741,6 +920,19 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 		"active_chunk_records": int(metrics.get("active_chunk_records", 0)),
 		"visual_ready_chunk_records": int(metrics.get("visual_ready_chunk_records", 0)),
 		"fully_ready_chunk_records": int(metrics.get("fully_ready_chunk_records", 0)),
+		"non_retiring_visual_not_ready_chunk_records": int(metrics.get("non_retiring_visual_not_ready_chunk_records", 0)),
+		"first_visual_not_ready_key": Vector4i(
+			int(metrics.get("first_visual_not_ready_key_x", 0)),
+			int(metrics.get("first_visual_not_ready_key_y", 0)),
+			int(metrics.get("first_visual_not_ready_key_z", 0)),
+			int(metrics.get("first_visual_not_ready_key_lod", 0))
+		),
+		"first_visual_not_ready_generation": int(metrics.get("first_visual_not_ready_generation", 0)),
+		"first_visual_not_ready_visual_generation": int(metrics.get("first_visual_not_ready_visual_generation", 0)),
+		"first_visual_not_ready_render_generation": int(metrics.get("first_visual_not_ready_render_generation", 0)),
+		"first_visual_not_ready_staged_render_generation": int(metrics.get("first_visual_not_ready_staged_render_generation", 0)),
+		"first_visual_not_ready_staged": bool(metrics.get("first_visual_not_ready_staged", false)),
+		"first_visual_not_ready_external_activation_required": bool(metrics.get("first_visual_not_ready_external_activation_required", false)),
 		"collision_required_chunk_records": int(metrics.get("collision_required_chunk_records", 0)),
 		"collision_ready_chunk_records": int(metrics.get("collision_ready_chunk_records", 0)),
 		"collision_required_not_ready_chunk_records": int(metrics.get("collision_required_not_ready_chunk_records", 0)),
@@ -853,6 +1045,90 @@ func _streaming_settled_summary(metrics: Dictionary) -> Dictionary:
 	return summary
 
 
+func _gpu_resident_settle_summary(terrain_world: Node) -> Dictionary:
+	var status := Dictionary(terrain_world.call("get_gpu_resident_render_status"))
+	var effect := Dictionary(status.get("effect_status", {}))
+	var native := Dictionary(status.get("native_metrics", {}))
+	return {
+		"gpu_resident_settle_enabled": true,
+		"gpu_resident_running": bool(status.get("running", false)),
+		"gpu_resident_tracked_chunks": int(status.get("tracked_chunks", 0)),
+		"gpu_resident_active_chunks": int(status.get("active_chunks", 0)),
+		"gpu_resident_incomplete_chunks": int(status.get("incomplete_chunks", 0)),
+		"gpu_resident_prepared_inactive_chunks": int(status.get(
+			"prepared_inactive_chunks", 0
+		)),
+		"gpu_resident_activation_queued_chunks": int(status.get(
+			"activation_queued_chunks", 0
+		)),
+		"gpu_resident_oldest_inactive_age_frames": int(status.get(
+			"oldest_inactive_age_frames", 0
+		)),
+		"gpu_resident_inactive_chunk_examples": Array(status.get(
+			"inactive_chunk_examples", []
+		)),
+		"gpu_resident_rejected_chunks": int(status.get("rejected_chunks", 0)),
+		"gpu_resident_rejection_reasons": Dictionary(status.get(
+			"rejection_reasons", {}
+		)).duplicate(true),
+		"gpu_resident_rejection_examples": Array(status.get(
+			"rejection_examples", []
+		)).duplicate(true),
+		"gpu_resident_stale_incomplete_groups_superseded": int(status.get(
+			"stale_incomplete_groups_superseded", 0
+		)),
+		"gpu_resident_activation_cohort_retry_attempts": int(status.get(
+			"activation_cohort_retry_attempts", 0
+		)),
+		"gpu_resident_pending_activation_retry_groups": int(status.get(
+			"pending_activation_retry_groups", 0
+		)),
+		"gpu_resident_pending_activation_cohorts": int(status.get(
+			"pending_activation_cohorts", 0
+		)),
+		"gpu_resident_activation_cohorts_queued": int(status.get(
+			"activation_cohorts_queued", 0
+		)),
+		"gpu_resident_activation_cohorts_committed": int(status.get(
+			"activation_cohorts_committed", 0
+		)),
+		"gpu_resident_stale_activation_cohorts": int(status.get(
+			"stale_activation_cohorts_retained", 0
+		)),
+		"gpu_resident_stale_activation_examples": Array(status.get(
+			"stale_activation_examples", []
+		)).duplicate(true),
+		"gpu_resident_last_activation_cohort_wait": Dictionary(status.get(
+			"last_activation_cohort_wait", {}
+		)).duplicate(true),
+		"gpu_resident_effect_queued": int(effect.get("queued_request_count", 0)),
+		"gpu_resident_effect_in_flight": int(effect.get(
+			"inflight_extraction_count", 0
+		)),
+		"gpu_resident_effect_pending_lifecycle_commands": int(effect.get(
+			"pending_lifecycle_command_count", 0
+		)),
+		"gpu_resident_effect_event_count": int(effect.get("event_count", 0)),
+		"gpu_resident_effect_draw_frames": int(effect.get("draw_frames", 0)),
+		"gpu_resident_unrouted_effect_events": int(status.get(
+			"unrouted_effect_events", 0
+		)),
+		"gpu_resident_unrouted_effect_event_examples": Array(status.get(
+			"unrouted_effect_event_examples", []
+		)).duplicate(true),
+		"gpu_resident_active_entries": int(effect.get("active_entry_count", 0)),
+		"gpu_resident_resident_entries": int(effect.get("resident_entry_count", 0)),
+		"gpu_resident_failed_cells": int(effect.get(
+			"arena_failed_cell_count_total", 0
+		)),
+		"gpu_resident_native_queued": int(native.get("queued_requests", 0)),
+		"gpu_resident_native_in_flight": int(native.get("in_flight_requests", 0)),
+		"gpu_resident_native_rejections": int(native.get(
+			"validation_rejections", 0
+		)),
+	}
+
+
 func _is_streaming_settled(
 	summary: Dictionary,
 	render_count: int,
@@ -874,7 +1150,8 @@ func _is_streaming_settled(
 		return false
 	if int(summary.get("staged_render_resources", 0)) != 0:
 		return false
-	if int(summary.get("render_resources", 0)) < render_count:
+	var gpu_resident := bool(summary.get("gpu_resident_settle_enabled", false))
+	if not gpu_resident and int(summary.get("render_resources", 0)) < render_count:
 		return false
 	if int(summary.get("collision_resources", 0)) < collision_count:
 		return false
@@ -890,6 +1167,29 @@ func _is_streaming_settled(
 		return false
 	if active_record_limit > 0 and active_records > active_record_limit:
 		return false
+	if gpu_resident:
+		if not bool(summary.get("gpu_resident_running", false)):
+			return false
+		var tracked_gpu_chunks := int(summary.get("gpu_resident_tracked_chunks", 0))
+		var active_gpu_chunks := int(summary.get("gpu_resident_active_chunks", 0))
+		var active_gpu_entries := int(summary.get("gpu_resident_active_entries", 0))
+		if active_gpu_chunks <= 0 or tracked_gpu_chunks != active_gpu_chunks:
+			return false
+		if active_gpu_entries < render_count or active_gpu_entries < active_gpu_chunks \
+				or int(summary.get("gpu_resident_resident_entries", 0)) \
+				< active_gpu_entries:
+			return false
+		for key in [
+			"gpu_resident_rejected_chunks",
+			"gpu_resident_effect_queued",
+			"gpu_resident_effect_in_flight",
+			"gpu_resident_failed_cells",
+			"gpu_resident_native_queued",
+			"gpu_resident_native_in_flight",
+			"gpu_resident_native_rejections"
+		]:
+			if int(summary.get(key, 0)) != 0:
+				return false
 	return true
 
 
@@ -1090,7 +1390,7 @@ func _update_player_collision_invoker(
 ) -> bool:
 	if not player_collision_invoker_enabled:
 		return true
-	var invoker_position := position
+	var predictive_position := position
 	var movement := Vector3.ZERO
 	if _pending_collision_motion_valid:
 		movement = _pending_collision_motion
@@ -1100,34 +1400,62 @@ func _update_player_collision_invoker(
 		movement = position - _last_collision_observation_position
 	_last_collision_observation_position = position
 	if movement.length_squared() > 0.0001:
-		invoker_position += movement.normalized() * \
+		predictive_position += movement.normalized() * \
 			_player_collision_prediction_distance()
-	return _submit_player_collision_invoker(invoker_position, force)
+	return _submit_player_collision_invokers(position, predictive_position, force)
 
 
-func _submit_player_collision_invoker(
-	invoker_position: Vector3,
+func _submit_player_collision_invokers(
+	player_position: Vector3,
+	predictive_position: Vector3,
 	force: bool
 ) -> bool:
-	if not force and _collision_invoker_chunk(invoker_position) == \
-			_collision_invoker_chunk(_last_collision_viewer_position):
-		return true
+	var player_chunk := _collision_invoker_chunk(player_position)
+	if force or player_chunk != _collision_invoker_chunk(
+		_last_collision_viewer_position
+	):
+		if not _submit_collision_viewer(
+			_player_collision_viewer_id, player_position, &"collision_player", force
+		):
+			return false
+		_last_collision_viewer_position = player_position
+		_accepted_collision_viewer_updates += 1
+	var predictive_chunk := _collision_invoker_chunk(predictive_position)
+	if force or predictive_chunk != _collision_invoker_chunk(
+		_last_predictive_collision_viewer_position
+	):
+		if not _submit_collision_viewer(
+			_player_predictive_collision_viewer_id,
+			predictive_position,
+			&"collision_predictive",
+			force
+		):
+			return false
+		_last_predictive_collision_viewer_position = predictive_position
+		_accepted_predictive_collision_viewer_updates += 1
+	return true
+
+
+func _submit_collision_viewer(
+	viewer_id: int,
+	position: Vector3,
+	role: StringName,
+	force: bool
+) -> bool:
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_runtime_collision_viewer",
-		_player_collision_viewer_id,
+		viewer_id,
 		_viewer_revision,
-		invoker_position,
+		position,
 		player_collision_invoker_radius_chunks
 	)):
 		return _fail("player collision viewer update failed: %s" % _terrain_world_error())
-	_last_collision_viewer_position = invoker_position
-	_accepted_collision_viewer_updates += 1
 	_trace_event(&"viewer_submitted", {
-		"role": "collision_player",
-		"viewer_id": _player_collision_viewer_id,
+		"role": role,
+		"viewer_id": viewer_id,
 		"revision": _viewer_revision,
-		"position": _vector3_summary(invoker_position),
+		"position": _vector3_summary(position),
 		"force": force,
 	})
 	_begin_streaming_burst()
@@ -1177,11 +1505,13 @@ func get_player_collision_readiness_at(
 		var player_position: Vector3 = _player.global_position
 		_pending_collision_motion = position - player_position
 		_pending_collision_motion_valid = true
-		var invoker_position := player_position
+		var predictive_position := player_position
 		if _pending_collision_motion.length_squared() > 0.0001:
-			invoker_position += _pending_collision_motion.normalized() * \
+			predictive_position += _pending_collision_motion.normalized() * \
 				_player_collision_prediction_distance()
-		if not _submit_player_collision_invoker(invoker_position, false):
+		if not _submit_player_collision_invokers(
+			player_position, predictive_position, false
+		):
 			_last_player_collision_readiness = {
 				"ready": false,
 				"enabled": true,

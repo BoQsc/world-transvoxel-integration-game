@@ -62,11 +62,11 @@ signal readiness_changed(snapshot: Dictionary)
 @export var runtime_global_coarse_lod_coverage: bool = false
 @export var runtime_gpu_meshing_shadow_enabled: bool = false
 @export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
-@export_range(1, 3, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
+@export_range(1, 16, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export var runtime_gpu_resident_render_candidate_enabled: bool = false
 @export var runtime_gpu_resident_world_environment_path: NodePath
 @export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
-@export_range(1, 256, 1) var runtime_gpu_resident_chunk_capacity: int = 64
+@export_range(1, 4096, 1) var runtime_gpu_resident_chunk_capacity: int = 64
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_activation_distance: float = 0.0
 @export_range(0.0, 1000000.0, 0.01) var runtime_collision_deactivation_distance: float = 0.0
 
@@ -382,6 +382,28 @@ func get_gpu_resident_render_status() -> Dictionary:
 			"cpu_collision_authority": true,
 		}
 	return _gpu_resident_render_controller.get_status()
+
+
+func debug_gpu_resident_ray_coverage(
+	origin: Vector3, direction: Vector3, maximum_distance: float = 512.0
+) -> Array:
+	if _gpu_resident_render_controller == null:
+		return []
+	return _gpu_resident_render_controller.debug_ray_coverage(
+		origin, direction, maximum_distance
+	)
+
+
+func request_debug_gpu_resident_ray_geometry(rays: Array) -> int:
+	if _gpu_resident_render_controller == null:
+		return 0
+	return _gpu_resident_render_controller.request_debug_ray_geometry(rays)
+
+
+func pop_debug_gpu_resident_ray_geometry(request_id: int) -> Dictionary:
+	if _gpu_resident_render_controller == null:
+		return {}
+	return _gpu_resident_render_controller.pop_debug_ray_geometry(request_id)
 
 
 func _resolve_gpu_world_environment() -> WorldEnvironment:

@@ -37,9 +37,11 @@ const EditBatch := preload(
 
 var _world
 var _world_environment: WorldEnvironment
+var _sun: DirectionalLight3D
 var _reference_scene
 var _material_applicator
 var _committed_revisions: Array[int] = []
+var _cpu_reference := false
 
 
 func _initialize() -> void:
@@ -47,6 +49,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	_cpu_reference = OS.get_cmdline_user_args().has("--cpu-reference")
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
@@ -54,7 +57,7 @@ func _run() -> void:
 	_world.generation_profile = _generation_profile()
 	_world.storage_profile = _storage_profile()
 	_world.material_profile = MaterialProfile.new()
-	_world.runtime_gpu_resident_render_candidate_enabled = true
+	_world.runtime_gpu_resident_render_candidate_enabled = not _cpu_reference
 	_world.runtime_gpu_meshing_shadow_capacity = 3
 	_world.runtime_gpu_resident_chunk_capacity = 4
 	_world.name = "TerrainWorld"
@@ -84,7 +87,11 @@ func _run() -> void:
 			or not _world.update_collision_viewer(2, 1, Vector3(8, 8, 8), 0):
 		_fail("resident production viewers were rejected")
 		return
-	if not await _wait_for_active_chunk(1, 1):
+	if _cpu_reference:
+		if not await _wait_for_cpu_chunk():
+			_fail("initial CPU reference chunk did not settle")
+			return
+	elif not await _wait_for_active_chunk(1, 1):
 		_fail("initial CPU visual was not replaced by a resident GPU chunk")
 		return
 	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
@@ -96,14 +103,20 @@ func _run() -> void:
 	) or not await _wait_for_commit(1):
 		_fail("resident construct edit did not commit")
 		return
-	if not await _wait_for_active_chunk(initial_activated + 1, 1):
+	if _cpu_reference:
+		if not await _wait_for_cpu_chunk():
+			_fail("constructed CPU reference chunk did not settle")
+			return
+	elif not await _wait_for_active_chunk(initial_activated + 1, 1):
 		_fail("edited resident generation did not replace the prior generation: %s" \
 			% str(_world.get_gpu_resident_render_status()))
 		return
 
 	var after_construct: Dictionary = _world.get_gpu_resident_render_status()
 	var construct_activated := int(after_construct.get("activated_chunks", 0))
-	var terrain_only_image := await _capture_image("terrain_only")
+	var terrain_only_image := await _capture_image(
+		"cpu_terrain_only" if _cpu_reference else "terrain_only"
+	)
 	if not _world.submit_edit_batch(
 		_edit_batch(
 			EditOperation.Mode.PLACE_STATIC_WATER, Vector3(4, 12, 4), 4.0, 9
@@ -112,18 +125,33 @@ func _run() -> void:
 	) or not await _wait_for_commit(2):
 		_fail("resident static-water edit did not commit")
 		return
-	if not await _wait_for_active_chunk(construct_activated + 1, 2):
+	if _cpu_reference:
+		if not await _wait_for_cpu_chunk():
+			_fail("terrain and water CPU reference chunk did not settle")
+			return
+	elif not await _wait_for_active_chunk(construct_activated + 1, 2):
 		_fail("terrain and water were not admitted as one complete resident chunk: %s" \
 			% str(_world.get_gpu_resident_render_status()))
 		return
 
-	var image := await _capture_image("static_water")
+	var image := await _capture_image(
+		"cpu_static_water" if _cpu_reference else "static_water"
+	)
 	if image == null or image.is_empty():
 		_fail("resident production viewport could not be inspected")
 		return
 	if terrain_only_image == null or terrain_only_image.is_empty() \
 			or _image_sha256(terrain_only_image) == _image_sha256(image):
 		_fail("bounded static-water response did not alter the inspected viewport")
+		return
+	if _cpu_reference:
+		if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
+			_fail("CPU reference world did not stop cleanly")
+			return
+		print("GPU_RESIDENT_PRODUCTION_LIFECYCLE_CPU_REFERENCE_PASS")
+		_world.queue_free()
+		await process_frame
+		quit(0)
 		return
 	var status: Dictionary = _world.get_gpu_resident_render_status()
 	var native_metrics: Dictionary = status.get("native_metrics", {})
@@ -133,8 +161,8 @@ func _run() -> void:
 			or not bool(status.get("production_chunk_replacement", false)) \
 			or str(status.get("native_position_space", "")) != "world" \
 			or not bool(status.get("cpu_collision_authority", false)) \
-			or bool(status.get("production_material_parity", true)) \
-			or bool(status.get("production_terrain_material_parity", true)) \
+			or not bool(status.get("production_material_parity", false)) \
+			or not bool(status.get("production_terrain_material_parity", false)) \
 			or not bool(status.get("production_terrain_material_payload_ready", false)) \
 			or not bool(status.get("production_terrain_albedo_mapping_parity", false)) \
 			or not bool(status.get("production_terrain_roughness_mapping_parity", false)) \
@@ -144,8 +172,11 @@ func _run() -> void:
 			or not bool(status.get(
 				"production_terrain_bounded_pbr_response_parity", false
 			)) \
-			or bool(status.get("production_terrain_normal_mapping_parity", true)) \
-			or bool(status.get("production_terrain_pbr_lighting_parity", true)) \
+			or not bool(status.get(
+				"production_terrain_directional_ambient_lighting_parity", false
+			)) \
+			or not bool(status.get("production_terrain_normal_mapping_parity", false)) \
+			or not bool(status.get("production_terrain_pbr_lighting_parity", false)) \
 			or not bool(status.get("production_static_water_material_parity", false)) \
 			or not bool(status.get(
 				"production_static_water_material_payload_ready", false
@@ -159,15 +190,16 @@ func _run() -> void:
 			)) \
 			or str(status.get("production_material_source", "")) \
 				!= "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader" \
-			or int(status.get("production_material_parameter_bytes", 0)) != 368 \
+			or int(status.get("production_material_parameter_bytes", 0)) != 416 \
 			or int(status.get("production_material_texture_count", 0)) != 5 \
 			or str(status.get("production_water_material_source", "")) \
 				!= "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader" \
 			or int(status.get("production_water_parameter_bytes", 0)) != 48 \
 			or int(status.get("rejected_chunks", -1)) != 0 \
+			or int(effect_status.get("active_partial_entry_count", -1)) != 0 \
 			or str(effect_status.get("resource_architecture", "")) \
-				!= "paged_shared_arena" \
-			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 0 \
+				!= "bounded_scratch_compact_residency" \
+			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 5 \
 			or int(effect_status.get("arena_page_count", 0)) < 1 \
 			or int(effect_status.get("arena_active_slot_count", -1)) != 2 \
 			or int(effect_status.get("arena_slot_leases", 0)) < 4 \
@@ -200,11 +232,20 @@ func _run() -> void:
 			or int(effect_status.get("active_entry_count", 0)) != 2 \
 			or int(effect_status.get("resident_entry_count", 0)) > 5 \
 			or int(effect_status.get("geometry_readback_bytes", -1)) != 0 \
+			or int(effect_status.get("counter_readback_bytes", 0)) <= 0 \
 			or bool(effect_status.get("cpu_chunk_finalization_used", true)) \
 			or bool(effect_status.get("array_mesh_upload_used", true)) \
 			or not bool(effect_status.get("atomic_surface_set_activation", false)) \
 			or int(runtime_metrics.get("collision_resources", 0)) < 1:
 		_fail("resident production contract failed: %s" % str(status))
+		return
+	_sun.shadow_enabled = true
+	if not await _wait_for_material_parity(false):
+		_fail("shadowed directional light did not downgrade GPU material parity")
+		return
+	_sun.shadow_enabled = false
+	if not await _wait_for_material_parity(true):
+		_fail("supported lighting did not restore GPU material parity")
 		return
 
 	_world.end_gpu_resident_render_publication()
@@ -225,9 +266,9 @@ func _run() -> void:
 			"%s activated=%d water_surfaces=2 restored=%d collision_authority=cpu " \
 			+ "readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 " \
 			+ "accepted_normal_response_parity=1 bounded_pbr_response_parity=1 " \
-			+ "terrain_material_parity=0 water_material_parity=1 " \
+			+ "terrain_material_parity=1 water_material_parity=1 " \
 			+ "water_fresnel_tint_parity=1 water_refraction_parity=1 " \
-			+ "material_params=368 material_textures=5 water_params=48 " \
+			+ "material_params=416 material_textures=5 water_params=48 " \
 			+ "arena=paged_shared native_packed=1 " \
 			+ "pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 " \
 			+ "cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 " \
@@ -274,9 +315,18 @@ func _setup_viewport() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0.02, 0.025, 0.03, 1.0)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.72, 0.76, 0.80)
+	environment.ambient_light_energy = 0.55
 	_world_environment = WorldEnvironment.new()
 	_world_environment.environment = environment
 	root.add_child(_world_environment)
+	_sun = DirectionalLight3D.new()
+	_sun.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
+	_sun.light_color = Color(1.0, 0.96, 0.88)
+	_sun.light_energy = 1.25
+	_sun.shadow_enabled = false
+	root.add_child(_sun)
 	var camera := Camera3D.new()
 	camera.position = Vector3(8, 12, 28)
 	root.add_child(camera)
@@ -364,10 +414,34 @@ func _wait_for_active_chunk(activated_chunks: int, active_surfaces: int) -> bool
 				and int(status.get("active_chunks", 0)) == 1 \
 				and int(status.get("rejected_chunks", 0)) == 0 \
 				and int(effect_status.get("active_entry_count", 0)) == active_surfaces \
+				and int(effect_status.get("active_partial_entry_count", 0)) == 0 \
 				and int(effect_status.get("draw_frames", 0)) >= 2 \
 				and bool(idle.get("cold_idle", false)) \
 				and int(idle.get("render_resources", 0)) >= 1 \
 				and int(idle.get("collision_resources", 0)) >= 1:
+			return true
+		await process_frame
+	return false
+
+
+func _wait_for_cpu_chunk() -> bool:
+	for _frame in range(1800):
+		var idle: Dictionary = _world.get_cold_idle_summary()
+		if bool(idle.get("cold_idle", false)) \
+				and int(idle.get("render_resources", 0)) >= 1 \
+				and int(idle.get("collision_resources", 0)) >= 1:
+			return true
+		await process_frame
+	return false
+
+
+func _wait_for_material_parity(expected: bool) -> bool:
+	for _frame in range(180):
+		var status: Dictionary = _world.get_gpu_resident_render_status()
+		if bool(status.get("production_material_parity", false)) == expected \
+				and bool(status.get(
+					"production_terrain_material_parity", false
+				)) == expected:
 			return true
 		await process_frame
 	return false
