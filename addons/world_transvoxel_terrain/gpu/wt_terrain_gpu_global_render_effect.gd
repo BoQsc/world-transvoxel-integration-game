@@ -39,6 +39,7 @@ var _arena
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
 var _inflight_extractions: Dictionary = {}
+var _cancelled_inflight_tickets: Dictionary = {}
 var _lifecycle_commands: Array[Dictionary] = []
 var _events: Array[Dictionary] = []
 var _debug_geometry_requests: Array[Dictionary] = []
@@ -136,6 +137,9 @@ var _status := {
 	"applied": 0,
 	"rejected": 0,
 	"stale_skips": 0,
+	"cancelled_queued_requests": 0,
+	"cancelled_inflight_requests": 0,
+	"discarded_cancelled_readbacks": 0,
 	"superseded_entries": 0,
 	"prepared_entries": 0,
 	"activated_entries": 0,
@@ -835,6 +839,17 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			continue
 		var request: Dictionary = _inflight_extractions[ticket]
 		_inflight_extractions.erase(ticket)
+		if _cancelled_inflight_tickets.has(ticket):
+			_cancelled_inflight_tickets.erase(ticket)
+			_arena.discard_readback(ticket)
+			_sync_arena_status_on_render_thread()
+			_mutex.lock()
+			_status["inflight_extraction_count"] = _inflight_extractions.size()
+			_status["discarded_cancelled_readbacks"] = int(
+				_status["discarded_cancelled_readbacks"]
+			) + 1
+			_mutex.unlock()
+			continue
 		var key := str(request.get("key", ""))
 		var sequence := int(request.get("publication_sequence", 0))
 		_mutex.lock()
@@ -1112,6 +1127,9 @@ func _activate_entry_on_render_thread(
 func _retire_entry_on_render_thread(
 	key: String, token: String, source: Dictionary
 ) -> void:
+	_cancel_unpublished_entry_on_render_thread(
+		key, int(source.get("publication_sequence", 0))
+	)
 	if _entries.has(token):
 		_free_entry_on_render_thread(_entries[token])
 		_entries.erase(token)
@@ -1125,6 +1143,44 @@ func _retire_entry_on_render_thread(
 	_sync_active_lod_inventory_locked()
 	_mutex.unlock()
 	_push_event_on_render_thread("RETIRED", source)
+
+
+func _cancel_unpublished_entry_on_render_thread(
+	key: String, publication_sequence: int
+) -> void:
+	var retained_pending: Array[Dictionary] = []
+	var cancelled_queued := 0
+	_mutex.lock()
+	for request_value in _pending:
+		var request := Dictionary(request_value)
+		if str(request.get("key", "")) == key \
+				and int(request.get("publication_sequence", 0)) == publication_sequence:
+			cancelled_queued += 1
+		else:
+			retained_pending.append(request)
+	_pending = retained_pending
+	_status["queued_request_count"] = _pending.size()
+	_status["cancelled_queued_requests"] = int(
+		_status["cancelled_queued_requests"]
+	) + cancelled_queued
+	_mutex.unlock()
+
+	var cancelled_inflight := 0
+	for ticket_value in _inflight_extractions.keys():
+		var ticket := int(ticket_value)
+		var request := Dictionary(_inflight_extractions[ticket])
+		if str(request.get("key", "")) != key \
+				or int(request.get("publication_sequence", 0)) != publication_sequence \
+				or _cancelled_inflight_tickets.has(ticket):
+			continue
+		_cancelled_inflight_tickets[ticket] = true
+		cancelled_inflight += 1
+	if cancelled_inflight > 0:
+		_mutex.lock()
+		_status["cancelled_inflight_requests"] = int(
+			_status["cancelled_inflight_requests"]
+		) + cancelled_inflight
+		_mutex.unlock()
 
 
 func _sync_active_lod_inventory_locked() -> void:
@@ -1709,6 +1765,7 @@ func _close_on_render_thread() -> void:
 		_free_entry_on_render_thread(entry)
 	_entries.clear()
 	_inflight_extractions.clear()
+	_cancelled_inflight_tickets.clear()
 	_active_sequence_by_key.clear()
 	if _arena != null:
 		_arena.close()

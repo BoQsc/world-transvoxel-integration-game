@@ -197,6 +197,43 @@ func _run() -> void:
 	var avoided_records := int(status.get(
 		"source_cell_indirect_records_avoided", 0
 	))
+	var cancelled_identity := _identity(batch, 401, 0x500000041, 0x600000061)
+	cancelled_identity["page_x"] = 1
+	var cancelled_request := _submit(batch, cancelled_identity, 1, false)
+	if cancelled_request <= request_three \
+			or not _effect.retire_entry(cancelled_identity, 1):
+		_fail("pre-publication retirement request was rejected")
+		return
+	if not await _wait_for_status(
+		func(cancelled_status: Dictionary) -> bool:
+			return int(cancelled_status.get("queued_request_count", -1)) == 0 \
+				and int(cancelled_status.get("inflight_extraction_count", -1)) == 0 \
+				and int(cancelled_status.get("cancelled_queued_requests", 0)) \
+					+ int(cancelled_status.get("cancelled_inflight_requests", 0)) == 1,
+		10.0
+	):
+		_fail("pre-publication retirement did not cancel extraction: %s" \
+			% str(_effect.get_status()))
+		return
+	var cancelled_prepared := 0
+	var cancelled_retired := 0
+	while true:
+		var event: Dictionary = _effect.pop_event()
+		if event.is_empty():
+			break
+		if Dictionary(event.get("identity", {})) != cancelled_identity:
+			continue
+		if str(event.get("status", "")) == "PREPARED":
+			cancelled_prepared += 1
+		elif str(event.get("status", "")) == "RETIRED":
+			cancelled_retired += 1
+	var cancelled_status: Dictionary = _effect.get_status()
+	if cancelled_prepared != 0 or cancelled_retired != 1 \
+			or int(cancelled_status.get("resident_entry_count", -1)) != 1:
+		_fail("retired extraction published an orphan entry: prepared=%d retired=%d status=%s" % [
+			cancelled_prepared, cancelled_retired, str(cancelled_status),
+		])
+		return
 	_effect.close()
 	_world_environment.compositor = null
 	if not await _wait_for_status(
@@ -263,7 +300,12 @@ func _identity(
 	}
 
 
-func _submit(batch: Dictionary, identity: Dictionary, sequence: int) -> int:
+func _submit(
+	batch: Dictionary,
+	identity: Dictionary,
+	sequence: int,
+	activate_immediately: bool = true
+) -> int:
 	return int(_effect.submit_explicit_samples(
 		batch.get("densities", PackedFloat32Array()),
 		batch.get("gradients", PackedVector3Array()),
@@ -271,7 +313,8 @@ func _submit(batch: Dictionary, identity: Dictionary, sequence: int) -> int:
 		batch.get("material_authored", PackedByteArray()),
 		batch.get("cells", []),
 		identity,
-		sequence
+		sequence,
+		activate_immediately
 	))
 
 
