@@ -50,6 +50,7 @@ const PRODUCTION_DEFAULT_ROAD_GRADES := [
 const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
 const RENDER_SUBMISSION_CAPACITY := 16
+const NATIVE_SUBMISSIONS_PER_FRAME := 4
 const ACTIVATION_COHORT_RETRY_CAPACITY := 8
 
 var _backend_terrain: Node
@@ -230,6 +231,7 @@ func get_status() -> Dictionary:
 		"running": _running,
 		"native_request_capacity": _native_request_capacity,
 		"render_submission_capacity": RENDER_SUBMISSION_CAPACITY,
+		"native_submissions_per_frame": NATIVE_SUBMISSIONS_PER_FRAME,
 		"resident_capacity": _resident_capacity,
 		"tracked_chunks": _groups.size(),
 		"active_chunks": active_groups,
@@ -632,7 +634,9 @@ static func _append_vec4(values: PackedFloat32Array, value: Vector4) -> void:
 
 
 func _submit_native_captures() -> void:
-	while _render_request_routes.size() < RENDER_SUBMISSION_CAPACITY:
+	var submitted_this_frame := 0
+	while _render_request_routes.size() < RENDER_SUBMISSION_CAPACITY \
+			and submitted_this_frame < NATIVE_SUBMISSIONS_PER_FRAME:
 		var request := Dictionary(_backend_terrain.call(
 			"pop_gpu_resident_render_request"
 		))
@@ -686,6 +690,7 @@ func _submit_native_captures() -> void:
 		_render_request_routes[render_request_id] = route
 		_entry_routes[_entry_token(identity, sequence)] = route
 		_submitted_surfaces += 1
+		submitted_this_frame += 1
 
 
 func _drain_effect_events() -> void:
