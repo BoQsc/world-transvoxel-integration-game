@@ -54,6 +54,8 @@ func run(
 	_readiness_probe = null
 	if OS.get_cmdline_user_args().has("--runtime-readiness-probe"):
 		_readiness_probe = load("res://scripts/wt_runtime_readiness_probe.gd").new()
+		_readiness_probe.set("publication_inspection_enabled",
+			OS.get_cmdline_user_args().has("--gpu-publication-probe"))
 	if not causal_trace_output_path.is_empty():
 		var TraceScript := load("res://scripts/wt_cpu_causal_trace.gd")
 		_causal_trace = TraceScript.new()

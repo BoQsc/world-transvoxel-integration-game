@@ -96,6 +96,17 @@ func _run() -> void:
 		return
 	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
 	var initial_activated := int(initial_status.get("activated_chunks", 0))
+	if not _cpu_reference:
+		var backend: Node = _world.get_backend_terrain()
+		var before: Dictionary = backend.call("get_gpu_resident_render_metrics")
+		var inspection: Dictionary = backend.call("inspect_gpu_resident_publication", Vector3i.ZERO, 0)
+		var repeated: Dictionary = backend.call("inspect_gpu_resident_publication", Vector3i.ZERO, 0)
+		var after: Dictionary = backend.call("get_gpu_resident_render_metrics")
+		if not inspection.get("built", false) or not inspection.get("read_only", false) \
+				or inspection != repeated or before != after \
+				or inspection.get("selected", []).size() != 1:
+			_fail("publication inspection changed native state or could not inspect the live chunk")
+			return
 
 	if not _world.submit_edit_batch(
 		_edit_batch(EditOperation.Mode.CONSTRUCT, Vector3(8, 12, 8), 2.0, 3),

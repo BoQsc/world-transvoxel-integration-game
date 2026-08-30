@@ -7,6 +7,8 @@ const MAXIMUM_RAY_CANDIDATES := 4096
 var samples: Array = []
 var dropped_samples := 0
 var _started_us := Time.get_ticks_usec()
+var publication_inspection_enabled := false
+var _inspected_labels := {}
 
 
 func capture(
@@ -59,6 +61,20 @@ func capture(
 		"gpu_native": _scalar_fields(gpu.get("native_metrics", {})),
 		"gpu_activation_wait": wait_summary,
 	}
+	if publication_inspection_enabled and not _inspected_labels.has(label):
+		for state in states:
+			if not ray.is_empty() and not ray_inventory.get("chunks", []).has(state.coordinate):
+				continue
+			if state.lod != 0 or not state.get("is_visual_required", false) or \
+				state.get("is_visual_ready", false) or not state.get("is_collision_required", false):
+				continue
+			var backend: Node = terrain.call("get_backend_terrain")
+			if backend != null and backend.has_method("inspect_gpu_resident_publication"):
+				event["publication_inspection"] = backend.call(
+					"inspect_gpu_resident_publication", state.coordinate, state.lod
+				)
+				_inspected_labels[label] = true
+				break
 	var serialized: Dictionary = _json_value(event)
 	serialized["capture_us"] = Time.get_ticks_usec() - started
 	samples.append(serialized)

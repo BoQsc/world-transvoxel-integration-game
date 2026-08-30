@@ -8776,7 +8776,9 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
 	if not ok:
-		_fail("streaming fly gap gate found visible terrain gaps: %s" % JSON.stringify(last_streaming_fly_summary))
+		_fail("streaming fly gate failed (sample failures=%d, final readiness=%s): %s" % [
+			failures.size(), str(ok), JSON.stringify(last_streaming_fly_summary)
+		])
 		return false
 	return true
 
@@ -8871,6 +8873,16 @@ func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> 
 	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
+		# Rejections are cumulative for this run. Waiting cannot turn this gate
+		# into a pass; retain the actual rejection rather than calling it a gap.
+		if int(summary.get("gpu_resident_rejected_chunks", 0)) > 0:
+			print("WT_STREAMING_FLY_FATAL_REJECTION ", JSON.stringify({
+				"context": context, "frame": frame,
+				"reasons": summary.get("gpu_resident_rejection_reasons", {}),
+				"examples": summary.get("gpu_resident_rejection_examples", []),
+			}))
+			_fail("streaming fly publication rejection %s" % context)
+			return false
 		if frame > 0 and frame % 120 == 0:
 			print(
 				"WT_STREAMING_FLY_VISUAL_READY_PROGRESS ",

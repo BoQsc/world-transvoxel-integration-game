@@ -11,6 +11,7 @@ import subprocess
 import psutil
 
 import p0_runtime_baseline as baseline
+import world_transvoxel_runtime_artifact as runtime_artifact
 
 
 def main() -> int:
@@ -19,6 +20,7 @@ def main() -> int:
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--native-trace", action="store_true")
     parser.add_argument("--no-probe", action="store_true")
+    parser.add_argument("--publication-probe", action="store_true")
     parser.add_argument(
         "--godot", type=pathlib.Path,
         default=pathlib.Path(
@@ -27,6 +29,8 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    if args.publication_probe and (args.no_probe or args.backend != "gpu"):
+        parser.error("publication inspection requires GPU with the readiness probe")
     project = pathlib.Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if output.exists():
@@ -47,6 +51,8 @@ def main() -> int:
             extra.append("--gpu-resident-render-candidate")
         if not args.no_probe:
             extra.append("--runtime-readiness-probe")
+        if args.publication_probe:
+            extra.append("--gpu-publication-probe")
         trace = output.with_name(output.stem + "_native.json") if args.native_trace else None
         if trace is not None and trace.exists():
             parser.error("native trace already exists; choose a new output stem")
@@ -55,6 +61,7 @@ def main() -> int:
         if capture.exists():
             parser.error("capture directory already exists; choose a new output stem")
         pin = json.loads((project / "WORLD_TRANSVOXEL_RUNTIME_PIN.json").read_text())
+        actual_artifact_digest = runtime_artifact.artifact_digest(project / "addons" / "world_transvoxel")
         result, execution = baseline._run_measurement(
             args.godot, project, capture, 1, 2, 24.0, 2, 0,
             causal_trace_path=trace, stem_prefix=args.backend,
@@ -62,6 +69,8 @@ def main() -> int:
         )
         payload = {
             "baseline": result, "execution": execution, "pin": pin,
+            "actual_runtime_artifact_sha256": actual_artifact_digest,
+            "runtime_artifact_matches_pin": actual_artifact_digest == pin["runtime_artifact"]["digest_sha256"],
             "affinity": affinity, "godot_version": version,
             "diagnostic_only_not_performance_baseline": not args.no_probe or args.native_trace,
         }

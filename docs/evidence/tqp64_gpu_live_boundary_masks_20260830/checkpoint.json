@@ -1,0 +1,73 @@
+{
+  "schema": "world_transvoxel.tqp64_gpu_publication_checkpoint.v1",
+  "date": "2026-08-30",
+  "status": "MOVING_LOD_PASS_GAMEPLAY_REJECTED",
+  "authority": {
+    "commit": "7bfa83f68afa756972fc22ed24a6cad1e8ba3907",
+    "addon_tree": "9121e299cd331e4330b5fb68374d0364a80b4407",
+    "native_source_tree": "afdc30294823f844ff30e60777831e92b63c6bb9",
+    "runtime_artifact_sha256": "9229d38c27d046aab2b30095609b6b3f9fdb05aa85b30bddb5b9704bd7a43fa7",
+    "fixes": [
+      "d35419985feecc2392fb3556cf0a6fbaa9f98a0e",
+      "7bfa83f68afa756972fc22ed24a6cad1e8ba3907"
+    ]
+  },
+  "invariants": {
+    "cpu_default": true,
+    "cpu_collision_authority": true,
+    "geometry_readback_bytes": 0,
+    "reciprocal_boundary_validation_retained": true,
+    "production_streaming_hash": "39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b",
+    "affinity": [0, 1, 2]
+  },
+  "moving_lod": {
+    "ok": true,
+    "samples": 25,
+    "failures": 0,
+    "maximum_visual_deficit": 304,
+    "maximum_pending_replacements": 304,
+    "maximum_pending_retirements": 716,
+    "final_convergence_frames": 320,
+    "final_convergence_ms": 20954.072,
+    "final_active": 1219,
+    "final_visual_ready": 1219,
+    "final_fully_ready": 1219,
+    "final_pending_replacements": 0,
+    "final_pending_retirements": 0,
+    "publication_rejections": 0
+  },
+  "probe_off_gameplay": {
+    "measurement_complete": false,
+    "accepted_movement_frames": 418,
+    "blocked_movement_frames": 602,
+    "blocked_ratio": 0.590196078431373,
+    "maximum_consecutive_blocked_frames": 112,
+    "physics_frame_p95_ms": 62.425,
+    "physics_frame_p99_ms": 84.331,
+    "relocated_target_wait_ms": 3025.871,
+    "edit_accepted": false,
+    "publication_rejections": 0,
+    "application_wait_expirations": 0
+  },
+  "verification": {
+    "native_debug_release": [
+      "test_wt_m3_application",
+      "test_wt_gpu_meshing_shadow",
+      "test_wt_production_streaming"
+    ],
+    "godot": [
+      "gpu_resident_production_lifecycle_vulkan",
+      "gpu_resident_production_lifecycle_d3d12",
+      "runtime_readiness_probe_smoke",
+      "gpu_activation_retry_fairness_smoke"
+    ]
+  },
+  "artifacts": {
+    "moving_lod.json": "90b0e0e8c45516305c17f0776016d19868909654e462076519e7bc8fc26ba113",
+    "moving_lod_command.json": "dbaa7136ca3e7978237da0388eee46176d691c777c6af183f7be1c50f6f8287f",
+    "moving_lod_exit.json": "4f00caba7090f2ad957922598802cf80a38c4c3b364d369999b4d6525e7f16e9",
+    "moving_lod_peak_sweep.png": "7cc5360b4bc50940ef03718e9bf3c4b453adb3141d584a93998c0ae60410136e",
+    "moving_lod_low_slope.png": "e03b357dabe1696a42db4ee076221a1c76b9ee3278f901cbea339bc9341c5101",
+    "gameplay_probe_off.json": "393c95e65388cd955bb1e44eeabac04e0d8e4b4e85e48829f1bfe31c5dc4ec7f"
+  }
+}

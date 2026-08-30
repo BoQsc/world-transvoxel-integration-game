@@ -900,7 +900,8 @@ func _try_validate_group(group_key: String) -> void:
 			_application_wait_expirations += 1
 			_reject_group(
 				group_key,
-				"GPU resident CPU-application wait expired"
+				"GPU resident CPU-application wait expired",
+				readiness
 			)
 		return
 	if str(readiness.get("status", "")) != "READY" \
@@ -1606,7 +1607,7 @@ static func _ray_aabb_distance(
 	return near_distance if far_distance >= 0.0 else -1.0
 
 
-func _reject_group(group_key: String, error: String) -> void:
+func _reject_group(group_key: String, error: String, readiness: Dictionary = {}) -> void:
 	if not _groups.has(group_key):
 		return
 	_last_error = error
@@ -1620,6 +1621,7 @@ func _reject_group(group_key: String, error: String) -> void:
 			request = Dictionary(requests.values()[0])
 		_rejection_examples.append({
 			"error": error,
+			"application_readiness": readiness.duplicate(true),
 			"identity": Dictionary(request.get("identity", {})).duplicate(true),
 			"prepared_surfaces": Dictionary(group.get("prepared", {})).duplicate(true),
 			"validated_surfaces": Dictionary(group.get("native_validated", {})).duplicate(true),
