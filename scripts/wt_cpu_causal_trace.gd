@@ -384,7 +384,7 @@ func _target_snapshot() -> Dictionary:
 	)
 	if state == null:
 		return result
-	result["present"] = true
+	result["present"] = bool(state.call("is_present"))
 	for method in [
 		"get_generation", "is_visual_required", "is_visual_ready",
 		"is_collision_required", "is_collision_ready", "get_render_generation",

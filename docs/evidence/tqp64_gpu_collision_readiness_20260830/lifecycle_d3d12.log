@@ -1,0 +1,4 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+D3D12 12_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design
+
+GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS activated=3 water_surfaces=2 restored=1 collision_authority=cpu readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 accepted_normal_response_parity=1 bounded_pbr_response_parity=1 terrain_material_parity=1 water_material_parity=1 water_fresnel_tint_parity=1 water_refraction_parity=1 material_params=416 material_textures=5 water_params=48 arena=paged_shared native_packed=1 pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 reservations=4 captures=5 released=3

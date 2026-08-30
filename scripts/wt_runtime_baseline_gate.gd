@@ -27,6 +27,7 @@ const MAXIMUM_VISUAL_COLLISION_DIVERGENCE_FRAMES := 8
 var _causal_trace: RefCounted
 var _render_frame_us: Array = []
 var _last_render_tick_us := 0
+var _readiness_probe: RefCounted
 
 
 func run(
@@ -50,6 +51,9 @@ func run(
 	var terrain_world: Node = game_world.call("get_terrain_world")
 	if terrain_world == null:
 		return _structural_failure("terrain_world_unavailable")
+	_readiness_probe = null
+	if OS.get_cmdline_user_args().has("--runtime-readiness-probe"):
+		_readiness_probe = load("res://scripts/wt_runtime_readiness_probe.gd").new()
 	if not causal_trace_output_path.is_empty():
 		var TraceScript := load("res://scripts/wt_cpu_causal_trace.gd")
 		_causal_trace = TraceScript.new()
@@ -258,6 +262,8 @@ func run(
 		"measurement_complete": measurement_complete,
 		"implementation": "g23_p0_runtime_baseline_v3",
 		"frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+		"readiness_probe": _readiness_probe.call("summary") \
+			if _readiness_probe != null else {"enabled": false},
 		"render_frame_interval_ms": _frame_time_summary(_render_frame_us),
 		"render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
 		"gpu_candidate_status": terrain_world.call("get_gpu_resident_render_status") \
@@ -406,6 +412,10 @@ func _run_movement_phase(
 		_trace_note_movement(
 			accepted, motion_velocity, position_before, player.global_position
 		)
+		if _readiness_probe != null and (
+			frame % 15 == 0 or (not accepted and blocked_frames == 0)
+		):
+			_readiness_probe.call("capture", label, frame, game_world, terrain_world, player)
 		if accepted:
 			accepted_frames += 1
 			current_blocked_run = 0
@@ -511,6 +521,19 @@ func _run_single_edit_measurement(
 			target_wait_frame_us.append(await _next_physics_frame(host, clock))
 	for frame in range(PHYSICS_TARGET_WAIT_FRAMES + 1):
 		physics_hit = _physics_interaction_target(host, player, camera)
+		if _readiness_probe != null and (
+			frame % 30 == 0 or not physics_hit.is_empty()
+		):
+			var origin := camera.global_position
+			var end := origin - camera.global_transform.basis.z * float(
+				player.get("interaction_distance")
+			)
+			_readiness_probe.call("capture", "edit_target_wait", frame,
+				game_world, terrain_world, player, {
+					"origin": origin, "end": end,
+					"physics_hit": not physics_hit.is_empty(),
+					"hit_position": physics_hit.get("position", null),
+				})
 		if not physics_hit.is_empty():
 			physics_target_wait_frames = \
 				foreground_priority_focus_settle_frames + frame

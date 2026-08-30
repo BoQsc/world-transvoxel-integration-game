@@ -1,0 +1,361 @@
+{
+  "schema": "world_transvoxel.gpu_collision_readiness_checkpoint.v1",
+  "status": "ADMISSION_FIX_VERIFIED_GAMEPLAY_STILL_REJECTED",
+  "cpu_default_unchanged": true,
+  "authority_pin": {
+    "schema": "world_transvoxel.integration.runtime_pin.v1",
+    "status": "ACTIVE",
+    "authority": {
+      "repository": "world-transvoxel",
+      "commit": "8e5102eabf4691969d4d5f6d11b1b1e5f9d4f331",
+      "addon_tree": "4ad33144936eefd9c6e349d19282b2e4a9b8d100",
+      "native_source_tree": "8986e4478f31e54056cbd2e89a822fd4a6c83da6",
+      "fallback": false
+    },
+    "runtime_artifact": {
+      "layout": "binary_consumer_v1",
+      "native_source_included": false,
+      "binary_build_commit": "8e5102eabf4691969d4d5f6d11b1b1e5f9d4f331",
+      "digest_sha256": "cc5aee56d1742f09bc61bc0b8526cb70704323312eacfef6791bd0767e312632",
+      "files": [
+        "LICENSE_SCOPE.md",
+        "OPERATING_LIMITS.md",
+        "PUBLIC_API.md",
+        "README.md",
+        "thirdparty/transvoxel_mit/LICENSE",
+        "thirdparty/transvoxel_mit/UPSTREAM.md",
+        "world_transvoxel.gdextension",
+        "world_transvoxel.gdextension.uid",
+        "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bin/world_transvoxel.windows.template_release.x86_64.dll"
+      ],
+      "binaries": [
+        {
+          "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bytes": 2477568,
+          "sha256": "886c807609e0ae9e097bdc2546a8ed57e28805aadab00021ce07dd083738516f"
+        },
+        {
+          "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+          "bytes": 2398720,
+          "sha256": "d7118443bf11d9890b0b9da8465fb45c0310203806256ba1ab784ac7fa9de227"
+        }
+      ]
+    }
+  },
+  "integration_parent_commit": "bcaaac539570cb6a246761ffa0c6ad37bf43315b",
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "build_arguments": [
+    "python",
+    "-m",
+    "SCons",
+    "-Q",
+    "-j3",
+    "target=template_debug or template_release",
+    "platform=windows",
+    "arch=x86_64",
+    "build_profile=build_profiles/world_transvoxel.json"
+  ],
+  "native_trace_events": 58938,
+  "native_complete": true,
+  "native_timeline_events": 114,
+  "diagnostic_notes": [
+    "Initial CPU/GPU probes predate correction of the global GPU last-activation-wait key; their chunk states and ray coordinates are retained unchanged.",
+    "The GPU native-traced diagnostic uses the corrected global wait key. A global last-wait is not an exact per-chunk dependency chain.",
+    "Initial capture_us excludes vector-to-JSON conversion; current probe includes it. Probe-enabled runs are diagnostic only."
+  ],
+  "files": [
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_diagnostic.json",
+      "retained": "gpu_diagnostic.json.gz",
+      "source_bytes": 2449845,
+      "source_sha256": "54a1f02bc81b87a9add4ba453f382ee2b390999d740954a16fba326e268b0cf2",
+      "retained_bytes": 123531,
+      "retained_sha256": "9d286a3c4294ddbb44a6265b08172165f194c4992ad8b295c24f67625765364d",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_diagnostic_01.stdout.log",
+      "retained": "gpu_diagnostic.stdout_log.gz",
+      "source_bytes": 1555195,
+      "source_sha256": "eecb2e2052655f1155225bebec2ebe7405d9be59c0b90b4fe12310098c2b5b7b",
+      "retained_bytes": 62622,
+      "retained_sha256": "6aa1f7ef036f598869f2b6aaf0ab62657b27c44e95b1478296f242822a8d5c3e",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_diagnostic_01.stderr.log",
+      "retained": "gpu_diagnostic.stderr_log.gz",
+      "source_bytes": 1554363,
+      "source_sha256": "4d5bbabb9acc4d7ca724ab4afd58c4e5d6487d7861fd07bcdf5e7f4a8544cca1",
+      "retained_bytes": 62448,
+      "retained_sha256": "6e69f2f0f79b0b20d97f27ce6efc8367149cdc300392ae8bd9455a89bd66c024",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\cpu_diagnostic.json",
+      "retained": "cpu_diagnostic.json.gz",
+      "source_bytes": 1443679,
+      "source_sha256": "a68a5a848fda473539644e119afb256d93f15a133bf6782d3afb4257a844fc2b",
+      "retained_bytes": 56572,
+      "retained_sha256": "df15f02f7e5fdf1ef18f46868d981c8b0193672b1e76d8c15ff42102b8c8afa3",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\cpu_diagnostic_01.stdout.log",
+      "retained": "cpu_diagnostic.stdout_log.gz",
+      "source_bytes": 932039,
+      "source_sha256": "ae6914338ab7f523334934e051da0b5ab380f2693a9c30fff0c18f39a3a5684a",
+      "retained_bytes": 48716,
+      "retained_sha256": "631d1bea30bcf6d2611f859640d00921baaea38e9b6853b16b4af380d8a7102c",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\cpu_diagnostic_01.stderr.log",
+      "retained": "cpu_diagnostic.stderr_log.gz",
+      "source_bytes": 932347,
+      "source_sha256": "7a8dda892493f5cd0c0cef430b5bc556de6a3900f759a25282a42a47a1b85a51",
+      "retained_bytes": 48829,
+      "retained_sha256": "1df4e52f6f0fd57e7757658a5ebbdb39ed0338ea916891084d866e873ae43bfe",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_causal_diagnostic.json",
+      "retained": "gpu_causal_diagnostic.json.gz",
+      "source_bytes": 2684388,
+      "source_sha256": "efcc8149f9a877e0c6e8b2ba2793a2964107ff0af2ef4d9025059cb816858d08",
+      "retained_bytes": 205463,
+      "retained_sha256": "a152c9731e2d93edeed9a06656945ac0838c05cb9737483dbcf0293e0c9b67c1",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_causal_01.stdout.log",
+      "retained": "gpu_causal_diagnostic.stdout_log.gz",
+      "source_bytes": 1691696,
+      "source_sha256": "9771ef82fa3fdbdf1f4d0050fc82bedecf1d7a05d45c014fee5c7d34ed660469",
+      "retained_bytes": 64598,
+      "retained_sha256": "402dd8d838067caae9353a392e28a18b6ddc1b88cbf030283715c6fb5ada8cf6",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_causal_01.stderr.log",
+      "retained": "gpu_causal_diagnostic.stderr_log.gz",
+      "source_bytes": 1690863,
+      "source_sha256": "5111d99bdb7a7695359ca2d6ee667ee3c177787af2fe926a32d80649e470b9c3",
+      "retained_bytes": 64430,
+      "retained_sha256": "55493722be02a7f05fec75dbc6fd54570fbe24ffca77521675b0963ef1e6a1de",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_before_trace_off.json",
+      "retained": "gpu_before_trace_off.json.gz",
+      "source_bytes": 62543,
+      "source_sha256": "557a06d99e5b105e559e53b808e797183aa6071d45e7450771618b9f92b90f59",
+      "retained_bytes": 8362,
+      "retained_sha256": "11036106e858b38cb726f0136f4a16419481a93bf82e0bf46d7045aea6236645",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_before_trace_off_01.stdout.log",
+      "retained": "gpu_before_trace_off.stdout_log.gz",
+      "source_bytes": 38064,
+      "source_sha256": "8b8775fbea670e6e4423354e705b95d9e143435131bd552e6483e652c115dad2",
+      "retained_bytes": 6694,
+      "retained_sha256": "94d686d58f2fc8df15b4a4ab0e1205d7033774b4122e3d40a6621d57c71ed062",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_before_trace_off_01.stderr.log",
+      "retained": "gpu_before_trace_off.stderr_log.gz",
+      "source_bytes": 37231,
+      "source_sha256": "8dd2f1468f1305eda4bf6602c9426ae3488fbb3a0d24d4820fda1e575cdd08c4",
+      "retained_bytes": 6491,
+      "retained_sha256": "b9baa614a8c087cdf99c02288756475d6604b9e35edaaa222f8921ede3b02cec",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_after_trace_off.json",
+      "retained": "gpu_after_trace_off.json.gz",
+      "source_bytes": 60154,
+      "source_sha256": "78f1bdc7911bb58ad7596b0cf7b190af71cab5cf8370da09f0f4276a0439e1ea",
+      "retained_bytes": 8226,
+      "retained_sha256": "df86be020bac84537c630cb4d88a2f22824ecb9cea9eb71197f74986aeabce84",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_after_trace_off_01.stdout.log",
+      "retained": "gpu_after_trace_off.stdout_log.gz",
+      "source_bytes": 36778,
+      "source_sha256": "6ed074de8faff9a7f6883816db3408f4a92c025715028006d4f68035dfcb8214",
+      "retained_bytes": 6576,
+      "retained_sha256": "0599fc34d3d0c4d3cacafe93a68aa05d5b3e47f7144b5f2bf80b225fe1660af8",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_after_trace_off_01.stderr.log",
+      "retained": "gpu_after_trace_off.stderr_log.gz",
+      "source_bytes": 35945,
+      "source_sha256": "ece2581fd936031127076b7d96b12954434130fa2037ecaed623f49c8350efa7",
+      "retained_bytes": 6362,
+      "retained_sha256": "207ae249b16e26697115fc9d9b67d3a95e6f98b8087a26854ed1015b977f8e35",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\cpu_after_trace_off.json",
+      "retained": "cpu_after_trace_off.json.gz",
+      "source_bytes": 20047,
+      "source_sha256": "5e230e6d7ada22b142b7abd2f980ddc4e73bf49552ca30afb54d6946aaaca081",
+      "retained_bytes": 4025,
+      "retained_sha256": "79a51e12f5818ee51a2b6dc3dbd16336a4910b283e516b227e377d3787b48e2c",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\cpu_after_trace_off\\cpu_01.stdout.log",
+      "retained": "cpu_after_trace_off.stdout_log.gz",
+      "source_bytes": 11033,
+      "source_sha256": "f38745abc9299ba90c30cae474aeb1cb16092b2e691e381c4cc8495ab33c37f7",
+      "retained_bytes": 2738,
+      "retained_sha256": "0a09b220558e0dec6b9115bbda57908665565204f653abecac891584fa3aeef4",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\cpu_after_trace_off\\cpu_01.stderr.log",
+      "retained": "cpu_after_trace_off.stderr_log.gz",
+      "source_bytes": 11341,
+      "source_sha256": "f86ee4a8d8e663fa20d0cdef1c5cedc2b3766230b5bb69953fd097281c52c895",
+      "retained_bytes": 2801,
+      "retained_sha256": "a332a2d12122a6984742bcc78107513b632141a57c1e273b221001985ce9a108",
+      "compression": "gzip"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_collision_readiness_20260830\\gpu_causal.json",
+      "retained": "gpu_causal.json.gz",
+      "source_bytes": 35786974,
+      "source_sha256": "feba55b8affae5463d46734b9cf55e59e51ba18ddb7e73e0257e506d8674bd9c",
+      "retained_bytes": 2240608,
+      "retained_sha256": "5492ff7eae53237c3de9720b30ed64664b1d27d71e4dacde9060899d34d68307",
+      "compression": "gzip"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_production_streaming_template_debug.log",
+      "retained": "gpu_collision_production_streaming_template_debug.log",
+      "source_bytes": 502,
+      "source_sha256": "1f4a093518d51f8e640627da07fdfd3078ac1fe922b6b01d0e4dbe74f65bbec5",
+      "retained_bytes": 502,
+      "retained_sha256": "1f4a093518d51f8e640627da07fdfd3078ac1fe922b6b01d0e4dbe74f65bbec5",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_m3_application_template_debug.log",
+      "retained": "gpu_collision_m3_application_template_debug.log",
+      "source_bytes": 87,
+      "source_sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5",
+      "retained_bytes": 87,
+      "retained_sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_gpu_meshing_shadow_template_debug.log",
+      "retained": "gpu_collision_gpu_meshing_shadow_template_debug.log",
+      "source_bytes": 120,
+      "source_sha256": "b5fc188074c1a4752d385326a2753664abe2bdb8bf9b930b5d9cffc44fe9e1f2",
+      "retained_bytes": 120,
+      "retained_sha256": "b5fc188074c1a4752d385326a2753664abe2bdb8bf9b930b5d9cffc44fe9e1f2",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_build_template_debug.log",
+      "retained": "gpu_collision_build_template_debug.log",
+      "source_bytes": 12036,
+      "source_sha256": "2fed79a6cc2aa40bc27f4f7641e197db59e1fb4eb02d2a560b538b13151f1ceb",
+      "retained_bytes": 12036,
+      "retained_sha256": "2fed79a6cc2aa40bc27f4f7641e197db59e1fb4eb02d2a560b538b13151f1ceb",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_production_streaming_template_release.log",
+      "retained": "gpu_collision_production_streaming_template_release.log",
+      "source_bytes": 502,
+      "source_sha256": "1f4a093518d51f8e640627da07fdfd3078ac1fe922b6b01d0e4dbe74f65bbec5",
+      "retained_bytes": 502,
+      "retained_sha256": "1f4a093518d51f8e640627da07fdfd3078ac1fe922b6b01d0e4dbe74f65bbec5",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_m3_application_template_release.log",
+      "retained": "gpu_collision_m3_application_template_release.log",
+      "source_bytes": 87,
+      "source_sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5",
+      "retained_bytes": 87,
+      "retained_sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_gpu_meshing_shadow_template_release.log",
+      "retained": "gpu_collision_gpu_meshing_shadow_template_release.log",
+      "source_bytes": 120,
+      "source_sha256": "b5fc188074c1a4752d385326a2753664abe2bdb8bf9b930b5d9cffc44fe9e1f2",
+      "retained_bytes": 120,
+      "retained_sha256": "b5fc188074c1a4752d385326a2753664abe2bdb8bf9b930b5d9cffc44fe9e1f2",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_build_template_release.log",
+      "retained": "gpu_collision_build_template_release.log",
+      "source_bytes": 16762,
+      "source_sha256": "fac8eb196cf464bea3dc14bcccb5e3081bb6a12a21302fdd1fcc6a02e439e8db",
+      "retained_bytes": 16762,
+      "retained_sha256": "fac8eb196cf464bea3dc14bcccb5e3081bb6a12a21302fdd1fcc6a02e439e8db",
+      "compression": "none"
+    },
+    {
+      "source": "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel\\build\\gpu_collision_admission_before.log",
+      "retained": "admission_negative_control.log",
+      "source_bytes": 560,
+      "source_sha256": "f951d5d9cf063113ba12d4b4b4f7dbe43d6428735863d0c7d9f84a6fa5369ae9",
+      "retained_bytes": 560,
+      "retained_sha256": "f951d5d9cf063113ba12d4b4b4f7dbe43d6428735863d0c7d9f84a6fa5369ae9",
+      "compression": "none"
+    },
+    {
+      "source": ".godot\\readiness_probe_smoke.log",
+      "retained": "readiness_probe_smoke.log",
+      "source_bytes": 166,
+      "source_sha256": "bfb2e9b90ed45e57160dad9e5a96122a231c1a461c328ad91b6740c78353e6ae",
+      "retained_bytes": 166,
+      "retained_sha256": "bfb2e9b90ed45e57160dad9e5a96122a231c1a461c328ad91b6740c78353e6ae",
+      "compression": "none"
+    },
+    {
+      "source": ".godot\\gpu_activation_ordering_smoke.log",
+      "retained": "activation_ordering_smoke.log",
+      "source_bytes": 320,
+      "source_sha256": "9aefbd54c17cb2fc5aebaead280cc82c99928a79990ffd6f49470b0e48f2e830",
+      "retained_bytes": 320,
+      "retained_sha256": "9aefbd54c17cb2fc5aebaead280cc82c99928a79990ffd6f49470b0e48f2e830",
+      "compression": "none"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_resident_production_lifecycle\\vulkan.log",
+      "retained": "lifecycle_vulkan.log",
+      "source_bytes": 772,
+      "source_sha256": "cba39900804c7c45a7e506224b95036ea1c77e127592b068d00faa4c64279a58",
+      "retained_bytes": 772,
+      "retained_sha256": "cba39900804c7c45a7e506224b95036ea1c77e127592b068d00faa4c64279a58",
+      "compression": "none"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_resident_production_lifecycle\\d3d12.log",
+      "retained": "lifecycle_d3d12.log",
+      "source_bytes": 768,
+      "source_sha256": "cc7ed7c385c2d23f4e9f349f68910c2336e0b1af97c7402fdacc9e013a7d6e63",
+      "retained_bytes": 768,
+      "retained_sha256": "cc7ed7c385c2d23f4e9f349f68910c2336e0b1af97c7402fdacc9e013a7d6e63",
+      "compression": "none"
+    }
+  ]
+}

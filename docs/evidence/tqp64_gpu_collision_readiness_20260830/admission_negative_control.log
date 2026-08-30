@@ -1,0 +1,8 @@
+PRODUCTION_G8_2000X2000_WINDOW_PASS pages=93 samples=5 max_window=25
+FOREGROUND_PRIORITY_LEASE_PASS sources=2 active=1 support=1 focus=0
+FOREGROUND_RUNTIME_METRICS updates=3 active=2 support=1 focus=1 changed=2 matched=5 missing=1
+FAIL: collision-only work blocked by full GPU visual queue
+FAIL: collision-only work consumed GPU visual admission or published hidden render
+FAIL: collision-only work blocked by full GPU visual queue
+FAIL: collision-only work consumed GPU visual admission or published hidden render
+PRODUCTION_STREAMING_FAIL failures=4
