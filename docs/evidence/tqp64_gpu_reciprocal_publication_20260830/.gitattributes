@@ -1,4 +1,4 @@
 # Preserve the exact retained bytes referenced by checkpoint.json.
 *.log -text -whitespace
-*.json -text
+*.json -text whitespace=cr-at-eol
 *.png -text
