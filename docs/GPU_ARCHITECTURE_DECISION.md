@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_GEOMETRY_AND_PERFORMANCE_REJECTED_RELEASE_OPEN`
+Status: `TQP64_SAMPLED_GPU_LOD_PASS_GAMEPLAY_REJECTED_RELEASE_OPEN`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -11,8 +11,35 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-30
 
-The latest [runtime investigation](evidence/tqp64_gpu_runtime_blockers_20260830/RESULT.md)
-supersedes the earlier ordering-only checkpoint below. CPU remains the default.
+The latest [reciprocal publication checkpoint](evidence/tqp64_gpu_reciprocal_publication_20260830/RESULT.md)
+pins upstream `6f47d4e`. Native cohort selection now includes reciprocal LOD
+boundary changes in both refinement and coarsening, with isolated regression
+coverage on all six faces and negative coordinates. A separate downstream
+terrain/water retirement race is fixed and deterministically tested. Both
+debug/release native tests and bounded Vulkan/D3D12 lifecycle tests pass.
+
+The Vulkan moving-LOD route passes all 25 sampled views and strict final drain:
+1,219 tracked/active GPU chunks, no pending work or partial GPU entries. This
+does not prove all-world geometry, material quality, or gameplay readiness.
+The post-movement global drain still takes 19.743 seconds.
+
+Trace-off gameplay is still rejected: post-draw p95/p99 92.380/118.926 ms,
+641/1,020 blocked movement steps, and no relocated edit target within 180
+frames. The 74.583 ms physics-signal p95 is **not** rendered-frame p95. No
+performance gain or CPU/GPU speedup is established by these incomplete routes.
+CPU remains the default; the GPU path remains opt-in.
+
+Next is the exact player-support/targeted-collision readiness failure, separating
+missing demand from generation/publication backlog with bounded identities and
+timings. Do not remove safety guards, extend waits, or enable broad collision
+to make a test pass. Then complete a matched trace-off movement/carve/construction
+workload. Final post-edit geometry, water, cross-backend gameplay, power, and
+human acceptance remain open. There is no defensible completion-date estimate.
+
+### Earlier Runtime Investigation
+
+The preceding [runtime investigation](evidence/tqp64_gpu_runtime_blockers_20260830/RESULT.md)
+superseded the earlier ordering-only checkpoint below. CPU remained the default.
 Upstream `0a9b3c9` adds fine-face dependency gating for GPU transitions. The
 integration corrects D3D12 fixed-coordinate interpolation and spatial retirement
 matching, batches renderer inventory accounting, and sends only authority-selected

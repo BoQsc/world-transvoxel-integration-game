@@ -51,7 +51,9 @@ const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
 const RENDER_SUBMISSION_CAPACITY := 16
 const NATIVE_SUBMISSIONS_PER_FRAME := 4
-const ACTIVATION_COHORT_RETRY_CAPACITY := 8
+# A regional wait is shared by many prepared members. One fair retry per frame
+# prevents those aliases from repeatedly rebuilding the same native cohort.
+const ACTIVATION_COHORT_RETRY_CAPACITY := 1
 const LIFECYCLE_HISTORY_CAPACITY := 512
 
 var _backend_terrain: Node
@@ -240,9 +242,12 @@ func get_status() -> Dictionary:
 	var incomplete_groups := 0
 	var prepared_inactive_groups := 0
 	var activation_queued_groups := 0
+	var retiring_groups := 0
 	var oldest_inactive_age_frames := 0
 	for group_value in _groups.values():
 		var group := Dictionary(group_value)
+		if bool(group.get("retiring", false)):
+			retiring_groups += 1
 		if bool(group.get("active", false)):
 			active_groups += 1
 		elif not bool(group.get("retiring", false)):
@@ -270,8 +275,10 @@ func get_status() -> Dictionary:
 		"incomplete_chunks": incomplete_groups,
 		"prepared_inactive_chunks": prepared_inactive_groups,
 		"activation_queued_chunks": activation_queued_groups,
+		"retiring_chunks": retiring_groups,
 		"oldest_inactive_age_frames": oldest_inactive_age_frames,
 		"inactive_chunk_examples": _inactive_group_examples(8),
+		"retiring_chunk_examples": _retiring_group_examples(8),
 		"submitted_surfaces": _submitted_surfaces,
 		"validated_surfaces": _validated_surfaces,
 		"activated_chunks": _activated_chunks,
@@ -712,6 +719,11 @@ func _submit_native_captures() -> void:
 			continue
 		var identity: Dictionary = request.get("identity", {})
 		var group_key := _group_key(identity)
+		if _groups.has(group_key) and bool(Dictionary(_groups[group_key]).get(
+			"retiring", false
+		)):
+			_reject_native_request(request, "resident chunk group is retiring")
+			continue
 		if not _groups.has(group_key) and _groups.size() >= _resident_capacity:
 			_reject_native_request(request, "resident chunk capacity reached")
 			continue
@@ -1879,6 +1891,40 @@ func _inactive_group_examples(limit: int) -> Array:
 			"last_incomplete_status": str(group.get(
 				"last_incomplete_status", ""
 			)),
+			"identities": identities,
+		})
+	return examples
+
+
+func _retiring_group_examples(limit: int) -> Array:
+	var examples: Array = []
+	for group_key_value in _groups.keys():
+		if examples.size() >= limit:
+			break
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups[group_key])
+		if not bool(group.get("retiring", false)):
+			continue
+		var requests: Dictionary = group.get("requests", {})
+		var identities := {}
+		var request_ids := {}
+		for surface_value in requests.keys():
+			var surface := str(surface_value)
+			var request := Dictionary(requests[surface])
+			identities[surface] = Dictionary(request.get("identity", {}))
+			request_ids[surface] = int(request.get("request_id", 0))
+		examples.append({
+			"group_key": group_key,
+			"age_frames": _process_frame - int(group.get("created_frame", _process_frame)),
+			"active": bool(group.get("active", false)),
+			"native_active": bool(group.get("native_active", false)),
+			"validated": bool(group.get("validated", false)),
+			"request_ids": request_ids,
+			"request_surfaces": requests.keys(),
+			"native_validated_surfaces": Dictionary(
+				group.get("native_validated", {})
+			).keys(),
+			"retired_surfaces": Dictionary(group.get("retired", {})).keys(),
 			"identities": identities,
 		})
 	return examples

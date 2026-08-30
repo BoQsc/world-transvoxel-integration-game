@@ -3,6 +3,13 @@
 Status: `GPU_GEOMETRY_AND_GAMEPLAY_PERFORMANCE_REJECTED`. This is a development checkpoint,
 not a release, a human-accepted baseline, or proof of GPU speedup.
 
+Historical result: the later
+[reciprocal publication checkpoint](../tqp64_gpu_reciprocal_publication_20260830/RESULT.md)
+adds an isolated native regression and reciprocal boundary fix, then passes
+the 25-sample Vulkan route and strict final drain. It also fixes a separately
+identified late-water retirement race. Gameplay performance remains rejected.
+The failed geometry and measurements below are preserved, not reclassified.
+
 ## Scope
 
 Godot 4.7.2 Steam, GTX 1060 Max-Q, Vulkan, three logical CPUs `[0, 1, 2]`,

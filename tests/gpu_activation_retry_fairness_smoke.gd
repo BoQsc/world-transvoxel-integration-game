@@ -32,6 +32,48 @@ class AdmissionEffect:
 		submitted_entries += entries.size()
 		return true
 
+
+class RetiringAdmissionBackend:
+	extends Node
+	var pending: Array[Dictionary] = []
+	var rejections: Array[Dictionary] = []
+
+	func pop_gpu_resident_render_request() -> Dictionary:
+		if pending.is_empty():
+			return {"status": "EMPTY"}
+		return pending.pop_front()
+
+	func reject_gpu_resident_render_request(
+		request_id: int, identity: Dictionary, error: String
+	) -> Dictionary:
+		rejections.append({
+			"request_id": request_id,
+			"identity": identity.duplicate(true),
+			"error": error,
+		})
+		return {"status": "REJECTED"}
+
+
+class RetiringAdmissionEffect:
+	extends RefCounted
+	var submissions := 0
+
+	func submit_native_packed_input(
+		_input_buffers: Array,
+		_cell_count: int,
+		_identity: Dictionary,
+		_publication_sequence: int,
+		_activate_immediately: bool,
+		_bounds_min: Vector3,
+		_bounds_max: Vector3,
+		_proven_empty: bool
+	) -> int:
+		submissions += 1
+		return submissions
+
+	func get_status() -> Dictionary:
+		return {}
+
 class RetryProbe:
 	extends "res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd"
 
@@ -76,6 +118,12 @@ func _initialize() -> void:
 	if not _test_generation_activation_ack() or not _test_optional_lifecycle_history():
 		quit(1)
 		return
+	if not _test_retiring_status():
+		quit(1)
+		return
+	if not _test_retiring_admission_rejected():
+		quit(1)
+		return
 	if not _test_activation_inventory():
 		quit(1)
 		return
@@ -85,7 +133,7 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
 	quit(0)
 
 
@@ -110,6 +158,109 @@ func _test_optional_lifecycle_history() -> bool:
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: optional bounded lifecycle history")
 	return ok
+
+
+func _test_retiring_status() -> bool:
+	var controller := Controller.new()
+	controller._process_frame = 25
+	controller._groups["retiring"] = {
+		"active": false,
+		"native_active": false,
+		"validated": false,
+		"retiring": true,
+		"created_frame": 5,
+		"requests": {"terrain": {
+			"request_id": 17,
+			"identity": {"surface": "terrain", "generation": 3},
+		}},
+		"native_validated": {},
+		"retired": {},
+	}
+	var status := controller.get_status()
+	var examples: Array = status.get("retiring_chunk_examples", [])
+	var ok := int(status.get("retiring_chunks", 0)) == 1 \
+		and examples.size() == 1 \
+		and int(Dictionary(examples[0].get("request_ids", {})).get(
+			"terrain", 0
+		)) == 17 \
+		and int(examples[0].get("age_frames", 0)) == 20
+	controller.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: retiring diagnostics")
+	return ok
+
+
+func _test_retiring_admission_rejected() -> bool:
+	var controller := Controller.new()
+	var backend := RetiringAdmissionBackend.new()
+	var effect := RetiringAdmissionEffect.new()
+	var identity := {
+		"page_x": 10,
+		"page_y": 0,
+		"page_z": 6,
+		"lod": 3,
+		"generation": 2035,
+		"source_revision": 190327,
+		"world_revision": 0,
+		"transition_mask": 32,
+		"surface": "static_water",
+		"input_stage": "pre_mesh_field",
+		"static_water_surface_expected": true,
+	}
+	var request := {
+		"schema": "world_transvoxel.gpu_resident_render_request.v6",
+		"status": "PASS",
+		"position_space": "world",
+		"input_stage": "pre_mesh_field",
+		"cpu_topology_input_dependency": false,
+		"cpu_field_sampling": false,
+		"gpu_density_field_generation": true,
+		"gpu_material_field_generation": true,
+		"gpu_page_lattice_input": true,
+		"gpu_transvoxel_extraction": true,
+		"cpu_visual_mesh_omitted": true,
+		"gpu_resident_render_publication": true,
+		"cpu_render_visible_until_activation": false,
+		"cpu_collision_publication_unchanged": true,
+		"native_input_packing": true,
+		"cell_batch_exported": false,
+		"fallback_used": false,
+		"gpu_input_buffers": _nonempty_input_buffers(),
+		"packed_byte_count": 13,
+		"cell_count": 1,
+		"page_count": 1,
+		"request_id": 2149,
+		"identity": identity,
+		"bounds_min": Vector3.ZERO,
+		"bounds_max": Vector3.ONE,
+	}
+	backend.pending.append(request)
+	controller._backend_terrain = backend
+	controller._effect = effect
+	controller._resident_capacity = 8
+	var group_key := controller._group_key(identity)
+	controller._groups[group_key] = controller._new_group(identity)
+	controller._groups[group_key]["retiring"] = true
+	controller._submit_native_captures()
+	var group := Dictionary(controller._groups[group_key])
+	var ok := effect.submissions == 0 \
+		and backend.rejections.size() == 1 \
+		and int(backend.rejections[0].get("request_id", 0)) == 2149 \
+		and str(backend.rejections[0].get("error", "")) \
+			== "resident chunk group is retiring" \
+		and Dictionary(group.get("requests", {})).is_empty()
+	controller.free()
+	backend.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: retiring admission")
+	return ok
+
+
+func _nonempty_input_buffers() -> Array:
+	var buffers: Array = []
+	for _index in range(13):
+		buffers.append(PackedByteArray([1]))
+	return buffers
 
 
 func _test_generation_activation_ack() -> bool:

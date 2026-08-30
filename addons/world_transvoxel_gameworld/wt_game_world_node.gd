@@ -635,8 +635,14 @@ func get_game_world_summary() -> Dictionary:
 		"gpu_resident_incomplete_chunks": int(gpu_resident_status.get(
 			"incomplete_chunks", 0
 		)),
+		"gpu_resident_retiring_chunks": int(gpu_resident_status.get(
+			"retiring_chunks", 0
+		)),
 		"gpu_resident_inactive_chunk_examples": Array(gpu_resident_status.get(
 			"inactive_chunk_examples", []
+		)),
+		"gpu_resident_retiring_chunk_examples": Array(gpu_resident_status.get(
+			"retiring_chunk_examples", []
 		)),
 		"gpu_resident_rejected_chunks": int(gpu_resident_status.get("rejected_chunks", 0)),
 		"gpu_resident_rejection_reasons": Dictionary(gpu_resident_status.get(
@@ -1055,6 +1061,7 @@ func _gpu_resident_settle_summary(terrain_world: Node) -> Dictionary:
 		"gpu_resident_tracked_chunks": int(status.get("tracked_chunks", 0)),
 		"gpu_resident_active_chunks": int(status.get("active_chunks", 0)),
 		"gpu_resident_incomplete_chunks": int(status.get("incomplete_chunks", 0)),
+		"gpu_resident_retiring_chunks": int(status.get("retiring_chunks", 0)),
 		"gpu_resident_prepared_inactive_chunks": int(status.get(
 			"prepared_inactive_chunks", 0
 		)),
@@ -1066,6 +1073,9 @@ func _gpu_resident_settle_summary(terrain_world: Node) -> Dictionary:
 		)),
 		"gpu_resident_inactive_chunk_examples": Array(status.get(
 			"inactive_chunk_examples", []
+		)),
+		"gpu_resident_retiring_chunk_examples": Array(status.get(
+			"retiring_chunk_examples", []
 		)),
 		"gpu_resident_rejected_chunks": int(status.get("rejected_chunks", 0)),
 		"gpu_resident_rejection_reasons": Dictionary(status.get(

@@ -1,0 +1,35 @@
+{
+  "command": [
+    "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+    "--path",
+    "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+    "--rendering-driver",
+    "vulkan",
+    "--audio-driver",
+    "Dummy",
+    "--log-file",
+    ".godot\\world_transvoxel_captures\\gpu_reciprocal_boundary_fixed_acceptance_20260830\\acceptance.log",
+    "--",
+    "--p2-profile",
+    "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "--human-visual-capture",
+    ".godot\\world_transvoxel_captures\\gpu_reciprocal_boundary_fixed_acceptance_20260830\\acceptance.png",
+    "--human-visual-capture-mode",
+    "streaming_fly_gap_gate",
+    "--human-visual-capture-wait-frames",
+    "1800",
+    "--human-material-mode",
+    "production_texture_array",
+    "--gpu-resident-render-candidate",
+    "--procedural-generation-workers",
+    "2",
+    "--meshing-workers",
+    "0"
+  ],
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "runtime_source": "reciprocal boundary candidate plus retiring admission rejection"
+}
