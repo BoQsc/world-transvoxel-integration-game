@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_PRE_MESH_FIELD_HANDOFF_QUALIFIED_BACKEND_BLOCKED`
+Status: `TQP64_PUBLICATION_ORDERING_CHECKPOINT_RELEASE_OPEN`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -9,7 +9,43 @@ Windows NVIDIA Vulkan/D3D12 profiles in the Terrain Lab. Those results do not
 replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
-## TQP-64 Integration Status
+## Current Checkpoint: 2026-08-30
+
+The resident candidate now consumes native-packed page-lattice inputs, performs
+GPU field evaluation and regular/transition extraction, and renders compact GPU
+buffers. CPU ownership of world data, storage, edits, and targeted collision
+remains intact. The production default has not been switched to GPU.
+
+[Retained evidence](evidence/tqp64_gpu_publication_ordering_20260830/RESULT.md)
+records two downstream ordering fixes: fair bounded activation retries and
+exclusion of render-thread activations still in flight from a new regional
+native commit. Strict Vulkan/D3D12 flight/carve/construction routes now require
+actual readiness, not merely an edit-journal commit. Both drained with every
+tracked GPU chunk active, no incomplete/inactive chunks, and no rejected,
+unrouted, or recovery events. No upstream recapture API or dormant-geometry
+cache was added. The upstream pin is unchanged at `c1b40a6`.
+
+TQP-64 is not complete. Continue in this order:
+
+1. Check the large-world visual result at terrain/water boundaries, edits, and
+   moving LOD transitions; retain exact identities and geometry diagnostics
+   alongside images. Bounded fixture parity is not whole-world visual approval.
+2. Measure the same accepted workload with intrusive tracing off: frame-time
+   tails, actual input-to-visible and collision latency, memory, and GPU-board
+   power separately from CPU/whole-system power. The causal route's global
+   readiness wait is not input-to-first-visible latency or a speedup benchmark.
+3. Resolve measured failures without relaxing identity, coverage, collision,
+   or ordering guarantees. Repeat the differential and lifecycle gates for
+   affected code; do not introduce speculative caching or fallback paths.
+4. Run the final cross-backend qualification and human playtest, then make the
+   release/default-backend decision. Do not label this checkpoint a completed
+   GPU terrain release or a 60 FPS/16 W result.
+
+The sections below are the historical implementation record. Earlier coverage
+percentages, timings, and statements that material/field work was still missing
+describe those dated stages, not the current checkpoint.
+
+## Historical TQP-64 Integration Status
 
 The production terrain addon now owns an opt-in
 `WtTerrainGpuMeshingService`. It runs the qualified compute mesher on one

@@ -1,0 +1,140 @@
+{
+  "schema": "world_transvoxel.gpu_publication_ordering_checkpoint.v1",
+  "date": "2026-08-30",
+  "godot": "4.7.2.stable.steam.ed1daf0bf",
+  "cpu_affinity_limit": 3,
+  "upstream_commit": "c1b40a6720061436df0134587655060d74ae3b73",
+  "integration_parent": "92d74d846292f7b6934c87f71022fdcc58068b82",
+  "gpu_release_complete": false,
+  "performance_baseline": false,
+  "dormant_cache_experiment_retained": false,
+  "recapture_api_added": false,
+  "source_sha256": {
+    "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd": "951e7c530c06ed0740f0f72c1e43fdcd8bad7776d80931d4b49303255e126791",
+    "scripts/wt_terrain_waterfall_route.gd": "f0b6f99e0960f3eb88678570c65cff0df8a33a1bddfc6eb805925e05025c6e79",
+    "tests/gpu_activation_retry_fairness_smoke.gd": "a1614229cc5fae79253c9c09c020446aad54334a2d93e7f63f4ef4109339b3eb",
+    "tests/gpu_activation_retry_fairness_smoke.gd.uid": "d07f8125956b963cde4d85ba77e1d93ca467cf75ca0ab99d06a7b4503757119a",
+    "tools/run_gpu_activation_retry_fairness_smoke.py": "baf1fce18ab414198c7f30365b43e19fb3bd69b56a012838b919429ad5bc15af"
+  },
+  "routes": [
+    {
+      "driver": "vulkan",
+      "trace_path": ".godot/world_transvoxel_captures/gpu_ordering_final_vulkan_20260830/trace.json",
+      "trace_sha256": "12c9faff04d51d82d9248471f7f6ee3cecca65df3dfd78f36d5c27415064e6bf",
+      "trace_seconds": 50.03661,
+      "native_trace_complete": true,
+      "tracked_chunks": 1758,
+      "active_chunks": 1758,
+      "controller_final": {
+        "incomplete_chunks": 0,
+        "prepared_inactive_chunks": 0,
+        "activation_queued_chunks": 0,
+        "pending_activation_retry_groups": 0,
+        "rejected_chunks": 0,
+        "recovery_count": 0,
+        "unrouted_effect_events": 0
+      },
+      "native_final": {
+        "queued_requests": 0,
+        "in_flight_requests": 0,
+        "pending_chunk_replacements": 0,
+        "pending_chunk_retirements": 0,
+        "pending_render_retirements": 0
+      },
+      "effect_final": {
+        "resident_entry_count": 1841,
+        "active_entry_count": 1841,
+        "queued_request_count": 0,
+        "inflight_extraction_count": 0,
+        "pending_lifecycle_command_count": 0,
+        "event_count": 0
+      },
+      "edits": [
+        {
+          "accepted": true,
+          "center": {
+            "x": 404.843872070313,
+            "y": 38.9448509216309,
+            "z": 404.843872070313
+          },
+          "committed": true,
+          "mode": "carve",
+          "ready": true,
+          "ready_frame": 489
+        },
+        {
+          "accepted": true,
+          "center": {
+            "x": 320.726379394531,
+            "y": 45.2824897766113,
+            "z": 489.730804443359
+          },
+          "committed": true,
+          "mode": "construct",
+          "ready": true,
+          "ready_frame": 377
+        }
+      ]
+    },
+    {
+      "driver": "d3d12",
+      "trace_path": ".godot/world_transvoxel_captures/gpu_ordering_final_d3d12_20260830/trace.json",
+      "trace_sha256": "ee2620fb9e3202d47075355023d552d29aa8bc718f6793c2c116f278651d031a",
+      "trace_seconds": 46.113241,
+      "native_trace_complete": true,
+      "tracked_chunks": 1709,
+      "active_chunks": 1709,
+      "controller_final": {
+        "incomplete_chunks": 0,
+        "prepared_inactive_chunks": 0,
+        "activation_queued_chunks": 0,
+        "pending_activation_retry_groups": 0,
+        "rejected_chunks": 0,
+        "recovery_count": 0,
+        "unrouted_effect_events": 0
+      },
+      "native_final": {
+        "queued_requests": 0,
+        "in_flight_requests": 0,
+        "pending_chunk_replacements": 0,
+        "pending_chunk_retirements": 0,
+        "pending_render_retirements": 0
+      },
+      "effect_final": {
+        "resident_entry_count": 1792,
+        "active_entry_count": 1792,
+        "queued_request_count": 0,
+        "inflight_extraction_count": 0,
+        "pending_lifecycle_command_count": 0,
+        "event_count": 0
+      },
+      "edits": [
+        {
+          "accepted": true,
+          "center": {
+            "x": 415.403686523438,
+            "y": 38.0114097595215,
+            "z": 415.403686523438
+          },
+          "committed": true,
+          "mode": "carve",
+          "ready": true,
+          "ready_frame": 414
+        },
+        {
+          "accepted": true,
+          "center": {
+            "x": 352.797515869141,
+            "y": 43.9143714904785,
+            "z": 480.386596679688
+          },
+          "committed": true,
+          "mode": "construct",
+          "ready": true,
+          "ready_frame": 214
+        }
+      ]
+    }
+  ],
+  "scope": "Downstream activation ordering and bounded route liveness; not production GPU release or a performance baseline."
+}

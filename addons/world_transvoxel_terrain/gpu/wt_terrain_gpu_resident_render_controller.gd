@@ -1075,9 +1075,12 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 
 func _prepared_inventory_pool() -> Array:
 	var inventories: Array = []
+	# A native regional commit must not depend on a retained entry whose
+	# render-thread activation is still pending.
 	for group_value in _groups.values():
 		var group := Dictionary(group_value)
 		if bool(group.get("retiring", false)) \
+				or bool(group.get("activation_queued", false)) \
 				or (not bool(group.get("native_prepared", false)) \
 				and not bool(group.get("native_active", false))):
 			continue
@@ -1128,16 +1131,15 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 
 
 func _drain_activation_cohort_retries() -> void:
-	if _activation_retry_queue.is_empty():
-		return
-	var pending: Array[String] = _activation_retry_queue
-	_activation_retry_queue = []
 	var attempts := 0
-	for group_key in pending:
+	var inspected := 0
+	var inspection_limit := _activation_retry_queue.size()
+	# Retried groups join the tail behind every group that has not had a turn.
+	while attempts < ACTIVATION_COHORT_RETRY_CAPACITY and inspected < inspection_limit \
+			and not _activation_retry_queue.is_empty():
+		var group_key := _activation_retry_queue.pop_front()
+		inspected += 1
 		if not _activation_retry_membership.has(group_key):
-			continue
-		if attempts >= ACTIVATION_COHORT_RETRY_CAPACITY:
-			_activation_retry_queue.append(group_key)
 			continue
 		_activation_retry_membership.erase(group_key)
 		if not _groups.has(group_key):

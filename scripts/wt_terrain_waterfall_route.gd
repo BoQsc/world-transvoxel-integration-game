@@ -45,8 +45,8 @@ func run(
 		&"carve", carve_surface - Vector3(0.0, 0.7, 0.0)
 	)
 	route["edits"].append(carve_result)
-	if not bool(carve_result.get("committed", false)):
-		route["error"] = "carve_not_committed"
+	if not bool(carve_result.get("ready", false)):
+		route["error"] = "carve_not_ready"
 		return {"ok": false, "route": route}
 	route["legs"].append(await _flight_leg(
 		"flight_relocation_construct",
@@ -61,8 +61,8 @@ func run(
 		&"construct", construct_surface + Vector3(0.0, 0.7, 0.0)
 	)
 	route["edits"].append(construct_result)
-	if not bool(construct_result.get("committed", false)):
-		route["error"] = "construct_not_committed"
+	if not bool(construct_result.get("ready", false)):
+		route["error"] = "construct_not_ready"
 		return {"ok": false, "route": route}
 	for _frame in range(120):
 		await _capture_wait_frame()
@@ -249,12 +249,16 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 			"query_chunk_state", target_chunk, 0
 		)
 		var metrics: Dictionary = _terrain_world.call("get_runtime_metrics")
-		ready = state != null and \
+		ready = accepted and committed and state != null and \
 				bool(state.call("is_visual_ready")) and \
 				bool(state.call("is_collision_ready")) and \
 				int(metrics.get("pending_chunk_replacements", 0)) == 0 and \
 				int(metrics.get("pending_chunk_retirements", 0)) == 0 and \
 				int(metrics.get("pending_render_retirements", 0)) == 0
+		if ready:
+			ready = gpu_publication_drained(Dictionary(
+				_terrain_world.call("get_gpu_resident_render_status")
+			))
 		if ready:
 			ready_frame = frame
 			break
@@ -275,6 +279,33 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 		"ready": ready,
 		"ready_frame": ready_frame,
 	}
+
+
+static func gpu_publication_drained(status: Dictionary) -> bool:
+	if not bool(status.get("gpu_resident_render_publication", false)):
+		return true
+	if not bool(status.get("running", false)):
+		return false
+	for key in [
+		"incomplete_chunks", "prepared_inactive_chunks", "activation_queued_chunks",
+		"pending_activation_cohorts", "pending_activation_retry_groups",
+		"rejected_chunks", "recovery_count", "unrouted_effect_events",
+		"application_wait_expirations",
+	]:
+		if int(status.get(key, -1)) != 0:
+			return false
+	var native := Dictionary(status.get("native_metrics", {}))
+	for key in ["queued_requests", "in_flight_requests", "reserved_capture_slots"]:
+		if int(native.get(key, -1)) != 0:
+			return false
+	var effect := Dictionary(status.get("effect_status", {}))
+	for key in [
+		"queued_request_count", "inflight_extraction_count", "event_count",
+		"pending_lifecycle_command_count",
+	]:
+		if int(effect.get(key, -1)) != 0:
+			return false
+	return true
 
 
 func _capture_wait_frame() -> void:

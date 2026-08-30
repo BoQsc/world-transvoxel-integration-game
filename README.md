@@ -63,24 +63,19 @@ target misses. A lossless causal trace attributes the dominant delay to serial
 mesh work feeding a conservative global visibility/replacement/collision
 backlog. [TQP-58](docs/GPU_ARCHITECTURE_DECISION.md) therefore selects a
 bounded GPU field-and-meshing candidate while CPU control remains authoritative.
-The current TQP-64 work qualifies both a bounded
-[same-device GPU resident-resource proof](docs/GPU_RESIDENT_RENDER_RESOURCE_CONTRACT.md)
-and a default-off
-[global render-thread publication proof](docs/GPU_GLOBAL_RENDER_PUBLICATION_CONTRACT.md).
-Compute-written vertex data and indexed indirect commands now reach a live
-Godot viewport without geometry readback, CPU finalization, or ArrayMesh upload
-on Vulkan and D3D12, with exact stale and supersession checks. A subsequent
-default-off production lifecycle uses a bounded shared arena and native-packed
-resident requests; it preserves exact chunk identity, atomic terrain/water
-activation, CPU visual recovery, and CPU collision authority. Pre-mesh capture
-reservation, priority admission, and stale-generation queue coalescing are also
-retained. The latest large-world Vulkan route reaches 17.16% maximum GPU
-coverage with zero late native-capacity rejection, but frame p95 is 62.81 ms
-against 23.69 ms CPU and production material parity is absent. CPU terrain
-therefore remains the default production visual and collision authority. The
-next TQP-64 prerequisite is bounded compact draw submission and visibility
-culling, followed by production camera/material parity and GPU-first field and
-Transvoxel request generation.
+TQP-64 remains active and default-off. The resident candidate evaluates the
+authoritative page lattice and extracts regular/transition geometry on the GPU,
+then renders compact resident buffers without geometry readback or ArrayMesh
+upload. CPU world, storage, edit, and collision authority remain unchanged.
+
+The [2026-08-30 publication-ordering checkpoint](docs/evidence/tqp64_gpu_publication_ordering_20260830/RESULT.md)
+fixes retry starvation and admission of still-activating regional members.
+Both Vulkan and D3D12 completed the strict 2K flight/carve/construction route
+with every tracked GPU chunk active and zero publication backlog or recovery.
+Bounded terrain/water material and relocation regressions also pass on both
+backends. This does not establish production visual quality, instantaneous
+edits, a frame-time speedup, or a power target. Remaining release gates are
+listed in [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-30).
 
 ## Critical edited-terrain LOD boundary
 
