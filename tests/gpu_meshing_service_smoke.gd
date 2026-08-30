@@ -120,6 +120,10 @@ func _run() -> void:
 	if not capacity_error.is_empty():
 		_fail(capacity_error)
 		return
+	var shared_face_error := await _exercise_exact_shared_face_coordinates(identity)
+	if not shared_face_error.is_empty():
+		_fail(shared_face_error)
+		return
 	var timing: Dictionary = completion.get("timing_usec", {})
 	var resource_status: Dictionary = _service.get_status().get(
 		"persistent_resources", {}
@@ -180,6 +184,66 @@ func _exercise_bounded_capacity(batch: Dictionary, identity: Dictionary) -> Stri
 			signature = str(completion.get("raw_signature", ""))
 		elif str(completion.get("raw_signature", "")) != signature:
 			return "bounded GPU request repeats were not deterministic"
+	return ""
+
+
+func _exercise_exact_shared_face_coordinates(identity: Dictionary) -> String:
+	var densities := PackedFloat32Array()
+	var gradients := PackedVector3Array()
+	var materials := PackedInt32Array()
+	var authored := PackedByteArray()
+	var cells := []
+	# A tolerance may bound interpolation error along an edge, but must not
+	# allow fixed coordinates to leave a shared face before deformation.
+	for origin in [Vector3(1248, 32, 1152), Vector3(-1248, -64, -1152)]:
+		for step in [1.0, 2.0, 4.0, 8.0]:
+			for axis in range(3):
+				for index in range(1, 64):
+					var alpha := float(index) / 65.0
+					var references := PackedInt32Array()
+					for corner in range(8):
+						references.append(densities.size())
+						densities.append((float((corner >> axis) & 1) - alpha) * step)
+						var gradient := Vector3.ZERO
+						gradient[axis] = 1.0
+						gradients.append(gradient)
+						materials.append(1)
+						authored.append(0)
+					cells.append({
+						"id": "shared_face_%d" % cells.size(), "type": "regular",
+						"origin": origin, "cell_size": step, "orientation": 0,
+						"sample_indices": references, "isovalue": 0.0,
+						"test_interpolation_axis": axis,
+					})
+	var request_id := int(_service.submit_explicit_samples(
+		densities, gradients, materials, authored, cells, identity
+	))
+	if request_id <= 0:
+		return "shared-face precision request rejected"
+	var completion := await _wait_for_completion(request_id, 10.0)
+	if str(completion.get("status", "")) != "PASS":
+		return "shared-face precision request failed: %s" % str(completion)
+	var results: Array = completion.get("cells", [])
+	if results.size() != cells.size():
+		return "shared-face precision result count differs"
+	var checked_vertices := 0
+	for index in range(results.size()):
+		var cell: Dictionary = cells[index]
+		var origin: Vector3 = cell["origin"]
+		var step: float = cell["cell_size"]
+		var vertices := PackedVector3Array(results[index].get("vertices", []))
+		if vertices.size() != 4:
+			return "shared-face plane vertex count differs"
+		for vertex in vertices:
+			for axis in range(3):
+				if axis == int(cell["test_interpolation_axis"]):
+					continue
+				if vertex[axis] != origin[axis] and vertex[axis] != origin[axis] + step:
+					return "shared-face coordinate drift cell=%d axis=%d origin=%.12f step=%.12f actual=%.12f" % [
+						index, axis, origin[axis], step, vertex[axis],
+					]
+			checked_vertices += 1
+	print("GPU_SHARED_FACE_PRECISION_PASS cells=%d vertices=%d" % [cells.size(), checked_vertices])
 	return ""
 
 

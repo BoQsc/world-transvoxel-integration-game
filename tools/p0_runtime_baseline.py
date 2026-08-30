@@ -82,6 +82,7 @@ def _run_measurement(
     stem_prefix: str = "run",
     edit_ready_wait_frames: int | None = None,
     extra_args: list[str] | None = None,
+    retain_incomplete_measurement: bool = False,
 ) -> tuple[dict[str, object], dict[str, object]]:
     capture_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{stem_prefix}_{index:02d}"
@@ -162,7 +163,9 @@ def _run_measurement(
     stdout = stdout_path.read_text(encoding="utf-8")
 
     baseline = _runtime_baseline_from_stdout(stdout)
-    _validate_completed_measurement(baseline)
+    measurement_complete = baseline.get("measurement_complete") is True
+    if measurement_complete or not retain_incomplete_measurement:
+        _validate_completed_measurement(baseline)
     acceptance = baseline["acceptance"]
     failures = acceptance.get("failures", [])
     if not isinstance(failures, list):
@@ -175,8 +178,11 @@ def _run_measurement(
         "process_cpu_seconds": process_cpu_seconds,
         "average_active_cores": process_cpu_seconds / max(wall_seconds, 0.001),
         "peak_process_tree_rss_bytes": peak_rss_bytes,
-        "measurement_complete": True,
+        "measurement_complete": measurement_complete,
         "target_status": (
+            "MEASUREMENT_INCOMPLETE"
+            if not measurement_complete
+            else
             "MEASURED_TARGET_PASS"
             if acceptance.get("ok") is True
             else "MEASURED_TARGET_MISS"

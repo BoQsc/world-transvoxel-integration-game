@@ -78,6 +78,9 @@ var _vertex_format := -1
 var _initialization_attempted := false
 var _close_requested := false
 var _close_completed := false
+var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
+var _stage_timing_usec: Dictionary = {}
+var _active_lod_inventory_dirty := false
 var _status := {
 	"schema": RESULT_SCHEMA,
 	"initialized": false,
@@ -418,7 +421,17 @@ func activate_entries(entries: Array) -> bool:
 	return _queue_activation_group_command("ACTIVATE_GROUP", entries)
 
 
-func _queue_activation_group_command(action: String, entries: Array) -> bool:
+func replace_entries(entries: Array, retirements: Array) -> bool:
+	if retirements.is_empty():
+		return activate_entries(entries)
+	return _queue_activation_group_command(
+		"REPLACE_GROUP", entries, retirements
+	)
+
+
+func _queue_activation_group_command(
+	action: String, entries: Array, retirements: Array = []
+) -> bool:
 	if entries.is_empty():
 		_record_rejection("global render activation group is empty")
 		return false
@@ -435,6 +448,19 @@ func _queue_activation_group_command(action: String, entries: Array) -> bool:
 			"identity": identity.duplicate(true),
 			"publication_sequence": publication_sequence,
 		})
+	var retained_retirements: Array[Dictionary] = []
+	for entry_value in retirements:
+		var entry := Dictionary(entry_value)
+		var identity := Dictionary(entry.get("identity", {}))
+		var publication_sequence := int(entry.get("publication_sequence", 0))
+		var identity_error := _validate_identity(identity, publication_sequence)
+		if not identity_error.is_empty():
+			_record_rejection(identity_error)
+			return false
+		retained_retirements.append({
+			"identity": identity.duplicate(true),
+			"publication_sequence": publication_sequence,
+		})
 	_mutex.lock()
 	if _close_requested:
 		_status["last_error"] = "global render publication is closed"
@@ -443,6 +469,7 @@ func _queue_activation_group_command(action: String, entries: Array) -> bool:
 	_lifecycle_commands.append({
 		"action": action,
 		"entries": retained_entries,
+		"retirements": retained_retirements,
 	})
 	_mutex.unlock()
 	RenderingServer.call_on_render_thread(
@@ -483,6 +510,7 @@ func request_debug_ray_geometry(rays: Array) -> int:
 			"origin": origin,
 			"direction": direction.normalized(),
 			"max_distance": maximum_distance,
+			"include_geometry": bool(ray.get("include_geometry", false)),
 		})
 	_mutex.lock()
 	if _close_requested or _debug_geometry_requests.size() >= 4:
@@ -528,6 +556,7 @@ func close() -> void:
 func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	if callback_type != EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT:
 		return
+	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	if _rendering_device == null:
 		_rendering_device = RenderingServer.get_rendering_device()
 	if _rendering_device == null or not _ensure_shaders():
@@ -537,16 +566,44 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		if not have_specific_error:
 			_record_render_error("global RenderingDevice shader initialization failed")
 		return
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("initialize", phase_start)
 	_apply_pending_production_material_on_render_thread()
 	_apply_pending_production_water_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("materials", phase_start)
 	_drain_arena_readbacks_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("arena_readback", phase_start)
 	_drain_pending_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("dispatch", phase_start)
 	# Failure probes are requested from the main thread after it reads the last
 	# completed frame. Inspect the still-published entries before applying the
 	# next lifecycle batch so the geometry result describes that captured frame.
 	_drain_debug_geometry_requests_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("debug_geometry", phase_start)
 	_drain_lifecycle_commands_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("lifecycle", phase_start)
 	_draw_entries_on_render_thread(render_data)
+	if _stage_timing_enabled:
+		_record_stage_time("draw", phase_start)
+		_mutex.lock()
+		_status["stage_timing_usec"] = _stage_timing_usec.duplicate(true)
+		_mutex.unlock()
+
+
+func _record_stage_time(stage: String, start_us: int) -> int:
+	var now := Time.get_ticks_usec()
+	var elapsed := now - start_us
+	var value := Dictionary(_stage_timing_usec.get(stage, {"calls": 0, "total": 0, "max": 0}))
+	value["calls"] = int(value["calls"]) + 1
+	value["total"] = int(value["total"]) + elapsed
+	value["max"] = maxi(int(value["max"]), elapsed)
+	_stage_timing_usec[stage] = value
+	return now
 
 
 func _ensure_shaders() -> bool:
@@ -991,6 +1048,7 @@ func _finish_entry_on_render_thread(
 
 
 func _drain_lifecycle_commands_on_render_thread() -> void:
+	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	var commands: Array[Dictionary] = []
 	_mutex.lock()
 	commands.assign(_lifecycle_commands)
@@ -1003,6 +1061,9 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 			continue
 		if action == "ACTIVATE_GROUP":
 			_activate_group_on_render_thread(command)
+			continue
+		if action == "REPLACE_GROUP":
+			_replace_group_on_render_thread(command)
 			continue
 		var identity: Dictionary = command.get("identity", {})
 		var key := _identity_key(identity)
@@ -1026,6 +1087,9 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 			_activate_entry_on_render_thread(key, token, command)
 		elif action == "RETIRE":
 			_retire_entry_on_render_thread(key, token, command)
+	_sync_active_lod_inventory_on_render_thread()
+	if _stage_timing_enabled:
+		_record_stage_time("lifecycle_all_callbacks", phase_start)
 
 
 func _stage_activation_group_on_render_thread(command: Dictionary) -> void:
@@ -1096,6 +1160,78 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 		)
 
 
+func _replace_group_on_render_thread(command: Dictionary) -> void:
+	var activations := _validated_activation_group_on_render_thread(command)
+	if activations.is_empty():
+		return
+	var retirements: Array[Dictionary] = []
+	for source_value in Array(command.get("retirements", [])):
+		var source := Dictionary(source_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var key := _identity_key(identity)
+		var sequence := int(source.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		if not _entries.has(token) \
+				or int(_active_sequence_by_key.get(key, 0)) != sequence:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"retained entry became stale before atomic replacement"
+			)
+			return
+		var entry: Dictionary = _entries[token]
+		if Dictionary(entry.get("identity", {})) != identity:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"retirement identity differs before atomic replacement"
+			)
+			return
+		retirements.append({"source": source, "key": key, "token": token})
+	for item in activations:
+		var token := str(item.get("token", ""))
+		var entry: Dictionary = _entries[token]
+		entry["active"] = true
+		_entries[token] = entry
+		_activate_entry_on_render_thread(
+			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
+		)
+	for item in retirements:
+		_retire_entry_on_render_thread(
+			str(item.get("key", "")),
+			str(item.get("token", "")),
+			Dictionary(item.get("source", {}))
+		)
+
+
+func _validated_activation_group_on_render_thread(
+	command: Dictionary
+) -> Array[Dictionary]:
+	var validated: Array[Dictionary] = []
+	for source_value in Array(command.get("entries", [])):
+		var source := Dictionary(source_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var key := _identity_key(identity)
+		var sequence := int(source.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		_mutex.lock()
+		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+		_mutex.unlock()
+		if not _entries.has(token) or sequence != latest_sequence:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"prepared activation set became stale before activation"
+			)
+			return []
+		var entry: Dictionary = _entries[token]
+		if Dictionary(entry.get("identity", {})) != identity:
+			_push_event_on_render_thread(
+				"REJECTED", source,
+				"activation set identity differs from prepared entry"
+			)
+			return []
+		validated.append({"source": source, "key": key, "token": token})
+	return validated
+
+
 func _activate_entry_on_render_thread(
 	key: String, token: String, source: Dictionary
 ) -> void:
@@ -1119,7 +1255,7 @@ func _activate_entry_on_render_thread(
 	_status["activated_entries"] = int(_status["activated_entries"]) + 1
 	_status["resident_entry_count"] = _entries.size()
 	_status["active_entry_count"] = _active_sequence_by_key.size()
-	_sync_active_lod_inventory_locked()
+	_active_lod_inventory_dirty = true
 	_mutex.unlock()
 	_push_event_on_render_thread("ACTIVE", source)
 
@@ -1140,7 +1276,7 @@ func _retire_entry_on_render_thread(
 	_status["retired_entries"] = int(_status["retired_entries"]) + 1
 	_status["resident_entry_count"] = _entries.size()
 	_status["active_entry_count"] = _active_sequence_by_key.size()
-	_sync_active_lod_inventory_locked()
+	_active_lod_inventory_dirty = true
 	_mutex.unlock()
 	_push_event_on_render_thread("RETIRED", source)
 
@@ -1183,7 +1319,10 @@ func _cancel_unpublished_entry_on_render_thread(
 		_mutex.unlock()
 
 
-func _sync_active_lod_inventory_locked() -> void:
+func _sync_active_lod_inventory_on_render_thread() -> void:
+	if not _active_lod_inventory_dirty:
+		return
+	_active_lod_inventory_dirty = false
 	var terrain_counts := {}
 	var water_counts := {}
 	var empty_count := 0
@@ -1213,12 +1352,15 @@ func _sync_active_lod_inventory_locked() -> void:
 		var counts := water_counts \
 			if str(identity.get("surface", "")) == "static_water" else terrain_counts
 		counts[lod] = int(counts.get(lod, 0)) + 1
+	_mutex.lock()
+	_status["active_inventory_rebuilds"] = int(_status.get("active_inventory_rebuilds", 0)) + 1
 	_status["active_terrain_lod_counts"] = terrain_counts
 	_status["active_static_water_lod_counts"] = water_counts
 	_status["active_empty_entry_count"] = empty_count
 	_status["active_partial_entry_count"] = partial_count
 	_status["active_empty_entry_examples"] = empty_examples
 	_status["active_partial_entry_examples"] = partial_examples
+	_mutex.unlock()
 
 
 func _create_entry_on_render_thread(request: Dictionary) -> Dictionary:
@@ -1276,7 +1418,8 @@ func _drain_debug_geometry_requests_on_render_thread() -> void:
 				if bounds_distance < 0.0:
 					continue
 				var probe := Dictionary(_arena.debug_ray_intersection(
-					entry, origin, direction, maximum_distance
+					entry, origin, direction, maximum_distance,
+					bool(ray.get("include_geometry", false))
 				))
 				total_readback_bytes += int(probe.get("geometry_readback_bytes", 0))
 				probe["bounds_distance"] = bounds_distance

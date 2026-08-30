@@ -3228,7 +3228,11 @@ func _human_artifact_sky_pixel_rays(
 	var direct_space_state := get_world_3d().direct_space_state
 	for index in range(pixel_summaries.size()):
 		var pixel: Dictionary = pixel_summaries[index]
-		var screen_point := Vector2(float(pixel.get("x", 0.0)), float(pixel.get("y", 0.0)))
+		# Image coordinates identify texels; raster samples lie at their centers.
+		var screen_point := Vector2(
+			float(pixel.get("x", 0.0)) + 0.5,
+			float(pixel.get("y", 0.0)) + 0.5
+		)
 		var origin := camera.project_ray_origin(screen_point)
 		var direction := camera.project_ray_normal(screen_point).normalized()
 		var end := origin + direction * 512.0
@@ -8355,6 +8359,10 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 	var max_render_fading_resources := 0
 	var sample_index := 0
 	var terrain_world_for_probe: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world_for_probe != null and terrain_world_for_probe.has_method(
+		"set_debug_gpu_resident_lifecycle_history_enabled"
+	):
+		terrain_world_for_probe.call("set_debug_gpu_resident_lifecycle_history_enabled", true)
 	var backend_for_probe: Node = null
 	if terrain_world_for_probe != null and terrain_world_for_probe.has_method("get_backend_terrain"):
 		backend_for_probe = terrain_world_for_probe.call("get_backend_terrain")
@@ -8432,6 +8440,8 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 			if not _streaming_fly_should_sample_frame(frame, frames, post_edit):
 				continue
 			var sample_gap_sensitive := gap_sensitive and frame >= gap_sensitive_start_frame
+			# Pair the image with this pose, not the preceding rendered camera.
+			await RenderingServer.frame_post_draw
 			var image := get_viewport().get_texture().get_image()
 			var sky := _screen_sky_pixel_summary(image, 4 if post_edit else 1)
 			var visual_gap_candidate := sample_gap_sensitive and _streaming_fly_sky_gap_detected(sky, post_edit)
@@ -8484,6 +8494,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 							"origin": _vector3_from_summary(ray.get("origin", {})),
 							"direction": _vector3_from_summary(ray.get("direction", {})),
 							"max_distance": float(ray.get("max_distance", 512.0)),
+							"include_geometry": true,
 						})
 					var debug_request_id := int(terrain_world_for_probe.call(
 						"request_debug_gpu_resident_ray_geometry", geometry_rays
@@ -8584,6 +8595,8 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				"label": label,
 				"segment": str(current.get("label", "segment")),
 				"frame": frame,
+				"capture_phase": "frame_post_draw",
+				"ray_sample_location": "pixel_center",
 				"position": _vector3_summary(position),
 				"target": _vector3_summary(target),
 				"gap_detected": gap,
@@ -8658,6 +8671,25 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 				sample["render_seam_diagnostics"] = _human_artifact_render_seam_diagnostics(
 					backend_for_probe,
 					render_ray_hits
+				)
+			if gap and terrain_world_for_probe != null \
+					and terrain_world_for_probe.has_method(
+						"get_gpu_resident_render_status"
+				):
+				var controller_status := Dictionary(terrain_world_for_probe.call(
+					"get_gpu_resident_render_status"
+				))
+				sample["gpu_resident_recent_lifecycle_events"] = Array(
+					controller_status.get("recent_lifecycle_events", [])
+				).duplicate(true)
+				sample["gpu_resident_retired_chunks"] = int(
+					controller_status.get("retired_chunks", 0)
+				)
+				sample["gpu_resident_superseded_chunks"] = int(
+					controller_status.get("superseded_chunks", 0)
+				)
+				sample["gpu_resident_cpu_only_regional_retirements"] = int(
+					controller_status.get("cpu_only_regional_retirements", 0)
 				)
 			samples.append(sample)
 			if gap or image_error != OK:

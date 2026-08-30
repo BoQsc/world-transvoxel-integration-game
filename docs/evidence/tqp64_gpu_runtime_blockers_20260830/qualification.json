@@ -1,0 +1,106 @@
+{
+  "status": "REJECTED_NOT_RELEASE_QUALIFIED",
+  "gpu_default_enabled": false,
+  "visual_gate": {
+    "ok": false,
+    "samples": 13,
+    "failures": 1,
+    "failure_label": "12_peak_sweep_f054",
+    "offline_reproduction": "RECORDED_DEFECT_REPRODUCED_NOT_TERRAIN_PASS"
+  },
+  "performance_gate": {
+    "ok": false,
+    "completed_equivalent_cpu_gpu_workload": false,
+    "final_gpu_post_draw_ms": {
+      "p95": 86.92,
+      "p99": 118.94,
+      "maximum": 225.957
+    },
+    "movement_blocked_steps": 569,
+    "movement_steps": 1020,
+    "edit_accepted": false,
+    "causal_trace_enabled": false,
+    "stage_timing_enabled": false,
+    "lifecycle_history_enabled": false
+  },
+  "focused_smoke_logs": [
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_meshing_service\\d3d12.log",
+      "sha256": "4cf85a06f82ea3300965dfbe00c30445f59d478c15e42901a19b84dd5e6ded88",
+      "result_lines": [
+        "GPU_SHARED_FACE_PRECISION_PASS cells=1512 vertices=6048",
+        "GPU_MESHING_SERVICE_SMOKE_PASS cells=4352 vertices=504 triangles=248 gpu_total_us=15181 persistent_rebuilds=1 persistent_reuses=4"
+      ]
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_meshing_service\\vulkan.log",
+      "sha256": "77bfaebf2d9aad89884b04fd874634b150d62ce66e322ab1c4c05af30b1b5f96",
+      "result_lines": [
+        "GPU_SHARED_FACE_PRECISION_PASS cells=1512 vertices=6048",
+        "GPU_MESHING_SERVICE_SMOKE_PASS cells=4352 vertices=504 triangles=248 gpu_total_us=12388 persistent_rebuilds=1 persistent_reuses=4"
+      ]
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_global_render_publication\\d3d12.log",
+      "sha256": "2d533967271d4125c447dae2f93fd59c80cd8bea9aa2ccd613ab742467aff6ba",
+      "result_lines": [
+        "GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=4352 applied=2 stale=1 superseded=1 draw_frames=8 indirect_draw_calls=7 compacted=1 culling=1 atomic_replacement=1 avoided_records=34809 foreground_pixels=27312 image_sha256=28b91dc7ebbbb271dd53cb92e90bd75cc96b78e78b09d76c7e15ae03555369fd"
+      ]
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_global_render_publication\\vulkan.log",
+      "sha256": "cf06429afa0c6175b267c0eecfd6b2c55b9904b61c0e7415d78876a6082b2406",
+      "result_lines": [
+        "GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=4352 applied=2 stale=1 superseded=1 draw_frames=8 indirect_draw_calls=7 compacted=1 culling=1 atomic_replacement=1 avoided_records=34809 foreground_pixels=27312 image_sha256=28b91dc7ebbbb271dd53cb92e90bd75cc96b78e78b09d76c7e15ae03555369fd"
+      ]
+    }
+  ],
+  "authority_pin": {
+    "schema": "world_transvoxel.integration.runtime_pin.v1",
+    "status": "ACTIVE",
+    "authority": {
+      "repository": "world-transvoxel",
+      "commit": "0a9b3c94ffded6e18f2027cbbc8ae8ac91d52fff",
+      "addon_tree": "620e606cf97ccd6f7e97fb845577b74ffa5622e8",
+      "native_source_tree": "d6b31283fed4774f6ae090c82a2619dc29a1a58a",
+      "fallback": false
+    },
+    "runtime_artifact": {
+      "layout": "binary_consumer_v1",
+      "native_source_included": false,
+      "binary_build_commit": "0a9b3c94ffded6e18f2027cbbc8ae8ac91d52fff",
+      "digest_sha256": "17e859464f7895ae0ff7f62f93f29a82985f06727935f1290adb0b942a8b0ab0",
+      "files": [
+        "LICENSE_SCOPE.md",
+        "OPERATING_LIMITS.md",
+        "PUBLIC_API.md",
+        "README.md",
+        "thirdparty/transvoxel_mit/LICENSE",
+        "thirdparty/transvoxel_mit/UPSTREAM.md",
+        "world_transvoxel.gdextension",
+        "world_transvoxel.gdextension.uid",
+        "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bin/world_transvoxel.windows.template_release.x86_64.dll"
+      ],
+      "binaries": [
+        {
+          "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bytes": 2705920,
+          "sha256": "9c209d19908acd835fc31db389b9d5370d0bdeb72611dcdc72ad8e869b5f1438"
+        },
+        {
+          "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+          "bytes": 2586112,
+          "sha256": "eec304aa65fc8ede956b4ad54d00129e91833f1859ff90852d11ff61a95d5dc7"
+        }
+      ]
+    }
+  },
+  "not_validated": [
+    "D3D12 whole-world gameplay performance",
+    "energy/frame",
+    "release export",
+    "human acceptance",
+    "post-fix seam qualification"
+  ]
+}

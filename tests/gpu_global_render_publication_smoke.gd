@@ -197,10 +197,52 @@ func _run() -> void:
 	var avoided_records := int(status.get(
 		"source_cell_indirect_records_avoided", 0
 	))
+	var replacement_identity := _identity(batch, 304, 0x500000032, 0x600000056)
+	replacement_identity["page_x"] = 1
+	var prepared_before := int(status.get("prepared_entries", 0))
+	var replacement_request := _submit(batch, replacement_identity, 4, false)
+	if replacement_request <= request_three or not await _wait_for_status(
+		func(replacement_status: Dictionary) -> bool:
+			return int(replacement_status.get("prepared_entries", 0)) \
+				> prepared_before,
+		10.0
+	):
+		_fail("atomic replacement entry was not prepared")
+		return
+	if not _effect.replace_entries(
+		[{"identity": replacement_identity, "publication_sequence": 4}],
+		[{"identity": identity, "publication_sequence": 3}]
+	):
+		_fail("atomic replacement command was rejected")
+		return
+	if not await _wait_for_status(
+		func(replacement_status: Dictionary) -> bool:
+			return int(replacement_status.get("active_entry_count", 0)) == 1 \
+				and int(replacement_status.get("retired_entries", 0)) >= 1,
+		10.0
+	):
+		_fail("atomic replacement did not complete: %s" % _effect.get_status())
+		return
+	var replacement_activated := 0
+	var replaced_retired := 0
+	while true:
+		var replacement_event: Dictionary = _effect.pop_event()
+		if replacement_event.is_empty():
+			break
+		var event_identity := Dictionary(replacement_event.get("identity", {}))
+		if str(replacement_event.get("status", "")) == "ACTIVE" \
+				and event_identity == replacement_identity:
+			replacement_activated += 1
+		elif str(replacement_event.get("status", "")) == "RETIRED" \
+				and event_identity == identity:
+			replaced_retired += 1
+	if replacement_activated != 1 or replaced_retired != 1:
+		_fail("atomic replacement did not publish a complete event pair")
+		return
 	var cancelled_identity := _identity(batch, 401, 0x500000041, 0x600000061)
-	cancelled_identity["page_x"] = 1
+	cancelled_identity["page_x"] = 2
 	var cancelled_request := _submit(batch, cancelled_identity, 1, false)
-	if cancelled_request <= request_three \
+	if cancelled_request <= replacement_request \
 			or not _effect.retire_entry(cancelled_identity, 1):
 		_fail("pre-publication retirement request was rejected")
 		return
@@ -248,7 +290,7 @@ func _run() -> void:
 		(
 			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 stale=1 " \
 			+ "superseded=1 draw_frames=%d indirect_draw_calls=%d " \
-			+ "compacted=1 culling=1 avoided_records=%d " \
+			+ "compacted=1 culling=1 atomic_replacement=1 avoided_records=%d " \
 			+ "foreground_pixels=%d image_sha256=%s"
 		) % [
 			EXPECTED_CELL_COUNT,

@@ -1,0 +1,5149 @@
+{
+  "status": "GPU_GEOMETRY_AND_GAMEPLAY_PERFORMANCE_REJECTED",
+  "runtime_pin": {
+    "schema": "world_transvoxel.integration.runtime_pin.v1",
+    "status": "ACTIVE",
+    "authority": {
+      "repository": "world-transvoxel",
+      "commit": "0a9b3c94ffded6e18f2027cbbc8ae8ac91d52fff",
+      "addon_tree": "620e606cf97ccd6f7e97fb845577b74ffa5622e8",
+      "native_source_tree": "d6b31283fed4774f6ae090c82a2619dc29a1a58a",
+      "fallback": false
+    },
+    "runtime_artifact": {
+      "layout": "binary_consumer_v1",
+      "native_source_included": false,
+      "binary_build_commit": "0a9b3c94ffded6e18f2027cbbc8ae8ac91d52fff",
+      "digest_sha256": "17e859464f7895ae0ff7f62f93f29a82985f06727935f1290adb0b942a8b0ab0",
+      "files": [
+        "LICENSE_SCOPE.md",
+        "OPERATING_LIMITS.md",
+        "PUBLIC_API.md",
+        "README.md",
+        "thirdparty/transvoxel_mit/LICENSE",
+        "thirdparty/transvoxel_mit/UPSTREAM.md",
+        "world_transvoxel.gdextension",
+        "world_transvoxel.gdextension.uid",
+        "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bin/world_transvoxel.windows.template_release.x86_64.dll"
+      ],
+      "binaries": [
+        {
+          "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bytes": 2705920,
+          "sha256": "9c209d19908acd835fc31db389b9d5370d0bdeb72611dcdc72ad8e869b5f1438"
+        },
+        {
+          "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+          "bytes": 2586112,
+          "sha256": "eec304aa65fc8ede956b4ad54d00129e91833f1859ff90852d11ff61a95d5dc7"
+        }
+      ]
+    }
+  },
+  "logical_cpu_affinity": [
+    0,
+    1,
+    2
+  ],
+  "gpu_speedup_claim": false,
+  "wattage_measured": false,
+  "rendered_interval_contract": "wall time between frame_post_draw signals, not display presentation",
+  "runs": [
+    {
+      "name": "cpu_render",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\cpu_render_result.json",
+        "sha256": "000378d7284382608dfdef86b5fb3eee2e5744f44c7d1c95d00b6ba95f06f94e",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\cpu_02.stdout.log",
+            "sha256": "5cdf95801e685a2158b8b8b58acad5315c03fdf8903f7e7b1899a92cc7dd5134"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\cpu_02.stderr.log",
+            "sha256": "faab0c742891c7017dd2ac8610580f50fbba8e8a450ceb887462c21d48036c0b"
+          }
+        ]
+      },
+      "execution": {
+        "run": 2,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\cpu_02.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 47.658463799976744,
+        "process_cpu_seconds": 77.453125,
+        "average_active_cores": 1.6251704067733252,
+        "peak_process_tree_rss_bytes": 888520704,
+        "measurement_complete": true,
+        "target_status": "MEASURED_TARGET_MISS",
+        "acceptance_failures": [
+          "frame_p95",
+          "frame_p99",
+          "visual_ready_wait",
+          "collision_ready_wait"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/cpu_02.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/cpu_02.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "frame_p95",
+            "frame_p99",
+            "visual_ready_wait",
+            "collision_ready_wait"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 106,
+          "maximum_collision_apply_frame_time_ns_observed": 5888900,
+          "maximum_collision_apply_time_ns_last": 2259900,
+          "maximum_collision_apply_time_ns_observed": 4505400,
+          "maximum_mesh_job_time_ns_observed": 41467800,
+          "maximum_pending_chunk_replacements": 732,
+          "maximum_pending_chunk_retirements": 2538,
+          "maximum_queued_collision": 0,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 16982100,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 731,
+          "maximum_staged_render_resources": 416,
+          "samples": 121
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 5888900,
+          "maximum_single_apply_ns": 4505400,
+          "ok": true,
+          "soft_bound_ns": 8755400
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": 1,
+          "authority_commit_ms": 16.645,
+          "collision_generation_after": 6617,
+          "collision_ready_censored": false,
+          "collision_ready_frames_after_commit": 420,
+          "collision_ready_ms_after_commit": 7056.912,
+          "collision_required": true,
+          "commit_frame_time_ms": {
+            "maximum": 16.645,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 16.645,
+            "p95": 16.645,
+            "p99": 16.645,
+            "samples": 1
+          },
+          "edit_position": {
+            "x": 560.990905761719,
+            "y": 39.134880065918,
+            "z": 560.0
+          },
+          "generation_after": 6617,
+          "generation_before": 6202,
+          "generation_changed_frames_after_commit": 1,
+          "gpu_render_required": false,
+          "interaction_accepted": true,
+          "interaction_call_ms": 0.803,
+          "interaction_ray_hit": true,
+          "interaction_reason": "raycast_hit",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "physics_collision",
+          "logical_collision_ready_frames_after_commit": 1,
+          "logical_visual_ready_frames_after_commit": 116,
+          "measurement_complete": true,
+          "native_visual_ready_frames_after_commit": 420,
+          "native_visual_ready_ms_after_commit": 7056.912,
+          "physics_target_found": true,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "physics_target_wait_frames": 0,
+          "physics_target_wait_ms": 0.0,
+          "ready_frame_time_ms": {
+            "maximum": 64.487,
+            "over_16_67_ms": 200,
+            "over_33_3_ms": 154,
+            "p50": 1.808,
+            "p95": 38.562,
+            "p99": 41.314,
+            "samples": 420
+          },
+          "ready_observation_window_frames": 420,
+          "ready_observation_window_ms": 7056.912,
+          "relocation_to_collision_ready_lower_bound_ms": 7073.557,
+          "relocation_to_collision_ready_ms": 7073.557,
+          "relocation_to_visual_ready_lower_bound_ms": 7073.557,
+          "relocation_to_visual_ready_ms": 7073.557,
+          "render_generation_after": 6617,
+          "resource_generation_api": true,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": 0,
+          "visual_readiness_contract": "native_render_generation",
+          "visual_ready_censored": false,
+          "visual_ready_frames_after_commit": 420,
+          "visual_ready_ms_after_commit": 7056.912
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 64.487,
+          "over_16_67_ms": 656,
+          "over_33_3_ms": 168,
+          "p50": 16.666,
+          "p95": 35.274,
+          "p99": 39.029,
+          "samples": 1801
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": true,
+        "movement": {
+          "accepted_frames": 1020,
+          "blocked_frames": 0,
+          "blocked_ratio": 0.0,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 0,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 571.547180175781,
+          "y": 41.4840507507324,
+          "z": 571.293212890625
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 16.915,
+              "over_16_67_ms": 25,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 16.718,
+              "p99": 16.915,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 367.942413330078,
+              "y": 40.7118148803711,
+              "z": 367.772125244141
+            },
+            "frame_time_ms": {
+              "maximum": 24.209,
+              "over_16_67_ms": 80,
+              "over_33_3_ms": 0,
+              "p50": 16.668,
+              "p95": 16.825,
+              "p99": 22.887,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 95.9652786254883
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 17.586,
+              "over_16_67_ms": 22,
+              "over_33_3_ms": 0,
+              "p50": 16.67,
+              "p95": 16.866,
+              "p99": 17.586,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.068878173828,
+              "y": 42.0693130493164,
+              "z": 299.898590087891
+            },
+            "frame_time_ms": {
+              "maximum": 49.22,
+              "over_16_67_ms": 73,
+              "over_33_3_ms": 5,
+              "p50": 16.662,
+              "p95": 29.468,
+              "p99": 36.192,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 367.942413330078,
+              "y": 40.7118148803711,
+              "z": 367.772125244141
+            },
+            "travel_distance": 95.9972763061523
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 16.696,
+              "over_16_67_ms": 5,
+              "over_33_3_ms": 0,
+              "p50": 16.667,
+              "p95": 16.68,
+              "p99": 16.696,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 556.010681152344,
+              "y": 43.8665657043457,
+              "z": 299.921142578125
+            },
+            "frame_time_ms": {
+              "maximum": 41.279,
+              "over_16_67_ms": 36,
+              "over_33_3_ms": 1,
+              "p50": 16.666,
+              "p95": 18.215,
+              "p99": 23.097,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.068878173828,
+              "y": 42.0693130493164,
+              "z": 299.898590087891
+            },
+            "travel_distance": 255.948120117188
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 40.556,
+              "over_16_67_ms": 14,
+              "over_33_3_ms": 2,
+              "p50": 16.667,
+              "p95": 33.937,
+              "p99": 40.556,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.010314941406,
+              "y": 43.8665657043457,
+              "z": 299.921142578125
+            },
+            "frame_time_ms": {
+              "maximum": 27.236,
+              "over_16_67_ms": 38,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.687,
+              "p99": 21.417,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 556.010681152344,
+              "y": 43.8665657043457,
+              "z": 299.921142578125
+            },
+            "travel_distance": 256.000366210938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 33.567,
+              "over_16_67_ms": 11,
+              "over_33_3_ms": 3,
+              "p50": 16.663,
+              "p95": 33.475,
+              "p99": 33.567,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.065734863281,
+              "y": 46.5272445678711,
+              "z": 555.781555175781
+            },
+            "frame_time_ms": {
+              "maximum": 35.527,
+              "over_16_67_ms": 32,
+              "over_33_3_ms": 2,
+              "p50": 16.666,
+              "p95": 16.699,
+              "p99": 34.856,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.010314941406,
+              "y": 43.8665657043457,
+              "z": 299.921142578125
+            },
+            "travel_distance": 255.874252319336
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 16.698,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 0,
+              "p50": 16.665,
+              "p95": 16.681,
+              "p99": 16.698,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 120,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 300.065734863281,
+              "y": 46.5272445678711,
+              "z": 299.781188964844
+            },
+            "frame_time_ms": {
+              "maximum": 27.356,
+              "over_16_67_ms": 26,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.682,
+              "p99": 22.857,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.065734863281,
+              "y": 46.5272445678711,
+              "z": 555.781555175781
+            },
+            "travel_distance": 256.000366210938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 43.941,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 1,
+              "p50": 16.667,
+              "p95": 17.835,
+              "p99": 43.941,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 571.547180175781,
+              "y": 41.4840507507324,
+              "z": 571.293212890625
+            },
+            "frame_time_ms": {
+              "maximum": 31.05,
+              "over_16_67_ms": 52,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.706,
+              "p99": 20.433,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 300.065734863281,
+              "y": 46.5272445678711,
+              "z": 299.781188964844
+            },
+            "travel_distance": 383.987487792969
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 17.683,
+              "over_16_67_ms": 27,
+              "over_33_3_ms": 0,
+              "p50": 16.666,
+              "p95": 16.705,
+              "p99": 17.683,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 64.676,
+          "over_16_67_ms": 875,
+          "over_33_3_ms": 179,
+          "p50": 16.755,
+          "p95": 36.123,
+          "p99": 41.055,
+          "samples": 1567
+        },
+        "route_net_displacement": 383.846435546875,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 97,
+          "collision_apply_frame_items_maximum_end": 106,
+          "collision_apply_frame_time_ns_maximum_end": 5888900,
+          "collision_apply_frame_time_ns_total": 1221884300,
+          "collision_apply_time_ns_maximum_end": 4505400,
+          "collision_apply_time_ns_total": 1221884300,
+          "collision_viewer_updates": 184,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 41467800,
+          "sample_job_time_ns_maximum_end": 16982100,
+          "viewer_updates": 171
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "cpu_collision_authority": true,
+          "gpu_resident_render_publication": false,
+          "running": false,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1"
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 0,
+        "gpu_effect_status": {}
+      }
+    },
+    {
+      "name": "gpu_stages",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_stages_result.json",
+        "sha256": "cbc486af121600fd2bd031051e7bacd36969dafd47810b59fa1fc03c21673618",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_stages_01.stdout.log",
+            "sha256": "ac3451be56cccdd29598bcbd2006bddb7a04f7e636a94efddb198ef54bff6d56"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_stages_01.stderr.log",
+            "sha256": "7d9a38e3c7e11023b29d0b6c260dbdd8756d47ec1d789cfdc6545a179161ccff"
+          }
+        ]
+      },
+      "execution": {
+        "run": 1,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_stages_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array",
+          "--gpu-resident-render-candidate",
+          "--gpu-stage-timing"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 84.88238650001585,
+        "process_cpu_seconds": 104.1875,
+        "average_active_cores": 1.2274336796595668,
+        "peak_process_tree_rss_bytes": 804085760,
+        "measurement_complete": false,
+        "target_status": "MEASUREMENT_INCOMPLETE",
+        "acceptance_failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "consecutive_blocked_movement_frames",
+          "frame_p95",
+          "frame_p99",
+          "physics_target_missing",
+          "physics_target_wait",
+          "authority_commit_wait",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_stages_01.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_stages_01.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "route_net_displacement",
+            "blocked_movement_frames",
+            "consecutive_blocked_movement_frames",
+            "frame_p95",
+            "frame_p99",
+            "physics_target_missing",
+            "physics_target_wait",
+            "authority_commit_wait",
+            "visual_ready_wait",
+            "visual_collision_divergence"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 28,
+          "maximum_collision_apply_frame_time_ns_observed": 4638800,
+          "maximum_collision_apply_time_ns_last": 2174700,
+          "maximum_collision_apply_time_ns_observed": 2822700,
+          "maximum_mesh_job_time_ns_observed": 29876500,
+          "maximum_pending_chunk_replacements": 562,
+          "maximum_pending_chunk_retirements": 495,
+          "maximum_queued_collision": 1,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 45611800,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 555,
+          "maximum_staged_render_resources": 0,
+          "samples": 104
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 4638800,
+          "maximum_single_apply_ns": 2822700,
+          "ok": true,
+          "soft_bound_ns": 7072700
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": -1,
+          "authority_commit_ms": -1.0,
+          "collision_generation_after": 0,
+          "collision_ready_censored": true,
+          "collision_ready_frames_after_commit": -1,
+          "collision_ready_ms_after_commit": -1.0,
+          "collision_required": false,
+          "commit_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "edit_position": {
+            "x": 562.607727050781,
+            "y": -20.3645782470703,
+            "z": 560.0
+          },
+          "generation_after": 0,
+          "generation_before": 0,
+          "generation_changed_frames_after_commit": -1,
+          "gpu_render_required": true,
+          "interaction_accepted": false,
+          "interaction_call_ms": 3.008,
+          "interaction_ray_hit": false,
+          "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "none",
+          "logical_collision_ready_frames_after_commit": -1,
+          "logical_visual_ready_frames_after_commit": -1,
+          "measurement_complete": false,
+          "native_visual_ready_frames_after_commit": -1,
+          "native_visual_ready_ms_after_commit": -1.0,
+          "physics_target_found": false,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 260.954,
+            "over_16_67_ms": 39,
+            "over_33_3_ms": 33,
+            "p50": 0.079,
+            "p95": 98.764,
+            "p99": 198.621,
+            "samples": 180
+          },
+          "physics_target_wait_frames": 180,
+          "physics_target_wait_ms": 3333.477,
+          "ready_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "ready_observation_window_frames": 0,
+          "ready_observation_window_ms": 0.0,
+          "relocation_to_collision_ready_lower_bound_ms": 3332.477,
+          "relocation_to_collision_ready_ms": -1.0,
+          "relocation_to_visual_ready_lower_bound_ms": 3332.477,
+          "relocation_to_visual_ready_ms": -1.0,
+          "render_generation_after": 0,
+          "resource_generation_api": false,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": -2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": -1,
+          "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+          "visual_ready_censored": true,
+          "visual_ready_frames_after_commit": -1,
+          "visual_ready_ms_after_commit": -1.0
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 4357.43,
+          "over_16_67_ms": 403,
+          "over_33_3_ms": 299,
+          "p50": 0.262,
+          "p95": 90.896,
+          "p99": 790.552,
+          "samples": 1560
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": false,
+        "movement": {
+          "accepted_frames": 393,
+          "blocked_frames": 627,
+          "blocked_ratio": 0.614705882352941,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 161,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 9.918212890625e-05
+        },
+        "movement_end_position": {
+          "x": 350.4287109375,
+          "y": 43.3492965698242,
+          "z": 318.099792480469
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 399.306,
+              "over_16_67_ms": 31,
+              "over_33_3_ms": 5,
+              "p50": 25.869,
+              "p95": 34.981,
+              "p99": 399.306,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 178,
+            "blocked_frames": 2,
+            "blocked_ratio": 0.0111111111111111,
+            "end_position": {
+              "x": 367.188262939453,
+              "y": 40.7268028259277,
+              "z": 367.017944335938
+            },
+            "frame_time_ms": {
+              "maximum": 739.689,
+              "over_16_67_ms": 71,
+              "over_33_3_ms": 33,
+              "p50": 0.863,
+              "p95": 58.357,
+              "p99": 126.427,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 2,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 94.898681640625
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 117.566,
+              "over_16_67_ms": 15,
+              "over_33_3_ms": 9,
+              "p50": 0.314,
+              "p95": 81.462,
+              "p99": 117.566,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 81,
+            "blocked_frames": 99,
+            "blocked_ratio": 0.55,
+            "end_position": {
+              "x": 336.645172119141,
+              "y": 41.3376770019531,
+              "z": 336.474853515625
+            },
+            "frame_time_ms": {
+              "maximum": 1700.167,
+              "over_16_67_ms": 37,
+              "over_33_3_ms": 31,
+              "p50": 0.269,
+              "p95": 187.444,
+              "p99": 1098.692,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 99,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 367.188262939453,
+              "y": 40.7268028259277,
+              "z": 367.017944335938
+            },
+            "travel_distance": 43.1987724304199
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 472.603,
+              "over_16_67_ms": 10,
+              "over_33_3_ms": 9,
+              "p50": 0.246,
+              "p95": 132.829,
+              "p99": 472.603,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 21,
+            "blocked_frames": 99,
+            "blocked_ratio": 0.825,
+            "end_position": {
+              "x": 381.445129394531,
+              "y": 41.3376770019531,
+              "z": 336.474853515625
+            },
+            "frame_time_ms": {
+              "maximum": 495.081,
+              "over_16_67_ms": 31,
+              "over_33_3_ms": 29,
+              "p50": 0.263,
+              "p95": 90.187,
+              "p99": 140.969,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 99,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 336.645172119141,
+              "y": 41.3376770019531,
+              "z": 336.474853515625
+            },
+            "travel_distance": 44.7999572753906
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 191.268,
+              "over_16_67_ms": 10,
+              "over_33_3_ms": 10,
+              "p50": 0.296,
+              "p95": 60.98,
+              "p99": 191.268,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 28,
+            "blocked_frames": 92,
+            "blocked_ratio": 0.766666666666667,
+            "end_position": {
+              "x": 321.739074707031,
+              "y": 41.7797813415527,
+              "z": 336.482208251953
+            },
+            "frame_time_ms": {
+              "maximum": 2150.497,
+              "over_16_67_ms": 26,
+              "over_33_3_ms": 21,
+              "p50": 0.253,
+              "p95": 454.895,
+              "p99": 1535.166,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 85,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 381.445129394531,
+              "y": 41.3376770019531,
+              "z": 336.474853515625
+            },
+            "travel_distance": 59.707691192627
+          },
+          {
+            "drift_distance": 9.918212890625e-05,
+            "frame_time_ms": {
+              "maximum": 404.358,
+              "over_16_67_ms": 11,
+              "over_33_3_ms": 6,
+              "p50": 0.324,
+              "p95": 75.112,
+              "p99": 404.358,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 22,
+            "blocked_frames": 98,
+            "blocked_ratio": 0.816666666666667,
+            "end_position": {
+              "x": 321.770416259766,
+              "y": 43.9224624633789,
+              "z": 383.308074951172
+            },
+            "frame_time_ms": {
+              "maximum": 116.876,
+              "over_16_67_ms": 32,
+              "over_33_3_ms": 32,
+              "p50": 0.255,
+              "p95": 63.065,
+              "p99": 77.548,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 98,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 321.739074707031,
+              "y": 41.7798805236816,
+              "z": 336.482208251953
+            },
+            "travel_distance": 46.874870300293
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 303.991,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 8,
+              "p50": 0.265,
+              "p95": 54.163,
+              "p99": 303.991,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 44,
+            "blocked_frames": 76,
+            "blocked_ratio": 0.633333333333333,
+            "end_position": {
+              "x": 321.770416259766,
+              "y": 43.9224624633789,
+              "z": 289.441497802734
+            },
+            "frame_time_ms": {
+              "maximum": 3733.761,
+              "over_16_67_ms": 23,
+              "over_33_3_ms": 22,
+              "p50": 0.243,
+              "p95": 99.41,
+              "p99": 1694.501,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 72,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 321.770416259766,
+              "y": 43.9224624633789,
+              "z": 383.308074951172
+            },
+            "travel_distance": 93.8665771484375
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 73.347,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 8,
+              "p50": 0.202,
+              "p95": 68.227,
+              "p99": 73.347,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 19,
+            "blocked_frames": 161,
+            "blocked_ratio": 0.894444444444444,
+            "end_position": {
+              "x": 350.4287109375,
+              "y": 43.3492965698242,
+              "z": 318.099792480469
+            },
+            "frame_time_ms": {
+              "maximum": 2013.885,
+              "over_16_67_ms": 35,
+              "over_33_3_ms": 30,
+              "p50": 0.26,
+              "p95": 322.261,
+              "p99": 1176.36,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 161,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 321.770416259766,
+              "y": 43.9224624633789,
+              "z": 289.441497802734
+            },
+            "travel_distance": 40.5330009460449
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 4357.43,
+              "over_16_67_ms": 16,
+              "over_33_3_ms": 13,
+              "p50": 0.222,
+              "p95": 338.054,
+              "p99": 4357.43,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 4357.907,
+          "over_16_67_ms": 403,
+          "over_33_3_ms": 313,
+          "p50": 50.668,
+          "p95": 553.999,
+          "p99": 2027.056,
+          "samples": 403
+        },
+        "route_net_displacement": 53.6286392211914,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 7,
+          "collision_apply_frame_items_maximum_end": 28,
+          "collision_apply_frame_time_ns_maximum_end": 4638800,
+          "collision_apply_frame_time_ns_total": 130899500,
+          "collision_apply_time_ns_maximum_end": 2822700,
+          "collision_apply_time_ns_total": 130899500,
+          "collision_viewer_updates": 61,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 29876500,
+          "sample_job_time_ns_maximum_end": 45611800,
+          "viewer_updates": 44
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "activated_chunks": 2091,
+          "activation_cohort_retry_attempts": 3546,
+          "activation_cohorts_committed": 1297,
+          "activation_cohorts_queued": 1298,
+          "activation_queued_chunks": 1,
+          "active_chunks": 1479,
+          "application_wait_expirations": 0,
+          "atomic_surface_set_activation": true,
+          "coverage_retained_reconciliation_deferrals": 757,
+          "cpu_collision_authority": true,
+          "cpu_only_regional_retirements": 2512,
+          "default_backend_unchanged": true,
+          "gpu_page_lattice_input": true,
+          "gpu_resident_render_publication": true,
+          "incomplete_chunks": 6,
+          "last_error": "",
+          "native_position_space": "world",
+          "native_request_capacity": 16,
+          "native_request_handoff_decoupled": true,
+          "native_submissions_per_frame": 4,
+          "oldest_inactive_age_frames": 35,
+          "pending_activation_cohorts": 1,
+          "pending_activation_retry_groups": 30,
+          "prepared_inactive_chunks": 31,
+          "production_chunk_replacement": true,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "recovery_count": 0,
+          "rejected_chunks": 0,
+          "rejection_reasons": {},
+          "render_submission_capacity": 16,
+          "resident_capacity": 4096,
+          "retired_chunks": 612,
+          "retirement_candidate_cancellations": 0,
+          "retirement_confirmation_deferrals": 54,
+          "running": true,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+          "stage_timing_enabled": true,
+          "stage_timing_usec": {
+            "activation_retry": {
+              "calls": 795,
+              "max": 3640536,
+              "total": 28866116
+            },
+            "effect_events": {
+              "calls": 795,
+              "max": 1669832,
+              "total": 26117595
+            },
+            "materials": {
+              "calls": 795,
+              "max": 6991,
+              "total": 1350419
+            },
+            "prepared_retry": {
+              "calls": 795,
+              "max": 46679,
+              "total": 1853330
+            },
+            "reconcile": {
+              "calls": 795,
+              "max": 378282,
+              "total": 2078642
+            },
+            "status": {
+              "calls": 795,
+              "max": 2274,
+              "total": 180481
+            },
+            "submit": {
+              "calls": 795,
+              "max": 13297,
+              "total": 1334569
+            },
+            "supersede": {
+              "calls": 795,
+              "max": 23318,
+              "total": 1853095
+            }
+          },
+          "stale_activation_cohorts_retained": 0,
+          "stale_incomplete_groups_superseded": 101,
+          "submitted_surfaces": 2655,
+          "superseded_chunks": 438,
+          "tracked_chunks": 1516,
+          "unrouted_effect_events": 0,
+          "validated_surfaces": 2320
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 512,
+        "gpu_effect_status": {
+          "activated_entries": 2170,
+          "active_empty_entry_count": 1040,
+          "active_entry_count": 1555,
+          "active_partial_entry_count": 0,
+          "active_static_water_lod_counts": {
+            "3": 76
+          },
+          "active_terrain_lod_counts": {
+            "0": 534,
+            "1": 317,
+            "2": 134,
+            "3": 494
+          },
+          "applied": 2551,
+          "arena_active_slot_count": 1599,
+          "arena_allocated_bytes": 82103264,
+          "arena_allocated_slot_count": 16,
+          "arena_binding_buffer_count_per_page": 21,
+          "arena_counter_readback_bytes": 15440,
+          "arena_page_count": 4,
+          "arena_page_slot_capacity": 4,
+          "arena_peak_active_slot_count": 1599,
+          "arena_resident_allocated_bytes": 16095776,
+          "arena_scratch_allocated_bytes": 66007488,
+          "arena_scratch_in_flight": 3,
+          "arena_slot_leases": 876,
+          "arena_slot_releases": 873,
+          "arena_slot_reuses": 856,
+          "arena_status": {
+            "active_slots": 1599,
+            "allocated_bytes": 82103264,
+            "allocated_slots": 16,
+            "architecture": "bounded_scratch_compact_residency",
+            "binding_buffer_count_per_page": 21,
+            "compacted_resident_entries": 736,
+            "compacted_surface_indices": true,
+            "compacted_surface_indirect_commands": true,
+            "compacted_surface_vertices": true,
+            "counter_readback_bytes": 15440,
+            "counter_readback_completions": 772,
+            "counter_readback_requests": 876,
+            "dispatch_count": 876,
+            "empty_resident_entries": 1815,
+            "failed_cell_count_total": 0,
+            "failed_extractions": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_commands_per_surface": 1,
+            "last_error": "",
+            "last_failure_cell_count": 0,
+            "maximum_slots": 16,
+            "page_allocations": 5,
+            "page_count": 4,
+            "page_replacements": 1,
+            "page_slot_capacity": 4,
+            "peak_active_slots": 1599,
+            "peak_resident_allocated_bytes": 16095776,
+            "peak_scratch_in_flight": 8,
+            "position_encoding": "float32_world_space",
+            "proven_empty_resident_entries": 1779,
+            "resident_allocated_bytes": 16095776,
+            "resident_buffer_count_per_entry": 5,
+            "schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
+            "scratch_allocated_bytes": 66007488,
+            "scratch_in_flight": 3,
+            "slot_leases": 876,
+            "slot_releases": 873,
+            "slot_reuses": 856,
+            "uploaded_bytes": 366291456
+          },
+          "array_mesh_upload_used": false,
+          "atomic_surface_set_activation": true,
+          "cancelled_inflight_requests": 101,
+          "cancelled_queued_requests": 0,
+          "close_completed": false,
+          "close_requested": false,
+          "compact_indirect_command_records": 34239,
+          "compacted_surface_indirect_commands": true,
+          "compositor_callback": "pre_transparent",
+          "counter_readback_bytes": 15440,
+          "cpu_chunk_finalization_used": false,
+          "cpu_collision_authority": true,
+          "cpu_meshing_used": false,
+          "device_local_index_copy_used": true,
+          "discarded_cancelled_readbacks": 101,
+          "draw_frames": 787,
+          "event_count": 5,
+          "fallback_used": false,
+          "geometry_readback_bytes": 0,
+          "global_rendering_device": true,
+          "gpu_written_indirect_commands": true,
+          "indirect_commands_per_surface": 1,
+          "indirect_draw_calls": 34239,
+          "inflight_extraction_count": 3,
+          "initialization_attempted": true,
+          "initialized": true,
+          "last_applied_identity": {
+            "cached_transition_mask": 8,
+            "field_mode": 0,
+            "generation": 3222,
+            "input_stage": "pre_mesh_field",
+            "lod": 2,
+            "page_x": 9,
+            "page_y": -1,
+            "page_z": 7,
+            "sample_count": 34295,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 8,
+            "world_revision": 0
+          },
+          "last_camera_basis_z": "(-0.027164, 0.999631, -0.0)",
+          "last_camera_origin": "(560.0, 75.6, 560.0)",
+          "last_culled_surface_count": 495,
+          "last_error": "",
+          "last_tested_bounds_max": "(304.0, 48.0, 352.0)",
+          "last_tested_bounds_min": "(288.0, 32.0, 336.0)",
+          "last_visible_surface_count": 20,
+          "max_compact_command_records_per_view": 112,
+          "max_source_cell_records_avoided_per_view": 2125804,
+          "native_packed_bytes_total": 1142382172,
+          "native_packed_requests": 2655,
+          "packed_bytes_total": 0,
+          "packing_requests": 0,
+          "packing_usec_max": 0,
+          "packing_usec_total": 0,
+          "pending_lifecycle_command_count": 0,
+          "prepared_entries": 2551,
+          "production_chunk_replacement": false,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "queued_request_count": 0,
+          "rejected": 0,
+          "render_target_readback_bytes": 0,
+          "render_thread_owned": true,
+          "request_capacity": 16,
+          "requested": 2655,
+          "resident_allocation_capacity": 8208,
+          "resident_buffer_count_per_entry": 5,
+          "resident_capacity": 4096,
+          "resident_capacity_rejections": 0,
+          "resident_entry_count": 1599,
+          "resource_architecture": "bounded_scratch_compact_residency",
+          "retired_entries": 492,
+          "same_global_device_compute_raster": true,
+          "schema": "world_transvoxel.terrain.gpu_global_render_publication.v1",
+          "source_cell_indirect_records_avoided": 1118102593,
+          "stage_timing_usec": {
+            "arena_readback": {
+              "calls": 795,
+              "max": 2504,
+              "total": 147977
+            },
+            "debug_geometry": {
+              "calls": 795,
+              "max": 41,
+              "total": 5818
+            },
+            "dispatch": {
+              "calls": 795,
+              "max": 2534,
+              "total": 256558
+            },
+            "draw": {
+              "calls": 795,
+              "max": 8266,
+              "total": 3088947
+            },
+            "initialize": {
+              "calls": 795,
+              "max": 20231,
+              "total": 24222
+            },
+            "lifecycle": {
+              "calls": 795,
+              "max": 28,
+              "total": 4210
+            },
+            "materials": {
+              "calls": 795,
+              "max": 2020,
+              "total": 11155
+            }
+          },
+          "stale_skips": 0,
+          "superseded_entries": 561,
+          "visibility_bounds_position_space": "world",
+          "visibility_culled_count": 236951,
+          "visibility_culling": "conservative_aabb_frustum",
+          "visibility_culling_near_far": false,
+          "visibility_test_count": 271190
+        }
+      }
+    },
+    {
+      "name": "gpu_activation",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_activation_result.json",
+        "sha256": "7bf33765d1428ae11d518bbffea307acfc50d1e43c1e64642c1b62fcc1cce5a2",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_activation_01.stdout.log",
+            "sha256": "f49d48aab23502aefe84d27f790850df53642108390893b954d919bc69d651b0"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_activation_01.stderr.log",
+            "sha256": "0428cffaee12b4244799af03eddbbc596b90655c1275c50800232ed1d7a99b6c"
+          }
+        ]
+      },
+      "execution": {
+        "run": 1,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_activation_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array",
+          "--gpu-resident-render-candidate",
+          "--gpu-stage-timing"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 61.38393910002196,
+        "process_cpu_seconds": 83.609375,
+        "average_active_cores": 1.3620724936495658,
+        "peak_process_tree_rss_bytes": 788328448,
+        "measurement_complete": false,
+        "target_status": "MEASUREMENT_INCOMPLETE",
+        "acceptance_failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "consecutive_blocked_movement_frames",
+          "frame_p95",
+          "frame_p99",
+          "physics_target_missing",
+          "physics_target_wait",
+          "authority_commit_wait",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_activation_01.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_activation_01.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "route_net_displacement",
+            "blocked_movement_frames",
+            "consecutive_blocked_movement_frames",
+            "frame_p95",
+            "frame_p99",
+            "physics_target_missing",
+            "physics_target_wait",
+            "authority_commit_wait",
+            "visual_ready_wait",
+            "visual_collision_divergence"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 31,
+          "maximum_collision_apply_frame_time_ns_observed": 4544800,
+          "maximum_collision_apply_time_ns_last": 3427200,
+          "maximum_collision_apply_time_ns_observed": 3614600,
+          "maximum_mesh_job_time_ns_observed": 87259400,
+          "maximum_pending_chunk_replacements": 1025,
+          "maximum_pending_chunk_retirements": 842,
+          "maximum_queued_collision": 2,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 34065800,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 833,
+          "maximum_staged_render_resources": 0,
+          "samples": 104
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 4544800,
+          "maximum_single_apply_ns": 3614600,
+          "ok": true,
+          "soft_bound_ns": 7864600
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": -1,
+          "authority_commit_ms": -1.0,
+          "collision_generation_after": 0,
+          "collision_ready_censored": true,
+          "collision_ready_frames_after_commit": -1,
+          "collision_ready_ms_after_commit": -1.0,
+          "collision_required": false,
+          "commit_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "edit_position": {
+            "x": 562.607727050781,
+            "y": -20.3645782470703,
+            "z": 560.0
+          },
+          "generation_after": 0,
+          "generation_before": 0,
+          "generation_changed_frames_after_commit": -1,
+          "gpu_render_required": true,
+          "interaction_accepted": false,
+          "interaction_call_ms": 3.291,
+          "interaction_ray_hit": false,
+          "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "none",
+          "logical_collision_ready_frames_after_commit": -1,
+          "logical_visual_ready_frames_after_commit": -1,
+          "measurement_complete": false,
+          "native_visual_ready_frames_after_commit": -1,
+          "native_visual_ready_ms_after_commit": -1.0,
+          "physics_target_found": false,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 835.652,
+            "over_16_67_ms": 29,
+            "over_33_3_ms": 28,
+            "p50": 0.086,
+            "p95": 127.935,
+            "p99": 470.632,
+            "samples": 180
+          },
+          "physics_target_wait_frames": 180,
+          "physics_target_wait_ms": 4157.076,
+          "ready_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "ready_observation_window_frames": 0,
+          "ready_observation_window_ms": 0.0,
+          "relocation_to_collision_ready_lower_bound_ms": 4156.076,
+          "relocation_to_collision_ready_ms": -1.0,
+          "relocation_to_visual_ready_lower_bound_ms": 4156.076,
+          "relocation_to_visual_ready_ms": -1.0,
+          "render_generation_after": 0,
+          "resource_generation_api": false,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": -2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": -1,
+          "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+          "visual_ready_censored": true,
+          "visual_ready_frames_after_commit": -1,
+          "visual_ready_ms_after_commit": -1.0
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 1433.743,
+          "over_16_67_ms": 393,
+          "over_33_3_ms": 293,
+          "p50": 0.295,
+          "p95": 92.415,
+          "p99": 294.242,
+          "samples": 1560
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": false,
+        "movement": {
+          "accepted_frames": 476,
+          "blocked_frames": 544,
+          "blocked_ratio": 0.533333333333333,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 98,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 399.15185546875,
+          "y": 43.3458633422852,
+          "z": 398.334899902344
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 427.149,
+              "over_16_67_ms": 29,
+              "over_33_3_ms": 4,
+              "p50": 9.859,
+              "p95": 34.425,
+              "p99": 427.149,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 136,
+            "blocked_frames": 44,
+            "blocked_ratio": 0.244444444444444,
+            "end_position": {
+              "x": 351.350952148438,
+              "y": 41.0102882385254,
+              "z": 351.1806640625
+            },
+            "frame_time_ms": {
+              "maximum": 225.06,
+              "over_16_67_ms": 73,
+              "over_33_3_ms": 39,
+              "p50": 0.793,
+              "p95": 58.269,
+              "p99": 85.419,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 44,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 72.5009002685547
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 895.358,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 6,
+              "p50": 0.273,
+              "p95": 246.711,
+              "p99": 895.358,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 114,
+            "blocked_frames": 66,
+            "blocked_ratio": 0.366666666666667,
+            "end_position": {
+              "x": 308.364379882813,
+              "y": 41.870044708252,
+              "z": 308.194091796875
+            },
+            "frame_time_ms": {
+              "maximum": 208.267,
+              "over_16_67_ms": 44,
+              "over_33_3_ms": 34,
+              "p50": 0.305,
+              "p95": 83.348,
+              "p99": 193.376,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 66,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 351.350952148438,
+              "y": 41.0102882385254,
+              "z": 351.1806640625
+            },
+            "travel_distance": 60.7982711791992
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 404.077,
+              "over_16_67_ms": 9,
+              "over_33_3_ms": 9,
+              "p50": 0.264,
+              "p95": 101.976,
+              "p99": 404.077,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 22,
+            "blocked_frames": 98,
+            "blocked_ratio": 0.816666666666667,
+            "end_position": {
+              "x": 355.259521484375,
+              "y": 42.8731117248535,
+              "z": 308.204162597656
+            },
+            "frame_time_ms": {
+              "maximum": 1035.242,
+              "over_16_67_ms": 32,
+              "over_33_3_ms": 26,
+              "p50": 0.339,
+              "p95": 100.971,
+              "p99": 361.781,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 98,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 308.364379882813,
+              "y": 41.870044708252,
+              "z": 308.194091796875
+            },
+            "travel_distance": 46.9058685302734
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 332.128,
+              "over_16_67_ms": 5,
+              "over_33_3_ms": 5,
+              "p50": 0.254,
+              "p95": 282.866,
+              "p99": 332.128,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 46,
+            "blocked_frames": 74,
+            "blocked_ratio": 0.616666666666667,
+            "end_position": {
+              "x": 257.126281738281,
+              "y": 42.8731117248535,
+              "z": 308.204162597656
+            },
+            "frame_time_ms": {
+              "maximum": 356.041,
+              "over_16_67_ms": 30,
+              "over_33_3_ms": 26,
+              "p50": 0.298,
+              "p95": 78.465,
+              "p99": 294.242,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 50,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 355.259521484375,
+              "y": 42.8731117248535,
+              "z": 308.204162597656
+            },
+            "travel_distance": 98.1332397460938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 138.254,
+              "over_16_67_ms": 5,
+              "over_33_3_ms": 5,
+              "p50": 0.169,
+              "p95": 68.325,
+              "p99": 138.254,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 20,
+            "blocked_frames": 100,
+            "blocked_ratio": 0.833333333333333,
+            "end_position": {
+              "x": 257.320404052734,
+              "y": 45.2074356079102,
+              "z": 350.661804199219
+            },
+            "frame_time_ms": {
+              "maximum": 347.335,
+              "over_16_67_ms": 36,
+              "over_33_3_ms": 22,
+              "p50": 0.306,
+              "p95": 127.222,
+              "p99": 305.327,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 53,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 257.126281738281,
+              "y": 42.8731117248535,
+              "z": 308.204162597656
+            },
+            "travel_distance": 42.5222053527832
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 179.474,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 5,
+              "p50": 0.305,
+              "p95": 113.68,
+              "p99": 179.474,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 44,
+            "blocked_frames": 76,
+            "blocked_ratio": 0.633333333333333,
+            "end_position": {
+              "x": 257.320404052734,
+              "y": 45.2074356079102,
+              "z": 256.795227050781
+            },
+            "frame_time_ms": {
+              "maximum": 1433.743,
+              "over_16_67_ms": 23,
+              "over_33_3_ms": 22,
+              "p50": 0.276,
+              "p95": 133.153,
+              "p99": 601.297,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 72,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 257.320404052734,
+              "y": 45.2074356079102,
+              "z": 350.661804199219
+            },
+            "travel_distance": 93.8665771484375
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 145.603,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 7,
+              "p50": 0.226,
+              "p95": 63.665,
+              "p99": 145.603,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 94,
+            "blocked_frames": 86,
+            "blocked_ratio": 0.477777777777778,
+            "end_position": {
+              "x": 399.15185546875,
+              "y": 43.3458633422852,
+              "z": 398.334899902344
+            },
+            "frame_time_ms": {
+              "maximum": 155.886,
+              "over_16_67_ms": 38,
+              "over_33_3_ms": 37,
+              "p50": 0.305,
+              "p95": 91.575,
+              "p99": 150.285,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 44,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 257.320404052734,
+              "y": 45.2074356079102,
+              "z": 256.795227050781
+            },
+            "travel_distance": 200.382385253906
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 114.815,
+              "over_16_67_ms": 18,
+              "over_33_3_ms": 18,
+              "p50": 0.252,
+              "p95": 93.233,
+              "p99": 114.815,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 1435.012,
+          "over_16_67_ms": 393,
+          "over_33_3_ms": 308,
+          "p50": 54.981,
+          "p95": 251.258,
+          "p99": 836.284,
+          "samples": 394
+        },
+        "route_net_displacement": 139.664596557617,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 13,
+          "collision_apply_frame_items_maximum_end": 31,
+          "collision_apply_frame_time_ns_maximum_end": 4544800,
+          "collision_apply_frame_time_ns_total": 181487700,
+          "collision_apply_time_ns_maximum_end": 3614600,
+          "collision_apply_time_ns_total": 181487700,
+          "collision_viewer_updates": 87,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 87259400,
+          "sample_job_time_ns_maximum_end": 34065800,
+          "viewer_updates": 69
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "activated_chunks": 1931,
+          "activation_cohort_retry_attempts": 3037,
+          "activation_cohorts_committed": 1290,
+          "activation_cohorts_queued": 1290,
+          "activation_queued_chunks": 0,
+          "active_chunks": 1537,
+          "application_wait_expirations": 0,
+          "atomic_surface_set_activation": true,
+          "coverage_retained_reconciliation_deferrals": 796,
+          "cpu_collision_authority": true,
+          "cpu_only_regional_retirements": 590,
+          "default_backend_unchanged": true,
+          "gpu_page_lattice_input": true,
+          "gpu_resident_render_publication": true,
+          "incomplete_chunks": 7,
+          "last_error": "",
+          "native_position_space": "world",
+          "native_request_capacity": 16,
+          "native_request_handoff_decoupled": true,
+          "native_submissions_per_frame": 4,
+          "oldest_inactive_age_frames": 58,
+          "pending_activation_cohorts": 0,
+          "pending_activation_retry_groups": 22,
+          "prepared_inactive_chunks": 22,
+          "production_chunk_replacement": true,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "recovery_count": 0,
+          "rejected_chunks": 0,
+          "rejection_reasons": {},
+          "render_submission_capacity": 16,
+          "resident_capacity": 4096,
+          "retired_chunks": 394,
+          "retirement_candidate_cancellations": 0,
+          "retirement_confirmation_deferrals": 54,
+          "running": true,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+          "stage_timing_enabled": true,
+          "stage_timing_usec": {
+            "activation_inventory": {
+              "calls": 288,
+              "max": 18930,
+              "total": 2770857
+            },
+            "activation_member_routes": {
+              "calls": 1290,
+              "max": 2981,
+              "total": 195317
+            },
+            "activation_native_commit": {
+              "calls": 288,
+              "max": 16258,
+              "total": 2019265
+            },
+            "activation_native_query": {
+              "calls": 5135,
+              "max": 8424,
+              "total": 2952550
+            },
+            "activation_retirement_routes": {
+              "calls": 1290,
+              "max": 327772,
+              "total": 6356187
+            },
+            "activation_retry": {
+              "calls": 832,
+              "max": 1050504,
+              "total": 11980432
+            },
+            "effect_events": {
+              "calls": 832,
+              "max": 809294,
+              "total": 18317659
+            },
+            "materials": {
+              "calls": 832,
+              "max": 5949,
+              "total": 1284508
+            },
+            "prepared_retry": {
+              "calls": 832,
+              "max": 23154,
+              "total": 1748926
+            },
+            "reconcile": {
+              "calls": 832,
+              "max": 404074,
+              "total": 2086164
+            },
+            "status": {
+              "calls": 832,
+              "max": 782,
+              "total": 175926
+            },
+            "submit": {
+              "calls": 832,
+              "max": 14002,
+              "total": 1242065
+            },
+            "supersede": {
+              "calls": 832,
+              "max": 32761,
+              "total": 2100874
+            }
+          },
+          "stale_activation_cohorts_retained": 0,
+          "stale_incomplete_groups_superseded": 134,
+          "submitted_surfaces": 2644,
+          "superseded_chunks": 599,
+          "tracked_chunks": 1566,
+          "unrouted_effect_events": 0,
+          "validated_surfaces": 2182
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 512,
+        "gpu_effect_status": {
+          "activated_entries": 2008,
+          "active_empty_entry_count": 1074,
+          "active_entry_count": 1613,
+          "active_partial_entry_count": 0,
+          "active_static_water_lod_counts": {
+            "3": 76
+          },
+          "active_terrain_lod_counts": {
+            "0": 560,
+            "1": 341,
+            "2": 142,
+            "3": 494
+          },
+          "applied": 2504,
+          "arena_active_slot_count": 1644,
+          "arena_allocated_bytes": 78534596,
+          "arena_allocated_slot_count": 16,
+          "arena_binding_buffer_count_per_page": 21,
+          "arena_counter_readback_bytes": 15000,
+          "arena_page_count": 4,
+          "arena_page_slot_capacity": 4,
+          "arena_peak_active_slot_count": 1677,
+          "arena_resident_allocated_bytes": 16548740,
+          "arena_scratch_allocated_bytes": 61985856,
+          "arena_scratch_in_flight": 5,
+          "arena_slot_leases": 890,
+          "arena_slot_releases": 885,
+          "arena_slot_reuses": 866,
+          "arena_status": {
+            "active_slots": 1644,
+            "allocated_bytes": 78534596,
+            "allocated_slots": 16,
+            "architecture": "bounded_scratch_compact_residency",
+            "binding_buffer_count_per_page": 21,
+            "compacted_resident_entries": 722,
+            "compacted_surface_indices": true,
+            "compacted_surface_indirect_commands": true,
+            "compacted_surface_vertices": true,
+            "counter_readback_bytes": 15000,
+            "counter_readback_completions": 750,
+            "counter_readback_requests": 890,
+            "dispatch_count": 890,
+            "empty_resident_entries": 1782,
+            "failed_cell_count_total": 0,
+            "failed_extractions": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_commands_per_surface": 1,
+            "last_error": "",
+            "last_failure_cell_count": 0,
+            "maximum_slots": 16,
+            "page_allocations": 6,
+            "page_count": 4,
+            "page_replacements": 2,
+            "page_slot_capacity": 4,
+            "peak_active_slots": 1677,
+            "peak_resident_allocated_bytes": 16624348,
+            "peak_scratch_in_flight": 8,
+            "position_encoding": "float32_world_space",
+            "proven_empty_resident_entries": 1754,
+            "resident_allocated_bytes": 16548740,
+            "resident_buffer_count_per_entry": 5,
+            "schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
+            "scratch_allocated_bytes": 61985856,
+            "scratch_in_flight": 5,
+            "slot_leases": 890,
+            "slot_releases": 885,
+            "slot_reuses": 866,
+            "uploaded_bytes": 324083976
+          },
+          "array_mesh_upload_used": false,
+          "atomic_surface_set_activation": true,
+          "cancelled_inflight_requests": 135,
+          "cancelled_queued_requests": 0,
+          "close_completed": false,
+          "close_requested": false,
+          "compact_indirect_command_records": 31958,
+          "compacted_surface_indirect_commands": true,
+          "compositor_callback": "pre_transparent",
+          "counter_readback_bytes": 15000,
+          "cpu_chunk_finalization_used": false,
+          "cpu_collision_authority": true,
+          "cpu_meshing_used": false,
+          "device_local_index_copy_used": true,
+          "discarded_cancelled_readbacks": 135,
+          "draw_frames": 808,
+          "event_count": 5,
+          "fallback_used": false,
+          "geometry_readback_bytes": 0,
+          "global_rendering_device": true,
+          "gpu_written_indirect_commands": true,
+          "indirect_commands_per_surface": 1,
+          "indirect_draw_calls": 31958,
+          "inflight_extraction_count": 5,
+          "initialization_attempted": true,
+          "initialized": true,
+          "last_applied_identity": {
+            "cached_transition_mask": 0,
+            "field_mode": 0,
+            "generation": 3712,
+            "input_stage": "pre_mesh_field",
+            "lod": 0,
+            "page_x": 36,
+            "page_y": 4,
+            "page_z": 34,
+            "sample_count": 6859,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 0,
+            "world_revision": 0
+          },
+          "last_camera_basis_z": "(-0.027164, 0.999631, -0.0)",
+          "last_camera_origin": "(560.0, 75.6, 560.0)",
+          "last_culled_surface_count": 519,
+          "last_error": "",
+          "last_tested_bounds_max": "(384.0, 64.0, 576.0)",
+          "last_tested_bounds_min": "(320.0, 0.0, 512.0)",
+          "last_visible_surface_count": 20,
+          "max_compact_command_records_per_view": 137,
+          "max_source_cell_records_avoided_per_view": 2223084,
+          "native_packed_bytes_total": 1047601232,
+          "native_packed_requests": 2644,
+          "packed_bytes_total": 0,
+          "packing_requests": 0,
+          "packing_usec_max": 0,
+          "packing_usec_total": 0,
+          "pending_lifecycle_command_count": 0,
+          "prepared_entries": 2504,
+          "production_chunk_replacement": false,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "queued_request_count": 0,
+          "rejected": 0,
+          "render_target_readback_bytes": 0,
+          "render_thread_owned": true,
+          "request_capacity": 16,
+          "requested": 2644,
+          "resident_allocation_capacity": 8208,
+          "resident_buffer_count_per_entry": 5,
+          "resident_capacity": 4096,
+          "resident_capacity_rejections": 0,
+          "resident_entry_count": 1644,
+          "resource_architecture": "bounded_scratch_compact_residency",
+          "retired_entries": 654,
+          "same_global_device_compute_raster": true,
+          "schema": "world_transvoxel.terrain.gpu_global_render_publication.v1",
+          "source_cell_indirect_records_avoided": 1131671594,
+          "stage_timing_usec": {
+            "arena_readback": {
+              "calls": 832,
+              "max": 2642,
+              "total": 149517
+            },
+            "debug_geometry": {
+              "calls": 832,
+              "max": 35,
+              "total": 6085
+            },
+            "dispatch": {
+              "calls": 832,
+              "max": 2810,
+              "total": 246614
+            },
+            "draw": {
+              "calls": 832,
+              "max": 8582,
+              "total": 3038782
+            },
+            "initialize": {
+              "calls": 832,
+              "max": 20410,
+              "total": 24751
+            },
+            "lifecycle": {
+              "calls": 832,
+              "max": 84,
+              "total": 4495
+            },
+            "materials": {
+              "calls": 832,
+              "max": 151,
+              "total": 9609
+            }
+          },
+          "stale_skips": 0,
+          "superseded_entries": 341,
+          "visibility_bounds_position_space": "world",
+          "visibility_culled_count": 242553,
+          "visibility_culling": "conservative_aabb_frustum",
+          "visibility_culling_near_far": false,
+          "visibility_test_count": 274511
+        }
+      }
+    },
+    {
+      "name": "gpu_corrected",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_corrected_result.json",
+        "sha256": "eeb27fc165740b3058b968f93b35a255e1bc9c8fd33bc795654a4dd6976e8e99",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_corrected_01.stdout.log",
+            "sha256": "5ae3ecefd53c3bdb65f48d0ffc33f1ed21d7f2bc1d039eb97793e0396e5fe034"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_corrected_01.stderr.log",
+            "sha256": "acfb97b60934e96cb7cd13f0c2765a4f5740a8d03133709987fe4431bad9432d"
+          }
+        ]
+      },
+      "execution": {
+        "run": 1,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_corrected_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array",
+          "--gpu-resident-render-candidate"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 51.02265040000202,
+        "process_cpu_seconds": 71.71875,
+        "average_active_cores": 1.4056257257854476,
+        "peak_process_tree_rss_bytes": 790044672,
+        "measurement_complete": false,
+        "target_status": "MEASUREMENT_INCOMPLETE",
+        "acceptance_failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "consecutive_blocked_movement_frames",
+          "frame_p95",
+          "frame_p99",
+          "physics_target_missing",
+          "physics_target_wait",
+          "authority_commit_wait",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_corrected_01.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_corrected_01.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "route_net_displacement",
+            "blocked_movement_frames",
+            "consecutive_blocked_movement_frames",
+            "frame_p95",
+            "frame_p99",
+            "physics_target_missing",
+            "physics_target_wait",
+            "authority_commit_wait",
+            "visual_ready_wait",
+            "visual_collision_divergence"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 29,
+          "maximum_collision_apply_frame_time_ns_observed": 5273300,
+          "maximum_collision_apply_time_ns_last": 2465200,
+          "maximum_collision_apply_time_ns_observed": 4017900,
+          "maximum_mesh_job_time_ns_observed": 33510700,
+          "maximum_pending_chunk_replacements": 851,
+          "maximum_pending_chunk_retirements": 769,
+          "maximum_queued_collision": 3,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 24822800,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 725,
+          "maximum_staged_render_resources": 0,
+          "samples": 104
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 5273300,
+          "maximum_single_apply_ns": 4017900,
+          "ok": true,
+          "soft_bound_ns": 8267900
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": -1,
+          "authority_commit_ms": -1.0,
+          "collision_generation_after": 0,
+          "collision_ready_censored": true,
+          "collision_ready_frames_after_commit": -1,
+          "collision_ready_ms_after_commit": -1.0,
+          "collision_required": false,
+          "commit_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "edit_position": {
+            "x": 562.607727050781,
+            "y": -20.3645782470703,
+            "z": 560.0
+          },
+          "generation_after": 0,
+          "generation_before": 0,
+          "generation_changed_frames_after_commit": -1,
+          "gpu_render_required": true,
+          "interaction_accepted": false,
+          "interaction_call_ms": 2.95,
+          "interaction_ray_hit": false,
+          "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "none",
+          "logical_collision_ready_frames_after_commit": -1,
+          "logical_visual_ready_frames_after_commit": -1,
+          "measurement_complete": false,
+          "native_visual_ready_frames_after_commit": -1,
+          "native_visual_ready_ms_after_commit": -1.0,
+          "physics_target_found": false,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 189.448,
+            "over_16_67_ms": 31,
+            "over_33_3_ms": 29,
+            "p50": 0.046,
+            "p95": 116.375,
+            "p99": 174.982,
+            "samples": 180
+          },
+          "physics_target_wait_frames": 180,
+          "physics_target_wait_ms": 3251.328,
+          "ready_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "ready_observation_window_frames": 0,
+          "ready_observation_window_ms": 0.0,
+          "relocation_to_collision_ready_lower_bound_ms": 3250.328,
+          "relocation_to_collision_ready_ms": -1.0,
+          "relocation_to_visual_ready_lower_bound_ms": 3250.328,
+          "relocation_to_visual_ready_ms": -1.0,
+          "render_generation_after": 0,
+          "resource_generation_api": false,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": -2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": -1,
+          "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+          "visual_ready_censored": true,
+          "visual_ready_frames_after_commit": -1,
+          "visual_ready_ms_after_commit": -1.0
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 341.353,
+          "over_16_67_ms": 450,
+          "over_33_3_ms": 332,
+          "p50": 0.27,
+          "p95": 80.226,
+          "p99": 144.036,
+          "samples": 1560
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": false,
+        "movement": {
+          "accepted_frames": 500,
+          "blocked_frames": 520,
+          "blocked_ratio": 0.509803921568627,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 99,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 301.477691650391,
+          "y": 44.1832656860352,
+          "z": 382.268432617188
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 40.441,
+              "over_16_67_ms": 31,
+              "over_33_3_ms": 5,
+              "p50": 27.722,
+              "p95": 35.951,
+              "p99": 40.441,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 136,
+            "blocked_frames": 44,
+            "blocked_ratio": 0.244444444444444,
+            "end_position": {
+              "x": 351.350952148438,
+              "y": 41.0102882385254,
+              "z": 351.1806640625
+            },
+            "frame_time_ms": {
+              "maximum": 107.784,
+              "over_16_67_ms": 73,
+              "over_33_3_ms": 39,
+              "p50": 0.699,
+              "p95": 60.432,
+              "p99": 84.897,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 44,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 72.5009002685547
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 332.864,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 7,
+              "p50": 0.226,
+              "p95": 128.319,
+              "p99": 332.864,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 173,
+            "blocked_frames": 7,
+            "blocked_ratio": 0.0388888888888889,
+            "end_position": {
+              "x": 286.116943359375,
+              "y": 42.3150024414063,
+              "z": 285.946655273438
+            },
+            "frame_time_ms": {
+              "maximum": 144.036,
+              "over_16_67_ms": 52,
+              "over_33_3_ms": 45,
+              "p50": 0.283,
+              "p95": 76.896,
+              "p99": 102.677,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 7,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 351.350952148438,
+              "y": 41.0102882385254,
+              "z": 351.1806640625
+            },
+            "travel_distance": 92.264045715332
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 123.493,
+              "over_16_67_ms": 11,
+              "over_33_3_ms": 9,
+              "p50": 0.239,
+              "p95": 105.944,
+              "p99": 123.493,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 30,
+            "blocked_frames": 90,
+            "blocked_ratio": 0.75,
+            "end_position": {
+              "x": 350.116882324219,
+              "y": 42.3150024414063,
+              "z": 285.946655273438
+            },
+            "frame_time_ms": {
+              "maximum": 198.079,
+              "over_16_67_ms": 39,
+              "over_33_3_ms": 25,
+              "p50": 0.283,
+              "p95": 75.625,
+              "p99": 137.186,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 76,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 286.116943359375,
+              "y": 42.3150024414063,
+              "z": 285.946655273438
+            },
+            "travel_distance": 63.9999389648438
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 341.353,
+              "over_16_67_ms": 5,
+              "over_33_3_ms": 3,
+              "p50": 0.225,
+              "p95": 135.854,
+              "p99": 341.353,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 59,
+            "blocked_frames": 61,
+            "blocked_ratio": 0.508333333333333,
+            "end_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 286.1435546875
+            },
+            "frame_time_ms": {
+              "maximum": 91.215,
+              "over_16_67_ms": 35,
+              "over_33_3_ms": 30,
+              "p50": 0.597,
+              "p95": 71.336,
+              "p99": 83.348,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 28,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 350.116882324219,
+              "y": 42.3150024414063,
+              "z": 285.946655273438
+            },
+            "travel_distance": 125.61075592041
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 53.726,
+              "over_16_67_ms": 12,
+              "over_33_3_ms": 7,
+              "p50": 0.406,
+              "p95": 52.945,
+              "p99": 53.726,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 30,
+            "blocked_frames": 90,
+            "blocked_ratio": 0.75,
+            "end_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 350.143493652344
+            },
+            "frame_time_ms": {
+              "maximum": 217.648,
+              "over_16_67_ms": 32,
+              "over_33_3_ms": 22,
+              "p50": 0.261,
+              "p95": 103.639,
+              "p99": 126.481,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 90,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 286.1435546875
+            },
+            "travel_distance": 63.9999389648438
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 77.629,
+              "over_16_67_ms": 9,
+              "over_33_3_ms": 7,
+              "p50": 0.279,
+              "p95": 72.959,
+              "p99": 77.629,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 21,
+            "blocked_frames": 99,
+            "blocked_ratio": 0.825,
+            "end_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 305.343536376953
+            },
+            "frame_time_ms": {
+              "maximum": 128.908,
+              "over_16_67_ms": 33,
+              "over_33_3_ms": 29,
+              "p50": 0.244,
+              "p95": 80.512,
+              "p99": 101.201,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 99,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 350.143493652344
+            },
+            "travel_distance": 44.7999572753906
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 204.378,
+              "over_16_67_ms": 8,
+              "over_33_3_ms": 6,
+              "p50": 0.241,
+              "p95": 80.226,
+              "p99": 204.378,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 51,
+            "blocked_frames": 129,
+            "blocked_ratio": 0.716666666666667,
+            "end_position": {
+              "x": 301.477691650391,
+              "y": 44.1832656860352,
+              "z": 382.268432617188
+            },
+            "frame_time_ms": {
+              "maximum": 274.318,
+              "over_16_67_ms": 46,
+              "over_33_3_ms": 44,
+              "p50": 0.269,
+              "p95": 79.354,
+              "p99": 151.218,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 52,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 224.552490234375,
+              "y": 45.7217636108398,
+              "z": 305.343536376953
+            },
+            "travel_distance": 108.799324035645
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 117.735,
+              "over_16_67_ms": 25,
+              "over_33_3_ms": 25,
+              "p50": 0.213,
+              "p95": 71.329,
+              "p99": 117.735,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 354.888,
+          "over_16_67_ms": 446,
+          "over_33_3_ms": 342,
+          "p50": 51.401,
+          "p95": 129.67,
+          "p99": 204.624,
+          "samples": 446
+        },
+        "route_net_displacement": 82.3420562744141,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 17,
+          "collision_apply_frame_items_maximum_end": 29,
+          "collision_apply_frame_time_ns_maximum_end": 5273300,
+          "collision_apply_frame_time_ns_total": 223363800,
+          "collision_apply_time_ns_maximum_end": 4017900,
+          "collision_apply_time_ns_total": 223363800,
+          "collision_viewer_updates": 84,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 33510700,
+          "sample_job_time_ns_maximum_end": 24822800,
+          "viewer_updates": 61
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "activated_chunks": 2102,
+          "activation_cohort_retry_attempts": 3597,
+          "activation_cohorts_committed": 1283,
+          "activation_cohorts_queued": 1283,
+          "activation_queued_chunks": 0,
+          "active_chunks": 1544,
+          "application_wait_expirations": 0,
+          "atomic_surface_set_activation": true,
+          "coverage_retained_reconciliation_deferrals": 768,
+          "cpu_collision_authority": true,
+          "cpu_only_regional_retirements": 426,
+          "default_backend_unchanged": true,
+          "gpu_page_lattice_input": true,
+          "gpu_resident_render_publication": true,
+          "incomplete_chunks": 7,
+          "last_error": "",
+          "native_position_space": "world",
+          "native_request_capacity": 16,
+          "native_request_handoff_decoupled": true,
+          "native_submissions_per_frame": 4,
+          "oldest_inactive_age_frames": 65,
+          "pending_activation_cohorts": 0,
+          "pending_activation_retry_groups": 100,
+          "prepared_inactive_chunks": 100,
+          "production_chunk_replacement": true,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "recovery_count": 0,
+          "rejected_chunks": 0,
+          "rejection_reasons": {},
+          "render_submission_capacity": 16,
+          "resident_capacity": 4096,
+          "retired_chunks": 558,
+          "retirement_candidate_cancellations": 0,
+          "retirement_confirmation_deferrals": 0,
+          "running": true,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+          "stage_timing_enabled": false,
+          "stage_timing_usec": {},
+          "stale_activation_cohorts_retained": 0,
+          "stale_incomplete_groups_superseded": 122,
+          "submitted_surfaces": 2865,
+          "superseded_chunks": 579,
+          "tracked_chunks": 1651,
+          "unrouted_effect_events": 0,
+          "validated_surfaces": 2434
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 512,
+        "gpu_effect_status": {
+          "activated_entries": 2179,
+          "active_empty_entry_count": 1101,
+          "active_entry_count": 1620,
+          "active_inventory_rebuilds": 1862,
+          "active_partial_entry_count": 0,
+          "active_static_water_lod_counts": {
+            "3": 76
+          },
+          "active_terrain_lod_counts": {
+            "0": 612,
+            "1": 306,
+            "2": 137,
+            "3": 489
+          },
+          "applied": 2741,
+          "arena_active_slot_count": 1727,
+          "arena_allocated_bytes": 73913712,
+          "arena_allocated_slot_count": 16,
+          "arena_binding_buffer_count_per_page": 21,
+          "arena_counter_readback_bytes": 15660,
+          "arena_page_count": 4,
+          "arena_page_slot_capacity": 4,
+          "arena_peak_active_slot_count": 1727,
+          "arena_resident_allocated_bytes": 16242288,
+          "arena_scratch_allocated_bytes": 57671424,
+          "arena_scratch_in_flight": 0,
+          "arena_slot_leases": 907,
+          "arena_slot_releases": 907,
+          "arena_slot_reuses": 890,
+          "arena_status": {
+            "active_slots": 1727,
+            "allocated_bytes": 73913712,
+            "allocated_slots": 16,
+            "architecture": "bounded_scratch_compact_residency",
+            "binding_buffer_count_per_page": 21,
+            "compacted_resident_entries": 742,
+            "compacted_surface_indices": true,
+            "compacted_surface_indirect_commands": true,
+            "compacted_surface_vertices": true,
+            "counter_readback_bytes": 15660,
+            "counter_readback_completions": 783,
+            "counter_readback_requests": 907,
+            "dispatch_count": 907,
+            "empty_resident_entries": 1999,
+            "failed_cell_count_total": 0,
+            "failed_extractions": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_commands_per_surface": 1,
+            "last_error": "",
+            "last_failure_cell_count": 0,
+            "maximum_slots": 16,
+            "page_allocations": 5,
+            "page_count": 4,
+            "page_replacements": 1,
+            "page_slot_capacity": 4,
+            "peak_active_slots": 1727,
+            "peak_resident_allocated_bytes": 16242288,
+            "peak_scratch_in_flight": 8,
+            "position_encoding": "float32_world_space",
+            "proven_empty_resident_entries": 1958,
+            "resident_allocated_bytes": 16242288,
+            "resident_buffer_count_per_entry": 5,
+            "schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
+            "scratch_allocated_bytes": 57671424,
+            "scratch_in_flight": 0,
+            "slot_leases": 907,
+            "slot_releases": 907,
+            "slot_reuses": 890,
+            "uploaded_bytes": 331704844
+          },
+          "array_mesh_upload_used": false,
+          "atomic_surface_set_activation": true,
+          "cancelled_inflight_requests": 122,
+          "cancelled_queued_requests": 0,
+          "close_completed": false,
+          "close_requested": false,
+          "compact_indirect_command_records": 33700,
+          "compacted_surface_indirect_commands": true,
+          "compositor_callback": "pre_transparent",
+          "counter_readback_bytes": 15660,
+          "cpu_chunk_finalization_used": false,
+          "cpu_collision_authority": true,
+          "cpu_meshing_used": false,
+          "device_local_index_copy_used": true,
+          "discarded_cancelled_readbacks": 122,
+          "draw_frames": 798,
+          "event_count": 7,
+          "fallback_used": false,
+          "geometry_readback_bytes": 0,
+          "global_rendering_device": true,
+          "gpu_written_indirect_commands": true,
+          "indirect_commands_per_surface": 1,
+          "indirect_draw_calls": 33700,
+          "inflight_extraction_count": 0,
+          "initialization_attempted": true,
+          "initialized": true,
+          "last_applied_identity": {
+            "cached_transition_mask": 0,
+            "field_mode": 0,
+            "generation": 3584,
+            "input_stage": "pre_mesh_field",
+            "lod": 0,
+            "page_x": 33,
+            "page_y": 3,
+            "page_z": 34,
+            "sample_count": 6859,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 0,
+            "world_revision": 0
+          },
+          "last_camera_basis_z": "(-0.027164, 0.999631, -0.0)",
+          "last_camera_origin": "(560.0, 75.6, 560.0)",
+          "last_culled_surface_count": 499,
+          "last_error": "",
+          "last_tested_bounds_max": "(384.0, 64.0, 640.0)",
+          "last_tested_bounds_min": "(320.0, 0.0, 576.0)",
+          "last_visible_surface_count": 20,
+          "max_compact_command_records_per_view": 142,
+          "max_source_cell_records_avoided_per_view": 2137836,
+          "native_packed_bytes_total": 1091585956,
+          "native_packed_requests": 2865,
+          "packed_bytes_total": 0,
+          "packing_requests": 0,
+          "packing_usec_max": 0,
+          "packing_usec_total": 0,
+          "pending_lifecycle_command_count": 0,
+          "prepared_entries": 2741,
+          "production_chunk_replacement": false,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "queued_request_count": 0,
+          "rejected": 0,
+          "render_target_readback_bytes": 0,
+          "render_thread_owned": true,
+          "request_capacity": 16,
+          "requested": 2865,
+          "resident_allocation_capacity": 8208,
+          "resident_buffer_count_per_entry": 5,
+          "resident_capacity": 4096,
+          "resident_capacity_rejections": 0,
+          "resident_entry_count": 1727,
+          "resource_architecture": "bounded_scratch_compact_residency",
+          "retired_entries": 757,
+          "same_global_device_compute_raster": true,
+          "schema": "world_transvoxel.terrain.gpu_global_render_publication.v1",
+          "source_cell_indirect_records_avoided": 1171336796,
+          "stale_skips": 2,
+          "superseded_entries": 381,
+          "visibility_bounds_position_space": "world",
+          "visibility_culled_count": 250673,
+          "visibility_culling": "conservative_aabb_frustum",
+          "visibility_culling_near_far": false,
+          "visibility_test_count": 284373
+        }
+      }
+    },
+    {
+      "name": "gpu_selected",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_selected_result.json",
+        "sha256": "4cc6edd91cfdc15ef9181a48574440f949f4f3b80431fd505acc185e77ea61e1",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_selected_01.stdout.log",
+            "sha256": "d5de8daf7773a9b39fa499b3c017108cea16dd5bdb243f38aa89755249ab7806"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_selected_01.stderr.log",
+            "sha256": "5acfecebf3902c020dd2764527b1019c6edc65472d86744c093f0f1870b0d1dc"
+          }
+        ]
+      },
+      "execution": {
+        "run": 1,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_selected_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array",
+          "--gpu-resident-render-candidate"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 49.92111950000981,
+        "process_cpu_seconds": 73.109375,
+        "average_active_cores": 1.4644979065420525,
+        "peak_process_tree_rss_bytes": 808828928,
+        "measurement_complete": false,
+        "target_status": "MEASUREMENT_INCOMPLETE",
+        "acceptance_failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "consecutive_blocked_movement_frames",
+          "frame_p95",
+          "frame_p99",
+          "physics_target_missing",
+          "physics_target_wait",
+          "authority_commit_wait",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_selected_01.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_selected_01.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "route_net_displacement",
+            "blocked_movement_frames",
+            "consecutive_blocked_movement_frames",
+            "frame_p95",
+            "frame_p99",
+            "physics_target_missing",
+            "physics_target_wait",
+            "authority_commit_wait",
+            "visual_ready_wait",
+            "visual_collision_divergence"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 36,
+          "maximum_collision_apply_frame_time_ns_observed": 6549500,
+          "maximum_collision_apply_time_ns_last": 3238600,
+          "maximum_collision_apply_time_ns_observed": 3238600,
+          "maximum_mesh_job_time_ns_observed": 34391100,
+          "maximum_pending_chunk_replacements": 634,
+          "maximum_pending_chunk_retirements": 725,
+          "maximum_queued_collision": 4,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 22482100,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 614,
+          "maximum_staged_render_resources": 0,
+          "samples": 104
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 6549500,
+          "maximum_single_apply_ns": 3238600,
+          "ok": true,
+          "soft_bound_ns": 7488600
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": -1,
+          "authority_commit_ms": -1.0,
+          "collision_generation_after": 0,
+          "collision_ready_censored": true,
+          "collision_ready_frames_after_commit": -1,
+          "collision_ready_ms_after_commit": -1.0,
+          "collision_required": false,
+          "commit_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "edit_position": {
+            "x": 562.607727050781,
+            "y": -20.3645782470703,
+            "z": 560.0
+          },
+          "generation_after": 0,
+          "generation_before": 0,
+          "generation_changed_frames_after_commit": -1,
+          "gpu_render_required": true,
+          "interaction_accepted": false,
+          "interaction_call_ms": 3.444,
+          "interaction_ray_hit": false,
+          "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "none",
+          "logical_collision_ready_frames_after_commit": -1,
+          "logical_visual_ready_frames_after_commit": -1,
+          "measurement_complete": false,
+          "native_visual_ready_frames_after_commit": -1,
+          "native_visual_ready_ms_after_commit": -1.0,
+          "physics_target_found": false,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 207.387,
+            "over_16_67_ms": 34,
+            "over_33_3_ms": 34,
+            "p50": 0.085,
+            "p95": 101.832,
+            "p99": 171.348,
+            "samples": 180
+          },
+          "physics_target_wait_frames": 180,
+          "physics_target_wait_ms": 3050.097,
+          "ready_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "ready_observation_window_frames": 0,
+          "ready_observation_window_ms": 0.0,
+          "relocation_to_collision_ready_lower_bound_ms": 3049.097,
+          "relocation_to_collision_ready_ms": -1.0,
+          "relocation_to_visual_ready_lower_bound_ms": 3049.097,
+          "relocation_to_visual_ready_ms": -1.0,
+          "render_generation_after": 0,
+          "resource_generation_api": false,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": -2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": -1,
+          "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+          "visual_ready_censored": true,
+          "visual_ready_frames_after_commit": -1,
+          "visual_ready_ms_after_commit": -1.0
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 215.148,
+          "over_16_67_ms": 493,
+          "over_33_3_ms": 370,
+          "p50": 0.345,
+          "p95": 67.693,
+          "p99": 119.567,
+          "samples": 1560
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": false,
+        "movement": {
+          "accepted_frames": 433,
+          "blocked_frames": 587,
+          "blocked_ratio": 0.575490196078431,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 113,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 0.0
+        },
+        "movement_end_position": {
+          "x": 286.844146728516,
+          "y": 44.0476684570313,
+          "z": 367.529266357422
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 50.951,
+              "over_16_67_ms": 30,
+              "over_33_3_ms": 5,
+              "p50": 11.313,
+              "p95": 33.338,
+              "p99": 50.951,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 178,
+            "blocked_frames": 2,
+            "blocked_ratio": 0.0111111111111111,
+            "end_position": {
+              "x": 367.188262939453,
+              "y": 40.7268028259277,
+              "z": 367.017944335938
+            },
+            "frame_time_ms": {
+              "maximum": 98.437,
+              "over_16_67_ms": 76,
+              "over_33_3_ms": 39,
+              "p50": 1.036,
+              "p95": 55.754,
+              "p99": 82.721,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 2,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 94.898681640625
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 53.844,
+              "over_16_67_ms": 18,
+              "over_33_3_ms": 12,
+              "p50": 0.463,
+              "p95": 49.804,
+              "p99": 53.844,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 100,
+            "blocked_frames": 80,
+            "blocked_ratio": 0.444444444444444,
+            "end_position": {
+              "x": 329.480743408203,
+              "y": 41.4809684753418,
+              "z": 329.310424804688
+            },
+            "frame_time_ms": {
+              "maximum": 155.941,
+              "over_16_67_ms": 55,
+              "over_33_3_ms": 44,
+              "p50": 0.361,
+              "p95": 68.614,
+              "p99": 125.368,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 80,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 367.188262939453,
+              "y": 40.7268028259277,
+              "z": 367.017944335938
+            },
+            "travel_distance": 53.3318176269531
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 78.462,
+              "over_16_67_ms": 17,
+              "over_33_3_ms": 11,
+              "p50": 0.59,
+              "p95": 65.407,
+              "p99": 78.462,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 17,
+            "blocked_frames": 103,
+            "blocked_ratio": 0.858333333333333,
+            "end_position": {
+              "x": 365.747375488281,
+              "y": 41.4809684753418,
+              "z": 329.310424804688
+            },
+            "frame_time_ms": {
+              "maximum": 215.148,
+              "over_16_67_ms": 44,
+              "over_33_3_ms": 33,
+              "p50": 0.337,
+              "p95": 57.555,
+              "p99": 65.958,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 103,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 329.480743408203,
+              "y": 41.4809684753418,
+              "z": 329.310424804688
+            },
+            "travel_distance": 36.2666320800781
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 78.811,
+              "over_16_67_ms": 7,
+              "over_33_3_ms": 7,
+              "p50": 0.277,
+              "p95": 78.433,
+              "p99": 78.811,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 66,
+            "blocked_frames": 54,
+            "blocked_ratio": 0.45,
+            "end_position": {
+              "x": 225.073028564453,
+              "y": 44.130184173584,
+              "z": 329.187530517578
+            },
+            "frame_time_ms": {
+              "maximum": 87.351,
+              "over_16_67_ms": 36,
+              "over_33_3_ms": 31,
+              "p50": 0.761,
+              "p95": 68.154,
+              "p99": 77.789,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 21,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 365.747375488281,
+              "y": 41.4809684753418,
+              "z": 329.310424804688
+            },
+            "travel_distance": 140.699340820313
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 65.727,
+              "over_16_67_ms": 12,
+              "over_33_3_ms": 9,
+              "p50": 0.369,
+              "p95": 48.306,
+              "p99": 65.727,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 10,
+            "blocked_frames": 110,
+            "blocked_ratio": 0.916666666666667,
+            "end_position": {
+              "x": 225.002258300781,
+              "y": 45.2845001220703,
+              "z": 350.487640380859
+            },
+            "frame_time_ms": {
+              "maximum": 63.403,
+              "over_16_67_ms": 46,
+              "over_33_3_ms": 33,
+              "p50": 0.337,
+              "p95": 54.54,
+              "p99": 63.006,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 110,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 225.073028564453,
+              "y": 44.130184173584,
+              "z": 329.187530517578
+            },
+            "travel_distance": 21.3314819335938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 66.382,
+              "over_16_67_ms": 10,
+              "over_33_3_ms": 8,
+              "p50": 0.348,
+              "p95": 66.236,
+              "p99": 66.382,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 21,
+            "blocked_frames": 99,
+            "blocked_ratio": 0.825,
+            "end_position": {
+              "x": 225.002258300781,
+              "y": 45.2845001220703,
+              "z": 305.687683105469
+            },
+            "frame_time_ms": {
+              "maximum": 145.444,
+              "over_16_67_ms": 26,
+              "over_33_3_ms": 26,
+              "p50": 0.305,
+              "p95": 97.04,
+              "p99": 138.922,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 99,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 225.002258300781,
+              "y": 45.2845001220703,
+              "z": 350.487640380859
+            },
+            "travel_distance": 44.7999572753906
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 152.187,
+              "over_16_67_ms": 6,
+              "over_33_3_ms": 5,
+              "p50": 0.225,
+              "p95": 68.206,
+              "p99": 152.187,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 41,
+            "blocked_frames": 139,
+            "blocked_ratio": 0.772222222222222,
+            "end_position": {
+              "x": 286.844146728516,
+              "y": 44.0476684570313,
+              "z": 367.529266357422
+            },
+            "frame_time_ms": {
+              "maximum": 185.689,
+              "over_16_67_ms": 49,
+              "over_33_3_ms": 48,
+              "p50": 0.322,
+              "p95": 70.366,
+              "p99": 150.404,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 113,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 225.002258300781,
+              "y": 45.2845001220703,
+              "z": 305.687683105469
+            },
+            "travel_distance": 87.4661636352539
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 119.567,
+              "over_16_67_ms": 27,
+              "over_33_3_ms": 25,
+              "p50": 0.302,
+              "p95": 65.61,
+              "p99": 119.567,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 215.649,
+          "over_16_67_ms": 491,
+          "over_33_3_ms": 390,
+          "p50": 47.28,
+          "p95": 107.399,
+          "p99": 165.096,
+          "samples": 491
+        },
+        "route_net_displacement": 68.8649215698242,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 13,
+          "collision_apply_frame_items_maximum_end": 36,
+          "collision_apply_frame_time_ns_maximum_end": 6549500,
+          "collision_apply_frame_time_ns_total": 188827600,
+          "collision_apply_time_ns_maximum_end": 3238600,
+          "collision_apply_time_ns_total": 188827600,
+          "collision_viewer_updates": 69,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 34391100,
+          "sample_job_time_ns_maximum_end": 22482100,
+          "viewer_updates": 52
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "activated_chunks": 2285,
+          "activation_cohort_retry_attempts": 4089,
+          "activation_cohorts_committed": 1312,
+          "activation_cohorts_queued": 1312,
+          "activation_queued_chunks": 0,
+          "active_chunks": 1464,
+          "application_wait_expirations": 0,
+          "atomic_surface_set_activation": true,
+          "coverage_retained_reconciliation_deferrals": 873,
+          "cpu_collision_authority": true,
+          "cpu_only_regional_retirements": 1584,
+          "default_backend_unchanged": true,
+          "gpu_page_lattice_input": true,
+          "gpu_resident_render_publication": true,
+          "incomplete_chunks": 5,
+          "last_error": "",
+          "native_position_space": "world",
+          "native_request_capacity": 16,
+          "native_request_handoff_decoupled": true,
+          "native_submissions_per_frame": 4,
+          "oldest_inactive_age_frames": 45,
+          "pending_activation_cohorts": 0,
+          "pending_activation_retry_groups": 33,
+          "prepared_inactive_chunks": 33,
+          "production_chunk_replacement": true,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "recovery_count": 0,
+          "rejected_chunks": 0,
+          "rejection_reasons": {},
+          "render_submission_capacity": 16,
+          "resident_capacity": 4096,
+          "retired_chunks": 821,
+          "retirement_candidate_cancellations": 0,
+          "retirement_confirmation_deferrals": 0,
+          "running": true,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+          "stage_timing_enabled": false,
+          "stage_timing_usec": {},
+          "stale_activation_cohorts_retained": 0,
+          "stale_incomplete_groups_superseded": 120,
+          "submitted_surfaces": 2942,
+          "superseded_chunks": 542,
+          "tracked_chunks": 1502,
+          "unrouted_effect_events": 0,
+          "validated_surfaces": 2537
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 512,
+        "gpu_effect_status": {
+          "activated_entries": 2362,
+          "active_empty_entry_count": 1053,
+          "active_entry_count": 1540,
+          "active_inventory_rebuilds": 1854,
+          "active_partial_entry_count": 0,
+          "active_static_water_lod_counts": {
+            "3": 76
+          },
+          "active_terrain_lod_counts": {
+            "0": 504,
+            "1": 329,
+            "2": 143,
+            "3": 488
+          },
+          "applied": 2820,
+          "arena_active_slot_count": 1578,
+          "arena_allocated_bytes": 76751904,
+          "arena_allocated_slot_count": 16,
+          "arena_binding_buffer_count_per_page": 21,
+          "arena_counter_readback_bytes": 15860,
+          "arena_page_count": 4,
+          "arena_page_slot_capacity": 4,
+          "arena_peak_active_slot_count": 1693,
+          "arena_resident_allocated_bytes": 14842208,
+          "arena_scratch_allocated_bytes": 61909696,
+          "arena_scratch_in_flight": 0,
+          "arena_slot_leases": 915,
+          "arena_slot_releases": 915,
+          "arena_slot_reuses": 895,
+          "arena_status": {
+            "active_slots": 1578,
+            "allocated_bytes": 76751904,
+            "allocated_slots": 16,
+            "architecture": "bounded_scratch_compact_residency",
+            "binding_buffer_count_per_page": 21,
+            "compacted_resident_entries": 758,
+            "compacted_surface_indices": true,
+            "compacted_surface_indirect_commands": true,
+            "compacted_surface_vertices": true,
+            "counter_readback_bytes": 15860,
+            "counter_readback_completions": 793,
+            "counter_readback_requests": 915,
+            "dispatch_count": 915,
+            "empty_resident_entries": 2062,
+            "failed_cell_count_total": 0,
+            "failed_extractions": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_commands_per_surface": 1,
+            "last_error": "",
+            "last_failure_cell_count": 0,
+            "maximum_slots": 16,
+            "page_allocations": 5,
+            "page_count": 4,
+            "page_replacements": 1,
+            "page_slot_capacity": 4,
+            "peak_active_slots": 1693,
+            "peak_resident_allocated_bytes": 15547560,
+            "peak_scratch_in_flight": 8,
+            "position_encoding": "float32_world_space",
+            "proven_empty_resident_entries": 2027,
+            "resident_allocated_bytes": 14842208,
+            "resident_buffer_count_per_entry": 5,
+            "schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
+            "scratch_allocated_bytes": 61909696,
+            "scratch_in_flight": 0,
+            "slot_leases": 915,
+            "slot_releases": 915,
+            "slot_reuses": 895,
+            "uploaded_bytes": 343355420
+          },
+          "array_mesh_upload_used": false,
+          "atomic_surface_set_activation": true,
+          "cancelled_inflight_requests": 120,
+          "cancelled_queued_requests": 0,
+          "close_completed": false,
+          "close_requested": false,
+          "compact_indirect_command_records": 38152,
+          "compacted_surface_indirect_commands": true,
+          "compositor_callback": "pre_transparent",
+          "counter_readback_bytes": 15860,
+          "cpu_chunk_finalization_used": false,
+          "cpu_collision_authority": true,
+          "cpu_meshing_used": false,
+          "device_local_index_copy_used": true,
+          "discarded_cancelled_readbacks": 120,
+          "draw_frames": 885,
+          "event_count": 5,
+          "fallback_used": false,
+          "geometry_readback_bytes": 0,
+          "global_rendering_device": true,
+          "gpu_written_indirect_commands": true,
+          "indirect_commands_per_surface": 1,
+          "indirect_draw_calls": 38152,
+          "inflight_extraction_count": 0,
+          "initialization_attempted": true,
+          "initialized": true,
+          "last_applied_identity": {
+            "cached_transition_mask": 0,
+            "field_mode": 0,
+            "generation": 3284,
+            "input_stage": "pre_mesh_field",
+            "lod": 0,
+            "page_x": 35,
+            "page_y": 6,
+            "page_z": 32,
+            "sample_count": 6859,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 0,
+            "world_revision": 0
+          },
+          "last_camera_basis_z": "(-0.027164, 0.999631, -0.0)",
+          "last_camera_origin": "(560.0, 75.6, 560.0)",
+          "last_culled_surface_count": 467,
+          "last_error": "",
+          "last_tested_bounds_max": "(224.0, 64.0, 352.0)",
+          "last_tested_bounds_min": "(192.0, 32.0, 320.0)",
+          "last_visible_surface_count": 20,
+          "max_compact_command_records_per_view": 103,
+          "max_source_cell_records_avoided_per_view": 2093209,
+          "native_packed_bytes_total": 1209117560,
+          "native_packed_requests": 2942,
+          "packed_bytes_total": 0,
+          "packing_requests": 0,
+          "packing_usec_max": 0,
+          "packing_usec_total": 0,
+          "pending_lifecycle_command_count": 0,
+          "prepared_entries": 2820,
+          "production_chunk_replacement": false,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "queued_request_count": 0,
+          "rejected": 0,
+          "render_target_readback_bytes": 0,
+          "render_thread_owned": true,
+          "request_capacity": 16,
+          "requested": 2942,
+          "resident_allocation_capacity": 8208,
+          "resident_buffer_count_per_entry": 5,
+          "resident_capacity": 4096,
+          "resident_capacity_rejections": 0,
+          "resident_entry_count": 1578,
+          "resource_architecture": "bounded_scratch_compact_residency",
+          "retired_entries": 922,
+          "same_global_device_compute_raster": true,
+          "schema": "world_transvoxel.terrain.gpu_global_render_publication.v1",
+          "source_cell_indirect_records_avoided": 1254237688,
+          "stale_skips": 2,
+          "superseded_entries": 442,
+          "visibility_bounds_position_space": "world",
+          "visibility_culled_count": 266239,
+          "visibility_culling": "conservative_aabb_frustum",
+          "visibility_culling_near_far": false,
+          "visibility_test_count": 304391
+        }
+      }
+    },
+    {
+      "name": "gpu_history_off",
+      "source": {
+        "result": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_history_off_result.json",
+        "sha256": "787cbcfeb495fa7cddc79a02cc931c8a5cd720232527f4c09af46578c1646bb8",
+        "logs": [
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_history_off_01.stdout.log",
+            "sha256": "02b7a33c23eac1979d69541e88caee26d505e45c2f0ceff53e6990350309ccf9"
+          },
+          {
+            "path": ".godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_history_off_01.stderr.log",
+            "sha256": "9e949dfb0b0998b705fd43ed36cfac862ac351ee14e5a43adeef8f0902dba385"
+          }
+        ]
+      },
+      "execution": {
+        "run": 1,
+        "command": [
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+          "--path",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+          "--",
+          "--p2-profile",
+          "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+          "--human-visual-capture",
+          "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_performance_checkpoint_20260830\\gpu_history_off_01.png",
+          "--human-visual-capture-mode",
+          "runtime_baseline_gate",
+          "--human-visual-capture-wait-frames",
+          "180",
+          "--player-collision-invoker-radius-chunks",
+          "2",
+          "--player-collision-prediction-distance",
+          "24.0",
+          "--procedural-generation-workers",
+          "2",
+          "--meshing-workers",
+          "0",
+          "--human-material-mode",
+          "production_texture_array",
+          "--gpu-resident-render-candidate"
+        ],
+        "godot_returncode": 1,
+        "wall_seconds": 48.46754260000307,
+        "process_cpu_seconds": 82.640625,
+        "average_active_cores": 1.705071488398398,
+        "peak_process_tree_rss_bytes": 1079672832,
+        "measurement_complete": false,
+        "target_status": "MEASUREMENT_INCOMPLETE",
+        "acceptance_failures": [
+          "route_net_displacement",
+          "blocked_movement_frames",
+          "consecutive_blocked_movement_frames",
+          "frame_p95",
+          "frame_p99",
+          "physics_target_missing",
+          "physics_target_wait",
+          "authority_commit_wait",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "stdout_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_history_off_01.stdout.log",
+        "stderr_log": ".godot/world_transvoxel_captures/gpu_performance_checkpoint_20260830/gpu_history_off_01.stderr.log",
+        "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+      },
+      "baseline": {
+        "acceptance": {
+          "failures": [
+            "route_net_displacement",
+            "blocked_movement_frames",
+            "consecutive_blocked_movement_frames",
+            "frame_p95",
+            "frame_p99",
+            "physics_target_missing",
+            "physics_target_wait",
+            "authority_commit_wait",
+            "visual_ready_wait",
+            "visual_collision_divergence"
+          ],
+          "maximum_authority_commit_frames": 15,
+          "maximum_blocked_movement_frames": 20,
+          "maximum_collision_ready_frames_after_commit": 15,
+          "maximum_consecutive_blocked_movement_frames": 10,
+          "maximum_frame_p95_ms": 20.0,
+          "maximum_frame_p99_ms": 33.3,
+          "maximum_physics_target_wait_frames": 30,
+          "maximum_visual_collision_divergence_frames": 8,
+          "maximum_visual_ready_frames_after_commit": 15,
+          "minimum_route_net_displacement": 340.0,
+          "ok": false
+        },
+        "backlog": {
+          "maximum_collision_apply_frame_items_observed": 32,
+          "maximum_collision_apply_frame_time_ns_observed": 5234100,
+          "maximum_collision_apply_time_ns_last": 2772400,
+          "maximum_collision_apply_time_ns_observed": 4271900,
+          "maximum_mesh_job_time_ns_observed": 37989000,
+          "maximum_pending_chunk_replacements": 615,
+          "maximum_pending_chunk_retirements": 626,
+          "maximum_queued_collision": 2,
+          "maximum_queued_render": 0,
+          "maximum_sample_job_time_ns_observed": 14793500,
+          "maximum_scheduler_queued_completions": 0,
+          "maximum_scheduler_queued_jobs": 599,
+          "maximum_staged_render_resources": 0,
+          "samples": 104
+        },
+        "causal_trace": {
+          "enabled": false
+        },
+        "collision_apply_frame_budget": {
+          "bound_model": "deadline_plus_one_indivisible_shape_plus_0_25ms",
+          "deadline_ns": 4000000,
+          "maximum_frame_apply_ns": 5234100,
+          "maximum_single_apply_ns": 4271900,
+          "ok": true,
+          "soft_bound_ns": 8521900
+        },
+        "collision_invoker_radius_chunks": 2,
+        "collision_prediction_distance": 24.0,
+        "edit": {
+          "authority_commit_frames": -1,
+          "authority_commit_ms": -1.0,
+          "collision_generation_after": 0,
+          "collision_ready_censored": true,
+          "collision_ready_frames_after_commit": -1,
+          "collision_ready_ms_after_commit": -1.0,
+          "collision_required": false,
+          "commit_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "edit_position": {
+            "x": 562.607727050781,
+            "y": -20.3645782470703,
+            "z": 560.0
+          },
+          "generation_after": 0,
+          "generation_before": 0,
+          "generation_changed_frames_after_commit": -1,
+          "gpu_render_required": true,
+          "interaction_accepted": false,
+          "interaction_call_ms": 2.879,
+          "interaction_ray_hit": false,
+          "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+          "interaction_render_mesh_hit": false,
+          "interaction_target_source": "none",
+          "logical_collision_ready_frames_after_commit": -1,
+          "logical_visual_ready_frames_after_commit": -1,
+          "measurement_complete": false,
+          "native_visual_ready_frames_after_commit": -1,
+          "native_visual_ready_ms_after_commit": -1.0,
+          "physics_target_found": false,
+          "physics_target_wait_frame_time_ms": {
+            "maximum": 124.151,
+            "over_16_67_ms": 53,
+            "over_33_3_ms": 36,
+            "p50": 0.138,
+            "p95": 83.133,
+            "p99": 118.566,
+            "samples": 180
+          },
+          "physics_target_wait_frames": 180,
+          "physics_target_wait_ms": 3023.752,
+          "ready_frame_time_ms": {
+            "maximum": 0.0,
+            "over_16_67_ms": 0,
+            "over_33_3_ms": 0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "samples": 0
+          },
+          "ready_observation_window_frames": 0,
+          "ready_observation_window_ms": 0.0,
+          "relocation_to_collision_ready_lower_bound_ms": 3022.752,
+          "relocation_to_collision_ready_ms": -1.0,
+          "relocation_to_visual_ready_lower_bound_ms": 3022.752,
+          "relocation_to_visual_ready_ms": -1.0,
+          "render_generation_after": 0,
+          "resource_generation_api": false,
+          "staged_render_generation_after": 0,
+          "target_chunk": {
+            "x": 35,
+            "y": -2,
+            "z": 35
+          },
+          "visual_collision_divergence_frames": -1,
+          "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+          "visual_ready_censored": true,
+          "visual_ready_frames_after_commit": -1,
+          "visual_ready_ms_after_commit": -1.0
+        },
+        "enabled": true,
+        "end_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "fast_speed": 128.0,
+        "fixed_post_flight_edit_position": {
+          "x": 560.0,
+          "y": 74.0,
+          "z": 560.0
+        },
+        "foreground_priority_focus_settle_frames": 0,
+        "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+        "frame_time_ms": {
+          "maximum": 225.508,
+          "over_16_67_ms": 546,
+          "over_33_3_ms": 343,
+          "p50": 0.378,
+          "p95": 67.447,
+          "p99": 97.158,
+          "samples": 1560
+        },
+        "implementation": "g23_p0_runtime_baseline_v3",
+        "measurement_complete": false,
+        "movement": {
+          "accepted_frames": 451,
+          "blocked_frames": 569,
+          "blocked_ratio": 0.557843137254902,
+          "frames": 1020,
+          "maximum_consecutive_blocked_frames": 106,
+          "rejected_zero_motion_frames": 0,
+          "stop_drift_distance": 9.5367431640625e-05
+        },
+        "movement_end_position": {
+          "x": 293.642150878906,
+          "y": 42.9988594055176,
+          "z": 280.69921875
+        },
+        "normal_speed": 32.0,
+        "ok": false,
+        "phases": [
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 33.874,
+              "over_16_67_ms": 33,
+              "over_33_3_ms": 1,
+              "p50": 27.018,
+              "p95": 31.272,
+              "p99": 33.874,
+              "samples": 60
+            },
+            "frames": 60,
+            "kind": "stop",
+            "label": "warmup",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 94,
+            "blocked_frames": 86,
+            "blocked_ratio": 0.477777777777778,
+            "end_position": {
+              "x": 335.513793945313,
+              "y": 41.3270378112793,
+              "z": 335.343505859375
+            },
+            "frame_time_ms": {
+              "maximum": 87.793,
+              "over_16_67_ms": 77,
+              "over_33_3_ms": 36,
+              "p50": 0.894,
+              "p95": 61.232,
+              "p99": 86.36,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_outbound",
+            "maximum_consecutive_blocked_frames": 86,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 300.0,
+              "y": 41.0312652587891,
+              "z": 300.0
+            },
+            "travel_distance": 50.1046943664551
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 59.734,
+              "over_16_67_ms": 15,
+              "over_33_3_ms": 8,
+              "p50": 15.849,
+              "p95": 50.164,
+              "p99": 59.734,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "normal_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 180,
+            "blocked_frames": 0,
+            "blocked_ratio": 0.0,
+            "end_position": {
+              "x": 267.661315917969,
+              "y": 42.9458389282227,
+              "z": 267.481750488281
+            },
+            "frame_time_ms": {
+              "maximum": 69.104,
+              "over_16_67_ms": 72,
+              "over_33_3_ms": 43,
+              "p50": 0.778,
+              "p95": 58.947,
+              "p99": 65.516,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "normal_return",
+            "maximum_consecutive_blocked_frames": 0,
+            "requested_speed": 32.0,
+            "start_position": {
+              "x": 335.513793945313,
+              "y": 41.3270378112793,
+              "z": 335.343505859375
+            },
+            "travel_distance": 95.9781036376953
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 68.792,
+              "over_16_67_ms": 20,
+              "over_33_3_ms": 11,
+              "p50": 2.2,
+              "p95": 51.372,
+              "p99": 68.792,
+              "samples": 45
+            },
+            "frames": 45,
+            "kind": "stop",
+            "label": "return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 39,
+            "blocked_frames": 81,
+            "blocked_ratio": 0.675,
+            "end_position": {
+              "x": 350.861236572266,
+              "y": 42.9458389282227,
+              "z": 267.481750488281
+            },
+            "frame_time_ms": {
+              "maximum": 93.451,
+              "over_16_67_ms": 40,
+              "over_33_3_ms": 29,
+              "p50": 0.384,
+              "p95": 70.488,
+              "p99": 89.053,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_outbound",
+            "maximum_consecutive_blocked_frames": 79,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 267.661315917969,
+              "y": 42.9458389282227,
+              "z": 267.481750488281
+            },
+            "travel_distance": 83.1999206542969
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 83.263,
+              "over_16_67_ms": 11,
+              "over_33_3_ms": 7,
+              "p50": 0.398,
+              "p95": 77.661,
+              "p99": 83.263,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 53,
+            "blocked_frames": 67,
+            "blocked_ratio": 0.558333333333333,
+            "end_position": {
+              "x": 237.831771850586,
+              "y": 44.0821685791016,
+              "z": 267.558532714844
+            },
+            "frame_time_ms": {
+              "maximum": 225.508,
+              "over_16_67_ms": 39,
+              "over_33_3_ms": 29,
+              "p50": 0.738,
+              "p95": 65.172,
+              "p99": 83.822,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_x_return",
+            "maximum_consecutive_blocked_frames": 38,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 350.861236572266,
+              "y": 42.9458389282227,
+              "z": 267.481750488281
+            },
+            "travel_distance": 113.035202026367
+          },
+          {
+            "drift_distance": 9.5367431640625e-05,
+            "frame_time_ms": {
+              "maximum": 68.258,
+              "over_16_67_ms": 13,
+              "over_33_3_ms": 6,
+              "p50": 0.425,
+              "p95": 56.592,
+              "p99": 68.258,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_x_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 14,
+            "blocked_frames": 106,
+            "blocked_ratio": 0.883333333333333,
+            "end_position": {
+              "x": 237.831771850586,
+              "y": 44.0822639465332,
+              "z": 297.425170898438
+            },
+            "frame_time_ms": {
+              "maximum": 86.652,
+              "over_16_67_ms": 41,
+              "over_33_3_ms": 31,
+              "p50": 0.297,
+              "p95": 61.299,
+              "p99": 79.83,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_outbound",
+            "maximum_consecutive_blocked_frames": 106,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 237.831771850586,
+              "y": 44.0822639465332,
+              "z": 267.558532714844
+            },
+            "travel_distance": 29.8666381835938
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 64.797,
+              "over_16_67_ms": 12,
+              "over_33_3_ms": 8,
+              "p50": 0.397,
+              "p95": 57.888,
+              "p99": 64.797,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_outbound_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 34,
+            "blocked_frames": 86,
+            "blocked_ratio": 0.716666666666667,
+            "end_position": {
+              "x": 237.832229614258,
+              "y": 44.0909614562988,
+              "z": 224.891937255859
+            },
+            "frame_time_ms": {
+              "maximum": 87.412,
+              "over_16_67_ms": 38,
+              "over_33_3_ms": 34,
+              "p50": 0.303,
+              "p95": 64.125,
+              "p99": 79.989,
+              "samples": 120
+            },
+            "frames": 120,
+            "kind": "movement",
+            "label": "fast_z_return",
+            "maximum_consecutive_blocked_frames": 52,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 237.831771850586,
+              "y": 44.0822639465332,
+              "z": 297.425170898438
+            },
+            "travel_distance": 72.5332336425781
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 85.914,
+              "over_16_67_ms": 13,
+              "over_33_3_ms": 5,
+              "p50": 0.262,
+              "p95": 65.135,
+              "p99": 85.914,
+              "samples": 30
+            },
+            "frames": 30,
+            "kind": "stop",
+            "label": "fast_z_return_stop",
+            "rejected_zero_motion_frames": 0
+          },
+          {
+            "accepted_frames": 37,
+            "blocked_frames": 143,
+            "blocked_ratio": 0.794444444444444,
+            "end_position": {
+              "x": 293.642150878906,
+              "y": 42.9988594055176,
+              "z": 280.69921875
+            },
+            "frame_time_ms": {
+              "maximum": 134.321,
+              "over_16_67_ms": 50,
+              "over_33_3_ms": 40,
+              "p50": 0.294,
+              "p95": 79.844,
+              "p99": 114.57,
+              "samples": 180
+            },
+            "frames": 180,
+            "kind": "movement",
+            "label": "fast_diagonal_outbound",
+            "maximum_consecutive_blocked_frames": 97,
+            "requested_speed": 128.0,
+            "start_position": {
+              "x": 237.832229614258,
+              "y": 44.0909614562988,
+              "z": 224.891937255859
+            },
+            "travel_distance": 78.9328384399414
+          },
+          {
+            "drift_distance": 0.0,
+            "frame_time_ms": {
+              "maximum": 173.927,
+              "over_16_67_ms": 19,
+              "over_33_3_ms": 19,
+              "p50": 0.178,
+              "p95": 96.682,
+              "p99": 173.927,
+              "samples": 90
+            },
+            "frames": 90,
+            "kind": "stop",
+            "label": "pre_edit_stop",
+            "rejected_zero_motion_frames": 0
+          }
+        ],
+        "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+        "render_frame_interval_ms": {
+          "maximum": 225.957,
+          "over_16_67_ms": 547,
+          "over_33_3_ms": 357,
+          "p50": 42.168,
+          "p95": 86.92,
+          "p99": 118.94,
+          "samples": 569
+        },
+        "route_net_displacement": 20.4160194396973,
+        "runtime_metric_delta": {
+          "collision_apply_frame_deadline_overruns": 17,
+          "collision_apply_frame_items_maximum_end": 32,
+          "collision_apply_frame_time_ns_maximum_end": 5234100,
+          "collision_apply_frame_time_ns_total": 258259500,
+          "collision_apply_time_ns_maximum_end": 4271900,
+          "collision_apply_time_ns_total": 258259500,
+          "collision_viewer_updates": 79,
+          "foreground_priority_active_sources_end": 0,
+          "foreground_priority_changed_priorities": 0,
+          "foreground_priority_focus_keys_end": 0,
+          "foreground_priority_matched_keys": 0,
+          "foreground_priority_missing_keys": 0,
+          "foreground_priority_support_keys_end": 0,
+          "foreground_priority_updates": 0,
+          "mesh_job_time_ns_maximum_end": 37989000,
+          "sample_job_time_ns_maximum_end": 14793500,
+          "viewer_updates": 53
+        },
+        "start_position": {
+          "x": 300.0,
+          "y": 41.0312652587891,
+          "z": 300.0
+        },
+        "gpu_candidate_status": {
+          "activated_chunks": 2436,
+          "activation_cohort_retry_attempts": 3852,
+          "activation_cohorts_committed": 1483,
+          "activation_cohorts_queued": 1483,
+          "activation_queued_chunks": 0,
+          "active_chunks": 1471,
+          "application_wait_expirations": 0,
+          "atomic_surface_set_activation": true,
+          "coverage_retained_reconciliation_deferrals": 919,
+          "cpu_collision_authority": true,
+          "cpu_only_regional_retirements": 439,
+          "default_backend_unchanged": true,
+          "gpu_page_lattice_input": true,
+          "gpu_resident_render_publication": true,
+          "incomplete_chunks": 4,
+          "last_error": "",
+          "native_position_space": "world",
+          "native_request_capacity": 16,
+          "native_request_handoff_decoupled": true,
+          "native_submissions_per_frame": 4,
+          "oldest_inactive_age_frames": 21,
+          "pending_activation_cohorts": 0,
+          "pending_activation_retry_groups": 7,
+          "prepared_inactive_chunks": 7,
+          "production_chunk_replacement": true,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "recovery_count": 0,
+          "rejected_chunks": 0,
+          "rejection_reasons": {},
+          "render_submission_capacity": 16,
+          "resident_capacity": 4096,
+          "retired_chunks": 965,
+          "retirement_candidate_cancellations": 0,
+          "retirement_confirmation_deferrals": 0,
+          "running": true,
+          "schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
+          "stage_timing_enabled": false,
+          "stage_timing_usec": {},
+          "stale_activation_cohorts_retained": 0,
+          "stale_incomplete_groups_superseded": 110,
+          "submitted_surfaces": 2987,
+          "superseded_chunks": 459,
+          "tracked_chunks": 1485,
+          "unrouted_effect_events": 0,
+          "validated_surfaces": 2611
+        },
+        "gpu_lifecycle_history_events_retained_at_end": 0,
+        "gpu_effect_status": {
+          "activated_entries": 2517,
+          "active_empty_entry_count": 1051,
+          "active_entry_count": 1550,
+          "active_inventory_rebuilds": 1942,
+          "active_partial_entry_count": 0,
+          "active_static_water_lod_counts": {
+            "2": 4,
+            "3": 75
+          },
+          "active_terrain_lod_counts": {
+            "0": 536,
+            "1": 277,
+            "2": 173,
+            "3": 485
+          },
+          "applied": 2871,
+          "arena_active_slot_count": 1560,
+          "arena_allocated_bytes": 76923700,
+          "arena_allocated_slot_count": 16,
+          "arena_binding_buffer_count_per_page": 21,
+          "arena_counter_readback_bytes": 16620,
+          "arena_page_count": 4,
+          "arena_page_slot_capacity": 4,
+          "arena_peak_active_slot_count": 1705,
+          "arena_resident_allocated_bytes": 15024884,
+          "arena_scratch_allocated_bytes": 61898816,
+          "arena_scratch_in_flight": 1,
+          "arena_slot_leases": 947,
+          "arena_slot_releases": 946,
+          "arena_slot_reuses": 933,
+          "arena_status": {
+            "active_slots": 1560,
+            "allocated_bytes": 76923700,
+            "allocated_slots": 16,
+            "architecture": "bounded_scratch_compact_residency",
+            "binding_buffer_count_per_page": 21,
+            "compacted_resident_entries": 793,
+            "compacted_surface_indices": true,
+            "compacted_surface_indirect_commands": true,
+            "compacted_surface_vertices": true,
+            "counter_readback_bytes": 16620,
+            "counter_readback_completions": 831,
+            "counter_readback_requests": 947,
+            "dispatch_count": 947,
+            "empty_resident_entries": 2078,
+            "failed_cell_count_total": 0,
+            "failed_extractions": 0,
+            "geometry_readback_bytes": 0,
+            "indirect_commands_per_surface": 1,
+            "last_error": "",
+            "last_failure_cell_count": 0,
+            "maximum_slots": 16,
+            "page_allocations": 5,
+            "page_count": 4,
+            "page_replacements": 1,
+            "page_slot_capacity": 4,
+            "peak_active_slots": 1705,
+            "peak_resident_allocated_bytes": 15976808,
+            "peak_scratch_in_flight": 8,
+            "position_encoding": "float32_world_space",
+            "proven_empty_resident_entries": 2040,
+            "resident_allocated_bytes": 15024884,
+            "resident_buffer_count_per_entry": 5,
+            "schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
+            "scratch_allocated_bytes": 61898816,
+            "scratch_in_flight": 1,
+            "slot_leases": 947,
+            "slot_releases": 946,
+            "slot_reuses": 933,
+            "uploaded_bytes": 382959404
+          },
+          "array_mesh_upload_used": false,
+          "atomic_surface_set_activation": true,
+          "cancelled_inflight_requests": 110,
+          "cancelled_queued_requests": 0,
+          "close_completed": false,
+          "close_requested": false,
+          "compact_indirect_command_records": 34138,
+          "compacted_surface_indirect_commands": true,
+          "compositor_callback": "pre_transparent",
+          "counter_readback_bytes": 16620,
+          "cpu_chunk_finalization_used": false,
+          "cpu_collision_authority": true,
+          "cpu_meshing_used": false,
+          "device_local_index_copy_used": true,
+          "discarded_cancelled_readbacks": 110,
+          "draw_frames": 950,
+          "event_count": 6,
+          "fallback_used": false,
+          "geometry_readback_bytes": 0,
+          "global_rendering_device": true,
+          "gpu_written_indirect_commands": true,
+          "indirect_commands_per_surface": 1,
+          "indirect_draw_calls": 34138,
+          "inflight_extraction_count": 1,
+          "initialization_attempted": true,
+          "initialized": true,
+          "last_applied_identity": {
+            "cached_transition_mask": 0,
+            "field_mode": 0,
+            "generation": 3623,
+            "input_stage": "pre_mesh_field",
+            "lod": 0,
+            "page_x": 36,
+            "page_y": 5,
+            "page_z": 36,
+            "sample_count": 6859,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 0,
+            "world_revision": 0
+          },
+          "last_camera_basis_z": "(-0.027164, 0.999631, -0.0)",
+          "last_camera_origin": "(560.0, 75.6, 560.0)",
+          "last_culled_surface_count": 477,
+          "last_error": "",
+          "last_tested_bounds_max": "(704.0, -64.0, 576.0)",
+          "last_tested_bounds_min": "(640.0, -128.0, 512.0)",
+          "last_visible_surface_count": 22,
+          "max_compact_command_records_per_view": 75,
+          "max_source_cell_records_avoided_per_view": 2143163,
+          "native_packed_bytes_total": 1208129068,
+          "native_packed_requests": 2987,
+          "packed_bytes_total": 0,
+          "packing_requests": 0,
+          "packing_usec_max": 0,
+          "packing_usec_total": 0,
+          "pending_lifecycle_command_count": 0,
+          "prepared_entries": 2871,
+          "production_chunk_replacement": false,
+          "production_material_parameter_bytes": 416,
+          "production_material_parity": true,
+          "production_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_terrain_palette.gdshader",
+          "production_material_texture_count": 5,
+          "production_static_water_fresnel_tint_parity": true,
+          "production_static_water_material_parity": true,
+          "production_static_water_material_payload_ready": true,
+          "production_static_water_refraction_parity": true,
+          "production_static_water_scene_copy_ready": true,
+          "production_terrain_accepted_normal_response_parity": true,
+          "production_terrain_albedo_mapping_parity": true,
+          "production_terrain_bounded_pbr_response_parity": true,
+          "production_terrain_directional_ambient_lighting_parity": true,
+          "production_terrain_material_parity": true,
+          "production_terrain_material_payload_ready": true,
+          "production_terrain_normal_mapping_parity": true,
+          "production_terrain_pbr_lighting_parity": true,
+          "production_terrain_roughness_mapping_parity": true,
+          "production_water_material_source": "res://addons/world_transvoxel_gameworld/material/wt_game_static_water.gdshader",
+          "production_water_parameter_bytes": 48,
+          "queued_request_count": 0,
+          "rejected": 0,
+          "render_target_readback_bytes": 0,
+          "render_thread_owned": true,
+          "request_capacity": 16,
+          "requested": 2987,
+          "resident_allocation_capacity": 8208,
+          "resident_buffer_count_per_entry": 5,
+          "resident_capacity": 4096,
+          "resident_capacity_rejections": 0,
+          "resident_entry_count": 1560,
+          "resource_architecture": "bounded_scratch_compact_residency",
+          "retired_entries": 814,
+          "same_global_device_compute_raster": true,
+          "schema": "world_transvoxel.terrain.gpu_global_render_publication.v1",
+          "source_cell_indirect_records_avoided": 1425320614,
+          "stale_skips": 5,
+          "superseded_entries": 612,
+          "visibility_bounds_position_space": "world",
+          "visibility_culled_count": 311782,
+          "visibility_culling": "conservative_aabb_frustum",
+          "visibility_culling_near_far": false,
+          "visibility_test_count": 345920
+        }
+      }
+    }
+  ]
+}

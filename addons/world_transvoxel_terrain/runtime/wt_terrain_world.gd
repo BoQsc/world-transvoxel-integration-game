@@ -384,6 +384,18 @@ func get_gpu_resident_render_status() -> Dictionary:
 	return _gpu_resident_render_controller.get_status()
 
 
+func is_gpu_resident_render_chunk_active(
+	position: Vector3i, lod: int, generation: int
+) -> bool:
+	return _gpu_resident_render_controller != null and \
+		_gpu_resident_render_controller.is_chunk_generation_active(position, lod, generation)
+
+
+func set_debug_gpu_resident_lifecycle_history_enabled(enabled: bool) -> void:
+	if _gpu_resident_render_controller != null:
+		_gpu_resident_render_controller.set_debug_lifecycle_history_enabled(enabled)
+
+
 func debug_gpu_resident_ray_coverage(
 	origin: Vector3, direction: Vector3, maximum_distance: float = 512.0
 ) -> Array:

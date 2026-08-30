@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_PUBLICATION_ORDERING_CHECKPOINT_RELEASE_OPEN`
+Status: `TQP64_GPU_GEOMETRY_AND_PERFORMANCE_REJECTED_RELEASE_OPEN`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -10,6 +10,37 @@ replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-30
+
+The latest [runtime investigation](evidence/tqp64_gpu_runtime_blockers_20260830/RESULT.md)
+supersedes the earlier ordering-only checkpoint below. CPU remains the default.
+Upstream `0a9b3c9` adds fine-face dependency gating for GPU transitions. The
+integration corrects D3D12 fixed-coordinate interpolation and spatial retirement
+matching, batches renderer inventory accounting, and sends only authority-selected
+cohort inventories while retaining native validation.
+
+Short trace-off gameplay still rejects the GPU candidate: final observed
+post-draw p95/p99 is 86.9/118.9 ms, movement blocks on 569/1020 steps, and the
+relocated edit target is unavailable within the existing observation window.
+The CPU reference completes movement but also misses edit/frame-tail targets.
+These are not equivalent completed paths and cannot establish a speedup ratio.
+Physics-step intervals are now explicitly distinguished from post-draw intervals;
+GPU edit readiness additionally requires the activation acknowledgment.
+Lifecycle history and per-stage timing are opt-in; the latest measurement has
+both disabled. Single-run differences are not statistically qualified gains.
+
+The final moving-LOD rerun also fails at peak-sweep sample 12. Exact saved GPU
+triangles prove a 0.030813-unit coarse/fine boundary opening with the required
+coarse positive-Z transition absent. The old ridge case passes; the entire
+visual route does not. The evidence includes an offline reproducer.
+
+Next priority is that publication-boundary defect, then the concrete
+player-support/collision-readiness failure and remaining measured activation
+costs, followed by a successful matched workload.
+Do not claim GPU completion, a hardware limit, 60 FPS, or an estimated delivery
+date from passing bounded correctness tests. The final visual, cross-backend,
+power, and human acceptance gates remain open.
+
+### Earlier Ordering Checkpoint
 
 The resident candidate now consumes native-packed page-lattice inputs, performs
 GPU field evaluation and regular/transition extraction, and renders compact GPU

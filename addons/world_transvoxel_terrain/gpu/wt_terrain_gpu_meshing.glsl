@@ -184,6 +184,20 @@ float regularized_alpha(float density_a, float density_b, float isovalue) {
 	return clamp((isovalue - density_a) / denominator, 1.0 / 32.0, 31.0 / 32.0);
 }
 
+vec3 interpolate_edge_position(vec3 endpoint_a, vec3 endpoint_b, float alpha) {
+	vec3 position = endpoint_a;
+	if (endpoint_a.x != endpoint_b.x) {
+		position.x = endpoint_a.x + (endpoint_b.x - endpoint_a.x) * alpha;
+	}
+	if (endpoint_a.y != endpoint_b.y) {
+		position.y = endpoint_a.y + (endpoint_b.y - endpoint_a.y) * alpha;
+	}
+	if (endpoint_a.z != endpoint_b.z) {
+		position.z = endpoint_a.z + (endpoint_b.z - endpoint_a.z) * alpha;
+	}
+	return position;
+}
+
 vec3 snap_position(vec3 position) {
 	return round(position * POSITION_SNAP_SCALE) / POSITION_SNAP_SCALE;
 }
@@ -1031,7 +1045,7 @@ void main() {
 			store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, case_code, 0, 0));
 			return;
 		}
-		vec3 position = mix(position_a, position_b, alpha);
+		vec3 position = interpolate_edge_position(position_a, position_b, alpha);
 		vec3 normal = normalized_or_zero(mix(sample_a.yzw, sample_b.yzw, alpha));
 		ivec2 surface_material = sample_a.x < isovalue ? material_a : material_b;
 		if (page_field_mode) {

@@ -485,7 +485,8 @@ func debug_ray_intersection(
 	entry: Dictionary,
 	origin: Vector3,
 	direction: Vector3,
-	maximum_distance: float
+	maximum_distance: float,
+	include_geometry: bool = false
 ) -> Dictionary:
 	var vertex_count := int(entry.get("vertex_count", 0))
 	var index_count := int(entry.get("index_count", 0))
@@ -547,7 +548,7 @@ func debug_ray_intersection(
 			nearest_indices = [index_a, index_b, index_c]
 			nearest_vertices = [a, b, c]
 			nearest_normal = (b - a).cross(c - a).normalized()
-	return {
+	var result := {
 		"valid": true,
 		"hit": nearest_triangle >= 0,
 		"distance": nearest_distance if nearest_triangle >= 0 else -1.0,
@@ -576,6 +577,14 @@ func debug_ray_intersection(
 			position_bytes.size() + index_bytes.size() + indirect_bytes.size()
 		),
 	}
+	if include_geometry:
+		var positions := []
+		for index in range(vertex_count):
+			var position := _decode_position(position_bytes, index)
+			positions.append([position.x, position.y, position.z])
+		result["vertex_positions"] = positions
+		result["indices"] = Array(index_bytes.to_int32_array())
+	return result
 
 
 static func _decode_position(bytes: PackedByteArray, index: int) -> Vector3:

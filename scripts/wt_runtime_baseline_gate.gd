@@ -25,6 +25,8 @@ const MAXIMUM_COLLISION_READY_FRAMES_AFTER_COMMIT := 15
 const MAXIMUM_VISUAL_COLLISION_DIVERGENCE_FRAMES := 8
 
 var _causal_trace: RefCounted
+var _render_frame_us: Array = []
+var _last_render_tick_us := 0
 
 
 func run(
@@ -73,6 +75,9 @@ func run(
 		"last_tick_us": Time.get_ticks_usec(),
 		"all_frame_us": [],
 	}
+	_render_frame_us.clear()
+	_last_render_tick_us = 0
+	RenderingServer.frame_post_draw.connect(_record_render_frame)
 	var backlog := _empty_backlog_summary()
 	var phases := []
 	var diagonal_direction := Vector3(1.0, -0.02, 1.0).normalized()
@@ -166,6 +171,7 @@ func run(
 		edit_ready_wait_frames, foreground_priority_focus_settle_frames
 	)
 	var runtime_metrics_end: Dictionary = terrain_world.call("get_runtime_metrics")
+	RenderingServer.frame_post_draw.disconnect(_record_render_frame)
 	var movement_summary := _summarize_movement(phases)
 	var all_frame_us: Array = clock["all_frame_us"]
 	var frame_time_summary := _frame_time_summary(all_frame_us)
@@ -251,6 +257,11 @@ func run(
 		"ok": acceptance_ok,
 		"measurement_complete": measurement_complete,
 		"implementation": "g23_p0_runtime_baseline_v3",
+		"frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+		"render_frame_interval_ms": _frame_time_summary(_render_frame_us),
+		"render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
+		"gpu_candidate_status": terrain_world.call("get_gpu_resident_render_status") \
+			if terrain_world.has_method("get_gpu_resident_render_status") else {},
 		"profile": str(selected_profile),
 		"start_position": _vector3_summary(start_position),
 		"movement_end_position": _vector3_summary(movement_end_position),
@@ -572,6 +583,12 @@ func _run_single_edit_measurement(
 
 	var generation_ready_frame := -1
 	var visual_ready_frame := -1
+	var native_visual_ready_frame := -1
+	var gpu_render_required := false
+	if terrain_world.has_method("get_gpu_resident_render_status"):
+		gpu_render_required = bool(Dictionary(terrain_world.call(
+			"get_gpu_resident_render_status"
+		)).get("running", false))
 	var collision_ready_frame := -1
 	var logical_visual_ready_frame := -1
 	var logical_collision_ready_frame := -1
@@ -595,6 +612,7 @@ func _run_single_edit_measurement(
 						observed_generation > generation_before:
 					final_generation = observed_generation
 					visual_ready_frame = -1
+					native_visual_ready_frame = -1
 					collision_ready_frame = -1
 				var generation_changed := final_generation > generation_before
 				if generation_changed and generation_ready_frame < 0:
@@ -625,8 +643,19 @@ func _run_single_edit_measurement(
 					final_collision_generation = int(
 						state.call("get_collision_generation")
 					)
-					if generation_changed and visual_ready_frame < 0 and \
-							final_render_generation == final_generation:
+					var native_render_ready := generation_changed and \
+						final_render_generation == final_generation
+					if native_render_ready and native_visual_ready_frame < 0:
+						native_visual_ready_frame = frame
+					var actual_render_ready := native_render_ready
+					if native_render_ready and gpu_render_required:
+						actual_render_ready = terrain_world.has_method(
+							"is_gpu_resident_render_chunk_active"
+						) and bool(terrain_world.call(
+							"is_gpu_resident_render_chunk_active",
+							expected_chunk, 0, final_generation
+						))
+					if actual_render_ready and visual_ready_frame < 0:
 						visual_ready_frame = frame
 						if not visual_ready_recorded:
 							visual_ready_recorded = true
@@ -644,7 +673,8 @@ func _run_single_edit_measurement(
 								"generation": final_generation,
 							}, true)
 				else:
-					visual_ready_frame = logical_visual_ready_frame
+					if not gpu_render_required:
+						visual_ready_frame = logical_visual_ready_frame
 					collision_ready_frame = logical_collision_ready_frame
 			if visual_ready_frame >= 0 and (collision_ready_frame >= 0 or not collision_required):
 				break
@@ -710,6 +740,13 @@ func _run_single_edit_measurement(
 		"authority_commit_ms": authority_commit_ms,
 		"generation_changed_frames_after_commit": generation_ready_frame,
 		"visual_ready_frames_after_commit": visual_ready_frame,
+		"gpu_render_required": gpu_render_required,
+		"visual_readiness_contract": "native_generation_and_gpu_activation_ack" \
+			if gpu_render_required else "native_render_generation",
+		"native_visual_ready_frames_after_commit": native_visual_ready_frame,
+		"native_visual_ready_ms_after_commit": _frames_elapsed_ms(
+			ready_frame_us, native_visual_ready_frame
+		),
 		"visual_ready_ms_after_commit": visual_ready_ms,
 		"collision_required": collision_required,
 		"collision_ready_frames_after_commit": collision_ready_frame,
@@ -746,6 +783,13 @@ func _physics_interaction_target(
 	query.collide_with_bodies = true
 	query.exclude = [player.get_rid()]
 	return host.get_world_3d().direct_space_state.intersect_ray(query)
+
+
+func _record_render_frame() -> void:
+	var now := Time.get_ticks_usec()
+	if _last_render_tick_us > 0:
+		_render_frame_us.append(now - _last_render_tick_us)
+	_last_render_tick_us = now
 
 
 func _next_physics_frame(host: Node, clock: Dictionary) -> int:

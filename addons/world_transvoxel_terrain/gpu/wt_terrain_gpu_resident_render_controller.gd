@@ -52,6 +52,7 @@ const APPLICATION_WAIT_RETRY_FRAMES := 3
 const RENDER_SUBMISSION_CAPACITY := 16
 const NATIVE_SUBMISSIONS_PER_FRAME := 4
 const ACTIVATION_COHORT_RETRY_CAPACITY := 8
+const LIFECYCLE_HISTORY_CAPACITY := 512
 
 var _backend_terrain: Node
 var _world_environment: WorldEnvironment
@@ -88,6 +89,9 @@ var _retirement_candidate_cancellations := 0
 var _stale_incomplete_groups_superseded := 0
 var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
+var _cpu_only_regional_retirements := 0
+var _recent_lifecycle_events: Array[Dictionary] = []
+var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
 var _activation_cohort_retry_attempts := 0
 var _last_activation_cohort_wait: Dictionary = {}
 var _stale_activation_cohorts_retained := 0
@@ -97,6 +101,8 @@ var _unrouted_effect_event_examples: Array = []
 var _process_frame := 0
 var _production_material_signature := ""
 var _production_water_signature := ""
+var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
+var _stage_timing_usec: Dictionary = {}
 
 
 func _ready() -> void:
@@ -197,6 +203,30 @@ func is_running() -> bool:
 	return _running
 
 
+func is_chunk_generation_active(position: Vector3i, lod: int, generation: int) -> bool:
+	if not _running or generation <= 0:
+		return false
+	for group_value in _groups.values():
+		var group := Dictionary(group_value)
+		if not bool(group.get("active", false)) or bool(group.get("retiring", false)):
+			continue
+		var request := Dictionary(Dictionary(group.get("requests", {})).get("terrain", {}))
+		var identity := Dictionary(request.get("identity", {}))
+		if int(identity.get("generation", -1)) == generation \
+				and int(identity.get("lod", -1)) == lod \
+				and int(identity.get("page_x", 0)) == position.x \
+				and int(identity.get("page_y", 0)) == position.y \
+				and int(identity.get("page_z", 0)) == position.z:
+			return true
+	return false
+
+
+func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
+	_lifecycle_history_enabled = enabled
+	if not enabled:
+		_recent_lifecycle_events.clear()
+
+
 func get_status() -> Dictionary:
 	var native_metrics := {}
 	var effect_status := {}
@@ -229,6 +259,8 @@ func get_status() -> Dictionary:
 	return {
 		"schema": "world_transvoxel.terrain.gpu_resident_render_controller.v1",
 		"running": _running,
+		"stage_timing_enabled": _stage_timing_enabled,
+		"stage_timing_usec": _stage_timing_usec.duplicate(true),
 		"native_request_capacity": _native_request_capacity,
 		"render_submission_capacity": RENDER_SUBMISSION_CAPACITY,
 		"native_submissions_per_frame": NATIVE_SUBMISSIONS_PER_FRAME,
@@ -260,6 +292,9 @@ func get_status() -> Dictionary:
 		),
 		"activation_cohorts_queued": _activation_cohorts_queued,
 		"activation_cohorts_committed": _activation_cohorts_committed,
+		"cpu_only_regional_retirements": _cpu_only_regional_retirements,
+		"lifecycle_history_enabled": _lifecycle_history_enabled,
+		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
 		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
 		"last_activation_cohort_wait": _last_activation_cohort_wait.duplicate(true),
@@ -352,32 +387,60 @@ func _process(_delta: float) -> void:
 	if not _running or _backend_terrain == null or _effect == null:
 		return
 	_process_frame += 1
+	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	_sync_production_materials()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("materials", phase_start)
 	if not _running:
 		return
 	_drain_effect_events()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("effect_events", phase_start)
 	if not _running:
 		return
 	_supersede_stale_incomplete_groups()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("supersede", phase_start)
 	if not _running:
 		return
 	_retry_prepared_groups()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("prepared_retry", phase_start)
 	if not _running:
 		return
 	_drain_activation_cohort_retries()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("activation_retry", phase_start)
 	if not _running:
 		return
 	_submit_native_captures()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("submit", phase_start)
 	if not _running:
 		return
 	_reconcile_active_chunks()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("reconcile", phase_start)
 	if not _running:
 		return
 	var effect_status: Dictionary = _effect.get_status()
+	if _stage_timing_enabled:
+		_record_stage_time("status", phase_start)
 	if bool(effect_status.get("initialization_attempted", false)) \
 			and not bool(effect_status.get("initialized", false)) \
 			and not str(effect_status.get("last_error", "")).is_empty():
 		_fail_closed(str(effect_status.get("last_error", "GPU renderer failed")))
+
+
+func _record_stage_time(stage: String, start_us: int) -> int:
+	var now := Time.get_ticks_usec()
+	var elapsed := now - start_us
+	var value := Dictionary(_stage_timing_usec.get(stage, {"calls": 0, "total": 0, "max": 0}))
+	value["calls"] = int(value["calls"]) + 1
+	value["total"] = int(value["total"]) + elapsed
+	value["max"] = maxi(int(value["max"]), elapsed)
+	_stage_timing_usec[stage] = value
+	return now
 
 
 func _sync_production_materials() -> void:
@@ -934,9 +997,12 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 	var terrain_identity := Dictionary(Dictionary(group.get(
 		"requests", {}
 	)).get("terrain", {})).get("identity", {})
+	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	var cohort := Dictionary(_backend_terrain.call(
 		"get_gpu_resident_render_activation_cohort", terrain_identity
 	))
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("activation_native_query", phase_start)
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
 		_record_activation_cohort_wait(cohort)
@@ -952,11 +1018,19 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		return
 	var native_precommitted := false
 	if bool(cohort.get("regional", false)):
+		var pool := _prepared_inventory_pool(Array(cohort.get("chunks", [])))
+		if _stage_timing_enabled:
+			phase_start = _record_stage_time("activation_inventory", phase_start)
+		if pool.is_empty():
+			_queue_activation_cohort_retry(group_key)
+			return
 		var regional_activation := Dictionary(_backend_terrain.call(
 			"activate_gpu_resident_render_cohort",
-			_prepared_inventory_pool(),
+			pool,
 			terrain_identity
 		))
+		if _stage_timing_enabled:
+			phase_start = _record_stage_time("activation_native_commit", phase_start)
 		var regional_status := str(regional_activation.get("status", ""))
 		if regional_status == "WAITING_COHORT":
 			_record_activation_cohort_wait(regional_activation)
@@ -974,10 +1048,15 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		cohort["chunks"] = Array(regional_activation.get(
 			"chunks", []
 		)).duplicate(true)
+		cohort["retirements"] = Array(regional_activation.get(
+			"retirements", []
+		)).duplicate(true)
 		native_precommitted = true
 	var group_keys: Array[String] = []
 	var cohort_member_group_keys: Array[String] = []
 	var activation_entries: Array[Dictionary] = []
+	var retirement_group_keys: Array[String] = []
+	var retirement_entries: Array[Dictionary] = []
 	var inventories: Array = []
 	for member_value in Array(cohort.get("chunks", [])):
 		var member := Dictionary(member_value)
@@ -1022,6 +1101,39 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 					"identity": Dictionary(request.get("identity", {})),
 					"publication_sequence": int(sequences.get(surface, 0)),
 				})
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("activation_member_routes", phase_start)
+	var retirements := Array(cohort.get("retirements", []))
+	var active_routes := _active_group_routes_by_chunk() if not retirements.is_empty() else {}
+	for retirement_value in retirements:
+		var retirement := Dictionary(retirement_value)
+		var retirement_key := _chunk_location_key(retirement)
+		var retirement_group_key := str(active_routes.get(retirement_key, ""))
+		if retirement_group_key.is_empty():
+			if active_routes.has(retirement_key):
+				_fail_closed("authoritative GPU retirement has ambiguous active generations")
+				return
+			_cpu_only_regional_retirements += 1
+			continue
+		var retirement_group := Dictionary(_groups[retirement_group_key])
+		if bool(retirement_group.get("retiring", false)) \
+				or bool(retirement_group.get("activation_queued", false)):
+			_fail_closed("authoritative GPU retirement is not stable")
+			return
+		if retirement_group_keys.has(retirement_group_key):
+			_fail_closed("authoritative GPU retirement repeats a chunk")
+			return
+		retirement_group_keys.append(retirement_group_key)
+		var retirement_requests := Dictionary(retirement_group.get("requests", {}))
+		var retirement_sequences := Dictionary(retirement_group.get("sequences", {}))
+		for surface in _required_surfaces(retirement_group):
+			var retirement_request := Dictionary(retirement_requests.get(surface, {}))
+			retirement_entries.append({
+				"identity": Dictionary(retirement_request.get("identity", {})),
+				"publication_sequence": int(retirement_sequences.get(surface, 0)),
+			})
+	if _stage_timing_enabled:
+		_record_stage_time("activation_retirement_routes", phase_start)
 	if inventories.is_empty():
 		_queue_activation_cohort_retry(group_key)
 		return
@@ -1046,6 +1158,8 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		"group_keys": group_keys.duplicate(),
 		"inventories": inventories.duplicate(true),
 		"activation_entries": activation_entries.duplicate(true),
+		"retirement_group_keys": retirement_group_keys.duplicate(),
+		"retirement_entries": retirement_entries.duplicate(true),
 		"selected_chunks": Array(cohort.get("chunks", [])).duplicate(true),
 		"native_committed": native_precommitted,
 		"regional": bool(cohort.get("regional", false)),
@@ -1061,7 +1175,13 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		_groups[member_group_key] = member_group
 	_activation_cohorts_queued += 1
 	if native_precommitted:
-		if not _effect.activate_entries(activation_entries):
+		_mark_groups_retiring(retirement_group_keys)
+		var render_swap_queued: bool = _effect.replace_entries(
+			activation_entries, retirement_entries
+		) if not retirement_entries.is_empty() else _effect.activate_entries(
+			activation_entries
+		)
+		if not render_swap_queued:
 			_fail_closed("global renderer rejected committed regional activation cohort")
 		return
 	# Every entry emitted PREPARED only after its compact resident buffers were
@@ -1073,23 +1193,61 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 	_try_commit_activation_cohort(group_key)
 
 
-func _prepared_inventory_pool() -> Array:
+func _prepared_inventory_pool(members: Array) -> Array:
 	var inventories: Array = []
-	# A native regional commit must not depend on a retained entry whose
-	# render-thread activation is still pending.
-	for group_value in _groups.values():
-		var group := Dictionary(group_value)
+	# Supply only the authority-selected cohort. Native commit still recomputes
+	# and validates membership; never admit an in-flight render activation.
+	for member_value in members:
+		var route_key := _activation_chunk_key(Dictionary(member_value))
+		var group_key := str(_prepared_group_routes.get(route_key, ""))
+		if group_key.is_empty() or not _groups.has(group_key):
+			return []
+		var group := Dictionary(_groups[group_key])
 		if bool(group.get("retiring", false)) \
 				or bool(group.get("activation_queued", false)) \
 				or (not bool(group.get("native_prepared", false)) \
 				and not bool(group.get("native_active", false))):
-			continue
+			return []
 		var requests := Dictionary(group.get("requests", {}))
 		if not _surface_set_complete(group, "prepared") \
 				or requests.size() != _required_surfaces(group).size():
-			continue
+			return []
+		var terrain_identity := Dictionary(Dictionary(requests.get("terrain", {})).get("identity", {}))
+		if _activation_chunk_key(terrain_identity) != route_key:
+			return []
 		inventories.append(_group_identities(group))
 	return inventories
+
+
+func _active_group_routes_by_chunk() -> Dictionary:
+	# Native retirement keys identify locations, not generations. Resolve each
+	# to its unique active GPU identity once for the whole replacement batch.
+	var routes := {}
+	for group_key_value in _groups.keys():
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups[group_key])
+		if not bool(group.get("active", false)) \
+				or bool(group.get("retiring", false)):
+			continue
+		var terrain_request := Dictionary(Dictionary(group.get(
+			"requests", {}
+		)).get("terrain", {}))
+		var location_key := _chunk_location_key(Dictionary(terrain_request.get(
+			"identity", {}
+		)))
+		routes[location_key] = "" if routes.has(location_key) else group_key
+	return routes
+
+
+func _mark_groups_retiring(group_keys: Array[String]) -> void:
+	for group_key in group_keys:
+		if not _groups.has(group_key):
+			continue
+		var group := Dictionary(_groups[group_key])
+		group["retiring"] = true
+		group["retirement_candidate_frame"] = -1
+		_groups[group_key] = group
+		_record_lifecycle_event("ATOMIC_RETIRE", group_key)
 
 
 func _record_activation_cohort_wait(wait: Dictionary) -> void:
@@ -1246,6 +1404,7 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 		member_group["activation_queued"] = false
 		member_group["activation_cohort_id"] = 0
 		_groups[member_group_key] = member_group
+		_record_lifecycle_event("ACTIVE", member_group_key)
 		_activated_chunks += 1
 	_activation_cohorts.erase(cohort_id)
 	_activation_cohorts_committed += 1
@@ -1294,7 +1453,7 @@ func _reconcile_active_chunks() -> void:
 				_retirement_candidate_cancellations += 1
 			continue
 		if candidate_frame >= 0 and candidate_frame < _process_frame:
-			_begin_group_retirement(group_key)
+			_begin_group_retirement(group_key, "native_reconciliation")
 			continue
 		group["retirement_candidate_frame"] = _process_frame
 		_groups[group_key] = group
@@ -1462,7 +1621,7 @@ func _reject_group(group_key: String, error: String) -> void:
 			var request_value = Dictionary(group.get("requests", {}))[surface]
 			var request := Dictionary(request_value)
 			_reject_native_request(request, error)
-	_begin_group_retirement(group_key)
+	_begin_group_retirement(group_key, "rejected")
 
 
 static func _is_stale_render_event(error: String) -> bool:
@@ -1487,7 +1646,7 @@ func _supersede_group(group_key: String) -> void:
 			int(request.get("request_id", 0)),
 			Dictionary(request.get("identity", {}))
 		)
-	_begin_group_retirement(group_key)
+	_begin_group_retirement(group_key, "superseded")
 
 
 func _reject_activation_cohort(group_key: String, error: String) -> void:
@@ -1522,7 +1681,9 @@ func _supersede_activation_cohort(group_key: String) -> void:
 		_supersede_group(member_group_key)
 
 
-func _begin_group_retirement(group_key: String) -> void:
+func _begin_group_retirement(
+	group_key: String, reason: String = "unspecified"
+) -> void:
 	if not _groups.has(group_key):
 		return
 	var group: Dictionary = _groups[group_key]
@@ -1530,6 +1691,7 @@ func _begin_group_retirement(group_key: String) -> void:
 		return
 	group["retiring"] = true
 	_groups[group_key] = group
+	_record_lifecycle_event("RETIRE", group_key, {"reason": reason})
 	var requests: Dictionary = group.get("requests", {})
 	var sequences: Dictionary = group.get("sequences", {})
 	for surface in requests:
@@ -1552,6 +1714,29 @@ func _try_finish_retirement(group_key: String) -> void:
 		group["native_active"] = false
 		_retired_chunks += 1
 	_cleanup_group(group_key)
+
+
+func _record_lifecycle_event(
+	action: String, group_key: String, details: Dictionary = {}
+) -> void:
+	if not _lifecycle_history_enabled or not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	var terrain_request := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {}))
+	var event := {
+		"frame": _process_frame,
+		"action": action,
+		"identity": Dictionary(terrain_request.get("identity", {})).duplicate(true),
+		"active": bool(group.get("active", false)),
+		"native_active": bool(group.get("native_active", false)),
+		"activation_queued": bool(group.get("activation_queued", false)),
+	}
+	event.merge(details, true)
+	_recent_lifecycle_events.append(event)
+	if _recent_lifecycle_events.size() > LIFECYCLE_HISTORY_CAPACITY:
+		_recent_lifecycle_events.pop_front()
 
 
 func _restore_cpu_and_release_native_requests() -> void:
@@ -1796,6 +1981,13 @@ static func _group_key(identity: Dictionary) -> String:
 		int(identity.get("source_revision", 0)),
 		int(identity.get("world_revision", 0)),
 		int(identity.get("transition_mask", 0)),
+	]
+
+
+static func _chunk_location_key(identity: Dictionary) -> String:
+	return "%d:%d:%d:%d" % [
+		int(identity.get("page_x", 0)), int(identity.get("page_y", 0)),
+		int(identity.get("page_z", 0)), int(identity.get("lod", 0)),
 	]
 
 

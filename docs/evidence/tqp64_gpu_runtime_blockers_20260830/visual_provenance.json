@@ -1,0 +1,73 @@
+{
+  "source_capture": ".godot\\world_transvoxel_captures\\gpu_visual_checkpoint_20260830\\gpu_publication_performance_final_streaming_fly.json",
+  "source_sha256": "afb44c2aabd1823878a30cce264e554072a5e561e08c227d8e49b448789ba844",
+  "sample_count": 13,
+  "failure_count": 1,
+  "ok": false,
+  "samples": [
+    {
+      "label": "00_ridge_cross_f000",
+      "gap_detected": false
+    },
+    {
+      "label": "01_ridge_cross_f001",
+      "gap_detected": false
+    },
+    {
+      "label": "02_ridge_cross_f003",
+      "gap_detected": false
+    },
+    {
+      "label": "03_ridge_cross_f008",
+      "gap_detected": false
+    },
+    {
+      "label": "04_ridge_cross_f016",
+      "gap_detected": false
+    },
+    {
+      "label": "05_ridge_cross_f032",
+      "gap_detected": false
+    },
+    {
+      "label": "06_ridge_cross_f054",
+      "gap_detected": false
+    },
+    {
+      "label": "07_peak_sweep_f001",
+      "gap_detected": false
+    },
+    {
+      "label": "08_peak_sweep_f003",
+      "gap_detected": false
+    },
+    {
+      "label": "09_peak_sweep_f008",
+      "gap_detected": false
+    },
+    {
+      "label": "10_peak_sweep_f016",
+      "gap_detected": false
+    },
+    {
+      "label": "11_peak_sweep_f032",
+      "gap_detected": false
+    },
+    {
+      "label": "12_peak_sweep_f054",
+      "gap_detected": true
+    }
+  ],
+  "images": [
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_visual_checkpoint_20260830\\gpu_publication_performance_final_streaming_fly_12_peak_sweep_f054.png",
+      "retained": "peak_sweep.png",
+      "sha256": "d6b593094c9da255910301b0e09bc6bfcb1acc33804c348c39b329837770016b"
+    },
+    {
+      "source": ".godot\\world_transvoxel_captures\\gpu_visual_checkpoint_20260830\\gpu_publication_performance_final_streaming_fly_12_peak_sweep_f054_confirmation.png",
+      "retained": "peak_sweep_confirmation.png",
+      "sha256": "d6b593094c9da255910301b0e09bc6bfcb1acc33804c348c39b329837770016b"
+    }
+  ]
+}
