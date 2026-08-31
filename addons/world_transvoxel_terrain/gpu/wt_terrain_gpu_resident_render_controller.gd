@@ -88,6 +88,7 @@ var _application_wait_expirations := 0
 var _coverage_retained_reconciliation_deferrals := 0
 var _retirement_confirmation_deferrals := 0
 var _retirement_candidate_cancellations := 0
+var _has_retirement_candidates := false
 var _stale_incomplete_groups_superseded := 0
 var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
@@ -95,7 +96,9 @@ var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
 var _activation_cohort_retry_attempts := 0
+var _activation_stale_seed_skips := 0
 var _last_activation_cohort_wait: Dictionary = {}
+var _last_activation_cohort_wait_frame := -1
 var _stale_activation_cohorts_retained := 0
 var _stale_activation_examples: Array = []
 var _unrouted_effect_events := 0
@@ -103,6 +106,7 @@ var _unrouted_effect_event_examples: Array = []
 var _process_frame := 0
 var _production_material_signature := ""
 var _production_water_signature := ""
+var _production_texture_cache: Dictionary = {}
 var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
 var _stage_timing_usec: Dictionary = {}
 
@@ -199,6 +203,9 @@ func stop() -> void:
 	_previous_compositor = null
 	_compositor = null
 	_effect = null
+	_production_texture_cache.clear()
+	_production_material_signature = ""
+	_production_water_signature = ""
 
 
 func is_running() -> bool:
@@ -227,6 +234,40 @@ func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
 	_lifecycle_history_enabled = enabled
 	if not enabled:
 		_recent_lifecycle_events.clear()
+
+
+func set_debug_stage_timing_enabled(enabled: bool) -> void:
+	_stage_timing_enabled = enabled or OS.get_cmdline_user_args().has("--gpu-stage-timing")
+
+
+func get_debug_processing_states() -> Array:
+	var states: Array = []
+	for group_key in _groups:
+		var group: Dictionary = _groups[group_key]
+		var request: Dictionary = Dictionary(group.get("requests", {})).get("terrain", {})
+		if request.is_empty():
+			continue
+		var stage := "extracting"
+		if bool(group.get("retiring", false)):
+			stage = "retiring"
+		elif bool(group.get("active", false)):
+			stage = "visible"
+		elif bool(group.get("activation_queued", false)):
+			stage = "activation_queued"
+		elif bool(group.get("native_prepared", false)):
+			stage = "cohort_wait"
+		elif _surface_set_complete(group, "prepared"):
+			stage = "native_prepare_wait"
+		states.append({
+			"identity": Dictionary(request.get("identity", {})).duplicate(),
+			"bounds_min": request.get("bounds_min", Vector3.ZERO),
+			"bounds_max": request.get("bounds_max", Vector3.ZERO),
+			"stage": stage,
+			"age_frames": _process_frame - int(group.get("created_frame", _process_frame)),
+			"activation_retry_queued": _activation_retry_membership.has(group_key),
+			"native_active": bool(group.get("native_active", false)),
+		})
+	return states
 
 
 func get_status() -> Dictionary:
@@ -303,8 +344,11 @@ func get_status() -> Dictionary:
 		"lifecycle_history_enabled": _lifecycle_history_enabled,
 		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
 		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
+		"activation_stale_seed_skips": _activation_stale_seed_skips,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
 		"last_activation_cohort_wait": _last_activation_cohort_wait.duplicate(true),
+		"last_activation_wait_age_frames": _process_frame - _last_activation_cohort_wait_frame \
+			if _last_activation_cohort_wait_frame >= 0 else -1,
 		"stale_activation_cohorts_retained": _stale_activation_cohorts_retained,
 		"stale_activation_examples": _stale_activation_examples.duplicate(true),
 		"unrouted_effect_events": _unrouted_effect_events,
@@ -405,12 +449,13 @@ func _process(_delta: float) -> void:
 		phase_start = _record_stage_time("effect_events", phase_start)
 	if not _running:
 		return
-	_supersede_stale_incomplete_groups()
+	var pending_groups := _pending_group_keys()
+	_supersede_stale_incomplete_groups(pending_groups)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("supersede", phase_start)
 	if not _running:
 		return
-	_retry_prepared_groups()
+	_retry_prepared_groups(pending_groups)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("prepared_retry", phase_start)
 	if not _running:
@@ -539,9 +584,7 @@ func _production_material_config(material: ShaderMaterial) -> Dictionary:
 			texture = material.get_shader_parameter("checker_texture")
 		if not texture is Texture:
 			return {}
-		var rd_texture := RenderingServer.texture_get_rd_texture(
-			texture.get_rid(), index in [0, 1, 4]
-		)
+		var rd_texture := _production_texture_rid(texture, index in [0, 1, 4])
 		if not rd_texture.is_valid():
 			return {}
 		resources.append(texture)
@@ -630,6 +673,27 @@ func _production_material_config(material: ShaderMaterial) -> Dictionary:
 		"scene_lighting_supported": bool(lighting.get("supported", false)),
 		"signature": ":".join(signature_parts),
 	}
+
+
+func _production_texture_rid(texture: Texture, srgb: bool) -> RID:
+	var key := "%d:%d" % [texture.get_instance_id(), int(srgb)]
+	var source_rid := texture.get_rid()
+	var cached: Dictionary = _production_texture_cache.get(key, {})
+	if cached.get("source_rid", RID()) == source_rid and not cached.is_empty():
+		return cached["rd_rid"]
+	var rd_rid := RenderingServer.texture_get_rd_texture(source_rid, srgb)
+	if rd_rid.is_valid():
+		var invalidate := _invalidate_production_texture.bind(texture.get_instance_id())
+		if not texture.changed.is_connected(invalidate):
+			texture.changed.connect(invalidate)
+		_production_texture_cache[key] = {"source_rid": source_rid, "rd_rid": rd_rid}
+	return rd_rid
+
+
+func _invalidate_production_texture(instance_id: int) -> void:
+	_production_texture_cache.erase("%d:0" % instance_id)
+	_production_texture_cache.erase("%d:1" % instance_id)
+	_production_material_signature = ""
 
 
 func _production_scene_lighting() -> Dictionary:
@@ -940,8 +1004,16 @@ func _try_validate_group(group_key: String) -> void:
 	_queue_activation_cohort_retry(group_key)
 
 
-func _retry_prepared_groups() -> void:
-	var group_keys := _groups.keys()
+func _pending_group_keys() -> Array:
+	var keys: Array = []
+	for key in _groups:
+		var group: Dictionary = _groups[key]
+		if not bool(group.get("active", false)) and not bool(group.get("retiring", false)):
+			keys.append(key)
+	return keys
+
+
+func _retry_prepared_groups(group_keys: Array = _pending_group_keys()) -> void:
 	var queued_cohort_retries := 0
 	for group_key_value in group_keys:
 		var group_key := str(group_key_value)
@@ -966,8 +1038,7 @@ func _retry_prepared_groups() -> void:
 		queued_cohort_retries += 1
 
 
-func _supersede_stale_incomplete_groups() -> void:
-	var group_keys := _groups.keys()
+func _supersede_stale_incomplete_groups(group_keys: Array = _pending_group_keys()) -> void:
 	for group_key_value in group_keys:
 		var group_key := str(group_key_value)
 		if not _groups.has(group_key):
@@ -1001,15 +1072,15 @@ func _supersede_stale_incomplete_groups() -> void:
 			_supersede_group(group_key)
 
 
-func _try_queue_activation_cohort(group_key: String) -> void:
+func _try_queue_activation_cohort(group_key: String) -> bool:
 	if not _groups.has(group_key):
-		return
+		return false
 	var group: Dictionary = _groups[group_key]
 	if bool(group.get("retiring", false)) \
 			or bool(group.get("active", false)) \
 			or bool(group.get("activation_queued", false)) \
 			or not bool(group.get("native_prepared", false)):
-		return
+		return false
 	var terrain_identity := Dictionary(Dictionary(group.get(
 		"requests", {}
 	)).get("terrain", {})).get("identity", {})
@@ -1024,6 +1095,20 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		var native_timing: Dictionary = cohort.get("query_timing_usec", {})
 		for stage in native_timing:
 			_accumulate_stage_time("native_query_" + str(stage), int(native_timing[stage]))
+	var cohort_status := str(cohort.get("status", ""))
+	# Native STALE_APPLICATION rejects the seed before any region selection.
+	# Retire it without spending the expensive-query budget on obsolete work.
+	if cohort_status == "STALE_APPLICATION":
+		_activation_stale_seed_skips += 1
+		_supersede_group(group_key)
+		return false
+	_queue_selected_activation_cohort(group_key, terrain_identity, cohort, phase_start)
+	return true
+
+
+func _queue_selected_activation_cohort(
+	group_key: String, terrain_identity: Dictionary, cohort: Dictionary, phase_start: int
+) -> void:
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
 		_record_activation_cohort_wait(cohort)
@@ -1273,6 +1358,7 @@ func _mark_groups_retiring(group_keys: Array[String]) -> void:
 
 func _record_activation_cohort_wait(wait: Dictionary) -> void:
 	_last_activation_cohort_wait = wait.duplicate(true)
+	_last_activation_cohort_wait_frame = _process_frame
 	var member := Dictionary(wait.get("waiting_member", {}))
 	if member.is_empty():
 		return
@@ -1312,7 +1398,7 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 func _drain_activation_cohort_retries() -> void:
 	var attempts := 0
 	var inspected := 0
-	var inspection_limit := _activation_retry_queue.size()
+	var inspection_limit := mini(_activation_retry_queue.size(), RENDER_SUBMISSION_CAPACITY)
 	# Retried groups join the tail behind every group that has not had a turn.
 	while attempts < ACTIVATION_COHORT_RETRY_CAPACITY and inspected < inspection_limit \
 			and not _activation_retry_queue.is_empty():
@@ -1329,9 +1415,9 @@ func _drain_activation_cohort_retries() -> void:
 				or bool(group.get("activation_queued", false)) \
 				or not bool(group.get("native_prepared", false)):
 			continue
-		attempts += 1
 		_activation_cohort_retry_attempts += 1
-		_try_queue_activation_cohort(group_key)
+		if _try_queue_activation_cohort(group_key):
+			attempts += 1
 
 
 func _try_commit_activation_cohort(group_key: String) -> void:
@@ -1478,10 +1564,14 @@ func _reconcile_active_chunks() -> void:
 			continue
 		group["retirement_candidate_frame"] = _process_frame
 		_groups[group_key] = group
+		_has_retirement_candidates = true
 		_retirement_confirmation_deferrals += 1
 
 
 func _clear_retirement_candidates() -> void:
+	if not _has_retirement_candidates:
+		return
+	_has_retirement_candidates = false
 	for group_key_value in _groups.keys():
 		var group_key := str(group_key_value)
 		var group: Dictionary = _groups[group_key]

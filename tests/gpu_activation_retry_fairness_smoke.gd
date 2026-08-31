@@ -57,6 +57,7 @@ class RetiringAdmissionBackend:
 class RetiringAdmissionEffect:
 	extends RefCounted
 	var submissions := 0
+	var empty_submissions := 0
 
 	func submit_native_packed_input(
 		_input_buffers: Array,
@@ -66,9 +67,10 @@ class RetiringAdmissionEffect:
 		_activate_immediately: bool,
 		_bounds_min: Vector3,
 		_bounds_max: Vector3,
-		_proven_empty: bool
+		proven_empty: bool
 	) -> int:
 		submissions += 1
+		empty_submissions += int(proven_empty)
 		return submissions
 
 	func get_status() -> Dictionary:
@@ -84,9 +86,10 @@ class RetryProbe:
 		_queue_activation_cohort_retry(key)
 		_queue_activation_cohort_retry(key)
 
-	func _try_queue_activation_cohort(group_key: String) -> void:
+	func _try_queue_activation_cohort(group_key: String) -> bool:
 		visited.append(group_key)
 		_queue_activation_cohort_retry(group_key)
+		return true
 
 
 class PreparationBackend:
@@ -99,6 +102,25 @@ class PreparationBackend:
 	func prepare_gpu_resident_render_chunk(_identities: Array) -> Dictionary:
 		preparations += 1
 		return {"status": "PREPARED", "prepared": true}
+
+
+class StaleSeedBackend:
+	extends Node
+	var queries: Array[int] = []
+
+	func get_gpu_resident_render_activation_cohort(identity: Dictionary) -> Dictionary:
+		var generation := int(identity.generation)
+		queries.append(generation)
+		return {"status": "WAITING_COHORT" if generation == 100 else "STALE_APPLICATION"}
+
+
+class RetireEffect:
+	extends RefCounted
+	var retired: Array[int] = []
+
+	func retire_entry(identity: Dictionary, _sequence: int) -> bool:
+		retired.append(int(identity.generation))
+		return true
 
 
 func _initialize() -> void:
@@ -127,6 +149,12 @@ func _initialize() -> void:
 	if not _test_initial_activation_budget():
 		quit(1)
 		return
+	if not _test_stale_seed_budget():
+		quit(1)
+		return
+	if not _test_empty_admission_budget():
+		quit(1)
+		return
 	if not _test_spatial_retirement_routes() or not _test_batched_inventory():
 		quit(1)
 		return
@@ -148,8 +176,44 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 initial_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
 	quit(0)
+
+
+func _test_stale_seed_budget() -> bool:
+	var controller := Controller.new()
+	var backend := StaleSeedBackend.new()
+	var effect := RetireEffect.new()
+	controller._backend_terrain = backend
+	controller._effect = effect
+	for generation in range(20):
+		_add_prepared_seed(controller, generation)
+	_add_prepared_seed(controller, 100)
+	controller._drain_activation_cohort_retries()
+	var ok := backend.queries.size() == controller.RENDER_SUBMISSION_CAPACITY \
+		and effect.retired.size() == controller.RENDER_SUBMISSION_CAPACITY
+	controller._drain_activation_cohort_retries()
+	ok = ok and backend.queries.size() == 21 and backend.queries[-1] == 100 \
+		and effect.retired.size() == 20 and controller._activation_stale_seed_skips == 20 \
+		and controller._activation_retry_membership.size() == 1 \
+		and controller._activation_retry_membership.has("100")
+	controller._drain_activation_cohort_retries()
+	ok = ok and backend.queries.size() == 22 and effect.retired.size() == 20
+	controller.free()
+	backend.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: stale seed cleanup consumed live selection budget or exceeded bound")
+	return ok
+
+
+func _add_prepared_seed(controller: Node, generation: int) -> void:
+	var key := str(generation)
+	controller._groups[key] = {
+		"native_prepared": true, "validated": true,
+		"native_validated": {"terrain": true},
+		"requests": {"terrain": {"identity": {"generation": generation}}},
+	}
+	controller._queue_activation_cohort_retry(key)
 
 
 func _test_initial_activation_budget() -> bool:
@@ -255,7 +319,31 @@ func _test_retiring_admission_rejected() -> bool:
 		"input_stage": "pre_mesh_field",
 		"static_water_surface_expected": true,
 	}
-	var request := {
+	var request := _resident_request(identity)
+	backend.pending.append(request)
+	controller._backend_terrain = backend
+	controller._effect = effect
+	controller._resident_capacity = 8
+	var group_key := controller._group_key(identity)
+	controller._groups[group_key] = controller._new_group(identity)
+	controller._groups[group_key]["retiring"] = true
+	controller._submit_native_captures()
+	var group := Dictionary(controller._groups[group_key])
+	var ok := effect.submissions == 0 \
+		and backend.rejections.size() == 1 \
+		and int(backend.rejections[0].get("request_id", 0)) == 2149 \
+		and str(backend.rejections[0].get("error", "")) \
+			== "resident chunk group is retiring" \
+		and Dictionary(group.get("requests", {})).is_empty()
+	controller.free()
+	backend.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: retiring admission")
+	return ok
+
+
+func _resident_request(identity: Dictionary) -> Dictionary:
+	return {
 		"schema": "world_transvoxel.gpu_resident_render_request.v6",
 		"status": "PASS",
 		"position_space": "world",
@@ -282,25 +370,34 @@ func _test_retiring_admission_rejected() -> bool:
 		"bounds_min": Vector3.ZERO,
 		"bounds_max": Vector3.ONE,
 	}
-	backend.pending.append(request)
-	controller._backend_terrain = backend
-	controller._effect = effect
-	controller._resident_capacity = 8
-	var group_key := controller._group_key(identity)
-	controller._groups[group_key] = controller._new_group(identity)
-	controller._groups[group_key]["retiring"] = true
-	controller._submit_native_captures()
-	var group := Dictionary(controller._groups[group_key])
-	var ok := effect.submissions == 0 \
-		and backend.rejections.size() == 1 \
-		and int(backend.rejections[0].get("request_id", 0)) == 2149 \
-		and str(backend.rejections[0].get("error", "")) \
-			== "resident chunk group is retiring" \
-		and Dictionary(group.get("requests", {})).is_empty()
-	controller.free()
-	backend.free()
+
+
+func _test_empty_admission_budget() -> bool:
+	var ok := true
+	for empty_count in [0, 8, 20]:
+		var controller := Controller.new()
+		var backend := RetiringAdmissionBackend.new()
+		var effect := RetiringAdmissionEffect.new()
+		controller._backend_terrain = backend
+		controller._effect = effect
+		controller._resident_capacity = 64
+		for index in range(empty_count + 8):
+			var request := _resident_request({
+				"generation": index + 1, "page_x": index,
+				"surface": "terrain", "input_stage": "pre_mesh_field",
+			})
+			request["request_id"] = index + 1
+			request["proven_empty"] = index < empty_count
+			backend.pending.append(request)
+		controller._submit_native_captures()
+		var expected := controller.NATIVE_SUBMISSIONS_PER_FRAME
+		ok = ok and effect.submissions == expected and backend.rejections.is_empty() \
+			and controller._render_request_routes.size() == expected \
+			and effect.submissions - effect.empty_submissions <= controller.NATIVE_SUBMISSIONS_PER_FRAME
+		controller.free()
+		backend.free()
 	if not ok:
-		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: retiring admission")
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: empty admission or extraction budget")
 	return ok
 
 

@@ -97,6 +97,9 @@ func _run() -> void:
 	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
 	var initial_activated := int(initial_status.get("activated_chunks", 0))
 	if not _cpu_reference:
+		if not await _test_texture_cache_invalidation():
+			_fail("production texture cache retained a replaced resource")
+			return
 		var backend: Node = _world.get_backend_terrain()
 		var before: Dictionary = backend.call("get_gpu_resident_render_metrics")
 		var inspection: Dictionary = backend.call("inspect_gpu_resident_publication", Vector3i.ZERO, 0)
@@ -315,7 +318,7 @@ func _run() -> void:
 			+ "accepted_normal_response_parity=1 bounded_pbr_response_parity=1 " \
 			+ "terrain_material_parity=1 water_material_parity=1 " \
 			+ "water_fresnel_tint_parity=1 water_refraction_parity=1 " \
-			+ "material_params=416 material_textures=5 water_params=48 " \
+			+ "material_params=416 material_textures=5 water_params=48 texture_cache_invalidation=1 " \
 			+ "arena=paged_shared native_packed=1 " \
 			+ "pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 " \
 			+ "cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 " \
@@ -345,6 +348,30 @@ func _capture_image(name: String) -> Image:
 		))
 		image.save_png("%s/%s_%s.png" % [CAPTURE_ROOT, driver, name])
 	return image
+
+
+func _test_texture_cache_invalidation() -> bool:
+	var controller = _world.get("_gpu_resident_render_controller")
+	var source := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	source.fill(Color.RED)
+	var texture := ImageTexture.create_from_image(source)
+	await RenderingServer.frame_post_draw
+	var first: RID = controller._production_texture_rid(texture, false)
+	var again: RID = controller._production_texture_rid(texture, false)
+	var key := "%d:0" % texture.get_instance_id()
+	if not first.is_valid() or again != first or not controller._production_texture_cache.has(key):
+		return false
+	var replacement := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	replacement.fill(Color.BLUE)
+	texture.set_image(replacement)
+	if controller._production_texture_cache.has(key):
+		return false
+	await RenderingServer.frame_post_draw
+	var refreshed: RID = controller._production_texture_rid(texture, false)
+	var expected := RenderingServer.texture_get_rd_texture(texture.get_rid(), false)
+	var ok := refreshed.is_valid() and refreshed == expected
+	controller._invalidate_production_texture(texture.get_instance_id())
+	return ok and not controller._production_texture_cache.has(key)
 
 
 static func _image_sha256(image: Image) -> String:

@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_SAMPLED_GPU_LOD_PASS_GAMEPLAY_REJECTED_RELEASE_OPEN`
+Status: `TQP64_GPU_PIPELINE_OBSERVABLE_DRAIN_IMPROVED_GAMEPLAY_REJECTED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -11,30 +11,40 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
 
-The [activation-query budget checkpoint](evidence/tqp64_gpu_activation_query_budget_20260831/RESULT.md)
-keeps upstream `236045f` pinned and routes initial prepared-group activation
-attempts through the existing FIFO retry budget. The regression reproduces eight
-unbudgeted queries before the fix and passes after it. Priority, capacities,
-cohort membership, native validation, and collision/movement safety are unchanged.
+The [GPU pipeline observability checkpoint](evidence/tqp64_gpu_pipeline_observability_20260831/RESULT.md)
+keeps upstream `236045f` pinned. Stale activation seeds are now discarded before
+they spend the live activation-query budget; pending activation groups are
+scanned once per retry frame; and production texture RIDs are cached with tested
+invalidation. These are controller-side work reductions. Cohort membership,
+native validation, collision authority, publication guards, and the CPU default
+are unchanged.
 
-Diagnostics-off GPU gameplay is still rejected. Two runs have post-draw p95/p99
-43.975/59.388 and 41.012/64.890 ms, but block 586 and 555 of 1,020 movement steps,
-versus 504 at the preceding checkpoint. Neither acquires the first edit target
-within 180 frames. This is a narrow frame-pacing improvement with unresolved
-readiness tradeoffs, not an accepted performance baseline. CPU remains default.
+All 25 moving-LOD sample views and the strict final drain pass with zero native
+or controller rejections. Final readiness improves from 21.348 seconds / 368
+frames to 5.896 seconds / 110 frames. GPU topology probing is disabled in that
+capture, so this is sampled visual coverage rather than exhaustive watertightness
+certification. Vulkan and D3D12 bounded lifecycle tests pass.
 
-All 25 moving-LOD sample views and strict final drain pass, with zero native or
-controller rejections. Final readiness still takes 21.348 seconds. GPU topology
-probing is disabled in that capture; the sampled result is not exhaustive
-watertightness certification. Vulkan/D3D12 bounded lifecycle tests pass.
+Diagnostics-off GPU gameplay is still rejected: 583 of 1,020 movement steps are
+blocked, post-draw p95/p99 are 44.032/69.307 ms, and the relocated edit target is
+not available after 180 frames / 2.988 seconds. The unchanged CPU control moves
+without blocked steps but still needs 6.802 seconds for relocated visual and
+collision readiness. Neither result meets the release latency contract.
 
-Next isolate stale retry cleanup and the measured generation-to-activation
-dependency. Empty work queues alone do not establish usable collision or
-completed authoritative retirement. The unchanged movement/edit gate must pass
-without longer waits or weaker guards. Post-edit terrain/water, cross-backend
-gameplay, performance/power, and human acceptance remain open. The inherited M5
-wrapper fingerprint also remains unresolved; the full authority suite is not
-claimed green.
+The optional playtest diagnostics now expose actual native collision triangle
+shapes, resident LOD bounds, GPU extraction/prepare/cohort/activation/retirement
+stages, frame timing, queue counters, and JSON snapshots. The disabled state
+does no terrain polling, stage timing, or wireframe generation. These tools make
+the remaining dependency observable; they do not make the candidate complete.
+
+Next change the measured residency/publication dependency, not another priority
+shuffle or timeout. A traced target is sampled, meshed, and delivered in tens of
+milliseconds but then waits behind a conservative publication component with
+hundreds of replacements/retirements. Any reduction must preserve retained
+coverage, exact transition compatibility, and CPU collision authority. Post-edit
+terrain/water, cross-backend gameplay, performance/power, and human acceptance
+remain open. The inherited M5 wrapper fingerprint also remains unresolved; the
+full authority suite is not claimed green.
 
 ### Earlier Queued Collision-Promotion Checkpoint
 

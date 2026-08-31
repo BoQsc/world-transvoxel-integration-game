@@ -505,11 +505,11 @@ func _start_profile() -> void:
 		_terrain_profile(selected_profile)
 	)
 	game_world.attach_player(player, settings["start"])
-	if playtest_diagnostics != null:
-		playtest_diagnostics.call("attach_runtime", game_world, player)
 	if not await game_world.start_world():
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
+	if playtest_diagnostics != null:
+		playtest_diagnostics.call("attach_runtime", game_world, player)
 	await get_tree().physics_frame
 	if not await _stabilize_player_spawn():
 		return
@@ -543,6 +543,14 @@ func _start_profile() -> void:
 				return
 		game_world.human_input_enabled = true
 		player.call("set_human_input_enabled", true)
+		if playtest_diagnostics != null:
+			var debug_view := _arg_value(Array(OS.get_cmdline_user_args()), "--human-debug-view", "")
+			if not debug_view.is_empty():
+				playtest_diagnostics.call("set_debug_options",
+					debug_view in ["collision", "all"], debug_view in ["lod", "all"],
+					debug_view in ["pipeline", "all"], true)
+				if debug_view == "menu":
+					playtest_diagnostics.call("set_menu_open", true)
 		_start_human_cpu_causal_trace()
 		if ground_traversal_probe_requested:
 			call_deferred("_run_ground_traversal_probe")
@@ -3019,6 +3027,8 @@ func _capture_human_artifact_mark(source: String) -> bool:
 		"mesh_quality_warning_precise_probes": mesh_quality_warning_precise_probes,
 		"precise_probes": precise_probes,
 		"cpu_causal_trace": causal_trace_snapshot,
+		"playtest_pipeline": playtest_diagnostics.call("get_diagnostic_snapshot") \
+			if playtest_diagnostics != null else {"enabled": false},
 	}
 	last_human_artifact_mark_summary = summary.duplicate(true)
 	var file := FileAccess.open(json_path, FileAccess.WRITE)
@@ -5198,6 +5208,14 @@ func _capture_human_visual() -> void:
 				return
 		for _frame in range(30):
 			await get_tree().process_frame
+		if human_visual_capture_mode == "pipeline_debug":
+			var debug_capture: Dictionary = await playtest_diagnostics.call(
+				"capture_debug_views", human_visual_capture_path
+			)
+			print("WT_PIPELINE_DEBUG_CAPTURE ", JSON.stringify(debug_capture))
+			if not bool(debug_capture.get("ok", false)):
+				_fail("Pipeline debug capture failed: %s" % str(debug_capture))
+				return
 	last_watertightness_summary = _collect_watertightness_summary()
 	var capture_written := false
 	var capture_error := ERR_UNAVAILABLE
@@ -5216,6 +5234,8 @@ func _capture_human_visual() -> void:
 	var watertightness_acceptance := _watertightness_acceptance_summary(last_watertightness_summary)
 	print("WT_HUMAN_VISUAL_CAPTURE_SUMMARY ", JSON.stringify({
 		"mode": human_visual_capture_mode,
+		"playtest_pipeline": playtest_diagnostics.call("get_diagnostic_snapshot") \
+			if playtest_diagnostics != null else {"enabled": false},
 		"profile": str(selected_profile),
 		"viewer_radius_chunks": int(summary.get("viewer_radius_chunks", 0)),
 		"viewer_maximum_lod": int(summary.get("viewer_maximum_lod", 0)),
@@ -10638,6 +10658,12 @@ func _apply_capture_camera_mode() -> bool:
 	var capture_position := player.global_position
 	var capture_target := Vector3(1032.0, 8.0, 1032.0)
 	match human_visual_capture_mode:
+		"pipeline_debug":
+			player.call("set_fly_mode_enabled", true)
+			capture_position = Vector3(300, 58, 290)
+			capture_target = Vector3(310, 42, 315)
+			player.global_position = capture_position
+			player.rotation = Vector3.ZERO
 		"topdown":
 			capture_position = Vector3(1032.0, 420.0, 1032.0)
 			capture_target = Vector3(1032.0, 40.0, 1032.1)
@@ -10811,6 +10837,8 @@ func _apply_capture_camera_mode() -> bool:
 	if human_visual_capture_mode == "topdown":
 		up_vector = Vector3.FORWARD
 	camera.look_at_from_position(capture_position, capture_target, up_vector)
+	if human_visual_capture_mode == "pipeline_debug":
+		player.call("set_view_target", capture_target)
 	camera.current = true
 	camera.make_current()
 	if game_world != null and game_world.has_method("update_player_viewer"):

@@ -52,6 +52,12 @@ bounded budget/configuration adapters, material override installation, player
 mesh-ray presentation fallback, and explicitly named diagnostic capture code.
 They do not replace terrain authority.
 
+The optional `scripts/wt_playtest_diagnostics.gd` view reads native-owned
+`WT_Collision_*` bodies and their existing `CollisionShape3D` resources. It
+creates separate visual-only debug meshes, never physics bodies, and does not
+modify the native shapes. Its GPU stage view reads controller publication state;
+it does not activate, retire, or generate terrain.
+
 ## Forbidden Changes
 
 - Do not copy native C++ source into this repository.

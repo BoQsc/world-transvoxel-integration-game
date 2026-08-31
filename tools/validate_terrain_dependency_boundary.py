@@ -37,6 +37,8 @@ DIRECT_BACKEND_EXCEPTION_PATHS = {
     "scripts/main.gd",
     "scripts/wt_cpu_b3a_lod_opening_capture.gd",
     "scripts/wt_ground_traversal_probe.gd",
+    # Read-only observation of native-owned collision shapes for optional visuals.
+    "scripts/wt_playtest_diagnostics.gd",
     "scripts/wt_production_player.gd",
     "scripts/wt_runtime_readiness_probe.gd",
     "scripts/wt_terrain_waterfall_route.gd",

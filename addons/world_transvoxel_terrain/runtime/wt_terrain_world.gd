@@ -396,6 +396,16 @@ func set_debug_gpu_resident_lifecycle_history_enabled(enabled: bool) -> void:
 		_gpu_resident_render_controller.set_debug_lifecycle_history_enabled(enabled)
 
 
+func set_debug_gpu_stage_timing_enabled(enabled: bool) -> void:
+	if _gpu_resident_render_controller != null:
+		_gpu_resident_render_controller.set_debug_stage_timing_enabled(enabled)
+
+
+func get_debug_gpu_processing_states() -> Array:
+	return _gpu_resident_render_controller.get_debug_processing_states() \
+		if _gpu_resident_render_controller != null else []
+
+
 func debug_gpu_resident_ray_coverage(
 	origin: Vector3, direction: Vector3, maximum_distance: float = 512.0
 ) -> Array:

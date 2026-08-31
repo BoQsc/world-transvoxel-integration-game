@@ -131,6 +131,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.append("--gpu-meshing-publication-candidate")
     if args.gpu_resident_render_candidate:
         command.append("--gpu-resident-render-candidate")
+    if getattr(args, "debug_view", None):
+        command.extend(["--human-debug-view", args.debug_view])
     if inspect_marker is not None:
         command.extend(["--human-artifact-inspect-marker", str(inspect_marker)])
     if args.terrain_waterfall:
@@ -447,6 +449,10 @@ def main(argv: list[str]) -> int:
             "the resident GPU renderer. CPU collision remains authoritative and "
             "production material parity is not yet qualified."
         ),
+    )
+    parser.add_argument(
+        "--debug-view", choices=("collision", "lod", "pipeline", "all", "menu"),
+        help="Start with optional live terrain diagnostics; also available in the ESC menu.",
     )
     parser.add_argument(
         "--inspect-marker",

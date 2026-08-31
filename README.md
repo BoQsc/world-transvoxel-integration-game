@@ -68,18 +68,21 @@ authoritative page lattice and extracts regular/transition geometry on the GPU,
 then renders compact resident buffers without geometry readback or ArrayMesh
 upload. CPU world, storage, edit, and collision authority remain unchanged.
 
-The [2026-08-31 queued collision-promotion checkpoint](docs/evidence/tqp64_gpu_collision_promotion_20260831/RESULT.md)
-removes proven redundant remeshing without relaxing publication or collision
-safety. A priority-queue experiment was withdrawn after it failed to establish
-a benefit. The subsequent [activation-query budget checkpoint](docs/evidence/tqp64_gpu_activation_query_budget_20260831/RESULT.md)
-routes initial activation attempts through the existing FIFO budget. Two
-diagnostics-off runs show better frame pacing but more blocked movement steps;
-neither accepts the relocated edit. The sampled moving-LOD check passes but
-still needs a 21.348-second final readiness drain. This is an experimental fix,
-not an accepted performance baseline. The CPU control completes with latency
-target misses. The separate M5 fingerprint mismatch remains unresolved, so the
-complete authority suite is not claimed green. GPU completion, overall gameplay
-speedup, and power targets are not claimed.
+The [2026-08-31 GPU pipeline observability checkpoint](docs/evidence/tqp64_gpu_pipeline_observability_20260831/RESULT.md)
+supersedes the earlier activation-query checkpoint. It removes stale activation
+seeds without spending live query budget, reuses bounded pending-group scans,
+and caches production texture RIDs. The sampled moving-LOD check remains clean
+and its final readiness drain falls from 21.348 to 5.896 seconds. Optional ESC
+menu views now expose actual native collision shapes, LOD bounds, and GPU
+publication stages; all polling and wireframes are disabled by default.
+
+This is still not an accepted performance baseline. The diagnostics-off GPU
+movement/edit gate blocks 583 of 1,020 movement steps and cannot acquire the
+relocated edit target in its three-second window. The unchanged CPU control also
+needs 6.802 seconds for relocated visual/collision readiness. The remaining
+dependency is conservative residency/publication completion, not a missing GPU
+dispatch. CPU remains default; GPU completion, gameplay speedup, power targets,
+and the complete authority suite are not claimed.
 Release gates and the next measured dependency are listed in
 [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-31).
 
