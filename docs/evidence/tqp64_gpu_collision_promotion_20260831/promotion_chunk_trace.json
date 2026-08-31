@@ -1,0 +1,1274 @@
+{
+  "schema": "world_transvoxel.gpu_relocation_chunk_trace.v1",
+  "claim_boundary": "Exact recorded events for an explicitly selected ray-intersecting chunk; not a proven ray hit, complete edit latency, or gameplay acceptance. Native elapsed_ns, frontend elapsed_us, and readiness elapsed_us each retain their original clock origin.",
+  "target": {
+    "coordinate": {
+      "x": 35,
+      "y": 2,
+      "z": 35
+    },
+    "lod": 0
+  },
+  "sources": {
+    "measurement": {
+      "path": ".godot\\gpu_collision_promotion_fixed_20260831.json",
+      "sha256": "921da48fa9bb42bd58cd7116ae2d652b645b6808798a3537a0f21b3a5537001f"
+    },
+    "trace": {
+      "path": ".godot\\gpu_collision_promotion_fixed_20260831_native.json",
+      "sha256": "1a83e6a4c51aaecdac2ba0d1f65a0c0c19b46593ec3542f2736b4d135371887a"
+    }
+  },
+  "native_capture": {
+    "capture_time_us_maximum": 36936,
+    "capture_time_us_total": 909166,
+    "complete": true,
+    "consumer_gap_event_count": 0,
+    "consumer_next_sequence": 69766,
+    "local_dropped_event_count": 0,
+    "local_event_capacity": 262144,
+    "local_retained_event_count": 69766,
+    "read_error": "",
+    "read_failed": false,
+    "schema": "world_transvoxel.native_cpu_causal_trace.v1",
+    "snapshot_count": 548,
+    "source_capacity": 262144,
+    "source_enabled": false,
+    "source_first_retained_sequence": 0,
+    "source_next_sequence": 69766,
+    "source_overwrite_count": 0,
+    "source_retained_event_count": 69766
+  },
+  "native_events": [
+    {
+      "auxiliary": 5758,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 99999973,
+      "elapsed_ns": 23269354300,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 5758,
+      "job_stage": "sample",
+      "jobs_ahead": 29,
+      "kind": "scheduler_job_queued",
+      "queue_depth_after": 120,
+      "queue_depth_before": 119,
+      "same_priority_jobs_ahead": 3,
+      "sequence": 59250,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 99999973,
+      "cause_id": 1135,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23276318300,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "chunk_demand_accepted",
+      "sequence": 59691,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23276502500,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_queued",
+      "sequence": 60181,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 5758,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483642,
+      "elapsed_ns": 23277840700,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 5758,
+      "job_stage": "sample",
+      "jobs_ahead": 10,
+      "kind": "scheduler_job_priority_observed",
+      "queue_depth_after": 508,
+      "queue_depth_before": 508,
+      "same_priority_jobs_ahead": 1,
+      "sequence": 60947,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23277986700,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_queued",
+      "sequence": 60981,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 5758,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483642,
+      "elapsed_ns": 23279482200,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 5758,
+      "job_stage": "sample",
+      "jobs_ahead": 0,
+      "kind": "scheduler_job_dequeued",
+      "queue_depth_after": 479,
+      "queue_depth_before": 480,
+      "same_priority_jobs_ahead": 0,
+      "sequence": 61183,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 5758,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23279482300,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "sample_started",
+      "sequence": 61184,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23279491100,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_requested",
+      "sequence": 61185,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483642,
+      "elapsed_ns": 23279495300,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": false,
+      "job_sequence": 5758,
+      "job_stage": "sample",
+      "kind": "page_meshing_ownership_established",
+      "sequence": 61186,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 5758,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 13100,
+      "elapsed_ns": 23279495600,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "sample_finished",
+      "sequence": 61187,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23347913300,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_started",
+      "sequence": 61807,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 3271600,
+      "elapsed_ns": 23351185100,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_finished",
+      "sequence": 61809,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23369526900,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_popped",
+      "sequence": 62062,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23369540700,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "frontend_publication_processed",
+      "sequence": 62063,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23380351400,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_completion_consumed",
+      "sequence": 62354,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 6178,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483642,
+      "elapsed_ns": 23417406900,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 6178,
+      "job_stage": "mesh",
+      "jobs_ahead": 24,
+      "kind": "scheduler_job_queued",
+      "queue_depth_after": 452,
+      "queue_depth_before": 451,
+      "same_priority_jobs_ahead": 1,
+      "sequence": 62519,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23474666900,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_popped",
+      "sequence": 63369,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23474667400,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "frontend_publication_processed",
+      "sequence": 63370,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 15,
+      "cause_id": 442,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23486598200,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "visibility_coverage_priority_requested",
+      "sequence": 63646,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 6178,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483647,
+      "elapsed_ns": 23503068500,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 6178,
+      "job_stage": "mesh",
+      "jobs_ahead": 106,
+      "kind": "scheduler_job_priority_observed",
+      "queue_depth_after": 451,
+      "queue_depth_before": 451,
+      "same_priority_jobs_ahead": 106,
+      "sequence": 64333,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23503068700,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "visibility_coverage_priority_applied",
+      "sequence": 64334,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 23503068700,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "visibility_coverage_priority_outcome",
+      "sequence": 64335,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 6178,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "effective_priority": 2147483647,
+      "elapsed_ns": 24459875400,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": true,
+      "has_queue_state": true,
+      "job_sequence": 6178,
+      "job_stage": "mesh",
+      "jobs_ahead": 0,
+      "kind": "scheduler_job_dequeued",
+      "queue_depth_after": 314,
+      "queue_depth_before": 315,
+      "same_priority_jobs_ahead": 0,
+      "sequence": 68111,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 6178,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24459876200,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "mesh_started",
+      "sequence": 68112,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 6178,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 6820700,
+      "elapsed_ns": 24466697200,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "mesh_finished",
+      "sequence": 68113,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24473369200,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "mesh_completion_consumed",
+      "sequence": 68120,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 4,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24473419800,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_queued",
+      "sequence": 68121,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 5,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24473420000,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_queued",
+      "sequence": 68122,
+      "status": 0,
+      "thread": "runtime"
+    },
+    {
+      "auxiliary": 4,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24480716500,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_popped",
+      "sequence": 68138,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 4,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24480716800,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "frontend_publication_processed",
+      "sequence": 68139,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 5,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24480716900,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "publication_popped",
+      "sequence": 68140,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 5,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24480717800,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "frontend_publication_processed",
+      "sequence": 68141,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 7800,
+      "elapsed_ns": 24480902400,
+      "generation": 2977,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "render_sink_applied",
+      "sequence": 68153,
+      "status": 0,
+      "thread": "frontend"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24880328900,
+      "generation": 3140,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_requested",
+      "sequence": 68943,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24884895600,
+      "generation": 3140,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_started",
+      "sequence": 68951,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 3357800,
+      "elapsed_ns": 24888253900,
+      "generation": 3140,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_finished",
+      "sequence": 68954,
+      "status": 0,
+      "thread": "storage"
+    },
+    {
+      "auxiliary": 0,
+      "cause_id": 0,
+      "chunk_lod": 0,
+      "chunk_x": 35,
+      "chunk_y": 2,
+      "chunk_z": 35,
+      "duration_ns": 0,
+      "elapsed_ns": 24892665300,
+      "generation": 3140,
+      "has_chunk": true,
+      "has_job_details": false,
+      "kind": "storage_completion_consumed",
+      "sequence": 68957,
+      "status": 0,
+      "thread": "runtime"
+    }
+  ],
+  "frontend_phases": [
+    {
+      "kind": "phase_started",
+      "phase": "warmup",
+      "elapsed_us": 8832,
+      "frame": 0
+    },
+    {
+      "kind": "phase_started",
+      "phase": "normal_outbound",
+      "elapsed_us": 986957,
+      "frame": 60
+    },
+    {
+      "kind": "phase_started",
+      "phase": "normal_stop",
+      "elapsed_us": 4017055,
+      "frame": 240
+    },
+    {
+      "kind": "phase_started",
+      "phase": "normal_return",
+      "elapsed_us": 4759605,
+      "frame": 285
+    },
+    {
+      "kind": "phase_started",
+      "phase": "return_stop",
+      "elapsed_us": 7808488,
+      "frame": 465
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_x_outbound",
+      "elapsed_us": 8631447,
+      "frame": 510
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_x_outbound_stop",
+      "elapsed_us": 10584670,
+      "frame": 630
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_x_return",
+      "elapsed_us": 11085153,
+      "frame": 660
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_x_return_stop",
+      "elapsed_us": 13104192,
+      "frame": 780
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_z_outbound",
+      "elapsed_us": 13592201,
+      "frame": 810
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_z_outbound_stop",
+      "elapsed_us": 15615842,
+      "frame": 930
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_z_return",
+      "elapsed_us": 16097697,
+      "frame": 960
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_z_return_stop",
+      "elapsed_us": 18240653,
+      "frame": 1080
+    },
+    {
+      "kind": "phase_started",
+      "phase": "fast_diagonal_outbound",
+      "elapsed_us": 18700290,
+      "frame": 1110
+    },
+    {
+      "kind": "phase_started",
+      "phase": "pre_edit_stop",
+      "elapsed_us": 21714272,
+      "frame": 1290
+    },
+    {
+      "kind": "phase_started",
+      "phase": "edit_target_wait",
+      "elapsed_us": 23254659,
+      "frame": 1380
+    },
+    {
+      "kind": "phase_started",
+      "phase": "edit_submit",
+      "elapsed_us": 26290088,
+      "frame": 1560
+    },
+    {
+      "kind": "phase_started",
+      "phase": "authority_commit_wait",
+      "elapsed_us": 26308948,
+      "frame": 1560
+    },
+    {
+      "kind": "phase_started",
+      "phase": "exact_publication_wait",
+      "elapsed_us": 26317574,
+      "frame": 1560
+    }
+  ],
+  "readiness_samples": [
+    {
+      "label": "edit_target_wait",
+      "frame": 0,
+      "elapsed_us": 23268154,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 0,
+          "get_render_generation": 0,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": false,
+          "is_present": false,
+          "is_visual_ready": false,
+          "is_visual_required": false,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 30,
+      "elapsed_us": 23804057,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 0,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 60,
+      "elapsed_us": 24257510,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 0,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 90,
+      "elapsed_us": 24785068,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 2977,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 120,
+      "elapsed_us": 25271305,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 2977,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 150,
+      "elapsed_us": 25770956,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 2977,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    },
+    {
+      "label": "edit_target_wait",
+      "frame": 180,
+      "elapsed_us": 26280909,
+      "ray": {
+        "end": {
+          "x": 562.607727050781,
+          "y": -20.3645782470703,
+          "z": 560.0
+        },
+        "hit_position": null,
+        "origin": {
+          "x": 560.0,
+          "y": 75.5999984741211,
+          "z": 560.0
+        },
+        "physics_hit": false
+      },
+      "states": [
+        {
+          "coordinate": {
+            "x": 35,
+            "y": 2,
+            "z": 35
+          },
+          "get_collision_generation": 0,
+          "get_generation": 2977,
+          "get_render_generation": 2977,
+          "get_staged_collision_generation": 0,
+          "get_staged_render_generation": 0,
+          "is_collision_ready": false,
+          "is_collision_required": true,
+          "is_present": true,
+          "is_visual_ready": false,
+          "is_visual_required": true,
+          "lod": 0
+        }
+      ]
+    }
+  ],
+  "stage_timing_usec": {},
+  "edit": {
+    "authority_commit_frames": -1,
+    "authority_commit_ms": -1.0,
+    "collision_generation_after": 0,
+    "collision_ready_censored": true,
+    "collision_ready_frames_after_commit": -1,
+    "collision_ready_ms_after_commit": -1.0,
+    "collision_required": false,
+    "commit_frame_time_ms": {
+      "maximum": 0.0,
+      "over_16_67_ms": 0,
+      "over_33_3_ms": 0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "samples": 0
+    },
+    "edit_position": {
+      "x": 562.607727050781,
+      "y": -20.3645782470703,
+      "z": 560.0
+    },
+    "generation_after": 0,
+    "generation_before": 0,
+    "generation_changed_frames_after_commit": -1,
+    "gpu_render_required": true,
+    "interaction_accepted": false,
+    "interaction_call_ms": 3.015,
+    "interaction_ray_hit": false,
+    "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+    "interaction_render_mesh_hit": false,
+    "interaction_target_source": "none",
+    "logical_collision_ready_frames_after_commit": -1,
+    "logical_visual_ready_frames_after_commit": -1,
+    "measurement_complete": false,
+    "native_visual_ready_frames_after_commit": -1,
+    "native_visual_ready_ms_after_commit": -1.0,
+    "physics_target_found": false,
+    "physics_target_wait_frame_time_ms": {
+      "maximum": 70.603,
+      "over_16_67_ms": 60,
+      "over_33_3_ms": 43,
+      "p50": 6.913,
+      "p95": 58.164,
+      "p99": 68.543,
+      "samples": 180
+    },
+    "physics_target_wait_frames": 180,
+    "physics_target_wait_ms": 3025.237,
+    "ready_frame_time_ms": {
+      "maximum": 0.0,
+      "over_16_67_ms": 0,
+      "over_33_3_ms": 0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "samples": 0
+    },
+    "ready_observation_window_frames": 0,
+    "ready_observation_window_ms": 0.0,
+    "relocation_to_collision_ready_lower_bound_ms": 3024.237,
+    "relocation_to_collision_ready_ms": -1.0,
+    "relocation_to_visual_ready_lower_bound_ms": 3024.237,
+    "relocation_to_visual_ready_ms": -1.0,
+    "render_generation_after": 0,
+    "resource_generation_api": false,
+    "staged_render_generation_after": 0,
+    "target_chunk": {
+      "x": 35,
+      "y": -2,
+      "z": 35
+    },
+    "visual_collision_divergence_frames": -1,
+    "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+    "visual_ready_censored": true,
+    "visual_ready_frames_after_commit": -1,
+    "visual_ready_ms_after_commit": -1.0
+  },
+  "movement": {
+    "accepted_frames": 460,
+    "blocked_frames": 560,
+    "blocked_ratio": 0.549019607843137,
+    "frames": 1020,
+    "maximum_consecutive_blocked_frames": 150,
+    "rejected_zero_motion_frames": 0,
+    "stop_drift_distance": 0.0
+  },
+  "render_frame_interval_ms": {
+    "maximum": 243.053,
+    "over_16_67_ms": 538,
+    "over_33_3_ms": 406,
+    "p50": 44.713,
+    "p95": 84.111,
+    "p99": 114.312,
+    "samples": 548
+  },
+  "execution": {
+    "run": 1,
+    "command": [
+      "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Godot Engine\\godot.windows.opt.tools.64.exe",
+      "--path",
+      "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game",
+      "--",
+      "--p2-profile",
+      "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+      "--human-visual-capture",
+      "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\world_transvoxel_captures\\gpu_collision_promotion_fixed_20260831\\gpu_01.png",
+      "--human-visual-capture-mode",
+      "runtime_baseline_gate",
+      "--human-visual-capture-wait-frames",
+      "180",
+      "--player-collision-invoker-radius-chunks",
+      "2",
+      "--player-collision-prediction-distance",
+      "24.0",
+      "--procedural-generation-workers",
+      "2",
+      "--meshing-workers",
+      "0",
+      "--cpu-causal-trace-output",
+      "C:\\Users\\Windows10_new\\Documents\\github_repositories\\world-transvoxel-integration-game\\.godot\\gpu_collision_promotion_fixed_20260831_native.json",
+      "--human-material-mode",
+      "production_texture_array",
+      "--gpu-resident-render-candidate",
+      "--runtime-readiness-probe"
+    ],
+    "godot_returncode": 1,
+    "wall_seconds": 58.546504299971275,
+    "process_cpu_seconds": 82.390625,
+    "average_active_cores": 1.4072680510156508,
+    "peak_process_tree_rss_bytes": 1550012416,
+    "measurement_complete": false,
+    "target_status": "MEASUREMENT_INCOMPLETE",
+    "acceptance_failures": [
+      "route_net_displacement",
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99",
+      "physics_target_missing",
+      "physics_target_wait",
+      "authority_commit_wait",
+      "visual_ready_wait",
+      "visual_collision_divergence"
+    ],
+    "stdout_log": ".godot/world_transvoxel_captures/gpu_collision_promotion_fixed_20260831/gpu_01.stdout.log",
+    "stderr_log": ".godot/world_transvoxel_captures/gpu_collision_promotion_fixed_20260831/gpu_01.stderr.log",
+    "renderer_device": "NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design"
+  },
+  "actual_runtime_artifact_sha256": "408373fe52240a7e004ea69ac8c982688ed54125e129e7982cd349f9740ba8d7",
+  "runtime_artifact_matches_pin": true,
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "godot_version": "4.7.2.stable.steam.ed1daf0bf"
+}

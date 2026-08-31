@@ -1,0 +1,48 @@
+{
+  "tests": [
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/run_gpu_resident_production_lifecycle_smoke.py",
+        "--driver",
+        "both"
+      ],
+      "returncode": 0,
+      "output": "[vulkan] GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS activated=3 water_surfaces=2 restored=1 collision_authority=cpu readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 accepted_normal_response_parity=1 bounded_pbr_response_parity=1 terrain_material_parity=1 water_material_parity=1 water_fresnel_tint_parity=1 water_refraction_parity=1 material_params=416 material_textures=5 water_params=48 arena=paged_shared native_packed=1 pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 reservations=3 captures=4 released=2\n[d3d12] GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS activated=3 water_surfaces=2 restored=1 collision_authority=cpu readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 accepted_normal_response_parity=1 bounded_pbr_response_parity=1 terrain_material_parity=1 water_material_parity=1 water_fresnel_tint_parity=1 water_refraction_parity=1 material_params=416 material_textures=5 water_params=48 arena=paged_shared native_packed=1 pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 reservations=3 captures=4 released=2\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/run_gpu_activation_retry_fairness_smoke.py"
+      ],
+      "returncode": 0,
+      "output": "Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org\n\nGPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/validate_world_transvoxel_runtime_artifact.py"
+      ],
+      "returncode": 0,
+      "output": "WT_RUNTIME_ARTIFACT_PASS authority=236045f8 files=10 digest=d96d92d8e951016631ae955132c6da6a72832480d54c0fa8a145814243752089 native_source=0 fallback=0\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/validate_terrain_dependency_boundary.py"
+      ],
+      "returncode": 0,
+      "output": "WT_TERRAIN_DEPENDENCY_BOUNDARY_PASS authority=236045f8 compatibility_base=4f1fdb5 runtime_scene=production native_source=0 fallback=false direct_backend_paths=13\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/sync_tqp54_candidate.py",
+        "--package",
+        "authority"
+      ],
+      "returncode": 0,
+      "output": "WT_AUTHORITY_PACKAGE_SYNC_PASS authority_files=10 authority_digest=d96d92d8e951016631ae955132c6da6a72832480d54c0fa8a145814243752089\n"
+    }
+  ]
+}

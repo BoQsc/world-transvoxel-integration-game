@@ -68,14 +68,15 @@ authoritative page lattice and extracts regular/transition geometry on the GPU,
 then renders compact resident buffers without geometry readback or ArrayMesh
 upload. CPU world, storage, edit, and collision authority remain unchanged.
 
-The [2026-08-31 indexed coverage checkpoint](docs/evidence/tqp64_gpu_coverage_index_20260831/RESULT.md)
-reduces repeated CPU coverage-validation work without changing selection or
-safety rules. Native debug/release, captured replay, and Vulkan/D3D12 lifecycle
-tests pass. The 25-sample moving-LOD route drains to complete coverage, but
-diagnostics-off gameplay still fails movement and relocated-edit readiness.
-The trace identifies a transition-generation queue wait; GPU completion is
-not claimed. One moving-LOD native rejection remains unclassified. No overall
-gameplay speedup or power claim is established. Release gates are listed in
+The [2026-08-31 queued collision-promotion checkpoint](docs/evidence/tqp64_gpu_collision_promotion_20260831/RESULT.md)
+removes proven redundant remeshing without relaxing publication or collision
+safety. A priority-queue experiment was withdrawn after it failed to establish
+a benefit; the original FIFO controller is unchanged. Diagnostics-off GPU
+gameplay still fails movement and relocated-edit readiness, while the CPU
+control completes with latency target misses. A separate M5 fingerprint mismatch
+remains unresolved, so the complete authority suite is not claimed green.
+GPU completion, overall gameplay speedup, and power targets are not claimed.
+Release gates and the next measured dependency are listed in
 [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-31).
 
 ## Critical edited-terrain LOD boundary

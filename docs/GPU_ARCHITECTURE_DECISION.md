@@ -11,6 +11,34 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
 
+The [queued collision-promotion checkpoint](evidence/tqp64_gpu_collision_promotion_20260831/RESULT.md)
+pins upstream `236045f`. Waiting mesh jobs now absorb collision-role promotion
+without cancelling and repeating their generation; executing/completed jobs
+retain conservative successor behavior. The focused native regression requires
+one mesh job and original-generation render/collision payloads with both zero
+and one mesh workers. GPU publication and collision safety are not relaxed.
+
+A downstream collision-priority retry experiment did not establish a gameplay
+benefit and was withdrawn. The original FIFO controller is unchanged. No CPU
+visual bridge or fallback was added.
+
+The final exact-pinned, diagnostics-off GPU route still fails: 504/1,020 blocked
+steps, longest block 132 steps, post-draw p95/p99 86.713/120.033 ms, and no first
+edit target after 180 frames / 2.999 seconds. The CPU/default control completes
+and accepts its edit but still misses movement and latency targets. These single
+runs do not establish a speedup or a hardware limit. CPU stays default.
+
+Next resolve the measured generation-to-activation dependency: destination
+collision work competes with many equally prioritized publication members,
+and completed payloads can still wait for the GPU cohort. Do not substitute
+another unproven priority shuffle, weaker safety guard, or longer timeout.
+The M5 executable's assertions pass but its wrapper fingerprint remains
+unreconciled; the complete authority suite is not claimed green. Completed
+movement/edit, post-edit geometry/water, cross-backend gameplay, performance,
+power, and human acceptance remain release gates.
+
+### Earlier Indexed Coverage Checkpoint
+
 The [indexed coverage checkpoint](evidence/tqp64_gpu_coverage_index_20260831/RESULT.md)
 pins upstream `d944150`. Optional native sub-stage timing identified repeated
 all-pairs authoritative coverage work. The existing hierarchy index now avoids
