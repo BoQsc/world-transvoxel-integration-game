@@ -1,0 +1,43 @@
+COMMAND ['build/native-tests/test_wt_publication_policy.template_debug.x86_64.exe']
+PUBLICATION_POLICY_PASS random_cases=250 coordinate_limit_cases=30
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_m3_application.template_debug.x86_64.exe']
+M3_APPLICATION_PASS stale_cycles=1000 cross_lod_publication=1 reciprocal_gpu_faces=12
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_gpu_meshing_shadow.template_debug.x86_64.exe']
+GPU_MESHING_SHADOW_TEST_PASS capacity=2 stale=1 mismatched=1 queued_superseded=1 pre_mesh_field=1 cpu_topology_calls=0
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_production_streaming.template_debug.x86_64.exe']
+GPU_COLLISION_ADMISSION_PASS mesh_workers=0
+GPU_COLLISION_ADMISSION_PASS mesh_workers=1
+PRODUCTION_G8_2000X2000_WINDOW_PASS pages=93 samples=5 max_window=25
+FOREGROUND_PRIORITY_LEASE_PASS sources=2 active=1 support=1 focus=0
+FOREGROUND_RUNTIME_METRICS updates=3 active=2 support=1 focus=1 changed=2 matched=5 missing=1
+PRODUCTION_STREAMING_HASH 39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b
+PRODUCTION_STREAMING_PASS pages=4 viewers=2 movement=4 backend=MIT meshing_workers=2
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_publication_policy.template_release.x86_64.exe']
+PUBLICATION_POLICY_PASS random_cases=250 coordinate_limit_cases=30
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_m3_application.template_release.x86_64.exe']
+M3_APPLICATION_PASS stale_cycles=1000 cross_lod_publication=1 reciprocal_gpu_faces=12
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_gpu_meshing_shadow.template_release.x86_64.exe']
+GPU_MESHING_SHADOW_TEST_PASS capacity=2 stale=1 mismatched=1 queued_superseded=1 pre_mesh_field=1 cpu_topology_calls=0
+EXIT 0
+
+COMMAND ['build/native-tests/test_wt_production_streaming.template_release.x86_64.exe']
+GPU_COLLISION_ADMISSION_PASS mesh_workers=0
+GPU_COLLISION_ADMISSION_PASS mesh_workers=1
+PRODUCTION_G8_2000X2000_WINDOW_PASS pages=93 samples=5 max_window=25
+FOREGROUND_PRIORITY_LEASE_PASS sources=2 active=1 support=1 focus=0
+FOREGROUND_RUNTIME_METRICS updates=3 active=2 support=1 focus=1 changed=2 matched=5 missing=1
+PRODUCTION_STREAMING_HASH 39db05c67fc2f4b8d8beaab2e7da927ae968efb3d75118bcd80c5523116d9b3b
+PRODUCTION_STREAMING_PASS pages=4 viewers=2 movement=4 backend=MIT meshing_workers=2
+EXIT 0

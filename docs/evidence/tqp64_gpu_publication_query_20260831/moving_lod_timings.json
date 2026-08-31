@@ -1,0 +1,60 @@
+[
+  {
+    "context": "before streaming fly gap gate",
+    "elapsed_msec": 4.678,
+    "frames": 0,
+    "ok": true,
+    "pipeline": {
+      "active_chunk_records": 1079,
+      "fully_ready_chunk_records": 1079,
+      "page_accepted_storage_completions": 1703,
+      "page_cache_decoded_entries": 128,
+      "page_cache_decoded_evictions": 1235,
+      "page_cache_decoded_hits": 622,
+      "page_cache_decoded_misses": 9039,
+      "page_cache_encoded_entries": 256,
+      "page_cache_encoded_evictions": 1021,
+      "page_cache_encoded_hits": 1364,
+      "page_cache_encoded_misses": 7675,
+      "page_dependency_cache_hits": 283,
+      "page_dependency_cache_misses": 2383,
+      "page_dependency_requests": 1278,
+      "pending_chunk_replacements": 0,
+      "storage_accepted_requests": 1278,
+      "storage_completed_requests": 1278,
+      "storage_duplicate_requests": 425,
+      "storage_load_time_ns_total": 8294826400,
+      "storage_maximum_in_flight_requests": 2,
+      "storage_worker_count": 2
+    }
+  },
+  {
+    "context": "after streaming fly gap gate",
+    "elapsed_msec": 19196.278,
+    "frames": 304,
+    "ok": true,
+    "pipeline": {
+      "active_chunk_records": 1219,
+      "fully_ready_chunk_records": 1219,
+      "page_accepted_storage_completions": 3383,
+      "page_cache_decoded_entries": 128,
+      "page_cache_decoded_evictions": 1889,
+      "page_cache_decoded_hits": 2238,
+      "page_cache_decoded_misses": 15748,
+      "page_cache_encoded_entries": 256,
+      "page_cache_encoded_evictions": 1235,
+      "page_cache_encoded_hits": 2764,
+      "page_cache_encoded_misses": 12984,
+      "page_dependency_cache_hits": 1619,
+      "page_dependency_cache_misses": 4085,
+      "page_dependency_requests": 2365,
+      "pending_chunk_replacements": 0,
+      "storage_accepted_requests": 2365,
+      "storage_completed_requests": 2365,
+      "storage_duplicate_requests": 1040,
+      "storage_load_time_ns_total": 17109117400,
+      "storage_maximum_in_flight_requests": 2,
+      "storage_worker_count": 2
+    }
+  }
+]

@@ -107,6 +107,32 @@ func _run() -> void:
 				or inspection.get("selected", []).size() != 1:
 			_fail("publication inspection changed native state or could not inspect the live chunk")
 			return
+		var boundary: Dictionary = inspection["boundaries"][0]
+		var identity := {
+			"page_x": 0, "page_y": 0, "page_z": 0, "lod": 0,
+			"generation": boundary["generation"],
+			"transition_mask": boundary["transition_mask"],
+			"source_revision": backend.call("get_world_source_revision"),
+			"world_revision": _world.get_world_revision(), "surface": "terrain",
+		}
+		var cohort: Dictionary = backend.call("get_gpu_resident_render_activation_cohort", identity)
+		var expected_member := {
+			"page_x": 0, "page_y": 0, "page_z": 0, "lod": 0,
+			"generation": boundary["generation"],
+			"transition_mask": boundary["transition_mask"], "activation_required": false,
+		}
+		if not cohort.get("ready", false) or cohort.get("chunks", []) != [expected_member] \
+				or cohort.get("activation_required_count", -1) != 0 \
+				or cohort.get("retained_active_count", -1) != 1 \
+				or not cohort.get("retirements", []).is_empty():
+			_fail("live cohort serialization changed identity or activation ownership")
+			return
+		identity["generation"] = int(identity["generation"]) + 1
+		var stale: Dictionary = backend.call("get_gpu_resident_render_activation_cohort", identity)
+		if stale.get("ready", true) or stale.get("status", "") != "STALE_APPLICATION" \
+				or not stale.get("chunks", []).is_empty():
+			_fail("stale cohort exposed an activation inventory")
+			return
 
 	if not _world.submit_edit_batch(
 		_edit_batch(EditOperation.Mode.CONSTRUCT, Vector3(8, 12, 8), 2.0, 3),

@@ -68,14 +68,13 @@ authoritative page lattice and extracts regular/transition geometry on the GPU,
 then renders compact resident buffers without geometry readback or ArrayMesh
 upload. CPU world, storage, edit, and collision authority remain unchanged.
 
-The [2026-08-30 publication-ordering checkpoint](docs/evidence/tqp64_gpu_publication_ordering_20260830/RESULT.md)
-fixes retry starvation and admission of still-activating regional members.
-Both Vulkan and D3D12 completed the strict 2K flight/carve/construction route
-with every tracked GPU chunk active and zero publication backlog or recovery.
-Bounded terrain/water material and relocation regressions also pass on both
-backends. This does not establish production visual quality, instantaneous
-edits, a frame-time speedup, or a power target. Remaining release gates are
-listed in [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-30).
+The [2026-08-31 publication-query checkpoint](docs/evidence/tqp64_gpu_publication_query_20260831/RESULT.md)
+removes discarded serialization without changing selection or safety rules.
+Native debug/release and bounded Vulkan/D3D12 lifecycle tests pass. The 25-sample
+moving-LOD route drains to complete coverage, but diagnostics-off gameplay
+still fails movement and relocated-edit readiness. No smooth-gameplay, speedup,
+or power claim is established. Remaining release gates are listed in
+[the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-31).
 
 ## Critical edited-terrain LOD boundary
 

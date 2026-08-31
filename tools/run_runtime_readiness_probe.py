@@ -21,6 +21,7 @@ def main() -> int:
     parser.add_argument("--native-trace", action="store_true")
     parser.add_argument("--no-probe", action="store_true")
     parser.add_argument("--publication-probe", action="store_true")
+    parser.add_argument("--gpu-stage-timing", action="store_true")
     parser.add_argument(
         "--godot", type=pathlib.Path,
         default=pathlib.Path(
@@ -31,6 +32,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.publication_probe and (args.no_probe or args.backend != "gpu"):
         parser.error("publication inspection requires GPU with the readiness probe")
+    if args.gpu_stage_timing and args.backend != "gpu":
+        parser.error("GPU stage timing requires the GPU backend")
     project = pathlib.Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if output.exists():
@@ -49,6 +52,8 @@ def main() -> int:
         extra = ["--human-material-mode", "production_texture_array"]
         if args.backend == "gpu":
             extra.append("--gpu-resident-render-candidate")
+        if args.gpu_stage_timing:
+            extra.append("--gpu-stage-timing")
         if not args.no_probe:
             extra.append("--runtime-readiness-probe")
         if args.publication_probe:
@@ -72,7 +77,7 @@ def main() -> int:
             "actual_runtime_artifact_sha256": actual_artifact_digest,
             "runtime_artifact_matches_pin": actual_artifact_digest == pin["runtime_artifact"]["digest_sha256"],
             "affinity": affinity, "godot_version": version,
-            "diagnostic_only_not_performance_baseline": not args.no_probe or args.native_trace,
+            "diagnostic_only_not_performance_baseline": not args.no_probe or args.native_trace or args.gpu_stage_timing,
         }
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

@@ -9,9 +9,32 @@ Windows NVIDIA Vulkan/D3D12 profiles in the Terrain Lab. Those results do not
 replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
-## Current Checkpoint: 2026-08-30
+## Current Checkpoint: 2026-08-31
 
-The latest [reciprocal publication checkpoint](evidence/tqp64_gpu_reciprocal_publication_20260830/RESULT.md)
+The [publication query checkpoint](evidence/tqp64_gpu_publication_query_20260831/RESULT.md)
+pins upstream `6112082`. It removes dictionary construction that was discarded
+on waiting GPU cohort queries. Selection, coverage, reciprocal masks, priority,
+collision policy, and movement guards are unchanged. A slower hierarchy-index
+trial was rejected. Eight real selector snapshots now have offline exact replay
+coverage, alongside the native oracle and Vulkan/D3D12 lifecycle checks.
+
+All 25 moving-LOD samples pass; final drain is 19.196 seconds with all 1,219
+chunks ready and no pending publication work. This is not fast enough to call
+the terrain complete. The exact-pinned diagnostics-off gameplay run still fails:
+544/1,020 blocked steps, longest block 172 steps, no relocated edit target after
+3.008 seconds, and post-draw p95/p99 76.639/97.665 ms. Fewer blocked steps than
+the prior run but a longer maximum block is not a qualified improvement.
+CPU stays default. No CPU/GPU speedup, power target, or human approval is claimed.
+
+Next is the remaining repeated native publication-query cost and destination
+physical readiness, not a weaker safety policy. Isolate selection, coverage,
+readiness, and priority work; preserve exact dependencies. A completed unchanged
+movement/edit route, post-edit geometry checks, cross-backend gameplay, power,
+and human acceptance remain required before GPU release.
+
+### Earlier Reciprocal Checkpoint
+
+The earlier [reciprocal publication checkpoint](evidence/tqp64_gpu_reciprocal_publication_20260830/RESULT.md)
 pins upstream `6f47d4e`. Native cohort selection now includes reciprocal LOD
 boundary changes in both refinement and coarsening, with isolated regression
 coverage on all six faces and negative coordinates. A separate downstream

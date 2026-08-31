@@ -1,0 +1,228 @@
+{
+  "schema": "world_transvoxel.tqp64_gpu_publication_query_checkpoint.v1",
+  "date": "2026-08-31",
+  "status": "MOVING_LOD_PASS_GAMEPLAY_REJECTED",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "611208274b4fd3faedf823071904446f779afc01",
+    "addon_tree": "9f43ef98632cd910d201cec11b42751b708c67ec",
+    "native_source_tree": "eee7b838fb8104f3c1f869e1339f97f721c27324",
+    "fallback": false
+  },
+  "runtime_artifact": {
+    "layout": "binary_consumer_v1",
+    "native_source_included": false,
+    "binary_build_commit": "611208274b4fd3faedf823071904446f779afc01",
+    "digest_sha256": "22394a2dac566596a9579642639d57b8747f31b3b8d54da941cd1ed0a9ef95e5",
+    "files": [
+      "LICENSE_SCOPE.md",
+      "OPERATING_LIMITS.md",
+      "PUBLIC_API.md",
+      "README.md",
+      "thirdparty/transvoxel_mit/LICENSE",
+      "thirdparty/transvoxel_mit/UPSTREAM.md",
+      "world_transvoxel.gdextension",
+      "world_transvoxel.gdextension.uid",
+      "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+      "bin/world_transvoxel.windows.template_release.x86_64.dll"
+    ],
+    "binaries": [
+      {
+        "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bytes": 2485248,
+        "sha256": "c9c7bd74f39fc3e5139042f7351cd31fd12ac5da498a558a44f2aad63f87c930"
+      },
+      {
+        "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+        "bytes": 2405888,
+        "sha256": "014d385c257ace20144f15c68178fcd6d3812b2995bafb8ed61fc3e3d38d3ca9"
+      }
+    ]
+  },
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "godot_version": "4.7.2.stable.steam.ed1daf0bf",
+  "cpu_default_unchanged": true,
+  "selector_membership_unchanged": true,
+  "moving_lod": {
+    "enabled": true,
+    "failure_count": 0,
+    "failure_examples": [],
+    "final_settle_summary": {
+      "active_chunk_records": 1219,
+      "collision_resources": 0,
+      "fully_ready_chunk_records": 1219,
+      "pending_chunk_replacements": 0,
+      "pending_chunk_retirements": 0,
+      "queued_collision": 0,
+      "queued_render": 0,
+      "render_resources": 1219,
+      "scheduler_queued_completions": 0,
+      "scheduler_queued_jobs": 0,
+      "staged_render_resources": 0,
+      "visual_ready_chunk_records": 1219
+    },
+    "implementation": "streaming_fly_gap_gate_v5_gpu_aware",
+    "max_non_retiring_visual_deficit": 303,
+    "max_pending_chunk_replacements": 303,
+    "max_pending_chunk_retirements": 718,
+    "max_pending_retirement_records_missing": 0,
+    "max_queued_render": 0,
+    "max_render_fading_resources": 0,
+    "max_scheduler_queued_jobs": 246,
+    "max_staged_render_resources": 0,
+    "min_non_retiring_visual_ready_chunk_records": 936,
+    "min_render_resources": 1079,
+    "min_visual_ready_chunk_records": 1037,
+    "ok": true,
+    "post_edit": false,
+    "profile": "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+    "sample_count": 25
+  },
+  "probe_off_gameplay": {
+    "measurement_complete": false,
+    "movement": {
+      "accepted_frames": 476,
+      "blocked_frames": 544,
+      "blocked_ratio": 0.533333333333333,
+      "frames": 1020,
+      "maximum_consecutive_blocked_frames": 172,
+      "rejected_zero_motion_frames": 0,
+      "stop_drift_distance": 0.0
+    },
+    "edit": {
+      "authority_commit_frames": -1,
+      "authority_commit_ms": -1.0,
+      "collision_generation_after": 0,
+      "collision_ready_censored": true,
+      "collision_ready_frames_after_commit": -1,
+      "collision_ready_ms_after_commit": -1.0,
+      "collision_required": false,
+      "commit_frame_time_ms": {
+        "maximum": 0.0,
+        "over_16_67_ms": 0,
+        "over_33_3_ms": 0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "samples": 0
+      },
+      "edit_position": {
+        "x": 562.607727050781,
+        "y": -20.3645782470703,
+        "z": 560.0
+      },
+      "generation_after": 0,
+      "generation_before": 0,
+      "generation_changed_frames_after_commit": -1,
+      "gpu_render_required": true,
+      "interaction_accepted": false,
+      "interaction_call_ms": 3.11,
+      "interaction_ray_hit": false,
+      "interaction_reason": "raycast_miss_render_mesh_scan_limited",
+      "interaction_render_mesh_hit": false,
+      "interaction_target_source": "none",
+      "logical_collision_ready_frames_after_commit": -1,
+      "logical_visual_ready_frames_after_commit": -1,
+      "measurement_complete": false,
+      "native_visual_ready_frames_after_commit": -1,
+      "native_visual_ready_ms_after_commit": -1.0,
+      "physics_target_found": false,
+      "physics_target_wait_frame_time_ms": {
+        "maximum": 110.442,
+        "over_16_67_ms": 63,
+        "over_33_3_ms": 39,
+        "p50": 0.104,
+        "p95": 67.033,
+        "p99": 92.999,
+        "samples": 180
+      },
+      "physics_target_wait_frames": 180,
+      "physics_target_wait_ms": 3007.569,
+      "ready_frame_time_ms": {
+        "maximum": 0.0,
+        "over_16_67_ms": 0,
+        "over_33_3_ms": 0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "samples": 0
+      },
+      "ready_observation_window_frames": 0,
+      "ready_observation_window_ms": 0.0,
+      "relocation_to_collision_ready_lower_bound_ms": 3006.569,
+      "relocation_to_collision_ready_ms": -1.0,
+      "relocation_to_visual_ready_lower_bound_ms": 3006.569,
+      "relocation_to_visual_ready_ms": -1.0,
+      "render_generation_after": 0,
+      "resource_generation_api": false,
+      "staged_render_generation_after": 0,
+      "target_chunk": {
+        "x": 35,
+        "y": -2,
+        "z": 35
+      },
+      "visual_collision_divergence_frames": -1,
+      "visual_readiness_contract": "native_generation_and_gpu_activation_ack",
+      "visual_ready_censored": true,
+      "visual_ready_frames_after_commit": -1,
+      "visual_ready_ms_after_commit": -1.0
+    },
+    "frame_time_ms": {
+      "maximum": 214.741,
+      "over_16_67_ms": 557,
+      "over_33_3_ms": 405,
+      "p50": 0.384,
+      "p95": 62.757,
+      "p99": 78.275,
+      "samples": 1560
+    },
+    "render_frame_interval_ms": {
+      "maximum": 223.329,
+      "over_16_67_ms": 556,
+      "over_33_3_ms": 418,
+      "p50": 43.521,
+      "p95": 76.639,
+      "p99": 97.665,
+      "samples": 557
+    },
+    "backlog": {
+      "maximum_collision_apply_frame_items_observed": 28,
+      "maximum_collision_apply_frame_time_ns_observed": 4898900,
+      "maximum_collision_apply_time_ns_last": 2167400,
+      "maximum_collision_apply_time_ns_observed": 4567800,
+      "maximum_mesh_job_time_ns_observed": 49118300,
+      "maximum_pending_chunk_replacements": 662,
+      "maximum_pending_chunk_retirements": 636,
+      "maximum_queued_collision": 10,
+      "maximum_queued_render": 0,
+      "maximum_sample_job_time_ns_observed": 58039700,
+      "maximum_scheduler_queued_completions": 0,
+      "maximum_scheduler_queued_jobs": 514,
+      "maximum_staged_render_resources": 0,
+      "samples": 104
+    }
+  },
+  "artifacts": {
+    ".gdignore": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "gameplay_probe_off.json": "f06ea12a10c8b4ff3fe53945d43a7799eeec9d8521006db9fd5d525e7412819d",
+    "gameplay_stage_after.json": "399b3f4cd44b2b3e83cff81cd193183f2d4204540135e9c8d2230cc733654005",
+    "gameplay_stage_before.json": "6efc982a756c2f6b70ccd1f03a129f8c28b1a519e7fc2e084d51ca94c7d55750",
+    "lifecycle_d3d12.log": "cc7ed7c385c2d23f4e9f349f68910c2336e0b1af97c7402fdacc9e013a7d6e63",
+    "lifecycle_vulkan.log": "cba39900804c7c45a7e506224b95036ea1c77e127592b068d00faa4c64279a58",
+    "moving_lod.json": "751b1219a2f59f86502c9f48edeec461c6769ca860d5bf9e8fbdd58cac58a297",
+    "moving_lod_command.json": "aa8989aa215b5e87c888cd2fc2fa59b3e6cc4fda9eed95ae7714af4c14a2b049",
+    "moving_lod_exit.json": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17",
+    "moving_lod_low_slope.png": "5dd861206b617d0e1fcf1e5adeac3292ad88d61b66cf7aa858bd93caab75bc6c",
+    "moving_lod_peak_sweep.png": "0f90fbc5ba4345f12882011f82cb68d69cb97dfd16ba21c05f3411a3b52cafee",
+    "moving_lod_timings.json": "3e36cbffc7d29f5c258212552061a0e336a9a4ee069a470a164fde6aaad3be38",
+    "native_regressions.log": "c67f528879eceb5188eab1ea17fe09a79635b3703bfa19f31529744510ca57ac",
+    "RESULT.md": "88c04ca81e8943b6e4e452969f2d75c6083b950f613d221add1fa62039416654",
+    "selector_before.json": "97c5af6d3410272eacdcf0fd6232db82eb88c5623719e6a791e7db3e9f651bc0",
+    "selector_rejected_index.json": "3b25d3b6ebe66977d2647e35e6d1bcf336e715e446a863fbd2ce4f9287024d30"
+  },
+  "artifact_hash_contract": "SHA-256 after CRLF-to-LF normalization for UTF-8 text; binary bytes unchanged"
+}
