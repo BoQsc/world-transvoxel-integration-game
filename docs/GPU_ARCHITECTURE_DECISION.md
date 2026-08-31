@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_PIPELINE_OBSERVABLE_DRAIN_IMPROVED_GAMEPLAY_REJECTED`
+Status: `TQP64_GPU_COLLISION_LOCALITY_FIXED_GPU_QUALIFICATION_REJECTED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -10,6 +10,31 @@ replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
+
+The [explicit collision-locality checkpoint](evidence/tqp64_gpu_collision_locality_20260831/RESULT.md)
+pins upstream `2a7a787`. Visual retirement no longer promotes a withdrawn local
+collision demand merely because old CPU geometry remains cached. A failing-before,
+passing-after native regression proves 512 unnecessary outgoing GPU-mode collision
+triangles are removed while the new support geometry remains available. Zero/one
+mesh-worker cases pass in debug/release; the legacy broad-collision control is
+unchanged. GPU visuals remain GPU-resident, and required Godot physics remains
+local and CPU-based. Neither rendering mode implies a GPU physics backend.
+
+Diagnostics-off gameplay remains rejected: 501/1,020 blocked steps, longest block
+123 steps, post-draw p95/p99 52.613/85.868 ms, and no relocated edit target after
+180 frames / 3.036 seconds. No matched-workload speedup or power claim is made.
+The fix removes demonstrated unnecessary collision work, not the larger
+publication-cohort delay. Visual coverage, transition masks, atomic activation,
+edit/cave retention, player safety guards, and the CPU default are unchanged.
+
+Moving-LOD qualification also fails: all 25 sampled views report no gaps, but
+two prepared terrain requests expire waiting for missing CPU application
+records. The final 1,219-ready-record snapshot does not erase those cumulative
+rejections. Whether this is a timing-dependent existing defect or a regression
+is not yet established. Isolate that missing-record lifecycle before accepting
+this artifact; do not extend its timeout or dismiss it based on screenshots.
+
+### Earlier Pipeline Observability Checkpoint
 
 The [GPU pipeline observability checkpoint](evidence/tqp64_gpu_pipeline_observability_20260831/RESULT.md)
 keeps upstream `236045f` pinned. Stale activation seeds are now discarded before

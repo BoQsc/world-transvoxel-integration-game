@@ -1,0 +1,212 @@
+{
+  "schema": "world_transvoxel.collision_locality_evidence.v1",
+  "authority": {
+    "repository": "world-transvoxel",
+    "commit": "2a7a7873844eec72b4007cb67948198a1d3088ba",
+    "addon_tree": "19f84c2e0e3ca477fbbc21afe449521ab6df2d68",
+    "native_source_tree": "68c8b1c3b91fc4fac67149bd9149453467d148cb",
+    "fallback": false
+  },
+  "runtime_artifact_sha256": "8e6fb9ee8a377bd24213dadfa0bbd3f406049fe9038052952f4979f61bf0ad20",
+  "logical_cpu_affinity": [
+    0,
+    1,
+    2
+  ],
+  "gameplay_accepted": false,
+  "moving_lod_accepted": false,
+  "moving_lod_sample_count": 25,
+  "moving_lod_sample_failures": 0,
+  "moving_lod_fatal_rejections": [
+    {
+      "context": "after streaming fly gap gate",
+      "examples": [
+        {
+          "activated_surfaces": {},
+          "application_readiness": {
+            "cpu_collision_publication_unchanged": true,
+            "cpu_render_publication_unchanged": true,
+            "error": "GPU resident geometry is waiting for its CPU application record",
+            "ready": false,
+            "schema": "world_transvoxel.gpu_resident_render_readiness.v1",
+            "status": "WAITING_APPLICATION"
+          },
+          "error": "GPU resident CPU-application wait expired",
+          "identity": {
+            "cached_transition_mask": 1,
+            "field_mode": 0,
+            "generation": 2030,
+            "input_stage": "pre_mesh_field",
+            "lod": 2,
+            "page_x": 20,
+            "page_y": 1,
+            "page_z": 19,
+            "sample_count": 34295,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 1,
+            "world_revision": 0
+          },
+          "prepared_surfaces": {
+            "terrain": true
+          },
+          "validated_surfaces": {
+            "terrain": true
+          }
+        },
+        {
+          "activated_surfaces": {},
+          "application_readiness": {
+            "cpu_collision_publication_unchanged": true,
+            "cpu_render_publication_unchanged": true,
+            "error": "GPU resident geometry is waiting for its CPU application record",
+            "ready": false,
+            "schema": "world_transvoxel.gpu_resident_render_readiness.v1",
+            "status": "WAITING_APPLICATION"
+          },
+          "error": "GPU resident CPU-application wait expired",
+          "identity": {
+            "cached_transition_mask": 1,
+            "field_mode": 0,
+            "generation": 2026,
+            "input_stage": "pre_mesh_field",
+            "lod": 2,
+            "page_x": 20,
+            "page_y": 1,
+            "page_z": 18,
+            "sample_count": 34295,
+            "source_revision": 190327,
+            "static_water_surface_expected": false,
+            "surface": "terrain",
+            "transition_mask": 1,
+            "world_revision": 0
+          },
+          "prepared_surfaces": {
+            "terrain": true
+          },
+          "validated_surfaces": {
+            "terrain": true
+          }
+        }
+      ],
+      "frame": 134,
+      "reasons": {
+        "GPU resident CPU-application wait expired": 2
+      }
+    }
+  ],
+  "moving_lod_final_summary": {
+    "active_chunk_records": 1219,
+    "collision_resources": 0,
+    "fully_ready_chunk_records": 1219,
+    "pending_chunk_replacements": 0,
+    "pending_chunk_retirements": 0,
+    "queued_collision": 0,
+    "queued_render": 0,
+    "render_resources": 1219,
+    "scheduler_queued_completions": 0,
+    "scheduler_queued_jobs": 0,
+    "staged_render_resources": 0,
+    "visual_ready_chunk_records": 1219
+  },
+  "qualification": "candidate_checkpoint_not_accepted_baseline",
+  "archive": {
+    "path": "retained_evidence.zip",
+    "bytes": 4005807,
+    "sha256": "be074521349c340324d94e8a140501e04422c4372dd8fb2bc756f5de3974c4c6",
+    "verified": true
+  },
+  "files": [
+    {
+      "entry": "checks/artifact.log",
+      "source": ".godot/collision_locality_20260831/artifact.log",
+      "bytes": 153,
+      "sha256": "c7140aa4be3acf207d042b69476ae96aa2395d8fd8f45a5ccede73a274faa1b4"
+    },
+    {
+      "entry": "checks/boundary_final.log",
+      "source": ".godot/collision_locality_20260831/boundary_final.log",
+      "bytes": 163,
+      "sha256": "a357c49bd1bd28e1943d81a09d4b25360294e75e955660ced5c5d706075ea830"
+    },
+    {
+      "entry": "checks/dependency_boundary.log",
+      "source": ".godot/collision_locality_20260831/dependency_boundary.log",
+      "bytes": 163,
+      "sha256": "a357c49bd1bd28e1943d81a09d4b25360294e75e955660ced5c5d706075ea830"
+    },
+    {
+      "entry": "checks/gpu_fairness.log",
+      "source": ".godot/collision_locality_20260831/gpu_fairness.log",
+      "bytes": 385,
+      "sha256": "b904432bb3d9a65e590da8e4d027d5e5e58c9ab4cf359873ab796c5b2fb59be6"
+    },
+    {
+      "entry": "checks/lifecycle.log",
+      "source": ".godot/collision_locality_20260831/lifecycle.log",
+      "bytes": 1289,
+      "sha256": "050ca1dd88f69d55f0b8de5c9155228c2d9199d4aefaeef4cef8dc1ced875015"
+    },
+    {
+      "entry": "checks/player_footprint.log",
+      "source": ".godot/collision_locality_20260831/player_footprint.log",
+      "bytes": 171,
+      "sha256": "1436dba0ef7fbd34f801ffef7fa2f0fef139fcb58430e6e919e94432731d90ce"
+    },
+    {
+      "entry": "checks/reporting.log",
+      "source": ".godot/collision_locality_20260831/reporting.log",
+      "bytes": 1169,
+      "sha256": "0e60124622a14e3bfde15da29ed140da8946fe93cdaf3c375e704c5076311184"
+    },
+    {
+      "entry": "checks/sync.log",
+      "source": ".godot/collision_locality_20260831/sync.log",
+      "bytes": 133,
+      "sha256": "9994d4b3557173bd1f605bf4e571275b11802e9d1306c1a3d914405e7abf0d75"
+    },
+    {
+      "entry": "gameplay/report.json",
+      "source": ".godot/collision_locality_20260831/gameplay.json",
+      "bytes": 62711,
+      "sha256": "139a195bdb083509a2dc7a1a0623310f4b2cd593b30449055382800d0b022a76"
+    },
+    {
+      "entry": "gameplay/gpu_01.stderr.log",
+      "source": ".godot/world_transvoxel_captures/gpu_collision_locality_off_20260831/gpu_01.stderr.log",
+      "bytes": 37094,
+      "sha256": "2772c2f1398331b59d00aeab430488312622a3f64aff4a8268d09b7def55b684"
+    },
+    {
+      "entry": "gameplay/gpu_01.stdout.log",
+      "source": ".godot/world_transvoxel_captures/gpu_collision_locality_off_20260831/gpu_01.stdout.log",
+      "bytes": 37927,
+      "sha256": "b4ccf846b1869961f2df7471ac6ce158cbc996d7e1c4283994067ab3cf7b302d"
+    },
+    {
+      "entry": "moving_lod/stdout.log",
+      "source": ".godot/collision_locality_20260831/visual_runner.log",
+      "bytes": 7014,
+      "sha256": "52c09aec1b377f67251552002ed43a380f8e6dd7fbd6d64f18fd23b63d644de5"
+    },
+    {
+      "entry": "moving_lod/samples.json",
+      "source": ".godot/world_transvoxel_captures/gpu_collision_locality_moving_lod_20260831/acceptance_streaming_fly.json",
+      "bytes": 461456,
+      "sha256": "782d4f18770706e2411b77dbe5dc36ddbb33167f4bcd9af90b488f90b8d1b545"
+    },
+    {
+      "entry": "moving_lod/acceptance_streaming_fly_12_peak_sweep_f054.png",
+      "source": ".godot/world_transvoxel_captures/gpu_collision_locality_moving_lod_20260831/acceptance_streaming_fly_12_peak_sweep_f054.png",
+      "bytes": 1391977,
+      "sha256": "0003d859d86aa606176079ee059f392e228ab6f38566c530f120733871b8ef82"
+    },
+    {
+      "entry": "moving_lod/acceptance_streaming_fly_24_low_slope_f042.png",
+      "source": ".godot/world_transvoxel_captures/gpu_collision_locality_moving_lod_20260831/acceptance_streaming_fly_24_low_slope_f042.png",
+      "bytes": 2577940,
+      "sha256": "64a2544756b5699ed5f3a3f183f9d45b472ac894470270fca717af1515ac1914"
+    }
+  ]
+}
