@@ -89,6 +89,18 @@ class RetryProbe:
 		_queue_activation_cohort_retry(group_key)
 
 
+class PreparationBackend:
+	extends Node
+	var preparations := 0
+
+	func get_gpu_resident_render_chunk_readiness(_identity: Dictionary) -> Dictionary:
+		return {"status": "READY", "ready": true}
+
+	func prepare_gpu_resident_render_chunk(_identities: Array) -> Dictionary:
+		preparations += 1
+		return {"status": "PREPARED", "prepared": true}
+
+
 func _initialize() -> void:
 	var probe := RetryProbe.new()
 	var capacity: int = probe.ACTIVATION_COHORT_RETRY_CAPACITY
@@ -112,6 +124,9 @@ func _initialize() -> void:
 		_fail(probe, "cancelled retry was retained")
 		return
 	probe.free()
+	if not _test_initial_activation_budget():
+		quit(1)
+		return
 	if not _test_spatial_retirement_routes() or not _test_batched_inventory():
 		quit(1)
 		return
@@ -133,8 +148,41 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 initial_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
 	quit(0)
+
+
+func _test_initial_activation_budget() -> bool:
+	var probe := RetryProbe.new()
+	var backend := PreparationBackend.new()
+	probe._backend_terrain = backend
+	probe.add_waiting("older")
+	for index in range(8):
+		var key := str(index)
+		var identity := {"page_x": index, "generation": index + 1, "surface": "terrain"}
+		probe._groups[key] = {
+			"requests": {"terrain": {"identity": identity}},
+			"prepared": {"terrain": true},
+			"native_validated": {"terrain": true},
+		}
+		probe._try_validate_group(key)
+		probe._try_validate_group(key)
+	var unbudgeted_calls := probe.visited.size()
+	var ok := unbudgeted_calls == 0 and backend.preparations == 8 \
+		and probe._activation_retry_membership.size() == 9 \
+		and probe._prepared_group_routes.size() == 8
+	probe._retry_prepared_groups()
+	probe._drain_activation_cohort_retries()
+	ok = ok and probe.visited == ["older"]
+	probe._groups["0"]["retiring"] = true
+	probe._drain_activation_cohort_retries()
+	ok = ok and probe.visited == ["older", "1"] \
+		and not probe._activation_retry_membership.has("0")
+	probe.free()
+	backend.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: initial activation budget; unbudgeted_calls=%d" % unbudgeted_calls)
+	return ok
 
 
 func _test_optional_lifecycle_history() -> bool:

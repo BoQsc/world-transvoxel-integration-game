@@ -71,11 +71,15 @@ upload. CPU world, storage, edit, and collision authority remain unchanged.
 The [2026-08-31 queued collision-promotion checkpoint](docs/evidence/tqp64_gpu_collision_promotion_20260831/RESULT.md)
 removes proven redundant remeshing without relaxing publication or collision
 safety. A priority-queue experiment was withdrawn after it failed to establish
-a benefit; the original FIFO controller is unchanged. Diagnostics-off GPU
-gameplay still fails movement and relocated-edit readiness, while the CPU
-control completes with latency target misses. A separate M5 fingerprint mismatch
-remains unresolved, so the complete authority suite is not claimed green.
-GPU completion, overall gameplay speedup, and power targets are not claimed.
+a benefit. The subsequent [activation-query budget checkpoint](docs/evidence/tqp64_gpu_activation_query_budget_20260831/RESULT.md)
+routes initial activation attempts through the existing FIFO budget. Two
+diagnostics-off runs show better frame pacing but more blocked movement steps;
+neither accepts the relocated edit. The sampled moving-LOD check passes but
+still needs a 21.348-second final readiness drain. This is an experimental fix,
+not an accepted performance baseline. The CPU control completes with latency
+target misses. The separate M5 fingerprint mismatch remains unresolved, so the
+complete authority suite is not claimed green. GPU completion, overall gameplay
+speedup, and power targets are not claimed.
 Release gates and the next measured dependency are listed in
 [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-31).
 

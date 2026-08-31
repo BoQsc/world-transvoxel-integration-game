@@ -11,6 +11,33 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
 
+The [activation-query budget checkpoint](evidence/tqp64_gpu_activation_query_budget_20260831/RESULT.md)
+keeps upstream `236045f` pinned and routes initial prepared-group activation
+attempts through the existing FIFO retry budget. The regression reproduces eight
+unbudgeted queries before the fix and passes after it. Priority, capacities,
+cohort membership, native validation, and collision/movement safety are unchanged.
+
+Diagnostics-off GPU gameplay is still rejected. Two runs have post-draw p95/p99
+43.975/59.388 and 41.012/64.890 ms, but block 586 and 555 of 1,020 movement steps,
+versus 504 at the preceding checkpoint. Neither acquires the first edit target
+within 180 frames. This is a narrow frame-pacing improvement with unresolved
+readiness tradeoffs, not an accepted performance baseline. CPU remains default.
+
+All 25 moving-LOD sample views and strict final drain pass, with zero native or
+controller rejections. Final readiness still takes 21.348 seconds. GPU topology
+probing is disabled in that capture; the sampled result is not exhaustive
+watertightness certification. Vulkan/D3D12 bounded lifecycle tests pass.
+
+Next isolate stale retry cleanup and the measured generation-to-activation
+dependency. Empty work queues alone do not establish usable collision or
+completed authoritative retirement. The unchanged movement/edit gate must pass
+without longer waits or weaker guards. Post-edit terrain/water, cross-backend
+gameplay, performance/power, and human acceptance remain open. The inherited M5
+wrapper fingerprint also remains unresolved; the full authority suite is not
+claimed green.
+
+### Earlier Queued Collision-Promotion Checkpoint
+
 The [queued collision-promotion checkpoint](evidence/tqp64_gpu_collision_promotion_20260831/RESULT.md)
 pins upstream `236045f`. Waiting mesh jobs now absorb collision-role promotion
 without cancelling and repeating their generation; executing/completed jobs

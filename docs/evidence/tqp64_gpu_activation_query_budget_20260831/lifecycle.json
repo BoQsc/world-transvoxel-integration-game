@@ -1,0 +1,10 @@
+{
+  "command": [
+    "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+    "tools/run_gpu_resident_production_lifecycle_smoke.py",
+    "--driver",
+    "both"
+  ],
+  "returncode": 0,
+  "output": "[vulkan] GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS activated=3 water_surfaces=2 restored=1 collision_authority=cpu readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 accepted_normal_response_parity=1 bounded_pbr_response_parity=1 terrain_material_parity=1 water_material_parity=1 water_fresnel_tint_parity=1 water_refraction_parity=1 material_params=416 material_textures=5 water_params=48 arena=paged_shared native_packed=1 pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 reservations=3 captures=4 released=2\n[d3d12] GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_PASS activated=3 water_surfaces=2 restored=1 collision_authority=cpu readback=0 terrain_albedo_mapping_parity=1 roughness_mapping_parity=1 accepted_normal_response_parity=1 bounded_pbr_response_parity=1 terrain_material_parity=1 water_material_parity=1 water_fresnel_tint_parity=1 water_refraction_parity=1 material_params=416 material_textures=5 water_params=48 arena=paged_shared native_packed=1 pre_mesh_admission=1 pre_mesh_field=1 cpu_topology_input=0 cpu_field_sampling=0 gpu_density_generation=1 gpu_material_generation=1 reservations=3 captures=4 released=2\n"
+}

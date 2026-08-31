@@ -1,0 +1,7 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+
+ERROR: GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: initial activation budget; unbudgeted_calls=8
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _test_initial_activation_budget (res://tests/gpu_activation_retry_fairness_smoke.gd:184)
+       [1] _initialize (res://tests/gpu_activation_retry_fairness_smoke.gd:127)

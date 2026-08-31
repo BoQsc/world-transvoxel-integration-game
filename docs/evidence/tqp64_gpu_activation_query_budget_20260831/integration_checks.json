@@ -1,0 +1,35 @@
+{
+  "affinity": [
+    0,
+    1,
+    2
+  ],
+  "checks": [
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/validate_world_transvoxel_runtime_artifact.py"
+      ],
+      "returncode": 0,
+      "output": "WT_RUNTIME_ARTIFACT_PASS authority=236045f8 files=10 digest=d96d92d8e951016631ae955132c6da6a72832480d54c0fa8a145814243752089 native_source=0 fallback=0\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/validate_terrain_dependency_boundary.py"
+      ],
+      "returncode": 0,
+      "output": "WT_TERRAIN_DEPENDENCY_BOUNDARY_PASS authority=236045f8 compatibility_base=4f1fdb5 runtime_scene=production native_source=0 fallback=false direct_backend_paths=13\n"
+    },
+    {
+      "command": [
+        "C:\\Users\\Windows10_new\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "tools/sync_tqp54_candidate.py",
+        "--package",
+        "authority"
+      ],
+      "returncode": 0,
+      "output": "WT_AUTHORITY_PACKAGE_SYNC_PASS authority_files=10 authority_digest=d96d92d8e951016631ae955132c6da6a72832480d54c0fa8a145814243752089\n"
+    }
+  ]
+}

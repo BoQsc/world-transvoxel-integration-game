@@ -51,8 +51,8 @@ const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
 const RENDER_SUBMISSION_CAPACITY := 16
 const NATIVE_SUBMISSIONS_PER_FRAME := 4
-# A regional wait is shared by many prepared members. One fair retry per frame
-# prevents those aliases from repeatedly rebuilding the same native cohort.
+# Initial attempts share the retry budget: many prepared members can refer to
+# one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 1
 const LIFECYCLE_HISTORY_CAPACITY := 512
 
@@ -937,7 +937,7 @@ func _try_validate_group(group_key: String) -> void:
 	_prepared_group_routes[_activation_chunk_key(Dictionary(
 		terrain_request.get("identity", {})
 	))] = group_key
-	_try_queue_activation_cohort(group_key)
+	_queue_activation_cohort_retry(group_key)
 
 
 func _retry_prepared_groups() -> void:

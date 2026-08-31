@@ -1,0 +1,15 @@
+{
+  "parent_commit": "e771b77a2e5ab00b764e34ede5fb55239d29fc31",
+  "source_files": [
+    {
+      "path": "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd",
+      "git_blob": "5a4e816763c531e9a136fe1195c4dcfe7b602de0",
+      "file_sha256": "881694c45fcef19b5a6841a14d898f96e1e4375aece594b657f25ac56f1ca5a0"
+    },
+    {
+      "path": "tests/gpu_activation_retry_fairness_smoke.gd",
+      "git_blob": "25498708b04361f83c65e337de448fa0cd2988f8",
+      "file_sha256": "927a66843a8210b72da5c1ea676b556a96f1c14b469c6e3dcee655f5bf629695"
+    }
+  ]
+}
