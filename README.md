@@ -68,12 +68,14 @@ authoritative page lattice and extracts regular/transition geometry on the GPU,
 then renders compact resident buffers without geometry readback or ArrayMesh
 upload. CPU world, storage, edit, and collision authority remain unchanged.
 
-The [2026-08-31 publication-query checkpoint](docs/evidence/tqp64_gpu_publication_query_20260831/RESULT.md)
-removes discarded serialization without changing selection or safety rules.
-Native debug/release and bounded Vulkan/D3D12 lifecycle tests pass. The 25-sample
-moving-LOD route drains to complete coverage, but diagnostics-off gameplay
-still fails movement and relocated-edit readiness. No smooth-gameplay, speedup,
-or power claim is established. Remaining release gates are listed in
+The [2026-08-31 indexed coverage checkpoint](docs/evidence/tqp64_gpu_coverage_index_20260831/RESULT.md)
+reduces repeated CPU coverage-validation work without changing selection or
+safety rules. Native debug/release, captured replay, and Vulkan/D3D12 lifecycle
+tests pass. The 25-sample moving-LOD route drains to complete coverage, but
+diagnostics-off gameplay still fails movement and relocated-edit readiness.
+The trace identifies a transition-generation queue wait; GPU completion is
+not claimed. One moving-LOD native rejection remains unclassified. No overall
+gameplay speedup or power claim is established. Release gates are listed in
 [the current GPU status](docs/GPU_ARCHITECTURE_DECISION.md#current-checkpoint-2026-08-31).
 
 ## Critical edited-terrain LOD boundary

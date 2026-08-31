@@ -441,13 +441,16 @@ func _process(_delta: float) -> void:
 
 func _record_stage_time(stage: String, start_us: int) -> int:
 	var now := Time.get_ticks_usec()
-	var elapsed := now - start_us
+	_accumulate_stage_time(stage, now - start_us)
+	return now
+
+
+func _accumulate_stage_time(stage: String, elapsed: int) -> void:
 	var value := Dictionary(_stage_timing_usec.get(stage, {"calls": 0, "total": 0, "max": 0}))
 	value["calls"] = int(value["calls"]) + 1
 	value["total"] = int(value["total"]) + elapsed
 	value["max"] = maxi(int(value["max"]), elapsed)
 	_stage_timing_usec[stage] = value
-	return now
 
 
 func _sync_production_materials() -> void:
@@ -1011,11 +1014,16 @@ func _try_queue_activation_cohort(group_key: String) -> void:
 		"requests", {}
 	)).get("terrain", {})).get("identity", {})
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
-	var cohort := Dictionary(_backend_terrain.call(
-		"get_gpu_resident_render_activation_cohort", terrain_identity
-	))
+	var cohort: Dictionary
+	if _stage_timing_enabled:
+		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity, true)
+	else:
+		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("activation_native_query", phase_start)
+		var native_timing: Dictionary = cohort.get("query_timing_usec", {})
+		for stage in native_timing:
+			_accumulate_stage_time("native_query_" + str(stage), int(native_timing[stage]))
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
 		_record_activation_cohort_wait(cohort)

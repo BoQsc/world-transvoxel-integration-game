@@ -1,0 +1,71 @@
+{
+  "schema": "world_transvoxel.gpu_coverage_checkpoint.v1",
+  "authority": {
+    "schema": "world_transvoxel.integration.runtime_pin.v1",
+    "status": "ACTIVE",
+    "authority": {
+      "repository": "world-transvoxel",
+      "commit": "d944150e444dcba83f742e3a6a803b5dc6a93e98",
+      "addon_tree": "ac9ca7620f9584bc0c3b0f4b76bc1fb5a4e74e96",
+      "native_source_tree": "e312597306a78d3fb59d67453ad70a2ac6f00be3",
+      "fallback": false
+    },
+    "runtime_artifact": {
+      "layout": "binary_consumer_v1",
+      "native_source_included": false,
+      "binary_build_commit": "d944150e444dcba83f742e3a6a803b5dc6a93e98",
+      "digest_sha256": "80e46b61ea719e1b3de52ffc01dff3eb1f84b76ec7d8e30ad4db40e6720927af",
+      "files": [
+        "LICENSE_SCOPE.md",
+        "OPERATING_LIMITS.md",
+        "PUBLIC_API.md",
+        "README.md",
+        "thirdparty/transvoxel_mit/LICENSE",
+        "thirdparty/transvoxel_mit/UPSTREAM.md",
+        "world_transvoxel.gdextension",
+        "world_transvoxel.gdextension.uid",
+        "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bin/world_transvoxel.windows.template_release.x86_64.dll"
+      ],
+      "binaries": [
+        {
+          "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bytes": 2489344,
+          "sha256": "53a1add1b44abb7bd3b9b4d032771be74d65367dc75293d6f965f6d48d1cf121"
+        },
+        {
+          "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+          "bytes": 2409472,
+          "sha256": "d473680491382c553cb136aad323b56e8f6f444901c9566ea7cef842ddc5e125"
+        }
+      ]
+    }
+  },
+  "integration_parent": "a9d5828fc7b353cf1cef8a982955d13efea97ff7",
+  "hash_contract": "SHA256 of UTF-8 text with CRLF normalized to LF; binary unchanged. Manifest excludes itself.",
+  "files": {
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/.gdignore": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/acceptance_streaming_fly_12_peak_sweep_f054.png": "f6a9fdf0f26a8f7b3029f64a1a6b6555ad509d19fecbdb194407d2f0550fdded",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/acceptance_streaming_fly_24_low_slope_f042.png": "3514b26608fe2560cf3041ebecedc0eacd74147817ece8b0f94a46b8510ab02c",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/before_chunk_trace.json": "df2a5d8cf03986e17e8416993461c346fca70d376d7ca54a23e3bc09e2e46685",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/before_measurement.json": "a19db2c76d8056fed547ee683020f976411aae424a9e781c09418c433dd1c4c7",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/gameplay_diagnostics_off.json": "d8b97bc40f3707fde161d972b76f7797ffc09976a4c5687aab03c6daf69e8078",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/indexed_chunk_trace.json": "53117e4d7a3f5580f1053cce9293b1e3bd6e5f2650fd2ca7e5a1c3b3eae3fd18",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/indexed_measurement.json": "765563850d9c1e6d31a11fbc9a752a5d72382c651a24d8e5e4d5141897376810",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/integration_checks.log": "6a2d0eb1f8f16f914ec9ca3cc592351c794e87b67d554b54a0892b94c086bf68",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/lifecycle_d3d12.log": "cc7ed7c385c2d23f4e9f349f68910c2336e0b1af97c7402fdacc9e013a7d6e63",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/lifecycle_vulkan.log": "cba39900804c7c45a7e506224b95036ea1c77e127592b068d00faa4c64279a58",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/moving_lod.json": "e23e1b98c5f519731a8809cb8c150acc615e5f4930935b89b143bfbbc38bdba6",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/moving_lod_command.json": "30ced69bf5265c9b90ca461ecb880f581f977f0cb6db8331dc86fd6e58a24bf5",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/moving_lod_timing.json": "be3f6643a502b4f15e5a0df5fbf971ff49d4328fa38910404417dd628c838fea",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/native_tests.log": "997abca6e8e3ecc0017fc998f1730b71ae2520ac9e8a0aa24f73ffede5b7377d",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/readiness_probe.log": "9f2656cca40bc8cfff833c16421e3851396548e8717da2cc3df25fde7c4d3588",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/replay_debug.json": "39cd4d56e1b22d523226aa22b8c426ee437ba4578a9d0e5dc4e9d4d7e3040ff9",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/replay_release.json": "ff73170829829268bb78da0289c1f9eed627d3a66d2b4d2ad70c12e20b85f6d3",
+    "docs/evidence/tqp64_gpu_coverage_index_20260831/RESULT.md": "515886031013cafc3d62253ada63c9e6b63dd874d403278a88af0939d199ea1e",
+    "WORLD_TRANSVOXEL_RUNTIME_PIN.json": "2b5d5352bda467cc5f8932c4ca3a9b36fe56b0ba971dc0d7ed76885d40a7237e",
+    "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd": "6129417902fe908932aac316f673bb23436aaa8fcb4bc96163d334dd68c10acc",
+    "tests/gpu_resident_production_lifecycle_smoke.gd": "87f13d609d8ff132de27b4800fcf37b8ae19154f975f194f7930a3326daecc6d",
+    "tools/summarize_gpu_relocation_trace.py": "180d52ccca66ca812752b8da58abe1af9d0a91136b4e7cff8eb4e2440ffcf4bd"
+  }
+}

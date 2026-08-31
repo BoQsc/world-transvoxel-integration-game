@@ -127,6 +127,16 @@ func _run() -> void:
 				or not cohort.get("retirements", []).is_empty():
 			_fail("live cohort serialization changed identity or activation ownership")
 			return
+		var measured: Dictionary = backend.call("get_gpu_resident_render_activation_cohort", identity, true)
+		var timing: Dictionary = measured.get("query_timing_usec", {})
+		for stage in ["seed_validation", "selection", "coverage", "member_readiness", "response"]:
+			if int(timing.get(stage, -1)) < 0:
+				_fail("native query timing omitted a completed phase")
+				return
+		measured.erase("query_timing_usec")
+		if cohort.has("query_timing_usec") or measured != cohort:
+			_fail("optional query timing changed publication results or ran by default")
+			return
 		identity["generation"] = int(identity["generation"]) + 1
 		var stale: Dictionary = backend.call("get_gpu_resident_render_activation_cohort", identity)
 		if stale.get("ready", true) or stale.get("status", "") != "STALE_APPLICATION" \

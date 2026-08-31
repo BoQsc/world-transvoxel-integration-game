@@ -11,6 +11,35 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
 
+The [indexed coverage checkpoint](evidence/tqp64_gpu_coverage_index_20260831/RESULT.md)
+pins upstream `d944150`. Optional native sub-stage timing identified repeated
+all-pairs authoritative coverage work. The existing hierarchy index now avoids
+those scans while preserving coverage decisions. Debug/release independent
+coverage regressions, eight captured replays, and Vulkan/D3D12 lifecycle tests
+pass. Selection, priority, generations, and collision rules are unchanged.
+
+The mean recorded coverage phase fell from 4.037 to 0.166 ms in diagnostic
+runs. This is a stage-level improvement, not GPU or gameplay completion.
+The unchanged moving-LOD route passes 25 samples and drains in 14.494 seconds.
+One native rejection in that capture is unclassified because its per-request
+reason was not retained; it is not a zero-error certification.
+
+Exact-pinned diagnostics-off gameplay still fails: 544/1,020 blocked steps,
+longest block 105 steps, no relocated target within 180 frames / 2.978 seconds,
+and rendered p95/p99 75.175/102.769 ms. CPU remains default. No new human
+acceptance, smooth-gameplay, CPU/GPU speedup, or power claim is established.
+
+The relocation trace now identifies a concrete ordering problem: a ray-crossed
+chunk loads and meshes in milliseconds, but its required transition generation
+waits behind hundreds of equally promoted coverage jobs without publishing
+collision. Next isolate that generation change and priority competition in a
+focused test before changing policy. Remaining selector cost and the unclassified
+native rejection also need bounded investigation. Do not weaken dependencies,
+safety guards, or timeouts. Completed movement/edit, post-edit geometry/water,
+cross-backend gameplay, power, and human acceptance remain release gates.
+
+### Earlier Serialization Checkpoint
+
 The [publication query checkpoint](evidence/tqp64_gpu_publication_query_20260831/RESULT.md)
 pins upstream `6112082`. It removes dictionary construction that was discarded
 on waiting GPU cohort queries. Selection, coverage, reciprocal masks, priority,
