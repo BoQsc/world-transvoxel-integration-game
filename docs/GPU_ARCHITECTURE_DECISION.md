@@ -25,9 +25,11 @@ frames to 5.896 seconds / 110 frames. GPU topology probing is disabled in that
 capture, so this is sampled visual coverage rather than exhaustive watertightness
 certification. Vulkan and D3D12 bounded lifecycle tests pass.
 
-Diagnostics-off GPU gameplay is still rejected: 583 of 1,020 movement steps are
-blocked, post-draw p95/p99 are 44.032/69.307 ms, and the relocated edit target is
-not available after 180 frames / 2.988 seconds. The unchanged CPU control moves
+Diagnostics-off GPU gameplay at that four-submission checkpoint is still
+rejected: 583 of 1,020 movement steps are blocked, post-draw p95/p99 are
+54.896/111.895 ms, and the relocated edit target is not available after 180
+frames / 2.988 seconds. The previously stated 44.032/69.307 ms were
+physics-signal intervals, incorrectly labelled as post-draw. The unchanged CPU control moves
 without blocked steps but still needs 6.802 seconds for relocated visual and
 collision readiness. Neither result meets the release latency contract.
 
@@ -36,6 +38,18 @@ shapes, resident LOD bounds, GPU extraction/prepare/cohort/activation/retirement
 stages, frame timing, queue counters, and JSON snapshots. The disabled state
 does no terrain polling, stage timing, or wireframe generation. These tools make
 the remaining dependency observable; they do not make the candidate complete.
+
+The final retained controller admits eight submissions per frame into the same
+sixteen-slot window. Its single diagnostics-off run records 503/1,020 blocked
+steps, longest block 106, post-draw p95/p99 51.303/91.284 ms, and no edit target
+after 2.996 seconds. Its 25-sample moving-LOD route passes and drains in 5.074
+seconds / 65 frames. A sixteen-submission run drains faster but has worse
+post-draw tails. This is a provisional tradeoff, not a statistically established
+speedup or accepted gameplay baseline. Rejected 32-slot experiments and their
+build limitations are retained in the checkpoint evidence. Correct-profile
+debug/release rebuilds reproduce the pinned DLLs exactly; upstream source is
+unchanged. Reporting v2 now names both timing clocks explicitly and refuses to
+aggregate an incomplete probe as a completed baseline.
 
 Next change the measured residency/publication dependency, not another priority
 shuffle or timeout. A traced target is sampled, meshed, and delivered in tens of

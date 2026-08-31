@@ -24,6 +24,20 @@ import p2_production_integration_game_quality as integration_quality
 PROFILE = integration_quality.FOUR_BIOME_WORLD_PROFILE
 MODE = "runtime_baseline_gate"
 RUNTIME_BASELINE_PREFIX = "WT_RUNTIME_BASELINE_SUMMARY "
+FRAME_TIMING_CONTRACTS = {
+    "frame_time_contract": "physics_signal_intervals_not_rendered_frames",
+    "render_frame_interval_contract": (
+        "wall_time_between_frame_post_draw_signals_not_display_present"
+    ),
+}
+FRAME_TIMING_FIELDS = {
+    f"{label}_{statistic}_ms": (section, statistic)
+    for label, section in (
+        ("physics_signal_interval", "frame_time_ms"),
+        ("frame_post_draw_interval", "render_frame_interval_ms"),
+    )
+    for statistic in ("p50", "p95", "p99", "maximum")
+}
 
 
 def _git(project: pathlib.Path, *args: str) -> str:
@@ -258,6 +272,17 @@ def _number(summary: dict[str, object], *path: str) -> float:
     return float(value)
 
 
+def frame_timing_metrics(baseline: dict[str, object]) -> dict[str, float]:
+    """Keep physics catch-up timing separate from rendered-frame intervals."""
+    for key, expected in FRAME_TIMING_CONTRACTS.items():
+        if baseline.get(key) != expected:
+            raise RuntimeError(f"missing or unsupported timing contract {key!r}")
+    return {
+        label: _number(baseline, *path)
+        for label, path in FRAME_TIMING_FIELDS.items()
+    }
+
+
 def _aggregate(
     runs: list[dict[str, object]],
     executions: list[dict[str, object]],
@@ -265,15 +290,25 @@ def _aggregate(
     meshing_workers: int,
     provenance: dict[str, object],
 ) -> dict[str, object]:
+    # Incomplete probes are evidence, not completed baseline runs. In particular,
+    # MEASUREMENT_INCOMPLETE must never fall through to MEASURED_TARGET_PASS.
+    if not runs or len(runs) != len(executions):
+        raise RuntimeError("baseline aggregation requires matching nonempty runs and executions")
+    for run in runs:
+        _validate_completed_measurement(run)
+        frame_timing_metrics(run)
+    for execution in executions:
+        if execution.get("measurement_complete") is not True or execution.get(
+            "target_status"
+        ) not in {"MEASURED_TARGET_PASS", "MEASURED_TARGET_MISS"}:
+            raise RuntimeError("baseline execution is incomplete or has an unknown target status")
     fields = {
+        **FRAME_TIMING_FIELDS,
         "blocked_frames": ("movement", "blocked_frames"),
         "maximum_consecutive_blocked_frames": (
             "movement",
             "maximum_consecutive_blocked_frames",
         ),
-        "frame_p95_ms": ("frame_time_ms", "p95"),
-        "frame_p99_ms": ("frame_time_ms", "p99"),
-        "frame_maximum_ms": ("frame_time_ms", "maximum"),
         "physics_target_wait_frames": ("edit", "physics_target_wait_frames"),
         "physics_target_wait_ms": ("edit", "physics_target_wait_ms"),
         "authority_commit_frames": ("edit", "authority_commit_frames"),
@@ -402,7 +437,8 @@ def _aggregate(
         }
     )
     return {
-        "schema": "world_transvoxel_authoritative_cpu_human_baseline_v1",
+        "schema": "world_transvoxel_authoritative_cpu_human_baseline_v2",
+        "timing_contracts": FRAME_TIMING_CONTRACTS.copy(),
         "status": "MEASURED_TARGET_MISS" if target_miss else "MEASURED_TARGET_PASS",
         "correctness_status": "RETAINED_FROM_PINNED_REVIEWED_BASELINE",
         "causal_attribution_status": "UNRESOLVED_REQUIRES_REAL_TIME_PIPELINE_TRACE",

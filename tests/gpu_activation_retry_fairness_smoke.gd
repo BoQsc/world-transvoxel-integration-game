@@ -186,19 +186,24 @@ func _test_stale_seed_budget() -> bool:
 	var effect := RetireEffect.new()
 	controller._backend_terrain = backend
 	controller._effect = effect
-	for generation in range(20):
+	var stale_count := controller.RENDER_SUBMISSION_CAPACITY + 4
+	var live_generation := 100
+	for generation in range(stale_count):
 		_add_prepared_seed(controller, generation)
-	_add_prepared_seed(controller, 100)
+	_add_prepared_seed(controller, live_generation)
 	controller._drain_activation_cohort_retries()
 	var ok := backend.queries.size() == controller.RENDER_SUBMISSION_CAPACITY \
 		and effect.retired.size() == controller.RENDER_SUBMISSION_CAPACITY
 	controller._drain_activation_cohort_retries()
-	ok = ok and backend.queries.size() == 21 and backend.queries[-1] == 100 \
-		and effect.retired.size() == 20 and controller._activation_stale_seed_skips == 20 \
+	ok = ok and backend.queries.size() == stale_count + 1 \
+		and backend.queries[-1] == live_generation \
+		and effect.retired.size() == stale_count \
+		and controller._activation_stale_seed_skips == stale_count \
 		and controller._activation_retry_membership.size() == 1 \
-		and controller._activation_retry_membership.has("100")
+		and controller._activation_retry_membership.has(str(live_generation))
 	controller._drain_activation_cohort_retries()
-	ok = ok and backend.queries.size() == 22 and effect.retired.size() == 20
+	ok = ok and backend.queries.size() == stale_count + 2 \
+		and effect.retired.size() == stale_count
 	controller.free()
 	backend.free()
 	if not ok:
@@ -381,7 +386,7 @@ func _test_empty_admission_budget() -> bool:
 		controller._backend_terrain = backend
 		controller._effect = effect
 		controller._resident_capacity = 64
-		for index in range(empty_count + 8):
+		for index in range(empty_count + controller.NATIVE_SUBMISSIONS_PER_FRAME):
 			var request := _resident_request({
 				"generation": index + 1, "page_x": index,
 				"surface": "terrain", "input_stage": "pre_mesh_field",

@@ -50,7 +50,10 @@ const PRODUCTION_DEFAULT_ROAD_GRADES := [
 const APPLICATION_WAIT_FRAME_LIMIT := 180
 const APPLICATION_WAIT_RETRY_FRAMES := 3
 const RENDER_SUBMISSION_CAPACITY := 16
-const NATIVE_SUBMISSIONS_PER_FRAME := 4
+# Feed half of the bounded extraction queue per frame. This removes the
+# four-item serialization without concentrating all sixteen submissions in one
+# frame.
+const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # Initial attempts share the retry budget: many prepared members can refer to
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 1
