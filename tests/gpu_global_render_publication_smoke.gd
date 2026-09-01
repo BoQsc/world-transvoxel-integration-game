@@ -160,6 +160,13 @@ func _run() -> void:
 				!= "conservative_aabb_frustum" \
 			or str(status.get("visibility_bounds_position_space", "")) != "world" \
 			or bool(status.get("visibility_culling_near_far", true)) \
+			or not bool(status.get("per_view_visibility_context", false)) \
+			or not bool(status.get("cached_mono_terrain_push_constants", false)) \
+			or not bool(status.get("conservative_draw_bins", false)) \
+			or float(status.get("draw_bin_extent", 0.0)) != 128.0 \
+			or int(status.get("draw_bin_count", 0)) != 1 \
+			or int(status.get("bin_visibility_test_count", 0)) <= 0 \
+			or int(status.get("bin_culled_surface_count", 0)) <= 0 \
 			or int(status.get("visibility_test_count", 0)) <= 0 \
 			or int(status.get("visibility_culled_count", 0)) <= 0 \
 			or int(status.get("last_visible_surface_count", 0)) != 1 \
@@ -177,6 +184,7 @@ func _run() -> void:
 			or int(status.get("queued_request_count", -1)) != 0 \
 			or int(status.get("draw_frames", 0)) < 4 \
 			or int(status.get("indirect_draw_calls", 0)) < 4 \
+			or int(status.get("cached_terrain_push_constant_uses", 0)) < 4 \
 			or int(status.get("compact_indirect_command_records", -1)) \
 				!= int(status.get("indirect_draw_calls", 0)) \
 			or int(status.get("source_cell_indirect_records_avoided", 0)) <= 0 \

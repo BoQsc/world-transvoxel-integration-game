@@ -28,6 +28,7 @@ const REQUEST_CAPACITY := 16
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
 const DRAW_COMMAND_STRIDE := 20
+const DRAW_BIN_EXTENT := 128.0
 const REQUIRED_IDENTITY_FIELDS := [
 	"page_x", "page_y", "page_z", "lod", "generation", "source_revision",
 	"world_revision", "transition_mask", "field_mode", "sample_count", "surface",
@@ -81,6 +82,7 @@ var _close_completed := false
 var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
 var _stage_timing_usec: Dictionary = {}
 var _active_lod_inventory_dirty := false
+var _draw_bins: Array[Dictionary] = []
 var _status := {
 	"schema": RESULT_SCHEMA,
 	"initialized": false,
@@ -118,10 +120,18 @@ var _status := {
 	"visibility_culling": "conservative_aabb_frustum",
 	"visibility_bounds_position_space": "world",
 	"visibility_culling_near_far": false,
+	"per_view_visibility_context": true,
+	"cached_mono_terrain_push_constants": true,
+	"conservative_draw_bins": true,
+	"draw_bin_extent": DRAW_BIN_EXTENT,
+	"draw_bin_count": 0,
+	"bin_visibility_test_count": 0,
+	"bin_culled_surface_count": 0,
 	"visibility_test_count": 0,
 	"visibility_culled_count": 0,
 	"last_visible_surface_count": 0,
 	"last_culled_surface_count": 0,
+	"cached_terrain_push_constant_uses": 0,
 	"compact_indirect_command_records": 0,
 	"source_cell_indirect_records_avoided": 0,
 	"max_compact_command_records_per_view": 0,
@@ -1021,6 +1031,7 @@ func _finish_entry_on_render_thread(
 	entry["identity"] = Dictionary(request.get("identity", {})).duplicate(true)
 	entry["bounds_min"] = request.get("bounds_min", Vector3.ZERO)
 	entry["bounds_max"] = request.get("bounds_max", Vector3.ZERO)
+	entry["mono_push_bytes"] = _entry_push_bytes(entry, 0, 1, Vector2i.ZERO, false)
 	var activate_immediately := bool(request.get("activate_immediately", true))
 	entry["active"] = activate_immediately
 	_entries[token] = entry
@@ -1329,6 +1340,7 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 	var partial_count := 0
 	var empty_examples: Array = []
 	var partial_examples: Array = []
+	var bins := {}
 	for key_value in _active_sequence_by_key.keys():
 		var key := str(key_value)
 		var token := _entry_token(key, int(_active_sequence_by_key[key]))
@@ -1352,6 +1364,28 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 		var counts := water_counts \
 			if str(identity.get("surface", "")) == "static_water" else terrain_counts
 		counts[lod] = int(counts.get(lod, 0)) + 1
+		if not bool(entry.get("empty", false)):
+			var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
+			var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
+			var center := (minimum + maximum) * 0.5
+			var coordinate := Vector3i((center / DRAW_BIN_EXTENT).floor())
+			var bin_key := "%d:%d:%d" % [coordinate.x, coordinate.y, coordinate.z]
+			var bin: Dictionary = bins.get(bin_key, {
+				"bounds_min": minimum,
+				"bounds_max": maximum,
+				"entries": [],
+				"source_cell_count": 0,
+			})
+			bin["bounds_min"] = Vector3(bin["bounds_min"]).min(minimum)
+			bin["bounds_max"] = Vector3(bin["bounds_max"]).max(maximum)
+			var bin_entries: Array = bin["entries"]
+			bin_entries.append(entry)
+			bin["entries"] = bin_entries
+			bin["source_cell_count"] = int(bin["source_cell_count"]) + int(
+				entry.get("cell_count", 0)
+			)
+			bins[bin_key] = bin
+	_draw_bins.assign(bins.values())
 	_mutex.lock()
 	_status["active_inventory_rebuilds"] = int(_status.get("active_inventory_rebuilds", 0)) + 1
 	_status["active_terrain_lod_counts"] = terrain_counts
@@ -1360,6 +1394,7 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 	_status["active_partial_entry_count"] = partial_count
 	_status["active_empty_entry_examples"] = empty_examples
 	_status["active_partial_entry_examples"] = partial_examples
+	_status["draw_bin_count"] = _draw_bins.size()
 	_mutex.unlock()
 
 
@@ -1488,9 +1523,12 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 	var draw_calls := 0
 	var visibility_tests := 0
 	var culled_surfaces := 0
+	var bin_visibility_tests := 0
+	var bin_culled_surfaces := 0
 	var visible_surfaces := 0
 	var compact_command_records := 0
 	var source_records_avoided := 0
+	var cached_push_uses := 0
 	var maximum_commands_per_view := 0
 	var maximum_records_avoided_per_view := 0
 	var last_tested_bounds_min := Vector3.ZERO
@@ -1547,31 +1585,38 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		var production_entries: Array[Dictionary] = []
 		var diagnostic_entries: Array[Dictionary] = []
 		var water_entries: Array[Dictionary] = []
-		for entry_value in _entries.values():
-			var entry: Dictionary = entry_value
-			if not bool(entry.get("active", false)) \
-					or bool(entry.get("empty", false)):
+		var visibility_context := _visibility_context_for_view(scene_data, view)
+		for bin_value in _draw_bins:
+			var bin: Dictionary = bin_value
+			var bin_entries: Array = bin.get("entries", [])
+			bin_visibility_tests += 1
+			if not _entry_visible_for_context(bin, visibility_context):
+				culled_surfaces += bin_entries.size()
+				bin_culled_surfaces += bin_entries.size()
+				view_records_avoided += int(bin.get("source_cell_count", 0))
 				continue
-			visibility_tests += 1
-			var source_cell_count := int(entry.get("cell_count", 0))
-			last_tested_bounds_min = entry.get("bounds_min", Vector3.ZERO)
-			last_tested_bounds_max = entry.get("bounds_max", Vector3.ZERO)
-			if not _entry_visible_for_view(entry, scene_data, view):
-				culled_surfaces += 1
-				view_records_avoided += source_cell_count
-				continue
-			visible_surfaces += 1
-			var surface := str(Dictionary(
-				entry.get("identity", {})
-			).get("surface", ""))
-			if surface == "terrain" and production_ready:
-				production_entries.append(entry)
-			elif surface == "static_water" and water_ready:
-				water_entries.append(entry)
-			else:
-				diagnostic_entries.append(entry)
-			view_command_records += 1
-			view_records_avoided += maxi(0, source_cell_count - 1)
+			for entry_value in bin_entries:
+				var entry: Dictionary = entry_value
+				visibility_tests += 1
+				var source_cell_count := int(entry.get("cell_count", 0))
+				last_tested_bounds_min = entry.get("bounds_min", Vector3.ZERO)
+				last_tested_bounds_max = entry.get("bounds_max", Vector3.ZERO)
+				if not _entry_visible_for_context(entry, visibility_context):
+					culled_surfaces += 1
+					view_records_avoided += source_cell_count
+					continue
+				visible_surfaces += 1
+				var surface := str(Dictionary(
+					entry.get("identity", {})
+				).get("surface", ""))
+				if surface == "terrain" and production_ready:
+					production_entries.append(entry)
+				elif surface == "static_water" and water_ready:
+					water_entries.append(entry)
+				else:
+					diagnostic_entries.append(entry)
+				view_command_records += 1
+				view_records_avoided += maxi(0, source_cell_count - 1)
 		var draw_list := _rendering_device.draw_list_begin(framebuffer)
 		if not production_entries.is_empty():
 			_rendering_device.draw_list_bind_render_pipeline(
@@ -1584,19 +1629,25 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				draw_list, _production_material_set, 1
 			)
 			for entry in production_entries:
+				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
+					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
+				cached_push_uses += 1 if view_count == 1 else 0
 				_draw_entry_on_render_thread(
 					draw_list,
 					entry,
-					_entry_push_bytes(entry, view, view_count, size, false)
+					push_bytes
 				)
 		if not diagnostic_entries.is_empty():
 			_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
 			_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
 			for entry in diagnostic_entries:
+				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
+					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
+				cached_push_uses += 1 if view_count == 1 else 0
 				_draw_entry_on_render_thread(
 					draw_list,
 					entry,
-					_entry_push_bytes(entry, view, view_count, size, false)
+					push_bytes
 				)
 		_rendering_device.draw_list_end()
 		if not water_entries.is_empty():
@@ -1658,8 +1709,17 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 	_status["visibility_culled_count"] = int(
 		_status["visibility_culled_count"]
 	) + culled_surfaces
+	_status["bin_visibility_test_count"] = int(
+		_status["bin_visibility_test_count"]
+	) + bin_visibility_tests
+	_status["bin_culled_surface_count"] = int(
+		_status["bin_culled_surface_count"]
+	) + bin_culled_surfaces
 	_status["last_visible_surface_count"] = visible_surfaces
 	_status["last_culled_surface_count"] = culled_surfaces
+	_status["cached_terrain_push_constant_uses"] = int(
+		_status["cached_terrain_push_constant_uses"]
+	) + cached_push_uses
 	var camera_transform := scene_data.get_cam_transform()
 	_status["last_camera_origin"] = camera_transform.origin
 	_status["last_camera_basis_z"] = camera_transform.basis.z
@@ -2140,18 +2200,31 @@ static func _bounds_are_valid(minimum: Vector3, maximum: Vector3) -> bool:
 static func _entry_visible_for_view(
 	entry: Dictionary, scene_data: RenderSceneData, view: int
 ) -> bool:
-	var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
-	var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
-	if not _bounds_are_valid(minimum, maximum):
-		return true
+	return _entry_visible_for_context(entry, _visibility_context_for_view(scene_data, view))
+
+
+static func _visibility_context_for_view(
+	scene_data: RenderSceneData, view: int
+) -> Dictionary:
 	var camera_transform := scene_data.get_cam_transform()
 	var eye_offset := scene_data.get_view_eye_offset(view)
 	var eye_transform := Transform3D(
 		camera_transform.basis,
 		camera_transform.origin + camera_transform.basis * eye_offset
 	)
-	var world_to_view := eye_transform.affine_inverse()
-	var projection := scene_data.get_view_projection(view)
+	return {
+		"world_to_view": eye_transform.affine_inverse(),
+		"projection": scene_data.get_view_projection(view),
+	}
+
+
+static func _entry_visible_for_context(entry: Dictionary, context: Dictionary) -> bool:
+	var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
+	var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
+	if not _bounds_are_valid(minimum, maximum):
+		return true
+	var world_to_view: Transform3D = context.get("world_to_view", Transform3D.IDENTITY)
+	var projection: Projection = context.get("projection", Projection())
 	var behind := 0
 	var left := 0
 	var right := 0

@@ -11,6 +11,15 @@ backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
 
+The [render-thread spatial checkpoint](evidence/tqp64_gpu_render_thread_spatial_20260901/RESULT.md)
+caches per-view state and mono terrain push constants and adds conservative draw
+bins. A randomized enclosing-bound oracle passes 26,480 checks; Vulkan and D3D12
+lifecycle smokes pass. Observed render callback time falls from 4.188 to 3.026 ms,
+but the clean route still has 485 blocked steps, post-draw p95/p99 51.329/84.498
+ms, and no edit target after 3.006 seconds. This reduces internal work but does
+not qualify GPU gameplay. A seven-chunk cursor-priority route also fails and
+remains opt-in.
+
 The [publication-lifecycle checkpoint](evidence/tqp64_gpu_publication_lifecycle_20260831/RESULT.md)
 pins upstream `18a892f`. It distinguishes obsolete GPU requests from genuinely
 pending frontend records, excludes collision-only records from visual coverage,

@@ -186,11 +186,27 @@ func get_foreground_priority_targets() -> Dictionary:
 	query.collide_with_bodies = true
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var focus_points := _interaction_priority_points(origin, direction, interaction_distance)
 	return {
 		"support_points": [global_position, global_position + Vector3.DOWN * 2.0],
-		"focus_valid": not hit.is_empty(),
+		"focus_valid": not focus_points.is_empty(),
 		"focus_point": hit.get("position", end),
+		"focus_points": focus_points,
 	}
+
+
+static func _interaction_priority_points(
+	origin: Vector3, direction: Vector3, distance: float
+) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	if not origin.is_finite() or not direction.is_finite() or not is_finite(distance) \
+			or distance <= 0.0 or distance > 96.0 or direction.is_zero_approx():
+		return points
+	var forward := direction.normalized()
+	var segments := ceili(distance / 8.0)
+	for index in range(segments + 1):
+		points.append(origin + forward * minf(float(index) * 8.0, distance))
+	return points
 
 
 func autonomous_look_at(target: Vector3) -> bool:

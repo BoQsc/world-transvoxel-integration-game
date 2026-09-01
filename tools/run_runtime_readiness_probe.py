@@ -24,6 +24,14 @@ def main() -> int:
     parser.add_argument("--gpu-stage-timing", action="store_true")
     parser.add_argument("--gpu-interaction-collision-demand", action="store_true")
     parser.add_argument(
+        "--foreground-priority", choices=("auto", "enabled", "disabled"),
+        default="auto",
+    )
+    parser.add_argument(
+        "--foreground-priority-focus-settle-frames", type=int, default=0,
+        choices=range(0, 61), metavar="0..60",
+    )
+    parser.add_argument(
         "--godot", type=pathlib.Path,
         default=pathlib.Path(
             r"C:\Program Files (x86)\Steam\steamapps\common\Godot Engine"
@@ -59,6 +67,13 @@ def main() -> int:
             extra.append("--gpu-stage-timing")
         if args.gpu_interaction_collision_demand:
             extra.append("--gpu-interaction-collision-demand")
+        if args.foreground_priority != "auto":
+            extra.extend(["--foreground-priority", args.foreground_priority])
+        if args.foreground_priority_focus_settle_frames > 0:
+            extra.extend([
+                "--foreground-priority-focus-settle-frames",
+                str(args.foreground_priority_focus_settle_frames),
+            ])
         if not args.no_probe:
             extra.append("--runtime-readiness-probe")
         if args.publication_probe:

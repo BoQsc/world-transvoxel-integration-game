@@ -1,0 +1,149 @@
+{
+  "schema": "world_transvoxel.gpu_render_thread_spatial_evidence.v1",
+  "status": "RENDER_THREAD_WORK_REDUCED_GPU_GAMEPLAY_REJECTED",
+  "recorded_date": "2026-09-01",
+  "parent_commit": "e1d34e6b129ceb84ce8f2824879b92429199e100",
+  "authority_commit": "18a892f02344481c73698c6a131da00e429a3fa4",
+  "environment": {
+    "godot": "4.7.2.stable.steam.ed1daf0bf",
+    "affinity": [
+      0,
+      1,
+      2
+    ],
+    "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design"
+  },
+  "checks": {
+    "draw_bin_oracle": "PASS_26480",
+    "production_lifecycle": "PASS_VULKAN_D3D12",
+    "default_gameplay": "FAIL",
+    "cursor_priority_experiment": "FAIL_DEFAULT_OFF"
+  },
+  "source_files": [
+    {
+      "path": "addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render_effect.gd",
+      "lf_sha256": "03946b3ff7127ff54cdb4a77d87b1da5aa338a65bfa4c3e1eb0ea75830991a87"
+    },
+    {
+      "path": "addons/world_transvoxel_gameworld/wt_game_world_node.gd",
+      "lf_sha256": "884ae40ae545c6cb7d06c0aec60662bc4a1037adf739aca6f232210cb7be6c11"
+    },
+    {
+      "path": "scripts/wt_production_player.gd",
+      "lf_sha256": "79004791672f982ff90c8ab2886891dacd218e60387a6051ad6a0cac9f81c12e"
+    },
+    {
+      "path": "tests/gpu_global_render_publication_smoke.gd",
+      "lf_sha256": "df2dcaf36387d3f164252fea68f1e5d76a83dff6948fcb0314c4fc8e58f6cd21"
+    },
+    {
+      "path": "tests/gpu_draw_bin_conservative_smoke.gd",
+      "lf_sha256": "1f681768c7dba597f3f76c4b3d2d491525676e1b6419d535811205112a921c69"
+    },
+    {
+      "path": "tests/interaction_collision_demand_smoke.gd",
+      "lf_sha256": "ea2b6855dda2ccfd3889710d0b9784bc2ca063b70960173ccf91802ca8fcf8d8"
+    },
+    {
+      "path": "tools/run_runtime_readiness_probe.py",
+      "lf_sha256": "d2bde405f77a1e0a825e371a23c07b96d6341c3f97eff509e040a7f3d26048f5"
+    }
+  ],
+  "archive": {
+    "path": "retained_evidence.zip",
+    "bytes": 98146,
+    "sha256": "ebc844afd0f789eab0534e07a237813b63b2986467ed034e10998c1c62f7bcd0",
+    "entries": [
+      {
+        "path": ".godot/gpu_render_thread_cache_20260901.json",
+        "bytes": 65984,
+        "sha256": "46c5f694535e810b07172a20559366bff4b44324b557ea1b27b20ac3bd72f84b"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_render_thread_cache_20260901/gpu_01.stderr.log",
+        "bytes": 38894,
+        "sha256": "a42204eeb2012e897888f2bf2da2bfb50a2d7ba203373bf93ac75d18399b19ca"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_render_thread_cache_20260901/gpu_01.stdout.log",
+        "bytes": 40888,
+        "sha256": "ceec481f79eb188444f8ef008cecd211707341da0f0ddc797de3c05e543ca07d"
+      },
+      {
+        "path": ".godot/gpu_draw_bins_20260901.json",
+        "bytes": 67223,
+        "sha256": "2f18a47474df116a675736f7a8a273044a4781641b0ae155d9ba53c6d2120e84"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_20260901/gpu_01.stderr.log",
+        "bytes": 39616,
+        "sha256": "5e6973ccc353d9497ebc260a21c7a13db06bf6d0a073e9a7cdaaf5a9853bca2a"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_20260901/gpu_01.stdout.log",
+        "bytes": 41610,
+        "sha256": "9444f49a50d2ac1455ae1747cbdda64c579f5345bd7f47e06959dbdde586d4ba"
+      },
+      {
+        "path": ".godot/gpu_draw_bins_default_clean_20260901.json",
+        "bytes": 62574,
+        "sha256": "37f699dfc6e2abecc9e779cfc4bd14709cce41a54a9e3c36b457e364ebaf1b74"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_default_clean_20260901/gpu_01.stderr.log",
+        "bytes": 37272,
+        "sha256": "e9b90e752f95daabed2d9b386c35008f0312fb3320e02e89389f54690cad2980"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_default_clean_20260901/gpu_01.stdout.log",
+        "bytes": 39141,
+        "sha256": "dc44f105b94f5f19dfc40659101149344f776d9fbbb64d99775f28b92c40b68e"
+      },
+      {
+        "path": ".godot/gpu_draw_bins_foreground_ray_20260901.json",
+        "bytes": 62704,
+        "sha256": "14b064311f2ec913574cfaf6bf0ef6b9985375e822e2f13a952648fc54b4620f"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_foreground_ray_20260901/gpu_01.stderr.log",
+        "bytes": 37285,
+        "sha256": "3858560ec97a70176ed78d86e404f02bb3b446ee1c8673e091fed4c6f49554fb"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_foreground_ray_20260901/gpu_01.stdout.log",
+        "bytes": 39154,
+        "sha256": "9b3da78b2532e93992af991af6798984a01f965f5a1b9f131d66c7ae36d9e098"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_render_context_smoke.log",
+        "bytes": 456,
+        "sha256": "8e45563d6975c07fac2a04a1b9c7b1a36a5c2eda16b36dc10c236ddb648a73be"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bins_smoke.log",
+        "bytes": 456,
+        "sha256": "8e45563d6975c07fac2a04a1b9c7b1a36a5c2eda16b36dc10c236ddb648a73be"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_cursor_priority_smoke.log",
+        "bytes": 189,
+        "sha256": "3b1c264eb4992379e06f4d54fd8b52b52748c1f14c897305ef470242af28cb88"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_draw_bin_conservative_smoke.log",
+        "bytes": 128,
+        "sha256": "e032f9a0100e9b7faac8901fa0a91f01035350d627d9369e1015ae2d6111cca7"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_resident_production_lifecycle/d3d12.log",
+        "bytes": 797,
+        "sha256": "889aeffddc6fde3385b865850d40a7263cf5de60f13689fa48b1c97c0f106d94"
+      },
+      {
+        "path": ".godot/world_transvoxel_captures/gpu_resident_production_lifecycle/vulkan.log",
+        "bytes": 801,
+        "sha256": "543fd380d78d12284855f854e0e3009ab47a0075191fa406c29e3656668c3fe8"
+      }
+    ]
+  }
+}

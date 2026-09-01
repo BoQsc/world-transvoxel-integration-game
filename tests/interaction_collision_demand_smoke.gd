@@ -48,6 +48,14 @@ func _run() -> void:
 	root.add_child(world)
 	root.add_child(scene)
 	root.add_child(player)
+	var priority_points: Array = player.call(
+		"_interaction_priority_points", Vector3(560, 75.6, 560), Vector3.DOWN, 96.0
+	)
+	var priority_keys: Array = world.call("_foreground_chunk_keys", priority_points)
+	if priority_points.size() != 13 or priority_keys.size() != 7 \
+			or priority_keys.front() != Vector3i(35, 4, 35) \
+			or priority_keys.back() != Vector3i(35, -2, 35):
+		return _fail("cursor priority did not cover the bounded interaction ray")
 	world.set("_reference_scene", scene)
 	world.set("_player", player)
 	if world.player_interaction_collision_invoker_enabled or \
@@ -74,7 +82,7 @@ func _run() -> void:
 	world.queue_free()
 	scene.queue_free()
 	await process_frame
-	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=2 coalesced=1 retired=1 gpu_cpu_visual_scan=0" % checks)
+	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=2 coalesced=1 retired=1 priority_ray=7 gpu_cpu_visual_scan=0" % checks)
 	quit(0)
 
 func _fail(message: String) -> void:
