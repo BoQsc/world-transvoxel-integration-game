@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bqjsi2ukysgd3"
-path="res://.godot/imported/snow_albedo_1.png-b469ce251e22449834833f8903cc3f89.ctex"
+path="res://.godot/imported/snow_albedo_1.png-c2d567aa274b8899982c309a5c556172.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/terrain_textures/material_layers/snow_albedo_1.png"
-dest_files=["res://.godot/imported/snow_albedo_1.png-b469ce251e22449834833f8903cc3f89.ctex"]
+source_file="res://assets/terrain_textures/material_layers/alternative/snow_albedo_1.png"
+dest_files=["res://.godot/imported/snow_albedo_1.png-c2d567aa274b8899982c309a5c556172.ctex"]
 
 [params]
 
