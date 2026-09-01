@@ -21,8 +21,7 @@ Preferred albedo names:
 
 Supported extensions are `.png`, `.jpg`, `.jpeg`, and `.webp`.
 
-The existing `coast_sand_01_diff_1k.jpg` is accepted as the sand layer until a
-standard `material_layers/sand_albedo.*` file is supplied.
+The sand layer is now `material_layers/sand_albedo.png`.
 
 Albedo-only textures are acceptable for this stage. Normal/roughness authored
 slots are intentionally deferred until the albedo biome/material behavior is

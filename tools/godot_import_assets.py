@@ -24,7 +24,7 @@ WINDOWS_STEAM_GODOT = pathlib.Path(
 )
 
 REQUIRED_TEXTURE_IMPORTS = {
-    "assets/terrain_textures/coast_sand_01_diff_1k.jpg.import": {
+    "assets/terrain_textures/material_layers/sand_albedo.png.import": {
         "mipmaps/generate": "true",
         "compress/normal_map": "0",
     },
