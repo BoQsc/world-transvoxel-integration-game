@@ -146,6 +146,9 @@ func _initialize() -> void:
 		_fail(probe, "cancelled retry was retained")
 		return
 	probe.free()
+	if not _test_collision_activation_lane():
+		quit(1)
+		return
 	if not _test_initial_activation_budget():
 		quit(1)
 		return
@@ -176,8 +179,36 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
 	quit(0)
+
+
+func _test_collision_activation_lane() -> bool:
+	var probe := RetryProbe.new()
+	for index in range(4):
+		var key := "normal_%d" % index
+		probe._groups[key] = {"native_prepared": true}
+		probe._queue_activation_cohort_retry(key)
+	for index in range(3):
+		var key := "collision_%d" % index
+		probe._groups[key] = {
+			"native_prepared": true,
+			"collision_activation_priority": true,
+		}
+		probe._queue_activation_cohort_retry(key)
+	for _frame in range(5):
+		probe._drain_activation_cohort_retries()
+	var expected := [
+		"collision_0", "collision_1", "collision_2", "normal_0", "collision_0",
+	]
+	var ok := probe.visited == expected \
+		and probe._activation_collision_retry_queue.size() == 3 \
+		and probe._activation_retry_queue.size() == 4 \
+		and probe._activation_retry_membership.size() == 7
+	probe.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: collision activation lane was not weighted-fair")
+	return ok
 
 
 func _test_stale_seed_budget() -> bool:
@@ -349,7 +380,7 @@ func _test_retiring_admission_rejected() -> bool:
 
 func _resident_request(identity: Dictionary) -> Dictionary:
 	return {
-		"schema": "world_transvoxel.gpu_resident_render_request.v6",
+		"schema": "world_transvoxel.gpu_resident_render_request.v7",
 		"status": "PASS",
 		"position_space": "world",
 		"input_stage": "pre_mesh_field",
@@ -393,6 +424,9 @@ func _test_empty_admission_budget() -> bool:
 			})
 			request["request_id"] = index + 1
 			request["proven_empty"] = index < empty_count
+			if bool(request["proven_empty"]):
+				request["gpu_input_buffers"] = []
+				request["packed_byte_count"] = 0
 			backend.pending.append(request)
 		controller._submit_native_captures()
 		var expected := controller.NATIVE_SUBMISSIONS_PER_FRAME

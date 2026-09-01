@@ -92,7 +92,12 @@ func _run() -> void:
 			_fail("initial CPU reference chunk did not settle")
 			return
 	elif not await _wait_for_active_chunk(1, 1):
-		_fail("initial CPU visual was not replaced by a resident GPU chunk")
+		_fail(
+			"initial CPU visual was not replaced by a resident GPU chunk: %s idle=%s" % [
+				str(_world.get_gpu_resident_render_status()),
+				str(_world.get_cold_idle_summary()),
+			]
+		)
 		return
 	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
 	var initial_activated := int(initial_status.get("activated_chunks", 0))
@@ -192,7 +197,10 @@ func _run() -> void:
 		return
 	if terrain_only_image == null or terrain_only_image.is_empty() \
 			or _image_sha256(terrain_only_image) == _image_sha256(image):
-		_fail("bounded static-water response did not alter the inspected viewport")
+		_fail(
+			"bounded static-water response did not alter the inspected viewport: %s" \
+				% str(_world.get_gpu_resident_render_status())
+		)
 		return
 	if _cpu_reference:
 		if not _world.stop_backend_world() or not await _wait_for_state("stopped"):

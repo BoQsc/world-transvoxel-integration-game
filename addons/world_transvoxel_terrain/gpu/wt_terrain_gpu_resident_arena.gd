@@ -810,8 +810,8 @@ func _push_constant_bytes(
 	bounds_max: Vector3
 ) -> PackedByteArray:
 	var values := PackedInt32Array([
-		int(slot_index * int(strides[0]) / 16),
-		int(slot_index * int(strides[1]) / 16),
+		int(slot_index * int(strides[0]) / 4),
+		int(slot_index * int(strides[1]) / 4),
 		int(slot_index * int(strides[2]) / 16),
 		int(slot_index * int(strides[3]) / 16),
 		int(slot_index * int(strides[4]) / 16),

@@ -330,7 +330,9 @@ func submit_native_packed_input(
 	if not identity_error.is_empty():
 		_record_rejection(identity_error)
 		return 0
-	if input_buffers.size() != 13 or cell_count <= 0:
+	if cell_count <= 0 or (not proven_empty and input_buffers.size() != 13) \
+			or (proven_empty and not input_buffers.is_empty() \
+				and input_buffers.size() != 13):
 		_record_rejection("native GPU input buffer inventory is invalid")
 		return 0
 	if not _bounds_are_valid(bounds_min, bounds_max):

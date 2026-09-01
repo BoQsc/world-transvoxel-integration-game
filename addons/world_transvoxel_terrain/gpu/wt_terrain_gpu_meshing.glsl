@@ -14,10 +14,10 @@ layout(push_constant, std430) uniform ArenaOffsets {
 } arena;
 
 layout(set = 0, binding = 0, std430) readonly buffer FieldValues {
-	vec4 values[];
+	float values[];
 } field_values;
 layout(set = 0, binding = 1, std430) readonly buffer FieldMeta {
-	ivec4 values[];
+	int values[];
 } field_meta;
 layout(set = 0, binding = 2, std430) readonly buffer CellHeaders {
 	ivec4 values[];
@@ -101,6 +101,39 @@ const int CHUNK_EDGE_COUNT = 3 * AXIS_EDGE_COUNT;
 const float POSITION_SNAP_SCALE = 65536.0;
 const float NO_STATIC_WATER_DENSITY = 3.0e38;
 const int STATIC_WATER_MATERIAL = 9;
+
+vec4 field_sample_at(int sample_index, bool page_field_mode) {
+	int base = arena.input_a.x;
+	if (!page_field_mode) {
+		base += sample_index * 4;
+		return vec4(
+			field_values.values[base],
+			field_values.values[base + 1],
+			field_values.values[base + 2],
+			field_values.values[base + 3]
+		);
+	}
+	int page_sample_count = config.values[arena.input_b.z].z * PAGE_SAMPLE_COUNT;
+	if (sample_index < page_sample_count) {
+		base += sample_index * 2;
+		return vec4(
+			field_values.values[base], field_values.values[base + 1], 0.0, 0.0
+		);
+	}
+	base += page_sample_count * 2 + (sample_index - page_sample_count) * 4;
+	return vec4(
+		field_values.values[base],
+		field_values.values[base + 1],
+		field_values.values[base + 2],
+		field_values.values[base + 3]
+	);
+}
+
+ivec2 field_material_at(int sample_index, bool page_field_mode) {
+	int stride = page_field_mode ? 2 : 4;
+	int base = arena.input_a.y + sample_index * stride;
+	return ivec2(field_meta.values[base], field_meta.values[base + 1]);
+}
 
 vec3 normalized_or_zero(vec3 value) {
 	float squared_length = dot(value, value);
@@ -366,10 +399,8 @@ bool page_source_sample(ivec3 point, out vec2 densities, out ivec2 material) {
 		ivec3 local = coordinate - ivec3(sample_minimum);
 		int sample_index = int(round(page_options.x)) +
 			(local.z * PAGE_DIMENSION + local.y) * PAGE_DIMENSION + local.x;
-		vec4 packed_density = field_values.values[arena.input_a.x + sample_index];
-		ivec4 packed_material = field_meta.values[arena.input_a.y + sample_index];
-		densities = packed_density.xy;
-		material = packed_material.xy;
+		densities = field_sample_at(sample_index, true).xy;
+		material = field_material_at(sample_index, true);
 		selected_spacing = spacing;
 		found = true;
 	}
@@ -570,10 +601,10 @@ bool page_surface_shift_record(
 	unit_offset = sample_references.values[reference + 1];
 	int sample_a_index = sample_references.values[reference + 2];
 	int sample_b_index = sample_references.values[reference + 3];
-	sample_a = field_values.values[arena.input_a.x + sample_a_index];
-	sample_b = field_values.values[arena.input_a.x + sample_b_index];
-	material_a = field_meta.values[arena.input_a.y + sample_a_index].xy;
-	material_b = field_meta.values[arena.input_a.y + sample_b_index].xy;
+	sample_a = field_sample_at(sample_a_index, true);
+	sample_b = field_sample_at(sample_b_index, true);
+	material_a = field_material_at(sample_a_index, true);
+	material_b = field_material_at(sample_b_index, true);
 	return true;
 }
 
@@ -869,8 +900,8 @@ void main() {
 			int source_index = sample_references.values[
 				arena.input_b.y + reference_offset + index
 			];
-			samples[index] = field_values.values[arena.input_a.x + source_index];
-			materials[index] = field_meta.values[arena.input_a.y + source_index].xy;
+			samples[index] = field_sample_at(source_index, false);
+			materials[index] = field_material_at(source_index, false);
 		}
 	}
 

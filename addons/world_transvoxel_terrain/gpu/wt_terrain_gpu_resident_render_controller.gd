@@ -57,6 +57,7 @@ const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # Initial attempts share the retry budget: many prepared members can refer to
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 1
+const COLLISION_ACTIVATION_RETRY_BURST := 3
 const LIFECYCLE_HISTORY_CAPACITY := 512
 
 var _backend_terrain: Node
@@ -70,8 +71,10 @@ var _render_request_routes: Dictionary = {}
 var _entry_routes: Dictionary = {}
 var _prepared_group_routes: Dictionary = {}
 var _activation_cohorts: Dictionary = {}
+var _activation_collision_retry_queue: Array[String] = []
 var _activation_retry_queue: Array[String] = []
 var _activation_retry_membership: Dictionary = {}
+var _activation_collision_retry_streak := 0
 var _running := false
 var _native_request_capacity := 16
 var _resident_capacity := 64
@@ -170,8 +173,10 @@ func start(
 	_entry_routes.clear()
 	_prepared_group_routes.clear()
 	_activation_cohorts.clear()
+	_activation_collision_retry_queue.clear()
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
+	_activation_collision_retry_streak = 0
 	_unrouted_effect_events = 0
 	_unrouted_effect_event_examples.clear()
 	_running = true
@@ -198,8 +203,10 @@ func stop() -> void:
 	_entry_routes.clear()
 	_prepared_group_routes.clear()
 	_activation_cohorts.clear()
+	_activation_collision_retry_queue.clear()
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
+	_activation_collision_retry_streak = 0
 	_backend_terrain = null
 	_world_environment = null
 	_directional_light = null
@@ -349,6 +356,9 @@ func get_status() -> Dictionary:
 		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
 		"activation_stale_seed_skips": _activation_stale_seed_skips,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
+		"pending_collision_activation_retry_groups": (
+			_activation_collision_retry_queue.size()
+		),
 		"last_activation_cohort_wait": _last_activation_cohort_wait.duplicate(true),
 		"last_activation_wait_age_frames": _process_frame - _last_activation_cohort_wait_frame \
 			if _last_activation_cohort_wait_frame >= 0 else -1,
@@ -1000,6 +1010,9 @@ func _try_validate_group(group_key: String) -> void:
 		)))
 		return
 	group["native_prepared"] = true
+	group["collision_activation_priority"] = bool(readiness.get(
+		"collision_required", false
+	))
 	_groups[group_key] = group
 	_prepared_group_routes[_activation_chunk_key(Dictionary(
 		terrain_request.get("identity", {})
@@ -1395,17 +1408,35 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 	if group_key.is_empty() or _activation_retry_membership.has(group_key):
 		return
 	_activation_retry_membership[group_key] = true
-	_activation_retry_queue.append(group_key)
+	var group: Dictionary = _groups.get(group_key, {})
+	if bool(group.get("collision_activation_priority", false)):
+		_activation_collision_retry_queue.append(group_key)
+	else:
+		_activation_retry_queue.append(group_key)
 
 
 func _drain_activation_cohort_retries() -> void:
 	var attempts := 0
 	var inspected := 0
-	var inspection_limit := mini(_activation_retry_queue.size(), RENDER_SUBMISSION_CAPACITY)
-	# Retried groups join the tail behind every group that has not had a turn.
+	var pending_count := (
+		_activation_collision_retry_queue.size() + _activation_retry_queue.size()
+	)
+	var inspection_limit := mini(pending_count, RENDER_SUBMISSION_CAPACITY)
+	# Collision-bearing groups get a bounded first lane. Each retry returns to
+	# that lane's tail, and one normal retry follows every collision burst so
+	# gameplay locality cannot starve the rest of the visual frontier.
 	while attempts < ACTIVATION_COHORT_RETRY_CAPACITY and inspected < inspection_limit \
-			and not _activation_retry_queue.is_empty():
-		var group_key := _activation_retry_queue.pop_front()
+			and (not _activation_collision_retry_queue.is_empty() \
+				or not _activation_retry_queue.is_empty()):
+		var use_collision_lane := not _activation_collision_retry_queue.is_empty() \
+			and (_activation_retry_queue.is_empty() \
+				or _activation_collision_retry_streak < COLLISION_ACTIVATION_RETRY_BURST)
+		var group_key := _activation_collision_retry_queue.pop_front() \
+			if use_collision_lane else _activation_retry_queue.pop_front()
+		if use_collision_lane:
+			_activation_collision_retry_streak += 1
+		else:
+			_activation_collision_retry_streak = 0
 		inspected += 1
 		if not _activation_retry_membership.has(group_key):
 			continue
@@ -1882,6 +1913,7 @@ func _fail_closed(error: String) -> void:
 func _reject_native_request(request: Dictionary, error: String) -> void:
 	if request.is_empty() or _backend_terrain == null:
 		return
+	_last_error = error
 	_backend_terrain.call(
 		"reject_gpu_resident_render_request",
 		int(request.get("request_id", 0)),
@@ -2068,7 +2100,7 @@ static func _required_surfaces(group: Dictionary) -> Array[String]:
 
 static func _validate_native_request(request: Dictionary) -> String:
 	if str(request.get("schema", "")) \
-			!= "world_transvoxel.gpu_resident_render_request.v6" \
+			!= "world_transvoxel.gpu_resident_render_request.v7" \
 			or str(request.get("status", "")) != "PASS":
 		return "native GPU resident request contract failed"
 	if str(request.get("position_space", "")) != "world":
@@ -2093,7 +2125,11 @@ static func _validate_native_request(request: Dictionary) -> String:
 			or bool(request.get("fallback_used", true)):
 		return "native GPU resident request changed publication authority"
 	var input_buffers := Array(request.get("gpu_input_buffers", []))
-	if input_buffers.size() != 13 or int(request.get("cell_count", 0)) <= 0 \
+	var proven_empty := bool(request.get("proven_empty", false))
+	if (not proven_empty and input_buffers.size() != 13) \
+			or (proven_empty and not input_buffers.is_empty() \
+				and input_buffers.size() != 13) \
+			or int(request.get("cell_count", 0)) <= 0 \
 			or int(request.get("page_count", 0)) <= 0:
 		return "native GPU resident input inventory is invalid"
 	var actual_bytes := 0
