@@ -1,6 +1,6 @@
 # Terrain Dependency Boundary
 
-## Current Accepted Runtime
+## Current Pinned Runtime
 
 The production integration game currently uses this dependency chain:
 
@@ -8,13 +8,18 @@ The production integration game currently uses this dependency chain:
 world-transvoxel-integration-game
   -> world_transvoxel_gameworld
   -> integration-owned world_transvoxel_terrain compatibility snapshot
-  -> pinned binary world_transvoxel runtime at a3a2b1727822b8b6adf00975ed9d08c461d20873
+  -> pinned binary world_transvoxel runtime (WORLD_TRANSVOXEL_RUNTIME_PIN.json)
 ```
 
 `world-transvoxel` remains the sole native density, material, meshing,
 publication, storage, and collision authority. This repository carries its
 pinned runtime binary and public metadata, but no native C++ implementation and
 no fallback terrain implementation.
+
+The pin is the current build identity, not GPU release acceptance. CPU remains
+the default backend; the GPU candidate's qualification status is recorded in
+`GPU_ARCHITECTURE_DECISION.md`. Historical revisions below explain the original
+compatibility boundary rather than naming the current binary.
 
 The production `WtGameWorld` path instantiates
 `runtime/wt_terrain_runtime_scene.tscn`. Terrain debug/reference scenes remain

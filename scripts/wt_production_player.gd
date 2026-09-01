@@ -567,6 +567,17 @@ func _submit_interaction(mode_name: StringName) -> bool:
 
 
 func _render_mesh_interaction_target(origin: Vector3, direction: Vector3, max_distance: float) -> Dictionary:
+	if game_world != null and bool(game_world.get("runtime_gpu_resident_render_candidate_enabled")):
+		return {
+			"ray_hit": false,
+			"render_mesh_hit": false,
+			"target_source": "none",
+			"reason": "raycast_miss_gpu_collision_pending",
+			"position": origin + direction * max_distance,
+			"collider": "",
+			"fallback_instances_scanned": 0,
+			"fallback_triangles_scanned": 0,
+		}
 	if not render_mesh_fallback_target_enabled:
 		return {
 			"ray_hit": false,

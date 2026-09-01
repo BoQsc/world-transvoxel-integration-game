@@ -1,6 +1,6 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_COLLISION_LOCALITY_FIXED_GPU_QUALIFICATION_REJECTED`
+Status: `TQP64_GPU_PUBLICATION_LIFECYCLE_FIXED_GPU_GAMEPLAY_REJECTED`
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
@@ -10,6 +10,35 @@ replace the authoritative CPU implementation or qualify a production GPU
 backend. TQP-64 is now active.
 
 ## Current Checkpoint: 2026-08-31
+
+The [publication-lifecycle checkpoint](evidence/tqp64_gpu_publication_lifecycle_20260831/RESULT.md)
+pins upstream `18a892f`. It distinguishes obsolete GPU requests from genuinely
+pending frontend records, excludes collision-only records from visual coverage,
+and preserves collision-only topology repairs after visual demotion. The latter
+two defects are reproduced in an isolated rendered relocation; three Vulkan and
+three D3D12 repetitions now drain with correct candidate ownership. Native
+application, coverage, and streaming regressions pass in debug/release.
+
+GPU interaction does not scan CPU visual triangle arrays. Targeted CPU physics
+remains authoritative. A full-ray collision-demand experiment failed to help and
+worsened frame-time tails; it is off by default and requires an explicit diagnostic
+flag. The default CPU backend and all publication/safety guards are preserved.
+
+The final default GPU gameplay run is still rejected: 478/1,020 blocked steps,
+longest block 100, post-draw p95/p99 44.868/77.785 ms, and no first-edit physics
+target after 180 frames / 3.018 seconds. There are no GPU request rejections or
+application-wait expirations in that run. These single incomplete runs do not
+establish a matched-workload speedup, power qualification, or GPU completion.
+Remaining work is the measured publication-to-player-support and first-target
+latency, not another timeout extension or broad collision-demand expansion.
+
+The moving-LOD run now passes 25 sampled views and final readiness in 64 frames
+/ 5.214 seconds, with zero GPU rejections. Its total 169.660-second wall time
+includes 121.809 seconds of synchronous screenshot analysis. This is a diagnostic
+coverage gate, not a frame-time benchmark; earlier runner timeouts remain
+incomplete evidence. Player movement and edit acceptance are still unqualified.
+
+### Earlier Collision Locality Checkpoint
 
 The [explicit collision-locality checkpoint](evidence/tqp64_gpu_collision_locality_20260831/RESULT.md)
 pins upstream `2a7a787`. Visual retirement no longer promotes a withdrawn local

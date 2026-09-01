@@ -257,6 +257,8 @@ func run(
 		elif not bool(causal_trace_summary.get("native_complete", false)):
 			acceptance_failures.append("causal_trace_native_incomplete")
 	var acceptance_ok := measurement_complete and acceptance_failures.is_empty()
+	var game_world_summary: Dictionary = game_world.call("get_game_world_summary") \
+		if game_world.has_method("get_game_world_summary") else {}
 
 	return {
 		"enabled": true,
@@ -270,6 +272,23 @@ func run(
 		"render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
 		"gpu_candidate_status": terrain_world.call("get_gpu_resident_render_status") \
 			if terrain_world.has_method("get_gpu_resident_render_status") else {},
+		"interaction_collision_invoker": {
+			"enabled": bool(game_world_summary.get(
+				"player_interaction_collision_invoker_enabled", false
+			)),
+			"radius_chunks": int(game_world_summary.get(
+				"player_interaction_collision_invoker_radius_chunks", 0
+			)),
+			"accepted_updates": int(game_world_summary.get(
+				"player_interaction_collision_viewer_updates", 0
+			)),
+			"active_viewers": int(game_world_summary.get(
+				"interaction_collision_viewer_count", 0
+			)),
+			"runtime_viewer_capacity": int(game_world_summary.get(
+				"runtime_viewer_capacity", 0
+			)),
+		},
 		"profile": str(selected_profile),
 		"start_position": _vector3_summary(start_position),
 		"movement_end_position": _vector3_summary(movement_end_position),

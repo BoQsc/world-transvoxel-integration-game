@@ -13,6 +13,7 @@ const FOREGROUND_PRIORITY_FOCUS_SOURCE_ID := 2
 const RuntimeScene := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
+const InteractionCollisionDemand := preload("res://addons/world_transvoxel_gameworld/wt_interaction_collision_demand.gd")
 
 @export var human_input_enabled: bool = false
 @export var player_driven_viewer_enabled: bool = true
@@ -27,6 +28,7 @@ const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrai
 @export var player_collision_invoker_enabled: bool = false
 @export_range(0, 16, 1) var player_collision_invoker_radius_chunks: int = 2
 @export_range(0.0, 1000000.0, 0.01) var player_collision_prediction_distance: float = 16.0
+@export var player_interaction_collision_invoker_enabled: bool = false
 @export var player_foreground_priority_enabled: bool = false
 @export_range(16, 1000, 1) var player_foreground_priority_update_interval_ms: int = 100
 @export var debug_overlay_enabled: bool = false
@@ -80,11 +82,13 @@ var _player_predictive_viewer_id := 64
 var _player_focus_viewer_id := 65
 var _player_collision_viewer_id := 66
 var _player_predictive_collision_viewer_id := 67
+var _player_interaction_collision_viewer_id := 68
 var _last_player_viewer_position := Vector3(INF, INF, INF)
 var _last_predictive_viewer_position := Vector3(INF, INF, INF)
 var _last_focus_viewer_position := Vector3(INF, INF, INF)
 var _last_collision_viewer_position := Vector3(INF, INF, INF)
 var _last_predictive_collision_viewer_position := Vector3(INF, INF, INF)
+var _last_interaction_collision_viewer_positions: Array[Vector3] = []
 var _last_collision_observation_position := Vector3(INF, INF, INF)
 var _pending_collision_motion := Vector3.ZERO
 var _pending_collision_motion_valid := false
@@ -93,6 +97,7 @@ var _accepted_predictive_viewer_updates := 0
 var _accepted_focus_viewer_updates := 0
 var _accepted_collision_viewer_updates := 0
 var _accepted_predictive_collision_viewer_updates := 0
+var _accepted_interaction_collision_viewer_updates := 0
 var _foreground_support_revision := 0
 var _foreground_focus_revision := 0
 var _last_foreground_support_keys: Array = []
@@ -249,13 +254,17 @@ func update_player_viewer(force: bool = false) -> bool:
 	if not visual_update_required:
 		if not _update_player_collision_invoker(position, force):
 			return false
+		if not _update_player_interaction_collision_invoker(force):
+			return false
 		return _update_player_foreground_priority_leases(force)
 	if not force and player_viewer_coalesce_while_streaming:
 		var coalesce_reason := _player_viewer_streaming_debt_reason()
 		if not coalesce_reason.is_empty():
 			_coalesced_player_viewer_updates += 1
 			_last_player_viewer_coalesce_reason = coalesce_reason
-			return _update_player_collision_invoker(position, force)
+			if not _update_player_collision_invoker(position, force):
+				return false
+			return _update_player_interaction_collision_invoker(force)
 	# When both roles move, enqueue the visual viewer first. The native worker
 	# consumes one viewer event before a foreground edit, so collision-first order
 	# can commit an edit against collision-only demand before visual demand arrives.
@@ -274,6 +283,8 @@ func update_player_viewer(force: bool = false) -> bool:
 		"force": force,
 	})
 	if not _update_player_collision_invoker(position, force):
+		return false
+	if not _update_player_interaction_collision_invoker(force):
 		return false
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
@@ -531,12 +542,15 @@ func get_causal_trace_context() -> Dictionary:
 		"collision_viewer_updates": _accepted_collision_viewer_updates,
 		"predictive_collision_viewer_updates":
 			_accepted_predictive_collision_viewer_updates,
+		"interaction_collision_viewer_updates":
+			_accepted_interaction_collision_viewer_updates,
 		"coalesced_player_viewer_updates": _coalesced_player_viewer_updates,
 		"last_player_viewer_position": _vector3_summary(_last_player_viewer_position),
 		"last_collision_viewer_position": _vector3_summary(_last_collision_viewer_position),
 		"last_predictive_collision_viewer_position": _vector3_summary(
 			_last_predictive_collision_viewer_position
 		),
+		"interaction_collision_viewer_count": _last_interaction_collision_viewer_positions.size(),
 		"edit_submission_count": _edit_submission_count,
 		"edit_accept_count": _edit_accept_count,
 		"edit_commit_count": _edit_commit_count,
@@ -600,6 +614,13 @@ func get_game_world_summary() -> Dictionary:
 		"player_collision_viewer_updates": _accepted_collision_viewer_updates,
 		"player_predictive_collision_viewer_updates":
 			_accepted_predictive_collision_viewer_updates,
+		"player_interaction_collision_invoker_enabled":
+			player_interaction_collision_invoker_enabled,
+		"player_interaction_collision_invoker_radius_chunks":
+			InteractionCollisionDemand.RADIUS_CHUNKS,
+		"player_interaction_collision_viewer_updates":
+			_accepted_interaction_collision_viewer_updates,
+		"interaction_collision_viewer_count": _last_interaction_collision_viewer_positions.size(),
 		"player_foreground_priority_enabled": player_foreground_priority_enabled,
 		"player_foreground_priority_update_interval_ms": player_foreground_priority_update_interval_ms,
 		"player_foreground_support_updates": _accepted_foreground_support_updates,
@@ -1450,15 +1471,18 @@ func _submit_collision_viewer(
 	viewer_id: int,
 	position: Vector3,
 	role: StringName,
-	force: bool
+	force: bool,
+	radius_chunks: int = -1
 ) -> bool:
+	var effective_radius := player_collision_invoker_radius_chunks \
+		if radius_chunks < 0 else radius_chunks
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
 		"update_runtime_collision_viewer",
 		viewer_id,
 		_viewer_revision,
 		position,
-		player_collision_invoker_radius_chunks
+		effective_radius
 	)):
 		return _fail("player collision viewer update failed: %s" % _terrain_world_error())
 	_trace_event(&"viewer_submitted", {
@@ -1466,9 +1490,59 @@ func _submit_collision_viewer(
 		"viewer_id": viewer_id,
 		"revision": _viewer_revision,
 		"position": _vector3_summary(position),
+		"radius_chunks": effective_radius,
 		"force": force,
 	})
 	_begin_streaming_burst()
+	return true
+
+
+func _update_player_interaction_collision_invoker(force: bool) -> bool:
+	if not player_interaction_collision_invoker_enabled or _player == null:
+		return _remove_interaction_collision_viewers(0)
+	var camera := _player.get_node_or_null("FirstPersonCamera") as Camera3D
+	if camera == null:
+		return _remove_interaction_collision_viewers(0)
+	var interaction_distance := float(_player.get("interaction_distance"))
+	if interaction_distance <= 0.0:
+		return _remove_interaction_collision_viewers(0)
+	var positions := InteractionCollisionDemand.centers(
+		camera.global_position, -camera.global_transform.basis.z, interaction_distance
+	)
+	if positions.is_empty():
+		return _fail("interaction collision ray must be finite and at most 96 world units")
+	if not _remove_interaction_collision_viewers(positions.size()):
+		return false
+	for index in range(positions.size()):
+		var position: Vector3 = positions[index]
+		if not force and index < _last_interaction_collision_viewer_positions.size() and \
+				_collision_invoker_chunk(position) == _collision_invoker_chunk(
+					_last_interaction_collision_viewer_positions[index]
+				):
+			continue
+		if not _submit_collision_viewer(
+			_player_interaction_collision_viewer_id + index, position,
+			&"collision_interaction", force, InteractionCollisionDemand.RADIUS_CHUNKS
+		):
+			return false
+		if index == _last_interaction_collision_viewer_positions.size():
+			_last_interaction_collision_viewer_positions.append(position)
+		else:
+			_last_interaction_collision_viewer_positions[index] = position
+		_accepted_interaction_collision_viewer_updates += 1
+	return true
+
+
+func _remove_interaction_collision_viewers(keep: int) -> bool:
+	while _last_interaction_collision_viewer_positions.size() > keep:
+		var index := _last_interaction_collision_viewer_positions.size() - 1
+		_viewer_revision += 1
+		if not bool(_reference_scene.call(
+			"remove_runtime_collision_viewer",
+			_player_interaction_collision_viewer_id + index, _viewer_revision
+		)):
+			return _fail("interaction collision viewer removal failed")
+		_last_interaction_collision_viewer_positions.remove_at(index)
 	return true
 
 

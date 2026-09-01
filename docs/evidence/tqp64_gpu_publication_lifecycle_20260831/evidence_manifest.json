@@ -1,0 +1,522 @@
+{
+  "schema": "world_transvoxel.gpu_publication_lifecycle_evidence.v1",
+  "status": "FOCUSED_FIXES_PASS_GPU_GAMEPLAY_REJECTED",
+  "recorded_date": "2026-09-01",
+  "integration_parent": "c1472d893d64ed17d51aface547c0aeaa1add69b",
+  "authority": {
+    "schema": "world_transvoxel.integration.runtime_pin.v1",
+    "status": "ACTIVE",
+    "authority": {
+      "repository": "world-transvoxel",
+      "commit": "18a892f02344481c73698c6a131da00e429a3fa4",
+      "addon_tree": "d9afce264d62ccff34ccdd6df0cc6c57033787f6",
+      "native_source_tree": "1fdd00a68b64b46d800a3ad4d0c4730019e99b0e",
+      "fallback": false
+    },
+    "runtime_artifact": {
+      "layout": "binary_consumer_v1",
+      "native_source_included": false,
+      "binary_build_commit": "18a892f02344481c73698c6a131da00e429a3fa4",
+      "digest_sha256": "77bc4262b5e8615dcf4a04936d4a326aa3ee0f2c0d158cd51d33cfdd1399d63f",
+      "files": [
+        "LICENSE_SCOPE.md",
+        "OPERATING_LIMITS.md",
+        "PUBLIC_API.md",
+        "README.md",
+        "thirdparty/transvoxel_mit/LICENSE",
+        "thirdparty/transvoxel_mit/UPSTREAM.md",
+        "world_transvoxel.gdextension",
+        "world_transvoxel.gdextension.uid",
+        "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+        "bin/world_transvoxel.windows.template_release.x86_64.dll"
+      ],
+      "binaries": [
+        {
+          "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bytes": 2490368,
+          "sha256": "ab4fb4de386e8d750337c93e9429130e8fa0b07992893cfd5702a4cfd2781674"
+        },
+        {
+          "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+          "bytes": 2410496,
+          "sha256": "866138cb61b0fdbd86787d5cb7d490e273fb14a0d76e51f388235dacb97cf4fe"
+        }
+      ]
+    }
+  },
+  "environment": {
+    "godot": "4.7.2.stable.steam.ed1daf0bf",
+    "affinity": [
+      0,
+      1,
+      2
+    ],
+    "gpu": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+    "generation_workers": 2
+  },
+  "checks": {
+    "native_debug_release": "PASS_FOCUSED_NOT_FULL_SUITE",
+    "collision_only_publication": "PASS_3_VULKAN_3_D3D12",
+    "production_lifecycle": "PASS_VULKAN_D3D12",
+    "headless_regressions": "PASS",
+    "moving_lod": "PASS_25_SAMPLED_VIEWS_AND_FINAL_DRAIN",
+    "previous_moving_lod_attempts": "INCOMPLETE_RUNNER_TIMEOUT",
+    "default_gameplay": "FAIL_BLOCKED_MOVEMENT_AND_MISSING_FIRST_EDIT_TARGET",
+    "ray_demand_experiment": "REJECTED_DEFAULT_OFF",
+    "m5_wrapper": "INHERITED_FINGERPRINT_UNRESOLVED"
+  },
+  "validators": [
+    {
+      "command": [
+        "python",
+        "tools/validate_world_transvoxel_runtime_artifact.py"
+      ],
+      "returncode": 0,
+      "stdout": "WT_RUNTIME_ARTIFACT_PASS authority=18a892f0 files=10 digest=77bc4262b5e8615dcf4a04936d4a326aa3ee0f2c0d158cd51d33cfdd1399d63f native_source=0 fallback=0\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "python",
+        "tools/validate_terrain_dependency_boundary.py"
+      ],
+      "returncode": 0,
+      "stdout": "WT_TERRAIN_DEPENDENCY_BOUNDARY_PASS authority=18a892f0 compatibility_base=4f1fdb5 runtime_scene=production native_source=0 fallback=false direct_backend_paths=14\n",
+      "stderr": ""
+    }
+  ],
+  "source_files": [
+    {
+      "path": "addons/world_transvoxel_gameworld/wt_game_world_node.gd",
+      "lf_sha256": "cfe10fdf29f10128e0d1701f27321a161f5da33527c89eb068f65afcc189736c"
+    },
+    {
+      "path": "addons/world_transvoxel_gameworld/wt_interaction_collision_demand.gd",
+      "lf_sha256": "ae920fa73edb63e7ef71febdf7cb6b7bab2c61279c410ea7019111d90b8d9bb8"
+    },
+    {
+      "path": "addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.gd",
+      "lf_sha256": "f02cbd685fd26de2237f9349e79bf70a42b5f488d39e77b242c1b20881597211"
+    },
+    {
+      "path": "scripts/main.gd",
+      "lf_sha256": "0d3e3790c92af0c5177e025b9ede4f8e4bf8c48b3855934b4215645414fc74b2"
+    },
+    {
+      "path": "scripts/wt_production_player.gd",
+      "lf_sha256": "49818e48ed78e3a67958f1e5eaa58e95d249fdcdd210ab137999bb05a2db862f"
+    },
+    {
+      "path": "scripts/wt_runtime_baseline_gate.gd",
+      "lf_sha256": "53638fdb84ae948aa85793b0b7e512a8d136d7effaa0366c2bb377a1c1f931dd"
+    },
+    {
+      "path": "tests/gpu_collision_only_publication_smoke.gd",
+      "lf_sha256": "4359a539345ea11ec7b1d9e0fe96bc67e325f85d234e7da4f997c69823e2fe25"
+    },
+    {
+      "path": "tests/gpu_resident_application_readiness_smoke.gd",
+      "lf_sha256": "b94f691e21a052bcf3657f36e1075f8b5f95a11a6d0bb0402d162c28833c2510"
+    },
+    {
+      "path": "tests/interaction_collision_demand_smoke.gd",
+      "lf_sha256": "29f9d8f6b7151ed89d03fc3f9a7a2ac7a49c2cc80bd95c35e2d49ec8b14fe475"
+    },
+    {
+      "path": "tools/run_gpu_collision_only_publication_smoke.py",
+      "lf_sha256": "d7df9e412f6d4eda52dca57505ace28a3ecdc7d917156afef75763d05a061296"
+    },
+    {
+      "path": "tools/run_runtime_readiness_probe.py",
+      "lf_sha256": "6c11e704f66c382d9dcb76149fcedc8fae92f690ebc4e72d915be7ced20fd84f"
+    }
+  ],
+  "archives": [
+    {
+      "path": "retained_evidence.zip",
+      "bytes": 734988,
+      "sha256": "fb87d09d064cff954704eb23bb8ddaf7e59b13b12282b1520d61906eeefaf47f",
+      "entries": [
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_m3_application.template_debug.log",
+          "bytes": 87,
+          "sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5"
+        },
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_m3_application.template_release.log",
+          "bytes": 87,
+          "sha256": "821c6274f6ee2bdfe039644a241df4a549a641bb2479f9ece6252be9c809cdc5"
+        },
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_production_streaming.template_debug.log",
+          "bytes": 1763,
+          "sha256": "b68d857e4168329ee20fc2bc50d47bbe91b6d60de67fd6ece2a87a78760c907c"
+        },
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_production_streaming.template_release.log",
+          "bytes": 1763,
+          "sha256": "b68d857e4168329ee20fc2bc50d47bbe91b6d60de67fd6ece2a87a78760c907c"
+        },
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_publication_policy.template_debug.log",
+          "bytes": 166,
+          "sha256": "f8d8048951f59722b9ea54c2b3e2e44ac4f9a39004fd8a91bb85207f2c7583cd"
+        },
+        {
+          "path": "upstream/build/gpu_completion_final_test_wt_publication_policy.template_release.log",
+          "bytes": 166,
+          "sha256": "f8d8048951f59722b9ea54c2b3e2e44ac4f9a39004fd8a91bb85207f2c7583cd"
+        },
+        {
+          "path": "upstream/build/gpu_retained_boundary_before.log",
+          "bytes": 1031,
+          "sha256": "58eefa844c7b859026872f836f236bf466aff88f44f6e0283ec4117b391fcd2a"
+        },
+        {
+          "path": "upstream/build/gpu_collision_only_repair_build.log",
+          "bytes": 27890,
+          "sha256": "5023ba4be4c3b68d52c1cd5b024f706f492bfca29e4f5ae6dd19e6560505dce0"
+        },
+        {
+          "path": "integration/WORLD_TRANSVOXEL_RUNTIME_PIN.json",
+          "bytes": 1465,
+          "sha256": "d50b93ec8cde63a2036b1bcf8b6e174b3f81fed29c3c3fd864dbc5787dd04010"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_verified_interaction_collision_demand_smoke.log",
+          "bytes": 171,
+          "sha256": "663a01aee6ecf5487668caf30617ea1e27cbc54010b8e2b23ffe73887eb98f30"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_verified_gpu_resident_application_readiness_smoke.log",
+          "bytes": 1358,
+          "sha256": "44339b491e832955e486ed9fe1907bd058a5930d2b40ae091a5af226259c46e3"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_verified_player_collision_footprint_smoke.log",
+          "bytes": 168,
+          "sha256": "a9a0c235fe55cffff863a145e2930df041d3e1a2c7c10fd133427e1f31f86f95"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_editor_import.log",
+          "bytes": 2021,
+          "sha256": "e30727c52c0d67bfb570eff315c87684e3584eaa692e91d613ce7a05d6809899"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_gpu_collision_only_d3d12_before_repair.log",
+          "bytes": 12396,
+          "sha256": "30c6ce78fb4a8979de8ec4b429b0015e224507efa0eeb4dee8d5589bd348a032"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/d3d12_1.log",
+          "bytes": 257,
+          "sha256": "8014c06af513e5c150ab9c6907fcb07d23f99197727f06b71c0dada9c403db69"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/d3d12_2.log",
+          "bytes": 257,
+          "sha256": "8014c06af513e5c150ab9c6907fcb07d23f99197727f06b71c0dada9c403db69"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/d3d12_3.log",
+          "bytes": 257,
+          "sha256": "8014c06af513e5c150ab9c6907fcb07d23f99197727f06b71c0dada9c403db69"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/vulkan_1.log",
+          "bytes": 261,
+          "sha256": "de961f04981bf0b627e7e06d228fde69463ac53fc475d661087652f2d5f6667c"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/vulkan_2.log",
+          "bytes": 261,
+          "sha256": "de961f04981bf0b627e7e06d228fde69463ac53fc475d661087652f2d5f6667c"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_collision_only_repair/vulkan_3.log",
+          "bytes": 261,
+          "sha256": "de961f04981bf0b627e7e06d228fde69463ac53fc475d661087652f2d5f6667c"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_resident_production_lifecycle/d3d12.log",
+          "bytes": 797,
+          "sha256": "889aeffddc6fde3385b865850d40a7263cf5de60f13689fa48b1c97c0f106d94"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_resident_production_lifecycle/vulkan.log",
+          "bytes": 801,
+          "sha256": "543fd380d78d12284855f854e0e3009ab47a0075191fa406c29e3656668c3fe8"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_ray_startup_inspection_20260831/gpu_01.stderr.log",
+          "bytes": 26015,
+          "sha256": "d06e36d60352f2ad7b592df5329ca15b204ac1328d0891dc0d639760497c11ed"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_ray_startup_inspection_20260831/gpu_01.stdout.log",
+          "bytes": 152234,
+          "sha256": "68a8a11eb417e1efca8ef5d79eeef8d68eb800ae7269d0a2c62184bf40c04418"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_pinned/stderr.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_pinned/stdout.log",
+          "bytes": 5605,
+          "sha256": "cda798a14272bf11df8a01b8db5ecd84ce5d6252cc7a92f516dedbc18f2e2fc2"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_default/stderr.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_default/stdout.log",
+          "bytes": 3413,
+          "sha256": "38e440209247c5d24025e1684ba8ec7c219aeaf549c8e3ce67cb3d0a54e236be"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_phases/execution.json",
+          "bytes": 1100,
+          "sha256": "339aef7b74588ebcd8a29a0a05a9f0c3aa8f51889513ce6033415221bd308d6e"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_phases/moving_streaming_fly.json",
+          "bytes": 461016,
+          "sha256": "07067c00ec52bd9a377564dfcd4cfb3b2dde6f5b3526cbabe891adea09df7e72"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_phases/stderr.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/completion_moving_lod_phases/stdout.log",
+          "bytes": 371718,
+          "sha256": "643671f80f4cdc714338c97a30db58b80505e0f8b2a8b4469c943bf472323e78"
+        },
+        {
+          "path": "integration/.godot/gpu_visual_candidate_filter_20260831.json",
+          "bytes": 70682,
+          "sha256": "99e3ed754e61e88c19574697f1fae44a13d049f0623cafe8f9d58aeacad9b782"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_visual_candidate_filter_20260831/gpu_01.stderr.log",
+          "bytes": 41397,
+          "sha256": "c795381eda33a69d6f7a1600c91de226ba2edb628b6290235d899d3f561da27a"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_visual_candidate_filter_20260831/gpu_01.stdout.log",
+          "bytes": 45458,
+          "sha256": "65a730f7743d42c344715cafc64ba7e36b855c623a030d9dd4afd5c3373d3b5c"
+        },
+        {
+          "path": "integration/.godot/gpu_visual_candidate_filter_diagnostic_20260831.json",
+          "bytes": 6492431,
+          "sha256": "a41088436d3103835ae0842aef7c8601d2f4675c9953685c1ccb191879a9df41"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_visual_candidate_filter_diagnostic_20260831/gpu_01.stderr.log",
+          "bytes": 3096156,
+          "sha256": "0d08e23c6d46b2d64136fe0946ee8da9314d2b3f9f12e8977264c6dab37f7027"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_visual_candidate_filter_diagnostic_20260831/gpu_01.stdout.log",
+          "bytes": 3124491,
+          "sha256": "5f0237bdbe014f65c623c6c6de83f9a9da838e5c6bb2f96aee1c86a51c3c8b6a"
+        },
+        {
+          "path": "integration/.godot/gpu_publication_lifecycle_pinned_20260831.json",
+          "bytes": 70667,
+          "sha256": "f68c7735e422f8d5326b6d497093f7e17a911910ae38a6618d12ba438097a12e"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_publication_lifecycle_pinned_20260831/gpu_01.stderr.log",
+          "bytes": 41367,
+          "sha256": "e9d73c05e4175242c9dab5e771085a6aa091569a7c56a1dbedfaf35220fd7378"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_publication_lifecycle_pinned_20260831/gpu_01.stdout.log",
+          "bytes": 45427,
+          "sha256": "851772aed2ae6055fa0b2dfe34715f3c09e3a5404ead1ec07de3dfb869d49244"
+        },
+        {
+          "path": "integration/.godot/gpu_publication_lifecycle_default_20260831.json",
+          "bytes": 62251,
+          "sha256": "7588732fbcde7284b8e55abfa9acaabacb790236afcc203ef9674a21435241ea"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_publication_lifecycle_default_20260831/gpu_01.stderr.log",
+          "bytes": 37006,
+          "sha256": "980ff3ddc22f17f377a2809189fe76851e506b22908727727eee44d39d53e06f"
+        },
+        {
+          "path": "integration/.godot/world_transvoxel_captures/gpu_publication_lifecycle_default_20260831/gpu_01.stdout.log",
+          "bytes": 38875,
+          "sha256": "872c8ebb8bf2481addc306d8df48324f0213c39f694a0802f598fc0b7af18b65"
+        },
+        {
+          "path": "integration/.godot/run_gpu_moving_checkpoint.py",
+          "bytes": 1567,
+          "sha256": "39bcb84e06dcc31931504ad805d8270ae42741c175e565f29e500eb8e332454c"
+        }
+      ]
+    },
+    {
+      "path": "moving_lod_captures.zip",
+      "bytes": 6543992,
+      "sha256": "ebcf261237a23e87378a7711852be73dca6617a6ef27b46cabcf09d79ff82439",
+      "entries": [
+        {
+          "path": "moving.png",
+          "bytes": 2577201,
+          "sha256": "2335d4c5ba5958aeaa296df285138b1b526c5c7019744431a9c34a4fe0bbb70e"
+        },
+        {
+          "path": "moving_streaming_fly_12_peak_sweep_f054.png",
+          "bytes": 1391213,
+          "sha256": "15f75ebae059b737a2d82e33e1d4e332cec349622e97dc51ba2701ea0fdd4c06"
+        },
+        {
+          "path": "moving_streaming_fly_24_low_slope_f042.png",
+          "bytes": 2577311,
+          "sha256": "168a1247162fe3c27a2ea7060341f06838d5f34c04ec0e86b2d20ceeba7d0b42"
+        }
+      ]
+    }
+  ],
+  "moving_lod_capture_inventory": [
+    {
+      "path": "moving.png",
+      "bytes": 2577201,
+      "sha256": "2335d4c5ba5958aeaa296df285138b1b526c5c7019744431a9c34a4fe0bbb70e"
+    },
+    {
+      "path": "moving_streaming_fly_00_ridge_cross_f000.png",
+      "bytes": 1569517,
+      "sha256": "003e603efb77dbb693fb0394a2891bc57ce642460da4eaff7b461223952299b8"
+    },
+    {
+      "path": "moving_streaming_fly_01_ridge_cross_f001.png",
+      "bytes": 1570735,
+      "sha256": "d27fcf4d32f0d6709ff2c1cec34ecf3c5eca6486a7d560d414ee313539d13d46"
+    },
+    {
+      "path": "moving_streaming_fly_02_ridge_cross_f003.png",
+      "bytes": 1576018,
+      "sha256": "8bd6969ed2382b45ae67f22127cfc5fc7268ab76e6a5a5983bf94cab00f1c7e0"
+    },
+    {
+      "path": "moving_streaming_fly_03_ridge_cross_f008.png",
+      "bytes": 1584200,
+      "sha256": "ac2b22e4e41d13bad62a7584152a7a8695a439b2aaf6cfa345f5126018b4c79a"
+    },
+    {
+      "path": "moving_streaming_fly_04_ridge_cross_f016.png",
+      "bytes": 1598149,
+      "sha256": "4327094dba356145a4a45704c350044a727a5826540e8270088a42bb799c76d8"
+    },
+    {
+      "path": "moving_streaming_fly_05_ridge_cross_f032.png",
+      "bytes": 1625942,
+      "sha256": "c7d2705336bf07a9a080c1b3a281ad9c8ecdec64833ab6b92bbd8bfc60c8a773"
+    },
+    {
+      "path": "moving_streaming_fly_06_ridge_cross_f054.png",
+      "bytes": 1643240,
+      "sha256": "3eacddf667873fe532b373135ff6bb4e6ff6ca05a3aa7a7a961c53b7221cddc2"
+    },
+    {
+      "path": "moving_streaming_fly_07_peak_sweep_f001.png",
+      "bytes": 1674271,
+      "sha256": "58e937df06fa614d0a8b1ec7ce53fa7164b7204327d6759bf17f740324e834d2"
+    },
+    {
+      "path": "moving_streaming_fly_08_peak_sweep_f003.png",
+      "bytes": 1747469,
+      "sha256": "c9a25ff971ec25ad2c9ac7a1eeee1e4b4e76fdf77e97197cac71f959d0fc9f2d"
+    },
+    {
+      "path": "moving_streaming_fly_09_peak_sweep_f008.png",
+      "bytes": 1990044,
+      "sha256": "b5728fa1cbfc80ad35f215dd61646c0e7c94406b5837d0c1838c526890a11ddf"
+    },
+    {
+      "path": "moving_streaming_fly_10_peak_sweep_f016.png",
+      "bytes": 2294229,
+      "sha256": "64503e2cfc4cb654ddb2f55415cb18156ad0e21f1aa082bd936d363e9201c51a"
+    },
+    {
+      "path": "moving_streaming_fly_11_peak_sweep_f032.png",
+      "bytes": 2079216,
+      "sha256": "f934c6f7dc0577924d7f668f54a1cbebcd1b0bd1b561d51ce059d1f3c2f756b7"
+    },
+    {
+      "path": "moving_streaming_fly_12_peak_sweep_f054.png",
+      "bytes": 1391213,
+      "sha256": "15f75ebae059b737a2d82e33e1d4e332cec349622e97dc51ba2701ea0fdd4c06"
+    },
+    {
+      "path": "moving_streaming_fly_13_valley_return_f001.png",
+      "bytes": 1396154,
+      "sha256": "ad2b6992e458d0efeea1bd01e538e7b5ce3f290265c625d6e02edfb6199363f0"
+    },
+    {
+      "path": "moving_streaming_fly_14_valley_return_f003.png",
+      "bytes": 1402174,
+      "sha256": "b50b6046d6db454219263bf1e5ac00c10bc5369ef0fed2021ef35008bbf3a7f1"
+    },
+    {
+      "path": "moving_streaming_fly_15_valley_return_f008.png",
+      "bytes": 1423593,
+      "sha256": "7db1bf130d2b859f41487b59a62d7f5f18630a7b67d980442332cc84348da369"
+    },
+    {
+      "path": "moving_streaming_fly_16_valley_return_f016.png",
+      "bytes": 1464473,
+      "sha256": "72c018798bcce2769680d9b010a5aef6f8774275dee5435418bc77dbba4ad625"
+    },
+    {
+      "path": "moving_streaming_fly_17_valley_return_f032.png",
+      "bytes": 1593763,
+      "sha256": "bbf6908dc88c35b9891f66e047dbcb9d9a7c864659b686adaf8b1b13296b3c6f"
+    },
+    {
+      "path": "moving_streaming_fly_18_valley_return_f054.png",
+      "bytes": 1733980,
+      "sha256": "a3a0409108fe27b7fb90203160760a8e3a5a707b72183e66c13a742d7c0ad3dc"
+    },
+    {
+      "path": "moving_streaming_fly_19_low_slope_f001.png",
+      "bytes": 1756011,
+      "sha256": "d8f577a7abc0c4110d311a75a30f18cec371615bbb43646cd1c153e1d0b12afa"
+    },
+    {
+      "path": "moving_streaming_fly_20_low_slope_f003.png",
+      "bytes": 1805570,
+      "sha256": "211f0db52050fbc8e2f09b387d9610a2b477f5603b6e9a093501786ede205012"
+    },
+    {
+      "path": "moving_streaming_fly_21_low_slope_f008.png",
+      "bytes": 1958725,
+      "sha256": "415711f8005e5541772d3aea2b68a316306fbfc2b9163e5d35ebcc9a037ad6f4"
+    },
+    {
+      "path": "moving_streaming_fly_22_low_slope_f016.png",
+      "bytes": 2286089,
+      "sha256": "72b5520eb6ebf5e0f78f67ec3ed0a8a32ccce6413db9e7ba3d738cae276c3ff5"
+    },
+    {
+      "path": "moving_streaming_fly_23_low_slope_f032.png",
+      "bytes": 2650188,
+      "sha256": "b48748402b59f931bf2554ead5728e123a93dab14e531d1ac545832b0d55e653"
+    },
+    {
+      "path": "moving_streaming_fly_24_low_slope_f042.png",
+      "bytes": 2577311,
+      "sha256": "168a1247162fe3c27a2ea7060341f06838d5f34c04ec0e86b2d20ceeba7d0b42"
+    }
+  ]
+}

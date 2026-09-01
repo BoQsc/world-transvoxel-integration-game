@@ -426,6 +426,9 @@ func _start_profile() -> void:
 		player_collision_prediction_distance_override \
 		if player_collision_prediction_distance_override >= 0.0 else \
 		float(settings.get("player_collision_prediction_distance", 16.0))
+	game_world.player_interaction_collision_invoker_enabled = \
+		collision_invoker_enabled and gpu_resident_render_candidate_requested and \
+		OS.get_cmdline_user_args().has("--gpu-interaction-collision-demand")
 	var foreground_priority_enabled := bool(settings.get(
 		"player_foreground_priority_enabled", false
 	))
@@ -445,6 +448,8 @@ func _start_profile() -> void:
 	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
 	game_world.runtime_active_chunk_capacity = int(settings.get("runtime_active_chunk_capacity", 0))
 	game_world.runtime_viewer_capacity = int(settings.get("runtime_viewer_capacity", 0))
+	if game_world.player_interaction_collision_invoker_enabled:
+		game_world.runtime_viewer_capacity = maxi(game_world.runtime_viewer_capacity, 4)
 	game_world.runtime_demand_capacity_per_viewer = int(settings.get("runtime_demand_capacity_per_viewer", 0))
 	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
 	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
@@ -812,6 +817,13 @@ func _wait_for_human_startup_visual_ready() -> bool:
 			)) if terrain_world != null else {}
 			var native := Dictionary(resident.get("native_metrics", {}))
 			var effect := Dictionary(resident.get("effect_status", {}))
+			if _frame == 120 and OS.get_cmdline_user_args().has("--gpu-publication-probe"):
+				var key = summary.get("first_blocked_replacement_key")
+				if key is Vector4i and terrain_world != null:
+					var backend: Node = terrain_world.call("get_backend_terrain")
+					print("WT_GPU_STARTUP_PUBLICATION ", JSON.stringify(backend.call(
+						"inspect_gpu_resident_publication", Vector3i(key.x, key.y, key.z), key.w
+					)))
 			print("WT_GPU_STARTUP_PENDING ", JSON.stringify({
 				"frame": _frame,
 				"active_records": int(summary.get("active_chunk_records", 0)),
@@ -862,6 +874,7 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"gpu_incomplete_chunks": int(resident.get("incomplete_chunks", 0)),
 				"gpu_submitted_surfaces": int(resident.get("submitted_surfaces", 0)),
 				"gpu_validated_surfaces": int(resident.get("validated_surfaces", 0)),
+				"activation_wait": resident.get("last_activation_cohort_wait", {}),
 				"native_queued": int(native.get("queued_requests", 0)),
 				"native_in_flight": int(native.get("in_flight_requests", 0)),
 				"native_reserved_slots": int(native.get("reserved_capture_slots", 0)),
@@ -8462,6 +8475,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 			var sample_gap_sensitive := gap_sensitive and frame >= gap_sensitive_start_frame
 			# Pair the image with this pose, not the preceding rendered camera.
 			await RenderingServer.frame_post_draw
+			var sample_started_usec := Time.get_ticks_usec()
 			var image := get_viewport().get_texture().get_image()
 			var sky := _screen_sky_pixel_summary(image, 4 if post_edit else 1)
 			var visual_gap_candidate := sample_gap_sensitive and _streaming_fly_sky_gap_detected(sky, post_edit)
@@ -8712,6 +8726,13 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 					controller_status.get("cpu_only_regional_retirements", 0)
 				)
 			samples.append(sample)
+			print("WT_STREAMING_FLY_SAMPLE ", JSON.stringify({
+				"label": label,
+				"analysis_msec": float(Time.get_ticks_usec() - sample_started_usec) / 1000.0,
+				"gap_detected": gap,
+				"visual_gap_candidate": visual_gap_candidate,
+				"capture_saved": save_capture and image_error == OK,
+			}))
 			if gap or image_error != OK:
 				failures.append(sample)
 				last_streaming_fly_summary = {
@@ -8890,6 +8911,9 @@ func _post_edit_streaming_fly_operations() -> Array:
 func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> bool:
 	var last_summary := {}
 	var started_usec := Time.get_ticks_usec()
+	print("WT_STREAMING_FLY_VISUAL_READY_BEGIN ", JSON.stringify({
+		"context": context, "frame_limit": frame_limit,
+	}))
 	for frame in range(frame_limit + 1):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
@@ -8903,7 +8927,7 @@ func _wait_for_streaming_fly_visual_ready(context: String, frame_limit: int) -> 
 			}))
 			_fail("streaming fly publication rejection %s" % context)
 			return false
-		if frame > 0 and frame % 120 == 0:
+		if frame < 3 or frame % 30 == 0:
 			print(
 				"WT_STREAMING_FLY_VISUAL_READY_PROGRESS ",
 				JSON.stringify({

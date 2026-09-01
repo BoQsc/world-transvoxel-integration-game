@@ -78,6 +78,13 @@ func update_runtime_collision_viewer(
 	))
 
 
+func remove_runtime_collision_viewer(viewer_id: int, revision: int) -> bool:
+	var terrain_world := get_terrain_world()
+	return terrain_world != null and bool(terrain_world.call(
+		"remove_collision_viewer", viewer_id, revision
+	))
+
+
 func update_runtime_foreground_priority_lease(
 	source_id: int,
 	revision: int,

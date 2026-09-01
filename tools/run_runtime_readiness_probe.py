@@ -22,6 +22,7 @@ def main() -> int:
     parser.add_argument("--no-probe", action="store_true")
     parser.add_argument("--publication-probe", action="store_true")
     parser.add_argument("--gpu-stage-timing", action="store_true")
+    parser.add_argument("--gpu-interaction-collision-demand", action="store_true")
     parser.add_argument(
         "--godot", type=pathlib.Path,
         default=pathlib.Path(
@@ -34,6 +35,8 @@ def main() -> int:
         parser.error("publication inspection requires GPU with the readiness probe")
     if args.gpu_stage_timing and args.backend != "gpu":
         parser.error("GPU stage timing requires the GPU backend")
+    if args.gpu_interaction_collision_demand and args.backend != "gpu":
+        parser.error("GPU interaction collision demand requires the GPU backend")
     project = pathlib.Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if output.exists():
@@ -54,6 +57,8 @@ def main() -> int:
             extra.append("--gpu-resident-render-candidate")
         if args.gpu_stage_timing:
             extra.append("--gpu-stage-timing")
+        if args.gpu_interaction_collision_demand:
+            extra.append("--gpu-interaction-collision-demand")
         if not args.no_probe:
             extra.append("--runtime-readiness-probe")
         if args.publication_probe:
