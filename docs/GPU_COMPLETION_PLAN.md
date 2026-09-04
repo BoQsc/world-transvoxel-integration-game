@@ -3,6 +3,19 @@
 Status: **INCOMPLETE_NOT_QUALIFIED**, 2026-09-05. CPU remains the default.
 This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
+## Update after the rerun
+
+The [edit refinement investigation](evidence/gpu_edit_refinement_20260905/RESULT.md)
+supersedes the recovery artifact state below. Authority `4682850` and both rebuilt
+DLLs now match the runtime pin. Two additional correctness defects are fixed,
+native debug/release regressions and Vulkan/D3D12 lifecycle smokes pass. Clean
+gameplay still fails: exact detail converges earlier, but first visual and
+collision response can worsen. The actual next problem is the edit/refinement
+publication dependency, not a demonstrated full scheduler queue. A coarse-visual
+activation wait was tested and discarded because it can deadlock refinement.
+The earlier recovery identity and candidate plan remain below as history; consult
+the investigation before implementing the admission proposal.
+
 ## Recovery identity
 
 - Integration parent: `090e394` (optimized page-field packing).

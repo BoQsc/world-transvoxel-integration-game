@@ -1,0 +1,264 @@
+{
+  "runs": [
+    {
+      "report": "gpu_exact_requeue_baseline_20260905.json.gz",
+      "sha256_uncompressed": "37a15a4b149105d718aedfaad6e097629a3ba8cb7e6f5d44370d5aa775949554",
+      "authority": "4578e731f7cccfc054cc13a06c53e7523e4379b3",
+      "artifact": "c80b11f1717a6866762b777b253784e74c6baf1b2cf0dc5aa257a0cfa8da587d",
+      "pin_matches": true,
+      "diagnostic_only": false,
+      "complete": true,
+      "acceptance": {
+        "failures": [
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "movement": {
+        "accepted_frames": 1020,
+        "blocked_frames": 0,
+        "blocked_ratio": 0.0,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 0,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "edit": {
+        "authority_commit_frames": 4,
+        "collision_ready_frames_after_commit": 3,
+        "visual_ready_frames_after_commit": 20,
+        "lod0_refinement_visual_ready_frames_after_commit": 97,
+        "visual_collision_divergence_frames": 17
+      },
+      "physics_frame_ms": {
+        "maximum": 37.603,
+        "over_16_67_ms": 447,
+        "over_33_3_ms": 4,
+        "p50": 16.666,
+        "p95": 19.02,
+        "p99": 28.067,
+        "samples": 1481
+      },
+      "post_draw_interval_ms": {
+        "maximum": 46.643,
+        "over_16_67_ms": 726,
+        "over_33_3_ms": 18,
+        "p50": 16.659,
+        "p95": 25.262,
+        "p99": 34.529,
+        "samples": 1478
+      }
+    },
+    {
+      "report": "gpu_balanced_refinement_run1_20260905.json.gz",
+      "sha256_uncompressed": "3b161c3c810300b55d3f8d6a7476a4a3631a5f055ead71a64f4a45490e066231",
+      "authority": "4682850b8d1773fbff947e17008812117716da49",
+      "artifact": "4f04ecc5077829041d11e6d42de6767721e7c0a66f2e5f372498261916a24498",
+      "pin_matches": true,
+      "diagnostic_only": false,
+      "complete": true,
+      "acceptance": {
+        "failures": [
+          "visual_ready_wait",
+          "collision_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "movement": {
+        "accepted_frames": 1020,
+        "blocked_frames": 0,
+        "blocked_ratio": 0.0,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 0,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "edit": {
+        "authority_commit_frames": 4,
+        "collision_ready_frames_after_commit": 59,
+        "visual_ready_frames_after_commit": 42,
+        "lod0_refinement_visual_ready_frames_after_commit": 42,
+        "visual_collision_divergence_frames": 17
+      },
+      "physics_frame_ms": {
+        "maximum": 35.861,
+        "over_16_67_ms": 429,
+        "over_33_3_ms": 4,
+        "p50": 16.666,
+        "p95": 18.013,
+        "p99": 26.303,
+        "samples": 1443
+      },
+      "post_draw_interval_ms": {
+        "maximum": 43.883,
+        "over_16_67_ms": 717,
+        "over_33_3_ms": 18,
+        "p50": 16.659,
+        "p95": 26.915,
+        "p99": 34.845,
+        "samples": 1442
+      }
+    },
+    {
+      "report": "gpu_balanced_refinement_run2_20260905.json.gz",
+      "sha256_uncompressed": "8063f8df03b3fb4c156bc499ad03a26685332a5e50bb8f274b407b4f78061150",
+      "authority": "4682850b8d1773fbff947e17008812117716da49",
+      "artifact": "4f04ecc5077829041d11e6d42de6767721e7c0a66f2e5f372498261916a24498",
+      "pin_matches": true,
+      "diagnostic_only": false,
+      "complete": true,
+      "acceptance": {
+        "failures": [
+          "frame_p95",
+          "visual_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "movement": {
+        "accepted_frames": 1019,
+        "blocked_frames": 1,
+        "blocked_ratio": 0.000980392156862745,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 1,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "edit": {
+        "authority_commit_frames": 5,
+        "collision_ready_frames_after_commit": 5,
+        "visual_ready_frames_after_commit": 64,
+        "lod0_refinement_visual_ready_frames_after_commit": 64,
+        "visual_collision_divergence_frames": 59
+      },
+      "physics_frame_ms": {
+        "maximum": 47.73,
+        "over_16_67_ms": 387,
+        "over_33_3_ms": 5,
+        "p50": 16.666,
+        "p95": 20.503,
+        "p99": 28.335,
+        "samples": 1449
+      },
+      "post_draw_interval_ms": {
+        "maximum": 58.426,
+        "over_16_67_ms": 687,
+        "over_33_3_ms": 23,
+        "p50": 16.624,
+        "p95": 28.347,
+        "p99": 36.912,
+        "samples": 1446
+      }
+    },
+    {
+      "report": "gpu_balanced_refinement_bounded_trace_20260905.json.gz",
+      "sha256_uncompressed": "8ccf1bc92ea3f1272a4ad405064159ba3873330a6cb2677def9021906a299c72",
+      "authority": "4682850b8d1773fbff947e17008812117716da49",
+      "artifact": "4f04ecc5077829041d11e6d42de6767721e7c0a66f2e5f372498261916a24498",
+      "pin_matches": true,
+      "diagnostic_only": true,
+      "complete": true,
+      "acceptance": {
+        "failures": [
+          "frame_p95",
+          "frame_p99",
+          "visual_ready_wait",
+          "collision_ready_wait",
+          "visual_collision_divergence"
+        ],
+        "maximum_authority_commit_frames": 15,
+        "maximum_blocked_movement_frames": 20,
+        "maximum_collision_ready_frames_after_commit": 15,
+        "maximum_consecutive_blocked_movement_frames": 10,
+        "maximum_frame_p95_ms": 20.0,
+        "maximum_frame_p99_ms": 33.3,
+        "maximum_physics_target_wait_frames": 30,
+        "maximum_visual_collision_divergence_frames": 8,
+        "maximum_visual_ready_frames_after_commit": 15,
+        "minimum_route_net_displacement": 340.0,
+        "ok": false
+      },
+      "movement": {
+        "accepted_frames": 1020,
+        "blocked_frames": 0,
+        "blocked_ratio": 0.0,
+        "frames": 1020,
+        "maximum_consecutive_blocked_frames": 0,
+        "rejected_zero_motion_frames": 0,
+        "stop_drift_distance": 0.0
+      },
+      "edit": {
+        "authority_commit_frames": 1,
+        "collision_ready_frames_after_commit": 174,
+        "visual_ready_frames_after_commit": 162,
+        "lod0_refinement_visual_ready_frames_after_commit": 162,
+        "visual_collision_divergence_frames": 12
+      },
+      "physics_frame_ms": {
+        "maximum": 209.987,
+        "over_16_67_ms": 348,
+        "over_33_3_ms": 189,
+        "p50": 8.128,
+        "p95": 101.184,
+        "p99": 143.774,
+        "samples": 1555
+      },
+      "post_draw_interval_ms": {
+        "maximum": 284.921,
+        "over_16_67_ms": 348,
+        "over_33_3_ms": 172,
+        "p50": 15.66,
+        "p95": 136.206,
+        "p99": 219.438,
+        "samples": 900
+      }
+    }
+  ],
+  "aborted_diagnostics": [
+    {
+      "name": "gpu_balanced_refinement_trace_20260905",
+      "reason": "user interruption; no completed report"
+    },
+    {
+      "name": "gpu_balanced_refinement_trace_rerun_20260905",
+      "reason": "stopped at roughly 9 GB RSS; native trace repeats full GPU inventory; no completed report"
+    }
+  ],
+  "rejected_handoff_candidate": "Waiting for current-LOD edit activation before refinement deadlocked bounded hierarchical edit regression. Uncommitted changes discarded.",
+  "lifecycle_smoke": {
+    "vulkan": "PASS",
+    "d3d12": "PASS"
+  }
+}

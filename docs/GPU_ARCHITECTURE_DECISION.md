@@ -1,13 +1,15 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_INCOMPLETE_CHECKPOINT_20260905`
+Status: `TQP64_GPU_REFINEMENT_CORRECTNESS_FIXED_GAMEPLAY_LATENCY_OPEN`
 
-The current recovery state and next work are recorded in the
-[GPU completion plan](GPU_COMPLETION_PLAN.md). The 2026-09-05 checkpoint preserves
-an unfinished native requeue correction and a debug DLL that does not match its
-runtime pin. Recent diagnostic results still fail edit latency/divergence.
-GPU remains opt-in and unqualified. The dated sections below are historical
-evidence, not a description of the latest working artifact.
+The [2026-09-05 refinement investigation](evidence/gpu_edit_refinement_20260905/RESULT.md)
+pins matching debug/release binaries from authority `4682850`. Internal refresh
+coalescing and multi-split balance defects are fixed with failing-before tests.
+Vulkan/D3D12 lifecycle passes, but clean gameplay still fails edit latency and
+divergence. Faster exact refinement currently delays first-edit feedback by
+joining it to a larger publication cohort. GPU remains opt-in and unqualified.
+The [completion plan](GPU_COMPLETION_PLAN.md) records the updated direction;
+the dated sections below are historical evidence.
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded
