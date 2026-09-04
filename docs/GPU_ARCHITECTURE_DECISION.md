@@ -1,6 +1,13 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_PUBLICATION_LIFECYCLE_FIXED_GPU_GAMEPLAY_REJECTED`
+Status: `TQP64_GPU_INCOMPLETE_CHECKPOINT_20260905`
+
+The current recovery state and next work are recorded in the
+[GPU completion plan](GPU_COMPLETION_PLAN.md). The 2026-09-05 checkpoint preserves
+an unfinished native requeue correction and a debug DLL that does not match its
+runtime pin. Recent diagnostic results still fail edit latency/divergence.
+GPU remains opt-in and unqualified. The dated sections below are historical
+evidence, not a description of the latest working artifact.
 
 TQP-58 selected a bounded GPU candidate for field evaluation and Transvoxel
 mesh extraction. TQP-59 through TQP-63 subsequently qualified the bounded

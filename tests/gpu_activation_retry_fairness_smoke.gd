@@ -6,11 +6,14 @@ const Controller := preload("res://addons/world_transvoxel_terrain/gpu/wt_terrai
 class AdmissionBackend:
 	extends Node
 	var commits := 0
+	var queries := 0
 
 	func get_gpu_resident_render_activation_cohort(_identity: Dictionary) -> Dictionary:
+		queries += 1
 		return {"status": "READY", "ready": true, "regional": true, "chunks": [
-			{"page_x": 0, "generation": 1}, {"page_x": 1, "generation": 2},
-			{"page_x": 2, "generation": 3},
+			{"page_x": 0, "generation": 1, "activation_required": true},
+			{"page_x": 1, "generation": 2, "activation_required": false},
+			{"page_x": 2, "generation": 3, "activation_required": false},
 		]}
 
 	func activate_gpu_resident_render_cohort(pool: Array, _seed: Dictionary) -> Dictionary:
@@ -254,6 +257,7 @@ func _add_prepared_seed(controller: Node, generation: int) -> void:
 
 func _test_initial_activation_budget() -> bool:
 	var probe := RetryProbe.new()
+	var capacity: int = probe.ACTIVATION_COHORT_RETRY_CAPACITY
 	var backend := PreparationBackend.new()
 	probe._backend_terrain = backend
 	probe.add_waiting("older")
@@ -273,11 +277,18 @@ func _test_initial_activation_budget() -> bool:
 		and probe._prepared_group_routes.size() == 8
 	probe._retry_prepared_groups()
 	probe._drain_activation_cohort_retries()
-	ok = ok and probe.visited == ["older"]
-	probe._groups["0"]["retiring"] = true
+	var expected_first: Array[String] = ["older"]
+	for index in range(capacity - 1):
+		expected_first.append(str(index))
+	ok = ok and probe.visited == expected_first
+	var retiring_key := str(capacity - 1)
+	probe._groups[retiring_key]["retiring"] = true
 	probe._drain_activation_cohort_retries()
-	ok = ok and probe.visited == ["older", "1"] \
-		and not probe._activation_retry_membership.has("0")
+	var expected_second := expected_first.duplicate()
+	for index in range(capacity, capacity * 2):
+		expected_second.append(str(index))
+	ok = ok and probe.visited == expected_second \
+		and not probe._activation_retry_membership.has(retiring_key)
 	probe.free()
 	backend.free()
 	if not ok:
@@ -588,11 +599,16 @@ func _test_regional_commit_barrier() -> bool:
 	var committed := backend.commits == 1 and effect.submitted_entries == 1 \
 		and bool(controller._groups["0"].get("activation_queued", false)) \
 		and bool(controller._groups["0"].get("native_active", false))
+	if not waited or not committed:
+		push_error(
+			"regional commit barrier mismatch: waited=%s committed=%s queries=%d commits=%d submitted=%d group=%s"
+			% [waited, committed, backend.queries, backend.commits, effect.submitted_entries, str(controller._groups.get("0", {}))]
+		)
+		controller.free()
+		backend.free()
+		return false
 	controller.free()
 	backend.free()
-	if not waited or not committed:
-		push_error("regional commit did not wait for retained render activation")
-		return false
 	return true
 
 
