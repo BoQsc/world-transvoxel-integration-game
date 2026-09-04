@@ -13,8 +13,11 @@ func _run() -> void:
 		return
 	var backend: Node = _world.get_backend_terrain()
 	if not _world.update_viewer(1, 1, Vector3(24, 30, 24), 2, 2) \
-			or not await _wait_for_complete_lod_inventory():
-		_fail("initial visual inventory did not settle")
+			or not await _wait_for_visual_inventory():
+		_fail("initial visual inventory did not settle: status=%s idle=%s metrics=%s" % [
+			str(_world.get_gpu_resident_render_status()),
+			str(_world.get_cold_idle_summary()),
+			str(_world.get_runtime_metrics())])
 		return
 	if not _world.update_collision_viewer(2, 1, Vector3(24, 24, 24), 1) \
 			or not _world.update_viewer(1, 2, Vector3(152, 30, 24), 2, 2):
@@ -88,6 +91,21 @@ func _run() -> void:
 	print("GPU_COLLISION_ONLY_PUBLICATION_PASS exclusions=%d parent_overlap=1 visual_preserved=1 drained=1" \
 		% observed_exclusions.size())
 	quit(0)
+
+
+func _wait_for_visual_inventory() -> bool:
+	for _frame in range(3600):
+		var status: Dictionary = _world.get_gpu_resident_render_status()
+		var effect: Dictionary = status.get("effect_status", {})
+		if bool(_world.get_cold_idle_summary().get("cold_idle", false)) \
+				and int(status.get("active_chunks", 0)) > 0 \
+				and int(status.get("active_chunks", -1)) \
+					== int(effect.get("active_entry_count", -2)) \
+				and int(status.get("rejected_chunks", -1)) == 0 \
+				and int(effect.get("draw_frames", 0)) >= 2:
+			return true
+		await process_frame
+	return false
 
 
 func _wait_collision_publication_idle() -> bool:

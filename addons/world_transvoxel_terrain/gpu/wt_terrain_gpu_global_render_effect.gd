@@ -444,7 +444,7 @@ func replace_entries(entries: Array, retirements: Array) -> bool:
 func _queue_activation_group_command(
 	action: String, entries: Array, retirements: Array = []
 ) -> bool:
-	if entries.is_empty():
+	if entries.is_empty() and (action != "REPLACE_GROUP" or retirements.is_empty()):
 		_record_rejection("global render activation group is empty")
 		return false
 	var retained_entries: Array[Dictionary] = []
@@ -1174,8 +1174,11 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 
 
 func _replace_group_on_render_thread(command: Dictionary) -> void:
-	var activations := _validated_activation_group_on_render_thread(command)
-	if activations.is_empty():
+	var activation_sources := Array(command.get("entries", []))
+	var activations: Array[Dictionary] = []
+	if not activation_sources.is_empty():
+		activations = _validated_activation_group_on_render_thread(command)
+	if not activation_sources.is_empty() and activations.is_empty():
 		return
 	var retirements: Array[Dictionary] = []
 	for source_value in Array(command.get("retirements", [])):

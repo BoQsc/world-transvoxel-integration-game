@@ -272,6 +272,8 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 		config.set("global_coarse_lod_coverage", true)
 	if bool(world.runtime_gpu_resident_render_candidate_enabled):
 		config.set("visual_viewer_collision_enabled", false)
+		config.set("hierarchical_lod_staging_enabled", true)
+		config.set("hierarchical_lod_background_activation_enabled", false)
 	if world.runtime_collision_activation_distance > 0.0:
 		config.set("collision_activation_distance", world.runtime_collision_activation_distance)
 	if world.runtime_collision_deactivation_distance > 0.0:

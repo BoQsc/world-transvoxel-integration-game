@@ -45,6 +45,8 @@ func capture(
 				seen[id] = true
 				states.append(chunk_snapshot(terrain, coordinate, lod))
 	var gpu: Dictionary = terrain.call("get_gpu_resident_render_status")
+	var game_summary: Dictionary = game_world.call("get_game_world_summary")
+	var pipeline_metrics: Dictionary = terrain.call("get_runtime_metrics")
 	var wait: Dictionary = gpu.get("last_activation_cohort_wait", {})
 	var wait_summary := _scalar_fields(wait)
 	wait_summary["waiting_member"] = wait.get("waiting_member", {})
@@ -56,25 +58,50 @@ func capture(
 		"support_is_last_movement_attempt": true,
 		"states": states,
 		"viewers": game_world.call("get_causal_trace_context"),
-		"pipeline": _scalar_fields(terrain.call("get_runtime_metrics")),
+		"pipeline": _scalar_fields(pipeline_metrics),
 		"gpu": _scalar_fields(gpu),
 		"gpu_native": _scalar_fields(gpu.get("native_metrics", {})),
+		"gpu_active_terrain_lod_counts": Dictionary(game_summary.get(
+			"gpu_resident_active_terrain_lod_counts", {}
+		)).duplicate(true),
+		"gpu_active_static_water_lod_counts": Dictionary(game_summary.get(
+			"gpu_resident_active_static_water_lod_counts", {}
+		)).duplicate(true),
 		"gpu_activation_wait": wait_summary,
 	}
-	if publication_inspection_enabled and not _inspected_labels.has(label):
+	var inspection_key := label
+	if label == "exact_publication_wait":
+		inspection_key = "%s:%d" % [label, frame]
+	if publication_inspection_enabled and not _inspected_labels.has(inspection_key):
+		var backend: Node = terrain.call("get_backend_terrain")
 		for state in states:
 			if not ray.is_empty() and not ray_inventory.get("chunks", []).has(state.coordinate):
 				continue
 			if state.lod != 0 or not state.get("is_visual_required", false) or \
 				state.get("is_visual_ready", false) or not state.get("is_collision_required", false):
 				continue
-			var backend: Node = terrain.call("get_backend_terrain")
 			if backend != null and backend.has_method("inspect_gpu_resident_publication"):
 				event["publication_inspection"] = backend.call(
 					"inspect_gpu_resident_publication", state.coordinate, state.lod
 				)
-				_inspected_labels[label] = true
+				_inspected_labels[inspection_key] = true
 				break
+		if not event.has("publication_inspection") and backend != null and \
+				backend.has_method("inspect_gpu_resident_publication") and \
+				int(pipeline_metrics.get("blocked_pending_chunk_replacements", 0)) > 0:
+			var blocked_coordinate := Vector3i(
+				int(pipeline_metrics.get("first_blocked_replacement_key_x", 0)),
+				int(pipeline_metrics.get("first_blocked_replacement_key_y", 0)),
+				int(pipeline_metrics.get("first_blocked_replacement_key_z", 0))
+			)
+			var blocked_lod := int(pipeline_metrics.get(
+				"first_blocked_replacement_key_lod", 0
+			))
+			event["publication_inspection"] = backend.call(
+				"inspect_gpu_resident_publication", blocked_coordinate, blocked_lod
+			)
+			event["publication_inspection_source"] = "first_blocked_replacement"
+			_inspected_labels[inspection_key] = true
 	var serialized: Dictionary = _json_value(event)
 	serialized["capture_us"] = Time.get_ticks_usec() - started
 	samples.append(serialized)
@@ -97,7 +124,8 @@ static func chunk_snapshot(terrain: Object, coordinate: Vector3i, lod: int) -> D
 	if state == null:
 		return result
 	for method in [
-		"is_present", "get_generation", "is_visual_required", "is_visual_ready",
+		"is_present", "get_generation", "get_world_revision",
+		"is_visual_required", "is_visual_ready",
 		"is_collision_required", "is_collision_ready", "get_render_generation",
 		"get_staged_render_generation", "get_collision_generation",
 		"get_staged_collision_generation",

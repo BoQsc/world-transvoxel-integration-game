@@ -272,6 +272,7 @@ func run(
 		"render_frame_interval_contract": "wall_time_between_frame_post_draw_signals_not_display_present",
 		"gpu_candidate_status": terrain_world.call("get_gpu_resident_render_status") \
 			if terrain_world.has_method("get_gpu_resident_render_status") else {},
+		"authority_runtime_metrics_end": runtime_metrics_end,
 		"interaction_collision_invoker": {
 			"enabled": bool(game_world_summary.get(
 				"player_interaction_collision_invoker_enabled", false
@@ -606,17 +607,20 @@ func _run_single_edit_measurement(
 			)
 
 	var commit_frame := -1
+	var committed_revision := revision_before
 	var commit_frame_us := []
 	_trace_begin_phase("authority_commit_wait", "edit:submission:1", true)
 	if interaction_accepted:
 		for frame in range(EDIT_COMMIT_WAIT_FRAMES + 1):
-			if int(terrain_world.call("get_backend_world_revision")) > revision_before:
+			var observed_revision := int(
+				terrain_world.call("get_backend_world_revision")
+			)
+			if observed_revision > revision_before:
 				commit_frame = frame
+				committed_revision = observed_revision
 				_trace_record(&"authority_commit_observed", {
 					"wait_frames": frame,
-					"world_revision": int(
-						terrain_world.call("get_backend_world_revision")
-					),
+					"world_revision": committed_revision,
 				}, true)
 				break
 			if frame == EDIT_COMMIT_WAIT_FRAMES:
@@ -628,99 +632,155 @@ func _run_single_edit_measurement(
 	var generation_ready_frame := -1
 	var visual_ready_frame := -1
 	var native_visual_ready_frame := -1
+	var visual_ready_lod := -1
+	var visual_ready_generation := 0
+	var visual_ready_chunk := Vector3i.ZERO
 	var gpu_render_required := false
 	if terrain_world.has_method("get_gpu_resident_render_status"):
 		gpu_render_required = bool(Dictionary(terrain_world.call(
 			"get_gpu_resident_render_status"
 		)).get("running", false))
 	var collision_ready_frame := -1
+	var collision_ready_lod := -1
+	var collision_ready_generation := 0
+	var collision_ready_chunk := Vector3i.ZERO
 	var logical_visual_ready_frame := -1
 	var logical_collision_ready_frame := -1
 	var collision_required := false
 	var resource_generation_api := false
 	var ready_frame_us := []
 	var final_generation := generation_before
+	var final_world_revision := 0
 	var final_render_generation := 0
 	var final_staged_render_generation := 0
 	var final_collision_generation := 0
+	var refinement_visual_ready_frame := -1
+	var refinement_collision_ready_frame := -1
 	var generation_change_recorded := false
 	var visual_ready_recorded := false
 	var collision_ready_recorded := false
+	var covering_chunks := []
+	for lod in range(4):
+		covering_chunks.append(_chunk_coordinate_for_lod(edit_position, lod))
 	_trace_begin_phase("exact_publication_wait", "edit:submission:1", true)
 	if commit_frame >= 0:
 		for frame in range(edit_ready_wait_frames + 1):
-			var state: RefCounted = terrain_world.call("query_chunk_state", expected_chunk, 0)
-			if state != null:
+			for lod in range(4):
+				var chunk: Vector3i = covering_chunks[lod]
+				var state: RefCounted = terrain_world.call("query_chunk_state", chunk, lod)
+				if state == null or not state.has_method("get_world_revision"):
+					continue
 				var observed_generation := _chunk_generation(state)
-				if observed_generation != final_generation and \
-						observed_generation > generation_before:
-					final_generation = observed_generation
-					visual_ready_frame = -1
-					native_visual_ready_frame = -1
-					collision_ready_frame = -1
-				var generation_changed := final_generation > generation_before
-				if generation_changed and generation_ready_frame < 0:
+				var observed_world_revision := int(state.call("get_world_revision"))
+				var edit_aware := observed_generation > 0 and \
+					observed_world_revision >= committed_revision
+				if not edit_aware:
+					continue
+				if generation_ready_frame < 0:
 					generation_ready_frame = frame
-				if generation_changed and not generation_change_recorded:
+				if not generation_change_recorded:
 					generation_change_recorded = true
-					_trace_record(&"target_generation_changed", {
+					_trace_record(&"target_revision_observed", {
 						"frame_after_commit": frame,
-						"generation": final_generation,
+						"generation": observed_generation,
+						"world_revision": observed_world_revision,
+						"lod": lod,
+						"chunk": _vector3i_summary(chunk),
 					}, true)
-				if state.has_method("is_collision_required"):
-					collision_required = bool(state.call("is_collision_required"))
-				if generation_changed and logical_visual_ready_frame < 0 and \
-						state.has_method("is_visual_ready") and bool(state.call("is_visual_ready")):
-					logical_visual_ready_frame = frame
-				if generation_changed and logical_collision_ready_frame < 0 and \
-						state.has_method("is_collision_ready") and bool(state.call("is_collision_ready")):
-					logical_collision_ready_frame = frame
-				resource_generation_api = \
-					state.has_method("get_render_generation") and \
+				var visual_required := state.has_method("is_visual_required") and \
+					bool(state.call("is_visual_required"))
+				var visual_ready := state.has_method("is_visual_ready") and \
+					bool(state.call("is_visual_ready"))
+				var observed_collision_required := \
+					state.has_method("is_collision_required") and \
+					bool(state.call("is_collision_required"))
+				var observed_collision_ready := \
+					state.has_method("is_collision_ready") and \
+					bool(state.call("is_collision_ready"))
+				collision_required = collision_required or observed_collision_required
+				resource_generation_api = state.has_method("get_render_generation") and \
 					state.has_method("get_collision_generation")
-				if resource_generation_api:
-					final_render_generation = int(state.call("get_render_generation"))
+				if not resource_generation_api:
+					continue
+				var render_generation := int(state.call("get_render_generation"))
+				var collision_generation := int(state.call("get_collision_generation"))
+				var native_render_ready := visual_required and visual_ready and \
+					render_generation == observed_generation
+				if native_render_ready and native_visual_ready_frame < 0:
+					native_visual_ready_frame = frame
+				var actual_render_ready := native_render_ready
+				if native_render_ready and gpu_render_required:
+					actual_render_ready = terrain_world.has_method(
+						"is_gpu_resident_render_chunk_active"
+					) and bool(terrain_world.call(
+						"is_gpu_resident_render_chunk_active",
+						chunk, lod, observed_generation
+					))
+				if actual_render_ready and visual_ready_frame < 0:
+					visual_ready_frame = frame
+					visual_ready_lod = lod
+					visual_ready_generation = observed_generation
+					visual_ready_chunk = chunk
+					logical_visual_ready_frame = frame
+					if not visual_ready_recorded:
+						visual_ready_recorded = true
+						_trace_record(&"edit_aware_render_published", {
+							"frame_after_commit": frame,
+							"generation": observed_generation,
+							"world_revision": observed_world_revision,
+							"lod": lod,
+							"chunk": _vector3i_summary(chunk),
+						}, true)
+				if observed_collision_required and observed_collision_ready and \
+						collision_generation == observed_generation and \
+						collision_ready_frame < 0:
+					collision_ready_frame = frame
+					logical_collision_ready_frame = frame
+					collision_ready_lod = lod
+					collision_ready_generation = observed_generation
+					collision_ready_chunk = chunk
+					if not collision_ready_recorded:
+						collision_ready_recorded = true
+						_trace_record(&"edit_aware_collision_published", {
+							"frame_after_commit": frame,
+							"generation": observed_generation,
+							"world_revision": observed_world_revision,
+							"lod": lod,
+							"chunk": _vector3i_summary(chunk),
+						}, true)
+				if lod == 0:
+					final_generation = observed_generation
+					final_world_revision = observed_world_revision
+					final_render_generation = render_generation
 					if state.has_method("get_staged_render_generation"):
 						final_staged_render_generation = int(
 							state.call("get_staged_render_generation")
 						)
-					final_collision_generation = int(
-						state.call("get_collision_generation")
-					)
-					var native_render_ready := generation_changed and \
-						final_render_generation == final_generation
-					if native_render_ready and native_visual_ready_frame < 0:
-						native_visual_ready_frame = frame
-					var actual_render_ready := native_render_ready
-					if native_render_ready and gpu_render_required:
-						actual_render_ready = terrain_world.has_method(
-							"is_gpu_resident_render_chunk_active"
-						) and bool(terrain_world.call(
-							"is_gpu_resident_render_chunk_active",
-							expected_chunk, 0, final_generation
-						))
-					if actual_render_ready and visual_ready_frame < 0:
-						visual_ready_frame = frame
-						if not visual_ready_recorded:
-							visual_ready_recorded = true
-							_trace_record(&"exact_render_published", {
-								"frame_after_commit": frame,
-								"generation": final_generation,
-							}, true)
-					if generation_changed and collision_ready_frame < 0 and \
-							final_collision_generation == final_generation:
-						collision_ready_frame = frame
-						if not collision_ready_recorded:
-							collision_ready_recorded = true
-							_trace_record(&"exact_collision_published", {
-								"frame_after_commit": frame,
-								"generation": final_generation,
-							}, true)
-				else:
-					if not gpu_render_required:
-						visual_ready_frame = logical_visual_ready_frame
-					collision_ready_frame = logical_collision_ready_frame
-			if visual_ready_frame >= 0 and (collision_ready_frame >= 0 or not collision_required):
+					final_collision_generation = collision_generation
+					if actual_render_ready and refinement_visual_ready_frame < 0:
+						refinement_visual_ready_frame = frame
+					if observed_collision_required and observed_collision_ready and \
+							collision_generation == observed_generation and \
+							refinement_collision_ready_frame < 0:
+						refinement_collision_ready_frame = frame
+			if _readiness_probe != null and (
+				frame % 5 == 0 or frame == edit_ready_wait_frames or
+				(visual_ready_frame >= 0 and (
+					collision_ready_frame >= 0 or not collision_required
+				))
+			):
+				var origin := camera.global_position
+				var end := origin - camera.global_transform.basis.z * float(
+					player.get("interaction_distance")
+				)
+				_readiness_probe.call(
+					"capture", "exact_publication_wait", frame,
+					game_world, terrain_world, player,
+					{"origin": origin, "end": end, "target_chunk": expected_chunk}
+				)
+			if visual_ready_frame >= 0 and collision_ready_frame >= 0 and \
+					refinement_visual_ready_frame >= 0 and \
+					refinement_collision_ready_frame >= 0:
 				break
 			if frame == edit_ready_wait_frames:
 				break
@@ -775,7 +835,9 @@ func _run_single_edit_measurement(
 		"edit_position": _vector3_summary(edit_position),
 		"target_chunk": _vector3i_summary(expected_chunk),
 		"generation_before": generation_before,
+		"committed_world_revision": committed_revision,
 		"generation_after": final_generation,
+		"world_revision_after": final_world_revision,
 		"render_generation_after": final_render_generation,
 		"staged_render_generation_after": final_staged_render_generation,
 		"collision_generation_after": final_collision_generation,
@@ -784,9 +846,14 @@ func _run_single_edit_measurement(
 		"authority_commit_ms": authority_commit_ms,
 		"generation_changed_frames_after_commit": generation_ready_frame,
 		"visual_ready_frames_after_commit": visual_ready_frame,
+		"visual_ready_lod": visual_ready_lod,
+		"visual_ready_generation": visual_ready_generation,
+		"visual_ready_chunk": _vector3i_summary(visual_ready_chunk),
 		"gpu_render_required": gpu_render_required,
-		"visual_readiness_contract": "native_generation_and_gpu_activation_ack" \
-			if gpu_render_required else "native_render_generation",
+		"visual_readiness_contract": \
+			"committed_world_revision_any_active_lod_and_gpu_activation_ack" \
+			if gpu_render_required else \
+			"committed_world_revision_any_active_lod_native_generation",
 		"native_visual_ready_frames_after_commit": native_visual_ready_frame,
 		"native_visual_ready_ms_after_commit": _frames_elapsed_ms(
 			ready_frame_us, native_visual_ready_frame
@@ -794,7 +861,14 @@ func _run_single_edit_measurement(
 		"visual_ready_ms_after_commit": visual_ready_ms,
 		"collision_required": collision_required,
 		"collision_ready_frames_after_commit": collision_ready_frame,
+		"collision_ready_lod": collision_ready_lod,
+		"collision_ready_generation": collision_ready_generation,
+		"collision_ready_chunk": _vector3i_summary(collision_ready_chunk),
 		"collision_ready_ms_after_commit": collision_ready_ms,
+		"lod0_refinement_visual_ready_frames_after_commit":
+			refinement_visual_ready_frame,
+		"lod0_refinement_collision_ready_frames_after_commit":
+			refinement_collision_ready_frame,
 		"ready_observation_window_frames": ready_frame_us.size(),
 		"ready_observation_window_ms": ready_observation_window_ms,
 		"visual_ready_censored": visual_ready_frame < 0,
@@ -1029,6 +1103,15 @@ func _chunk_coordinate(position: Vector3) -> Vector3i:
 		floori(position.x / CHUNK_SIZE),
 		floori(position.y / CHUNK_SIZE),
 		floori(position.z / CHUNK_SIZE)
+	)
+
+
+func _chunk_coordinate_for_lod(position: Vector3, lod: int) -> Vector3i:
+	var extent := CHUNK_SIZE * float(1 << lod)
+	return Vector3i(
+		floori(position.x / extent),
+		floori(position.y / extent),
+		floori(position.z / extent)
 	)
 
 

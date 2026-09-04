@@ -405,6 +405,11 @@ func _start_profile() -> void:
 	game_world.name = "WtGameWorld"
 	game_world.human_input_enabled = false
 	game_world.player_viewer_update_distance = float(settings.get("player_viewer_update_distance", 8.0))
+	# GPU publication swaps complete LOD regions atomically. Keep only the latest
+	# visual destination while one region is outstanding; collision viewers below
+	# continue to follow the player independently.
+	game_world.player_viewer_coalesce_while_streaming = \
+		gpu_resident_render_candidate_requested
 	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
 	if autonomous and human_visual_capture_path.is_empty():
 		predictive_viewer_enabled = false
@@ -432,6 +437,8 @@ func _start_profile() -> void:
 	var foreground_priority_enabled := bool(settings.get(
 		"player_foreground_priority_enabled", false
 	))
+	if gpu_resident_render_candidate_requested:
+		foreground_priority_enabled = true
 	if foreground_priority_override == "enabled":
 		foreground_priority_enabled = true
 	elif foreground_priority_override == "disabled":
@@ -5160,6 +5167,7 @@ func _place_player_at_tunnel_playtest_start() -> bool:
 
 
 func _capture_human_visual() -> void:
+	var deferred_runtime_baseline_failure := ""
 	if human_visual_capture_mode == "runtime_baseline_gate":
 		var runtime_baseline_gate = RuntimeBaselineGate.new()
 		last_runtime_baseline_summary = await runtime_baseline_gate.run(
@@ -5173,11 +5181,9 @@ func _capture_human_visual() -> void:
 		)
 		print("WT_RUNTIME_BASELINE_SUMMARY ", JSON.stringify(last_runtime_baseline_summary))
 		if not bool(last_runtime_baseline_summary.get("ok", false)):
-			_fail(
-				"runtime baseline acceptance failure: %s" %
+			deferred_runtime_baseline_failure = \
+				"runtime baseline acceptance failure: %s" % \
 				JSON.stringify(last_runtime_baseline_summary)
-			)
-			return
 	elif human_visual_capture_mode == "fly_collision_stress_gate":
 		if not await _run_fly_collision_stress_gate():
 			return
@@ -5355,6 +5361,11 @@ func _capture_human_visual() -> void:
 	var watertightness_accepted := bool(watertightness_acceptance.get("accepted_for_mode", false))
 	if _capture_requires_watertightness_probe() and not watertightness_accepted:
 		push_error("WT_WATERTIGHTNESS_FAIL: %s" % JSON.stringify(last_watertightness_summary))
+		await _shutdown_gpu_resident_capture_resources()
+		get_tree().quit(1)
+		return
+	if not deferred_runtime_baseline_failure.is_empty():
+		push_error("WT_PRODUCTION_GAME_P2_FAIL: " + deferred_runtime_baseline_failure)
 		await _shutdown_gpu_resident_capture_resources()
 		get_tree().quit(1)
 		return

@@ -58,7 +58,9 @@ const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 1
 const COLLISION_ACTIVATION_RETRY_BURST := 3
-const LIFECYCLE_HISTORY_CAPACITY := 512
+const LIFECYCLE_HISTORY_CAPACITY := 4096
+const MATERIAL_SYNC_INTERVAL_FRAMES := 30
+const IDLE_RECONCILIATION_INTERVAL_FRAMES := 8
 
 var _backend_terrain: Node
 var _world_environment: WorldEnvironment
@@ -115,6 +117,8 @@ var _production_water_signature := ""
 var _production_texture_cache: Dictionary = {}
 var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
 var _stage_timing_usec: Dictionary = {}
+var _next_material_sync_frame := 0
+var _next_reconciliation_frame := 0
 
 
 func _ready() -> void:
@@ -452,7 +456,9 @@ func _process(_delta: float) -> void:
 		return
 	_process_frame += 1
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
-	_sync_production_materials()
+	if _process_frame >= _next_material_sync_frame:
+		_sync_production_materials()
+		_next_material_sync_frame = _process_frame + MATERIAL_SYNC_INTERVAL_FRAMES
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("materials", phase_start)
 	if not _running:
@@ -483,7 +489,8 @@ func _process(_delta: float) -> void:
 		phase_start = _record_stage_time("submit", phase_start)
 	if not _running:
 		return
-	_reconcile_active_chunks()
+	if _process_frame >= _next_reconciliation_frame:
+		_next_reconciliation_frame = _process_frame + _reconcile_active_chunks()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("reconcile", phase_start)
 	if not _running:
@@ -841,6 +848,10 @@ func _submit_native_captures() -> void:
 		group["requests"] = requests
 		group["sequences"] = sequences
 		_groups[group_key] = group
+		_record_lifecycle_event("CAPTURE_SUBMITTED", group_key, {
+			"surface": surface,
+			"render_request_id": render_request_id,
+		})
 		var route := {"group_key": group_key, "surface": surface}
 		_render_request_routes[render_request_id] = route
 		_entry_routes[_entry_token(identity, sequence)] = route
@@ -868,6 +879,9 @@ func _drain_effect_events() -> void:
 					group_key, str(route.get("surface", "")), event
 				)
 				_mark_surface(group_key, "prepared", str(route.get("surface", "")))
+				_record_lifecycle_event("SURFACE_PREPARED", group_key, {
+					"surface": str(route.get("surface", "")),
+				})
 				if not bool(Dictionary(_groups.get(group_key, {})).get(
 					"retiring", false
 				)):
@@ -1014,6 +1028,9 @@ func _try_validate_group(group_key: String) -> void:
 		"collision_required", false
 	))
 	_groups[group_key] = group
+	_record_lifecycle_event("NATIVE_PREPARED", group_key, {
+		"collision_priority": bool(group.get("collision_activation_priority", false)),
+	})
 	_prepared_group_routes[_activation_chunk_key(Dictionary(
 		terrain_request.get("identity", {})
 	))] = group_key
@@ -1127,6 +1144,9 @@ func _queue_selected_activation_cohort(
 ) -> void:
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
+		_record_lifecycle_event("COHORT_WAIT", group_key, {
+			"status": cohort_status,
+		})
 		_record_activation_cohort_wait(cohort)
 		_queue_activation_cohort_retry(group_key)
 		return
@@ -1139,41 +1159,14 @@ func _queue_selected_activation_cohort(
 		)))
 		return
 	var native_precommitted := false
+	var regional_inventory_pool: Array = []
 	if bool(cohort.get("regional", false)):
-		var pool := _prepared_inventory_pool(Array(cohort.get("chunks", [])))
+		regional_inventory_pool = _prepared_inventory_pool(Array(cohort.get("chunks", [])))
 		if _stage_timing_enabled:
 			phase_start = _record_stage_time("activation_inventory", phase_start)
-		if pool.is_empty():
+		if regional_inventory_pool.is_empty():
 			_queue_activation_cohort_retry(group_key)
 			return
-		var regional_activation := Dictionary(_backend_terrain.call(
-			"activate_gpu_resident_render_cohort",
-			pool,
-			terrain_identity
-		))
-		if _stage_timing_enabled:
-			phase_start = _record_stage_time("activation_native_commit", phase_start)
-		var regional_status := str(regional_activation.get("status", ""))
-		if regional_status == "WAITING_COHORT":
-			_record_activation_cohort_wait(regional_activation)
-			_queue_activation_cohort_retry(group_key)
-			return
-		if regional_status.begins_with("STALE"):
-			_supersede_group(group_key)
-			return
-		if regional_status != "ACTIVE" \
-				or not bool(regional_activation.get("active", false)):
-			_fail_closed(str(regional_activation.get(
-				"error", "native regional activation transaction failed"
-			)))
-			return
-		cohort["chunks"] = Array(regional_activation.get(
-			"chunks", []
-		)).duplicate(true)
-		cohort["retirements"] = Array(regional_activation.get(
-			"retirements", []
-		)).duplicate(true)
-		native_precommitted = true
 	var group_keys: Array[String] = []
 	var cohort_member_group_keys: Array[String] = []
 	var activation_entries: Array[Dictionary] = []
@@ -1259,6 +1252,32 @@ func _queue_selected_activation_cohort(
 	if inventories.is_empty():
 		_queue_activation_cohort_retry(group_key)
 		return
+	# Native regional activation mutates authoritative visibility. Commit only
+	# after every activation and retirement route has passed controller preflight,
+	# so a transient route miss cannot strand a native/effect split state.
+	if bool(cohort.get("regional", false)):
+		var regional_activation := Dictionary(_backend_terrain.call(
+			"activate_gpu_resident_render_cohort",
+			regional_inventory_pool,
+			terrain_identity
+		))
+		if _stage_timing_enabled:
+			phase_start = _record_stage_time("activation_native_commit", phase_start)
+		var regional_status := str(regional_activation.get("status", ""))
+		if regional_status == "WAITING_COHORT":
+			_record_activation_cohort_wait(regional_activation)
+			_queue_activation_cohort_retry(group_key)
+			return
+		if regional_status.begins_with("STALE"):
+			_supersede_group(group_key)
+			return
+		if regional_status != "ACTIVE" \
+				or not bool(regional_activation.get("active", false)):
+			_fail_closed(str(regional_activation.get(
+				"error", "native regional activation transaction failed"
+			)))
+			return
+		native_precommitted = true
 	if group_keys.is_empty():
 		if not native_precommitted:
 			var retained_activation := Dictionary(_backend_terrain.call(
@@ -1269,6 +1288,11 @@ func _queue_selected_activation_cohort(
 				_fail_closed(str(retained_activation.get(
 					"error", "retained GPU activation cohort commit failed"
 				)))
+				return
+		if not retirement_entries.is_empty():
+			_mark_groups_retiring(retirement_group_keys)
+			if not _effect.replace_entries([], retirement_entries):
+				_fail_closed("global renderer rejected committed retirement-only cohort")
 				return
 		for member_group_key in cohort_member_group_keys:
 			_activation_retry_membership.erase(member_group_key)
@@ -1295,6 +1319,11 @@ func _queue_selected_activation_cohort(
 		if native_precommitted:
 			member_group["native_active"] = true
 		_groups[member_group_key] = member_group
+		_record_lifecycle_event("COHORT_SELECTED", member_group_key, {
+			"cohort_id": cohort_id,
+			"regional": bool(cohort.get("regional", false)),
+			"member_count": group_keys.size(),
+		})
 	_activation_cohorts_queued += 1
 	if native_precommitted:
 		_mark_groups_retiring(retirement_group_keys)
@@ -1511,10 +1540,18 @@ func _try_commit_activation_cohort(group_key: String) -> void:
 		var member_group := Dictionary(_groups[member_group_key])
 		member_group["native_active"] = true
 		_groups[member_group_key] = member_group
+		_record_lifecycle_event("NATIVE_COMMITTED", member_group_key, {
+			"cohort_id": cohort_id,
+		})
 	cohort["native_committed"] = true
 	_activation_cohorts[cohort_id] = cohort
 	if not _effect.activate_entries(Array(cohort.get("activation_entries", []))):
 		_fail_closed("global renderer rejected committed activation cohort")
+		return
+	for member_group_key_value in group_keys:
+		_record_lifecycle_event("ACTIVATION_REQUESTED", str(member_group_key_value), {
+			"cohort_id": cohort_id,
+		})
 
 
 func _try_finish_activation_cohort(group_key: String) -> void:
@@ -1551,11 +1588,11 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 	_activation_cohorts_committed += 1
 
 
-func _reconcile_active_chunks() -> void:
+func _reconcile_active_chunks() -> int:
 	if not _resident_replacement_batch_ready():
 		_coverage_retained_reconciliation_deferrals += 1
 		_clear_retirement_candidates()
-		return
+		return 1
 	var terrain_identities: Array = []
 	var group_by_identity: Dictionary = {}
 	for group_key in _groups:
@@ -1568,19 +1605,20 @@ func _reconcile_active_chunks() -> void:
 		terrain_identities.append(terrain_identity)
 		group_by_identity[_group_key(terrain_identity)] = group_key
 	if terrain_identities.is_empty():
-		return
+		return IDLE_RECONCILIATION_INTERVAL_FRAMES
 	var reconciliation := Dictionary(_backend_terrain.call(
 		"reconcile_gpu_resident_render_chunks", terrain_identities
 	))
 	if str(reconciliation.get("status", "")) != "PASS":
 		_fail_closed("native resident reconciliation failed")
-		return
+		return IDLE_RECONCILIATION_INTERVAL_FRAMES
 	var retire_group_keys := {}
 	for identity_value in Array(reconciliation.get("retire", [])):
 		var identity := Dictionary(identity_value)
 		var group_key := str(group_by_identity.get(_group_key(identity), ""))
 		if not group_key.is_empty():
 			retire_group_keys[group_key] = true
+	var retirement_confirmation_pending := false
 	for group_key_value in group_by_identity.values():
 		var group_key := str(group_key_value)
 		if not _groups.has(group_key):
@@ -1598,8 +1636,10 @@ func _reconcile_active_chunks() -> void:
 			continue
 		group["retirement_candidate_frame"] = _process_frame
 		_groups[group_key] = group
-		_has_retirement_candidates = true
+		retirement_confirmation_pending = true
 		_retirement_confirmation_deferrals += 1
+	_has_retirement_candidates = retirement_confirmation_pending
+	return 1 if retirement_confirmation_pending else IDLE_RECONCILIATION_INTERVAL_FRAMES
 
 
 func _clear_retirement_candidates() -> void:
