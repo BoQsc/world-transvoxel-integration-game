@@ -1,9 +1,17 @@
 # GPU Architecture Decision
 
-Status: `TQP64_GPU_REFINEMENT_CORRECTNESS_FIXED_GAMEPLAY_LATENCY_OPEN`
+Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
+
+The [rapid-edit investigation](evidence/gpu_rapid_edit_20260905/RESULT.md)
+pins authority `2a5e22a`. A repeated cross-chunk carve/construction test reproduced
+mixed visible revisions on the prior candidate and passes on Vulkan/D3D12 after
+grouping adjacent pending edit generations atomically. The final clean route has
+zero blocked movement steps, but first visual takes 47 frames and collision takes
+66 frames after commit. GPU remains opt-in and unqualified. The smaller refinement
+step experiment was reverted because it did not establish a latency improvement.
 
 The [2026-09-05 refinement investigation](evidence/gpu_edit_refinement_20260905/RESULT.md)
-pins matching debug/release binaries from authority `4682850`. Internal refresh
+previously pinned matching debug/release binaries from authority `4682850`. Internal refresh
 coalescing and multi-split balance defects are fixed with failing-before tests.
 Vulkan/D3D12 lifecycle passes, but clean gameplay still fails edit latency and
 divergence. Faster exact refinement currently delays first-edit feedback by

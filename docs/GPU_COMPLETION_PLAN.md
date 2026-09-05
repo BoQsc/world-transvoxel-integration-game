@@ -5,6 +5,14 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
+The latest [rapid-edit fix](evidence/gpu_rapid_edit_20260905/RESULT.md) supersedes
+the pin below with `2a5e22a`. Transient cross-chunk revision mismatch is reproduced
+on the old candidate and fixed on Vulkan/D3D12. Retained matching seam masks no
+longer let half of a pending edit publish independently. The final gameplay route
+still misses visual/collision response limits (47/66 frames); GPU is not complete.
+One-step refinement was measured and reverted. Preserve atomic edit publication
+when addressing latency; do not recover response time by exposing mixed revisions.
+
 The [edit refinement investigation](evidence/gpu_edit_refinement_20260905/RESULT.md)
 supersedes the recovery artifact state below. Authority `4682850` and both rebuilt
 DLLs now match the runtime pin. Two additional correctness defects are fixed,
