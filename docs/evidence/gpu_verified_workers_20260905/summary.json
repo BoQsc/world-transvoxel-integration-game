@@ -1,0 +1,68 @@
+[
+  {
+    "experiment": "gpu_activation_time_budget_run1_20260905",
+    "observed_meshing_workers": 0,
+    "requested_meshing_workers": 0,
+    "commit_frames": 1,
+    "collision_frames": 5,
+    "first_visual_frames": 11,
+    "lod0_visual_frames": 79,
+    "target_wait_frames": 31,
+    "divergence_frames": 6,
+    "blocked_frames": 47,
+    "longest_block": 36,
+    "p95_ms": 37.482,
+    "p99_ms": 56.465,
+    "failures": [
+      "route_net_displacement",
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99",
+      "physics_target_wait"
+    ]
+  },
+  {
+    "experiment": "gpu_verified_meshworker1_run1_20260905",
+    "observed_meshing_workers": 1,
+    "requested_meshing_workers": 1,
+    "commit_frames": 1,
+    "collision_frames": 4,
+    "first_visual_frames": 13,
+    "lod0_visual_frames": 80,
+    "target_wait_frames": 31,
+    "divergence_frames": 9,
+    "blocked_frames": 44,
+    "longest_block": 36,
+    "p95_ms": 38.99,
+    "p99_ms": 51.463,
+    "failures": [
+      "route_net_displacement",
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99",
+      "physics_target_wait",
+      "visual_collision_divergence"
+    ]
+  },
+  {
+    "experiment": "gpu_verified_activation_budget_run1_20260905",
+    "observed_meshing_workers": 1,
+    "requested_meshing_workers": 1,
+    "commit_frames": 4,
+    "collision_frames": 7,
+    "first_visual_frames": 10,
+    "lod0_visual_frames": 89,
+    "target_wait_frames": 0,
+    "divergence_frames": 3,
+    "blocked_frames": 7,
+    "longest_block": 5,
+    "p95_ms": 38.603,
+    "p99_ms": 56.855,
+    "failures": [
+      "frame_p95",
+      "frame_p99"
+    ]
+  }
+]

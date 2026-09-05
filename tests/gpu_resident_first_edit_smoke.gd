@@ -47,6 +47,8 @@ func _run() -> void:
 	operation.density_value = 1.0
 	var batch := EditBatch.new()
 	batch.add_operation(operation)
+	var submitted_us := Time.get_ticks_usec()
+	var stage_first_seen := {}
 	if not _world.submit_edit_batch(batch, 6601):
 		_fail("first edit rejected")
 		return
@@ -58,9 +60,14 @@ func _run() -> void:
 		await process_frame
 		if commit_frame < 0 and _world.get_world_revision() == 1:
 			commit_frame = frame
+			stage_first_seen["committed"] = {"frame": frame, "elapsed_us": Time.get_ticks_usec() - submitted_us}
 		for state_value in _world.get_debug_gpu_processing_states():
 			var state := Dictionary(state_value)
 			var identity := Dictionary(state.get("identity", {}))
+			if int(identity.get("world_revision", 0)) == 1:
+				var stage := str(state.get("stage", "unknown"))
+				if not stage_first_seen.has(stage):
+					stage_first_seen[stage] = {"frame": frame, "elapsed_us": Time.get_ticks_usec() - submitted_us}
 			if state.get("stage", "") == "visible" and int(identity.get("world_revision", 0)) == 1:
 				var minimum: Vector3 = state.get("bounds_min", Vector3.INF)
 				var maximum: Vector3 = state.get("bounds_max", -Vector3.INF)
@@ -74,6 +81,7 @@ func _run() -> void:
 	if commit_frame < 0 or first_visual_frame < 0 or first_visual_lod <= 0:
 		_fail("first edit bypassed coarse feedback: commit=%d visual=%d lod=%d" % [commit_frame, first_visual_frame, first_visual_lod])
 		return
+	print("GPU_RESIDENT_FIRST_EDIT_TIMELINE " + JSON.stringify(stage_first_seen))
 	var refined := false
 	for _frame in range(900):
 		await process_frame

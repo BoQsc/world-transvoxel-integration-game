@@ -56,7 +56,8 @@ const RENDER_SUBMISSION_CAPACITY := 16
 const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # Initial attempts share the retry budget: many prepared members can refer to
 # one regional wait, so preparation must not rebuild its cohort for each member.
-const ACTIVATION_COHORT_RETRY_CAPACITY := 1
+const ACTIVATION_COHORT_RETRY_CAPACITY := 4
+const ACTIVATION_COHORT_RETRY_BUDGET_USEC := 750
 const COLLISION_ACTIVATION_RETRY_BURST := 3
 const LIFECYCLE_HISTORY_CAPACITY := 4096
 const MATERIAL_SYNC_INTERVAL_FRAMES := 30
@@ -1448,6 +1449,7 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 
 
 func _drain_activation_cohort_retries() -> void:
+	var deadline := _activation_retry_clock_usec() + ACTIVATION_COHORT_RETRY_BUDGET_USEC
 	var attempts := 0
 	var inspected := 0
 	var pending_count := (
@@ -1460,6 +1462,10 @@ func _drain_activation_cohort_retries() -> void:
 	while attempts < ACTIVATION_COHORT_RETRY_CAPACITY and inspected < inspection_limit \
 			and (not _activation_collision_retry_queue.is_empty() \
 				or not _activation_retry_queue.is_empty()):
+		# One expensive query may exceed the budget; do not start another.
+		# Cheap independent cohorts can advance without a frame per seed.
+		if inspected > 0 and _activation_retry_clock_usec() >= deadline:
+			break
 		var use_collision_lane := not _activation_collision_retry_queue.is_empty() \
 			and (_activation_retry_queue.is_empty() \
 				or _activation_collision_retry_streak < COLLISION_ACTIVATION_RETRY_BURST)
@@ -1484,6 +1490,10 @@ func _drain_activation_cohort_retries() -> void:
 		_activation_cohort_retry_attempts += 1
 		if _try_queue_activation_cohort(group_key):
 			attempts += 1
+
+
+func _activation_retry_clock_usec() -> int:
+	return Time.get_ticks_usec()
 
 
 func _try_commit_activation_cohort(group_key: String) -> void:

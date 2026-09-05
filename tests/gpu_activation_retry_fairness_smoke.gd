@@ -83,6 +83,11 @@ class RetryProbe:
 	extends "res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd"
 
 	var visited: Array[String] = []
+	var simulated_usec := 0
+	var query_cost_usec := 0
+
+	func _activation_retry_clock_usec() -> int:
+		return simulated_usec
 
 	func add_waiting(key: String) -> void:
 		_groups[key] = {"native_prepared": true}
@@ -91,6 +96,7 @@ class RetryProbe:
 
 	func _try_queue_activation_cohort(group_key: String) -> bool:
 		visited.append(group_key)
+		simulated_usec += query_cost_usec
 		_queue_activation_cohort_retry(group_key)
 		return true
 
@@ -149,6 +155,9 @@ func _initialize() -> void:
 		_fail(probe, "cancelled retry was retained")
 		return
 	probe.free()
+	if not _test_retry_time_budget():
+		quit(1)
+		return
 	if not _test_collision_activation_lane():
 		quit(1)
 		return
@@ -204,13 +213,34 @@ func _test_collision_activation_lane() -> bool:
 	var expected := [
 		"collision_0", "collision_1", "collision_2", "normal_0", "collision_0",
 	]
-	var ok := probe.visited == expected \
+	var ok := probe.visited.slice(0, 5) == expected \
+		and probe.visited.size() == 5 * probe.ACTIVATION_COHORT_RETRY_CAPACITY \
+		and probe.visited.has("normal_3") \
 		and probe._activation_collision_retry_queue.size() == 3 \
 		and probe._activation_retry_queue.size() == 4 \
 		and probe._activation_retry_membership.size() == 7
 	probe.free()
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: collision activation lane was not weighted-fair")
+	return ok
+
+
+func _test_retry_time_budget() -> bool:
+	var probe := RetryProbe.new()
+	for index in range(8):
+		probe.add_waiting(str(index))
+	probe.query_cost_usec = probe.ACTIVATION_COHORT_RETRY_BUDGET_USEC + 1
+	probe._drain_activation_cohort_retries()
+	var ok := probe.visited == ["0"]
+	probe.query_cost_usec = probe.ACTIVATION_COHORT_RETRY_BUDGET_USEC / 2
+	probe._drain_activation_cohort_retries()
+	ok = ok and probe.visited == ["0", "1", "2"]
+	probe.query_cost_usec = 0
+	probe._drain_activation_cohort_retries()
+	ok = ok and probe.visited == ["0", "1", "2", "3", "4", "5", "6"]
+	probe.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: retry deadline or cheap-cohort progress failed")
 	return ok
 
 

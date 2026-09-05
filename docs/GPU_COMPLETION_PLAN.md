@@ -5,6 +5,14 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
+Latest measurement correction and checkpoint:
+[verified workers and bounded activation retries](evidence/gpu_verified_workers_20260905/RESULT.md).
+Earlier readiness runs overrode the GPU launcher's mesh worker with zero; their
+worker-benefit attribution is invalid. The corrected runner verifies one worker.
+Budgeted retries improve queue progress, but the latest single run still has
+seven blocked steps, 89-frame exact detail, and failing frame times. Instant and
+sustained nonhalting editing remain unresolved.
+
 Current authority `674ecc3` reuses unaffected coarse edge corrections during edit
 replay, with byte-exact and negative-control proofs. Maximum preparation in the
 large route falls from roughly 54 ms to 3.4 ms, but overall timing still fails:

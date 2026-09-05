@@ -56,7 +56,10 @@
       "frame_p95",
       "frame_p99",
       "visual_collision_divergence"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_auto_lod_radius1_run1",
@@ -114,7 +117,10 @@
       "consecutive_blocked_movement_frames",
       "frame_p95",
       "frame_p99"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_auto_lod_live_viewer_run1",
@@ -172,7 +178,10 @@
       "frame_p95",
       "frame_p99",
       "visual_collision_divergence"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_viewer_activation_run1",
@@ -229,7 +238,10 @@
       "consecutive_blocked_movement_frames",
       "frame_p95",
       "frame_p99"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_viewer_meshworker1_run1",
@@ -283,7 +295,10 @@
     "p99_ms": 28.007,
     "failures": [
       "frame_p95"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_viewer_workers1_run1",
@@ -340,7 +355,10 @@
       "frame_p99",
       "visual_ready_wait",
       "visual_collision_divergence"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   },
   {
     "experiment": "gpu_viewer_priority_final_run1",
@@ -397,6 +415,9 @@
       "frame_p99",
       "visual_ready_wait",
       "visual_collision_divergence"
-    ]
+    ],
+    "observed_meshing_workers": 0,
+    "runner_procedural_generation_workers": 2,
+    "worker_configuration_correction": "Runner overrides launcher; names do not establish actual worker settings"
   }
 ]

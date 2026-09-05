@@ -2,6 +2,13 @@
 
 Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
 
+Latest integration investigation: [verified workers and activation retries](evidence/gpu_verified_workers_20260905/RESULT.md).
+The readiness runner had overridden all launcher mesh-worker changes with zero;
+those earlier worker comparisons were invalid. Corrected runs verify one worker.
+Bounded activation retries now advance up to four cheap queries within a 750 us
+budget. One route observed seven blocked steps and ten-frame initial feedback,
+but 89-frame exact detail and failing frame times. Qualification remains open.
+
 Latest pin: `674ecc3`, documented in the
 [local correction investigation](evidence/gpu_local_surface_shift_20260905/RESULT.md).
 Reusing unaffected corrections preserves exact output and cuts maximum coarse
@@ -12,8 +19,8 @@ The subsequent material initialization fix passes its strengthened lifecycle tes
 Previous pin: `65bc583`, documented in the
 [viewer activation investigation](evidence/gpu_viewer_activation_20260905/RESULT.md).
 Nearby LOD detail now advances without edits, using a bounded native viewer
-neighborhood. One asynchronous mesh worker substantially reduced movement stalls
-in the experiment; final qualification still fails, with 23-frame visual response,
+neighborhood. Correction: the experiment runner overrode the launcher with zero
+mesh workers, so earlier worker-benefit attribution was invalid. That run still fails, with 23-frame visual response,
 83-frame exact detail, and five blocked steps. No hardware limitation is established.
 
 Previous pin: `14bb8f0`, documented in the

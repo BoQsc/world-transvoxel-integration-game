@@ -27,6 +27,10 @@ D3D12 takes six frames and 3,020 microseconds. These are bounded fixture results
 Automatic LOD relocation and twelve rapid cross-chunk edits pass on both drivers;
 the rapid test checks 62 frames without mixed visible revisions.
 
+Runner correction: both large route reports below used zero mesh workers, due
+to an explicit runner argument overriding the GPU launcher's one-worker setting.
+They do not measure the normal launcher configuration.
+
 The large clean route reduced maximum mesh preparation from about 54 ms in the
 preceding report to 3.443 ms. End-to-end timing nevertheless failed: commit 2
 frames, first visual 39 frames after commit, LOD0 and collision 127 frames,

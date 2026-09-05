@@ -25,6 +25,10 @@ def main() -> int:
     parser.add_argument("--gpu-lifecycle-history", action="store_true")
     parser.add_argument("--gpu-interaction-collision-demand", action="store_true")
     parser.add_argument(
+        "--meshing-workers", type=int, choices=range(0, 9), default=None,
+        help="Override launcher policy (default: GPU 1, CPU 0).",
+    )
+    parser.add_argument(
         "--foreground-priority", choices=("auto", "enabled", "disabled"),
         default="auto",
     )
@@ -40,6 +44,9 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    meshing_workers = args.meshing_workers
+    if meshing_workers is None:
+        meshing_workers = 1 if args.backend == "gpu" else 0
     if args.publication_probe and (args.no_probe or args.backend != "gpu"):
         parser.error("publication inspection requires GPU with the readiness probe")
     if args.gpu_stage_timing and args.backend != "gpu":
@@ -93,7 +100,7 @@ def main() -> int:
         pin = json.loads((project / "WORLD_TRANSVOXEL_RUNTIME_PIN.json").read_text())
         actual_artifact_digest = runtime_artifact.artifact_digest(project / "addons" / "world_transvoxel")
         result, execution = baseline._run_measurement(
-            args.godot, project, capture, 1, 2, 24.0, 2, 0,
+            args.godot, project, capture, 1, 2, 24.0, 2, meshing_workers,
             causal_trace_path=trace, stem_prefix=args.backend,
             extra_args=extra, retain_incomplete_measurement=True,
         )
@@ -102,6 +109,10 @@ def main() -> int:
             "actual_runtime_artifact_sha256": actual_artifact_digest,
             "runtime_artifact_matches_pin": actual_artifact_digest == pin["runtime_artifact"]["digest_sha256"],
             "affinity": affinity, "godot_version": version,
+            "requested_meshing_workers": meshing_workers,
+            "observed_meshing_workers": result.get(
+                "authority_runtime_metrics_end", {}
+            ).get("mesh_worker_count"),
             "diagnostic_only_not_performance_baseline": (
                 not args.no_probe
                 or args.native_trace
@@ -109,8 +120,14 @@ def main() -> int:
                 or args.gpu_lifecycle_history
             ),
         }
+        payload["worker_configuration_matches_requested"] = (
+            payload["observed_meshing_workers"] == meshing_workers
+        )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        if not payload["worker_configuration_matches_requested"]:
+            print("ERROR: runtime meshing worker count differs from requested configuration")
+            return 1
         print(json.dumps({
             "output": str(output), "complete": result["measurement_complete"],
             "movement": result["movement"], "edit_accepted": result["edit"]["interaction_accepted"],

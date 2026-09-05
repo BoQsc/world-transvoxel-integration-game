@@ -3,6 +3,11 @@
 Status: INCOMPLETE_NOT_QUALIFIED. Native authority is `65bc583d9ad29f2bf69f784aea10973ea459bba8`.
 Runtime digest: `028f08fba94d5ad9afdbecc66d8cca7c26355487c5c674f0ff68981665a6c391`.
 
+Correction: the readiness runner explicitly passed zero meshing workers and two
+procedural workers in every report below, overriding launcher settings. The
+worker-labelled experiments did not test the intended worker changes. Their
+timings remain observations, but cannot establish a worker-count benefit.
+
 The GPU integration disabled autonomous background LOD activation. A bounded
 four-by-four-by-four chunk test never reached LOD0 after 300 frames without an
 edit on the previous configuration. Simply enabling all background activation
@@ -43,16 +48,17 @@ capture. Compressed complete reports and `summary.json` retain failures.
 | All background | 1 | 3 | 12 | 58 | 77 | 29.755 / 41.282 |
 | All background, radius 1 | 3 | 4 | 12 | 76 | 35 | 31.247 / 43.124 |
 | Bounded viewer, synchronous mesh | 1 | 3 | 11 | 68 | 39 | 26.254 / 36.484 |
-| Bounded viewer, one mesh worker | 3 | 4 | 10 | 65 | 0 | 20.980 / 28.007 |
-| Also one procedural worker | 5 | 4 | 17 | 96 | 4 | 22.956 / 34.380 |
+| Intended one mesh worker; actually zero | 3 | 4 | 10 | 65 | 0 | 20.980 / 28.007 |
+| Intended one procedural worker; actually two | 5 | 4 | 17 | 96 | 4 | 22.956 / 34.380 |
 | Final: two procedural workers, live priorities | 5 | 1 | 23 | 83 | 5 | 25.912 / 36.767 |
 
 Collision/visual/LOD0 columns are frames after commit. These are different
-configurations, not repeat measurements of a single final configuration. Removing
+launcher configurations, partly overridden by the runner as corrected above. Removing
 the visual coalescing gate also regressed to 155 blocked steps. Unrestricted
 background activation, the radius reduction, gate removal, and procedural-worker
-reduction were reverted. One asynchronous mesh worker is retained. The latest
-configuration still fails frame-time, visual response and divergence limits.
+reduction were reverted. One asynchronous mesh worker is retained in the launcher,
+but these measurements exercised zero. The final recorded run still fails
+frame-time, visual response and divergence limits.
 
 ## Remaining work
 
