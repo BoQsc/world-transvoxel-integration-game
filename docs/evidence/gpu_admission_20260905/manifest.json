@@ -1,0 +1,71 @@
+{
+  "reports": [
+    {
+      "file": "gpu_delay_diagnostic_20260905.json.gz",
+      "uncompressed_sha256": "0a7c7e63533c776bf4ee9a4905720ab626d842b605d573344cdee3ac8fcd9cdd",
+      "diagnostic_only": true,
+      "pin_matches": true,
+      "failures": [
+        "frame_p95",
+        "frame_p99",
+        "visual_ready_wait",
+        "collision_ready_wait"
+      ]
+    },
+    {
+      "file": "gpu_admission_bypass_run1_20260905.json.gz",
+      "uncompressed_sha256": "d65cdda7a6212a64687238d7961b133c7ffe6dedf1b15ae7a9cf19a843db27ed",
+      "diagnostic_only": false,
+      "pin_matches": true,
+      "failures": [
+        "visual_ready_wait",
+        "visual_collision_divergence"
+      ]
+    },
+    {
+      "file": "gpu_admission_bypass_run2_20260905.json.gz",
+      "uncompressed_sha256": "31fe3b7a81c1fb39d337037a4ccbdf3ae99abc9af14c5f05d2e9c6722ac365c3",
+      "diagnostic_only": false,
+      "pin_matches": true,
+      "failures": [
+        "visual_ready_wait",
+        "collision_ready_wait"
+      ]
+    },
+    {
+      "file": "gpu_pipeline32_run2_20260905.json.gz",
+      "uncompressed_sha256": "0112a411e099310ffe476a02f4ddd535df457574c8d893315e88f5e62129d5d1",
+      "diagnostic_only": false,
+      "pin_matches": true,
+      "failures": [
+        "frame_p95",
+        "visual_ready_wait",
+        "visual_collision_divergence"
+      ]
+    },
+    {
+      "file": "gpu_content_first_run1_20260905.json.gz",
+      "uncompressed_sha256": "e333b0392a60aa288bff18cc884b8bc3cccc1ae716c9e0c33a7e7d2dbbca6f0b",
+      "diagnostic_only": false,
+      "pin_matches": true,
+      "failures": [
+        "visual_ready_wait",
+        "visual_collision_divergence"
+      ]
+    },
+    {
+      "file": "gpu_content_first_run2_20260905.json.gz",
+      "uncompressed_sha256": "32662a21219ccca795e2a66e78e7c042f6559aed5a9c9f24cd3e556dd5fcaf16",
+      "diagnostic_only": false,
+      "pin_matches": true,
+      "failures": [
+        "visual_ready_wait",
+        "visual_collision_divergence"
+      ]
+    }
+  ],
+  "admission_only_commit": "61ff14aa5b2a1c7c47e843fd71e34a6e8772adb4",
+  "admission_only_binary_identical_to": "64b7b875c8e86241fd750364dd1189fe8b8e5e9d",
+  "final_commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+  "final_artifact_digest": "e3d030a17253b3ef72b76ce7b2d3bf5a060518023eea1201894c9e44ff843ae6"
+}

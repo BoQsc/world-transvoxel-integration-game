@@ -2,6 +2,15 @@
 
 Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
 
+Latest pin: `14bb8f0`, documented in the
+[admission investigation](evidence/gpu_admission_20260905/RESULT.md). GPU capture
+backpressure now permits independent sampling/collision jobs to proceed.
+The rapid-edit regression remains green on Vulkan/D3D12, but the full route still
+misses visual response limits. A larger pipeline was tested and reverted.
+Retained coarse edit content now publishes before refinement when supported,
+with failed-generation recovery for baked data. First response improves to
+25–29 frames in two clean runs; final LOD0 remains 75–85 frames. GPU is incomplete.
+
 The [rapid-edit investigation](evidence/gpu_rapid_edit_20260905/RESULT.md)
 pins authority `2a5e22a`. A repeated cross-chunk carve/construction test reproduced
 mixed visible revisions on the prior candidate and passes on Vulkan/D3D12 after

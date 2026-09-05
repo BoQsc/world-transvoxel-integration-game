@@ -5,6 +5,22 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
+Latest authority `14bb8f0` separates retained coarse edit feedback from refinement.
+It waits for the exact edited coarse generation, but releases the wait if that
+generation fails, is cancelled/superseded, or leaves the plan. This handles the
+baked coarse-page regression that blocked earlier attempts. The focused GPU test
+shows coarse feedback in six frames and still reaches LOD0 on Vulkan/D3D12.
+Two clean gameplay runs show first visual at 29/25 frames, collision at 1/5, and
+zero blocked steps. Exact LOD0 takes 75/85 frames. The existing visual response
+and divergence gates still fail. See the latest section of the admission evidence.
+
+The [admission investigation](evidence/gpu_admission_20260905/RESULT.md) pins
+`61ff14a` and fixes a demonstrated scheduler stall: GPU capture backpressure no
+longer prevents independent sampling/collision work. The regression fails with
+the bypass removed and passes with it restored. Clean visual delay is still
+47–57 frames; GPU completion remains open. A 32-request pipeline experiment was
+reverted after failing to improve latency and worsening frame time/memory.
+
 The latest [rapid-edit fix](evidence/gpu_rapid_edit_20260905/RESULT.md) supersedes
 the pin below with `2a5e22a`. Transient cross-chunk revision mismatch is reproduced
 on the old candidate and fixed on Vulkan/D3D12. Retained matching seam masks no
