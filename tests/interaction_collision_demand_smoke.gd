@@ -4,6 +4,15 @@ const Demand := preload("res://addons/world_transvoxel_gameworld/wt_interaction_
 const GameWorld := preload("res://addons/world_transvoxel_gameworld/wt_game_world_node.gd")
 const Player := preload("res://scripts/wt_production_player.gd")
 
+class CoalescedWorld:
+	extends GameWorld
+	var priority_updates := 0
+	func _player_viewer_streaming_debt_reason() -> String:
+		return "pending_chunk_replacements"
+	func _update_player_foreground_priority_leases(_force: bool) -> bool:
+		priority_updates += 1
+		return true
+
 class MockScene:
 	extends Node
 	var live := {}
@@ -74,6 +83,15 @@ func _run() -> void:
 	if not world.call("_update_player_interaction_collision_invoker", false) or not scene.live.is_empty():
 		return _fail("disabled interaction demand was not retired")
 	player.game_world = world
+	var coalesced := CoalescedWorld.new()
+	root.add_child(coalesced)
+	coalesced.set("_reference_scene", scene)
+	coalesced.set("_player", player)
+	coalesced.player_driven_viewer_enabled = true
+	coalesced.player_viewer_coalesce_while_streaming = true
+	if not coalesced.update_player_viewer() or coalesced.priority_updates != 1:
+		return _fail("streaming coalescing suppressed foreground priority updates")
+	coalesced.queue_free()
 	world.runtime_gpu_resident_render_candidate_enabled = true
 	var target: Dictionary = player.call("_render_mesh_interaction_target", Vector3.ZERO, Vector3.DOWN, 96.0)
 	if target.get("reason") != "raycast_miss_gpu_collision_pending" or target.get("fallback_triangles_scanned", -1) != 0:

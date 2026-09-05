@@ -13,6 +13,9 @@ func _run() -> void:
 	_world.generation_profile = generation
 	_world.storage_profile = _storage_profile()
 	_world.runtime_gpu_resident_render_candidate_enabled = true
+	# Exercise editing retained coarse coverage independently of automatic refinement.
+	_world.runtime_gpu_resident_background_refinement_enabled = false
+	_world.runtime_gpu_resident_viewer_refinement_enabled = false
 	_world.runtime_gpu_resident_chunk_capacity = 256
 	root.add_child(_world)
 	if not _world.start_backend_world() or not await _wait_for_state("running"):

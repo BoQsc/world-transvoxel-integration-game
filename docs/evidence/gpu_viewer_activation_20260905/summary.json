@@ -1,0 +1,402 @@
+[
+  {
+    "experiment": "gpu_auto_lod_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "addon_tree": "4e531b24fdefa570014a66bdc69e6419cb82cba0",
+        "native_source_tree": "12cd794880a69a70fffa392b570b0b8aa4363168",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "digest_sha256": "e3d030a17253b3ef72b76ce7b2d3bf5a060518023eea1201894c9e44ff843ae6",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2514944,
+            "sha256": "773799bc5d3077d0bf536e2b549fe87cbb36f0ca08a7817f6c2449186cdb8c43"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2435584,
+            "sha256": "de141cbced4f3e41ae9a76b87a5dbf9c47419acd8314559195545bad3da2d9c6"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 1,
+    "collision_frames": 3,
+    "visual_frames": 12,
+    "lod0_frames": 58,
+    "blocked_frames": 77,
+    "p95_ms": 29.755,
+    "p99_ms": 41.282,
+    "failures": [
+      "route_net_displacement",
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99",
+      "visual_collision_divergence"
+    ]
+  },
+  {
+    "experiment": "gpu_auto_lod_radius1_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "addon_tree": "4e531b24fdefa570014a66bdc69e6419cb82cba0",
+        "native_source_tree": "12cd794880a69a70fffa392b570b0b8aa4363168",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "digest_sha256": "e3d030a17253b3ef72b76ce7b2d3bf5a060518023eea1201894c9e44ff843ae6",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2514944,
+            "sha256": "773799bc5d3077d0bf536e2b549fe87cbb36f0ca08a7817f6c2449186cdb8c43"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2435584,
+            "sha256": "de141cbced4f3e41ae9a76b87a5dbf9c47419acd8314559195545bad3da2d9c6"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 3,
+    "collision_frames": 4,
+    "visual_frames": 12,
+    "lod0_frames": 76,
+    "blocked_frames": 35,
+    "p95_ms": 31.247,
+    "p99_ms": 43.124,
+    "failures": [
+      "route_net_displacement",
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99"
+    ]
+  },
+  {
+    "experiment": "gpu_auto_lod_live_viewer_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "addon_tree": "4e531b24fdefa570014a66bdc69e6419cb82cba0",
+        "native_source_tree": "12cd794880a69a70fffa392b570b0b8aa4363168",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "14bb8f09e662204897c284f9672460e337d3eae0",
+        "digest_sha256": "e3d030a17253b3ef72b76ce7b2d3bf5a060518023eea1201894c9e44ff843ae6",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2514944,
+            "sha256": "773799bc5d3077d0bf536e2b549fe87cbb36f0ca08a7817f6c2449186cdb8c43"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2435584,
+            "sha256": "de141cbced4f3e41ae9a76b87a5dbf9c47419acd8314559195545bad3da2d9c6"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 2,
+    "collision_frames": 3,
+    "visual_frames": 13,
+    "lod0_frames": 45,
+    "blocked_frames": 155,
+    "p95_ms": 24.42,
+    "p99_ms": 38.946,
+    "failures": [
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99",
+      "visual_collision_divergence"
+    ]
+  },
+  {
+    "experiment": "gpu_viewer_activation_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "addon_tree": "ddca1612533ed9c7763c5db486414a06879ad26e",
+        "native_source_tree": "961a1eecc53a34e95c0e0bc703174d8b7f805fe6",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "digest_sha256": "028f08fba94d5ad9afdbecc66d8cca7c26355487c5c674f0ff68981665a6c391",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2516992,
+            "sha256": "945a8f0d996ea24023adf08a610fd6f3750d62bfea9c0e5d00955e1b24dbe08d"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2437632,
+            "sha256": "e0de250be8c0fa7bde24c315ce7be77861690aee0012e06c15427ccfc86ca6cd"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 1,
+    "collision_frames": 3,
+    "visual_frames": 11,
+    "lod0_frames": 68,
+    "blocked_frames": 39,
+    "p95_ms": 26.254,
+    "p99_ms": 36.484,
+    "failures": [
+      "blocked_movement_frames",
+      "consecutive_blocked_movement_frames",
+      "frame_p95",
+      "frame_p99"
+    ]
+  },
+  {
+    "experiment": "gpu_viewer_meshworker1_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "addon_tree": "ddca1612533ed9c7763c5db486414a06879ad26e",
+        "native_source_tree": "961a1eecc53a34e95c0e0bc703174d8b7f805fe6",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "digest_sha256": "028f08fba94d5ad9afdbecc66d8cca7c26355487c5c674f0ff68981665a6c391",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2516992,
+            "sha256": "945a8f0d996ea24023adf08a610fd6f3750d62bfea9c0e5d00955e1b24dbe08d"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2437632,
+            "sha256": "e0de250be8c0fa7bde24c315ce7be77861690aee0012e06c15427ccfc86ca6cd"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 3,
+    "collision_frames": 4,
+    "visual_frames": 10,
+    "lod0_frames": 65,
+    "blocked_frames": 0,
+    "p95_ms": 20.98,
+    "p99_ms": 28.007,
+    "failures": [
+      "frame_p95"
+    ]
+  },
+  {
+    "experiment": "gpu_viewer_workers1_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "addon_tree": "ddca1612533ed9c7763c5db486414a06879ad26e",
+        "native_source_tree": "961a1eecc53a34e95c0e0bc703174d8b7f805fe6",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "digest_sha256": "028f08fba94d5ad9afdbecc66d8cca7c26355487c5c674f0ff68981665a6c391",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2516992,
+            "sha256": "945a8f0d996ea24023adf08a610fd6f3750d62bfea9c0e5d00955e1b24dbe08d"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2437632,
+            "sha256": "e0de250be8c0fa7bde24c315ce7be77861690aee0012e06c15427ccfc86ca6cd"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 5,
+    "collision_frames": 4,
+    "visual_frames": 17,
+    "lod0_frames": 96,
+    "blocked_frames": 4,
+    "p95_ms": 22.956,
+    "p99_ms": 34.38,
+    "failures": [
+      "frame_p95",
+      "frame_p99",
+      "visual_ready_wait",
+      "visual_collision_divergence"
+    ]
+  },
+  {
+    "experiment": "gpu_viewer_priority_final_run1",
+    "pin": {
+      "schema": "world_transvoxel.integration.runtime_pin.v1",
+      "status": "ACTIVE",
+      "authority": {
+        "repository": "world-transvoxel",
+        "commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "addon_tree": "ddca1612533ed9c7763c5db486414a06879ad26e",
+        "native_source_tree": "961a1eecc53a34e95c0e0bc703174d8b7f805fe6",
+        "fallback": false
+      },
+      "runtime_artifact": {
+        "layout": "binary_consumer_v1",
+        "native_source_included": false,
+        "binary_build_commit": "65bc583d9ad29f2bf69f784aea10973ea459bba8",
+        "digest_sha256": "028f08fba94d5ad9afdbecc66d8cca7c26355487c5c674f0ff68981665a6c391",
+        "files": [
+          "LICENSE_SCOPE.md",
+          "OPERATING_LIMITS.md",
+          "PUBLIC_API.md",
+          "README.md",
+          "thirdparty/transvoxel_mit/LICENSE",
+          "thirdparty/transvoxel_mit/UPSTREAM.md",
+          "world_transvoxel.gdextension",
+          "world_transvoxel.gdextension.uid",
+          "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+          "bin/world_transvoxel.windows.template_release.x86_64.dll"
+        ],
+        "binaries": [
+          {
+            "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
+            "bytes": 2516992,
+            "sha256": "945a8f0d996ea24023adf08a610fd6f3750d62bfea9c0e5d00955e1b24dbe08d"
+          },
+          {
+            "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
+            "bytes": 2437632,
+            "sha256": "e0de250be8c0fa7bde24c315ce7be77861690aee0012e06c15427ccfc86ca6cd"
+          }
+        ]
+      }
+    },
+    "authority_commit_frames": 5,
+    "collision_frames": 1,
+    "visual_frames": 23,
+    "lod0_frames": 83,
+    "blocked_frames": 5,
+    "p95_ms": 25.912,
+    "p99_ms": 36.767,
+    "failures": [
+      "frame_p95",
+      "frame_p99",
+      "visual_ready_wait",
+      "visual_collision_divergence"
+    ]
+  }
+]

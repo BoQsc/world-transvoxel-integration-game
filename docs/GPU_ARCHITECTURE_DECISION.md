@@ -2,7 +2,14 @@
 
 Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
 
-Latest pin: `14bb8f0`, documented in the
+Latest pin: `65bc583`, documented in the
+[viewer activation investigation](evidence/gpu_viewer_activation_20260905/RESULT.md).
+Nearby LOD detail now advances without edits, using a bounded native viewer
+neighborhood. One asynchronous mesh worker substantially reduced movement stalls
+in the experiment; final qualification still fails, with 23-frame visual response,
+83-frame exact detail, and five blocked steps. No hardware limitation is established.
+
+Previous pin: `14bb8f0`, documented in the
 [admission investigation](evidence/gpu_admission_20260905/RESULT.md). GPU capture
 backpressure now permits independent sampling/collision jobs to proceed.
 The rapid-edit regression remains green on Vulkan/D3D12, but the full route still

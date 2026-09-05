@@ -64,6 +64,8 @@ signal readiness_changed(snapshot: Dictionary)
 @export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
 @export_range(1, 16, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export var runtime_gpu_resident_render_candidate_enabled: bool = false
+@export var runtime_gpu_resident_background_refinement_enabled: bool = false
+@export var runtime_gpu_resident_viewer_refinement_enabled: bool = true
 @export var runtime_gpu_resident_world_environment_path: NodePath
 @export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
 @export_range(1, 4096, 1) var runtime_gpu_resident_chunk_capacity: int = 64

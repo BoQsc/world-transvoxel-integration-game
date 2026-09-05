@@ -5,7 +5,16 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
-Latest authority `14bb8f0` separates retained coarse edit feedback from refinement.
+Latest authority `65bc583` adds bounded automatic viewer activation, fixing nearby
+detail that only advanced after an edit. The GPU launcher uses one asynchronous
+mesh worker and continues foreground priorities while visual updates coalesce.
+The no-edit relocation, rapid-edit and lifecycle tests pass on Vulkan/D3D12.
+The final clean gameplay run still takes 23 frames to first edit feedback and 83
+to LOD0, with five blocked steps and frame-time misses. See the
+[viewer activation experiments](evidence/gpu_viewer_activation_20260905/RESULT.md).
+Instant editing and sustained nonhalting gameplay remain unqualified.
+
+Previous authority `14bb8f0` separates retained coarse edit feedback from refinement.
 It waits for the exact edited coarse generation, but releases the wait if that
 generation fails, is cancelled/superseded, or leaves the plan. This handles the
 baked coarse-page regression that blocked earlier attempts. The focused GPU test

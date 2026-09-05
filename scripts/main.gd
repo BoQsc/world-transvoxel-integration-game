@@ -391,6 +391,7 @@ func _start_profile() -> void:
 			settings["expected_max_resources"] = 1024
 			settings["runtime_lod_refinement_radius_chunks"] = 0
 	if gpu_resident_render_candidate_requested:
+		settings["runtime_meshing_worker_count"] = 1
 		# GPU visuals use the independent collision invoker instead of broad
 		# visual-viewer collision. Startup has no general collision demand to
 		# satisfy; player support is demanded and verified by the targeted body

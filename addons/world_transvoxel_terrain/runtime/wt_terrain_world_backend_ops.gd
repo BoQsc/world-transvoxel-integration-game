@@ -273,7 +273,10 @@ static func _apply_runtime_config_overrides(world, config: Resource) -> void:
 	if bool(world.runtime_gpu_resident_render_candidate_enabled):
 		config.set("visual_viewer_collision_enabled", false)
 		config.set("hierarchical_lod_staging_enabled", true)
-		config.set("hierarchical_lod_background_activation_enabled", false)
+		config.set("hierarchical_lod_background_activation_enabled",
+			world.runtime_gpu_resident_background_refinement_enabled)
+		config.set("hierarchical_lod_viewer_activation_enabled",
+			world.runtime_gpu_resident_viewer_refinement_enabled)
 	if world.runtime_collision_activation_distance > 0.0:
 		config.set("collision_activation_distance", world.runtime_collision_activation_distance)
 	if world.runtime_collision_deactivation_distance > 0.0:

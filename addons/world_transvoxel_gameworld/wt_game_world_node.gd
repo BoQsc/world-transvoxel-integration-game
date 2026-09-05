@@ -264,7 +264,9 @@ func update_player_viewer(force: bool = false) -> bool:
 			_last_player_viewer_coalesce_reason = coalesce_reason
 			if not _update_player_collision_invoker(position, force):
 				return false
-			return _update_player_interaction_collision_invoker(force)
+			if not _update_player_interaction_collision_invoker(force):
+				return false
+			return _update_player_foreground_priority_leases(force)
 	# When both roles move, enqueue the visual viewer first. The native worker
 	# consumes one viewer event before a foreground edit, so collision-first order
 	# can commit an edit against collision-only demand before visual demand arrives.
