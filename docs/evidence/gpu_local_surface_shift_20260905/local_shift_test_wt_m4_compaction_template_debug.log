@@ -1,0 +1,3 @@
+LOCAL_SURFACE_SHIFT samples_full=68390 samples_local=3204 exact_cases=24
+M4_COMPACTION_HASH 73f0f8ac46d1dfc3d235788b8c9d04a90934b0d70bf94aedf44a09e3562fe049
+M4_COMPACTION_PASS pages=2 compacted_revision=2 multiresolution=1 failure_cases=6

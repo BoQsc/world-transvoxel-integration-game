@@ -5,7 +5,14 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
-Latest authority `65bc583` adds bounded automatic viewer activation, fixing nearby
+Current authority `674ecc3` reuses unaffected coarse edge corrections during edit
+replay, with byte-exact and negative-control proofs. Maximum preparation in the
+large route falls from roughly 54 ms to 3.4 ms, but overall timing still fails:
+39-frame first feedback and 127-frame exact detail/collision. A separate initial
+material retry race was reproduced and fixed afterward. See the
+[local correction investigation](evidence/gpu_local_surface_shift_20260905/RESULT.md).
+
+Previous authority `65bc583` adds bounded automatic viewer activation, fixing nearby
 detail that only advanced after an edit. The GPU launcher uses one asynchronous
 mesh worker and continues foreground priorities while visual updates coalesce.
 The no-edit relocation, rapid-edit and lifecycle tests pass on Vulkan/D3D12.

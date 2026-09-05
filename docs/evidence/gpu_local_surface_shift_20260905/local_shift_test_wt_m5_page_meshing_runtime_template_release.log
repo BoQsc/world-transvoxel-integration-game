@@ -1,0 +1,5 @@
+M5_WATER_TOP_AREA 13615.963 13615.488 13613.668 13608.026 BOUNDARY_TRIANGLES 1932 1600 312 38
+AUTHORED_WATER_ORIENTATION aligned=536 opposed=0 outward=536 inward=0
+LARGE_ROLLING_HILLS_CAVE_LOD2_TRANSITION_MASKS pairs=8 max_indices=153
+M5_PAGE_MESHING_RUNTIME_HASH aa1a828204ad38c1d476286553af5f65e779cc0eccfe777c88db44b31f49f45d
+M5_PAGE_MESHING_RUNTIME_PASS dependencies=13 cache_entries=2 backpressure=1 cancellations=1 invalidations=1 missing_support=1 priority_ordered_loading_retry=1 shared_page_fanout=1 shared_page_cancellation_fanout=1 large_rolling_hills_cave_lod2_mask_regression=1 human_boundary_repro=1 edited_coarse_rebuild=1 sphere_difference_topology=1 smooth_sphere_difference=1 material_volume_distance=1 procedural_water_volume=1 authored_water_volume=1

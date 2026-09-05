@@ -458,7 +458,10 @@ func _process(_delta: float) -> void:
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	if _process_frame >= _next_material_sync_frame:
 		_sync_production_materials()
-		_next_material_sync_frame = _process_frame + MATERIAL_SYNC_INTERVAL_FRAMES
+		# Materials and RD texture handles may arrive after the first process
+		# frame. Do not postpone their initial installation by half a second.
+		var initializing := _production_material_signature.is_empty() or _production_water_signature.is_empty()
+		_next_material_sync_frame = _process_frame + (1 if initializing else MATERIAL_SYNC_INTERVAL_FRAMES)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("materials", phase_start)
 	if not _running:

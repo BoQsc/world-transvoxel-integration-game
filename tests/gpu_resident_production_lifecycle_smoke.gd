@@ -100,6 +100,10 @@ func _run() -> void:
 		)
 		return
 	var initial_status: Dictionary = _world.get_gpu_resident_render_status()
+	if not _cpu_reference and (not bool(initial_status.get("production_terrain_material_payload_ready", false)) \
+			or not bool(initial_status.get("production_static_water_material_payload_ready", false))):
+		_fail("initial GPU activation preceded production material initialization")
+		return
 	var initial_activated := int(initial_status.get("activated_chunks", 0))
 	if not _cpu_reference:
 		if not await _test_texture_cache_invalidation():
@@ -295,6 +299,12 @@ func _run() -> void:
 			or bool(effect_status.get("array_mesh_upload_used", true)) \
 			or not bool(effect_status.get("atomic_surface_set_activation", false)) \
 			or int(runtime_metrics.get("collision_resources", 0)) < 1:
+		var backend: Node = _world.get_backend_terrain()
+		for method in ["get_render_material_override", "get_water_material_override"]:
+			var actual = backend.call(method)
+			print("GPU_RESIDENT_MATERIAL_DIAGNOSTIC %s type=%s shader=%s" % [method,
+				actual.get_class() if actual != null else "null",
+				actual.shader.resource_path if actual is ShaderMaterial and actual.shader != null else "none"])
 		_fail("resident production contract failed: %s" % str(status))
 		return
 	_sun.shadow_enabled = true

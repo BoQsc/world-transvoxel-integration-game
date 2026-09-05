@@ -1,0 +1,8 @@
+LOCAL_SURFACE_SHIFT samples_full=68390 samples_local=1979 exact_cases=24
+FAIL: local correction differs from full rebuild including normals/materials
+FAIL: local correction differs from full rebuild including normals/materials
+FAIL: local correction differs from full rebuild including normals/materials
+FAIL: local correction differs from full rebuild including normals/materials
+FAIL: local correction differs from full rebuild including normals/materials
+FAIL: local correction differs from full rebuild including normals/materials
+M4_COMPACTION_FAIL failures=6

@@ -2,7 +2,14 @@
 
 Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
 
-Latest pin: `65bc583`, documented in the
+Latest pin: `674ecc3`, documented in the
+[local correction investigation](evidence/gpu_local_surface_shift_20260905/RESULT.md).
+Reusing unaffected corrections preserves exact output and cuts maximum coarse
+edit preparation to 3.4 ms in the latest route. Overall GPU timing still fails;
+39-frame first feedback and 127-frame LOD0/collision are not instant editing.
+The subsequent material initialization fix passes its strengthened lifecycle test.
+
+Previous pin: `65bc583`, documented in the
 [viewer activation investigation](evidence/gpu_viewer_activation_20260905/RESULT.md).
 Nearby LOD detail now advances without edits, using a bounded native viewer
 neighborhood. One asynchronous mesh worker substantially reduced movement stalls

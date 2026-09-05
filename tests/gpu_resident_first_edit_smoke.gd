@@ -38,6 +38,7 @@ func _run() -> void:
 		_fail("first edit fixture did not provide retained coarse coverage")
 		return
 	var operation := EditOperation.new()
+	var prepare_before := int(_world.get_runtime_metrics().get("mesh_prepare_time_ns_total", 0))
 	operation.mode = EditOperation.Mode.CONSTRUCT
 	operation.brush_shape = EditOperation.BrushShape.SPHERE
 	operation.center = Vector3(8, 8, 8)
@@ -52,6 +53,7 @@ func _run() -> void:
 	var commit_frame := -1
 	var first_visual_frame := -1
 	var first_visual_lod := -1
+	var prepare_at_feedback := 0
 	for frame in range(900):
 		await process_frame
 		if commit_frame < 0 and _world.get_world_revision() == 1:
@@ -67,6 +69,7 @@ func _run() -> void:
 					first_visual_frame = frame
 					first_visual_lod = int(identity.get("lod", -1))
 		if first_visual_frame >= 0:
+			prepare_at_feedback = int(_world.get_runtime_metrics().get("mesh_prepare_time_ns_total", 0)) - prepare_before
 			break
 	if commit_frame < 0 or first_visual_frame < 0 or first_visual_lod <= 0:
 		_fail("first edit bypassed coarse feedback: commit=%d visual=%d lod=%d" % [commit_frame, first_visual_frame, first_visual_lod])
@@ -86,7 +89,7 @@ func _run() -> void:
 	if not refined:
 		_fail("first edit content published but refinement stopped")
 		return
-	print("GPU_RESIDENT_FIRST_EDIT_SMOKE_PASS commit=%d visual_after_commit=%d first_lod=%d refined=1" % [commit_frame, first_visual_frame - commit_frame, first_visual_lod])
+	print("GPU_RESIDENT_FIRST_EDIT_SMOKE_PASS commit=%d visual_after_commit=%d first_lod=%d refined=1 prepare_until_feedback_us=%d" % [commit_frame, first_visual_frame - commit_frame, first_visual_lod, prepare_at_feedback / 1000])
 	_world.stop_backend_world()
 	await _wait_for_state("stopped")
 	quit(0)

@@ -1,0 +1,9 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+D3D12 12_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design
+
+ERROR: GPU_RESIDENT_PRODUCTION_LIFECYCLE_SMOKE_FAIL: initial GPU activation preceded production material initialization
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _fail (res://tests/gpu_resident_production_lifecycle_smoke.gd:549)
+       [1] _run (res://tests/gpu_resident_production_lifecycle_smoke.gd:105)
+       [2] _wait_for_active_chunk (res://tests/gpu_resident_production_lifecycle_smoke.gd:514)
