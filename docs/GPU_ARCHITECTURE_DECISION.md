@@ -2,14 +2,21 @@
 
 Status: `TQP64_GPU_RAPID_EDIT_PUBLICATION_FIXED_GAMEPLAY_LATENCY_OPEN`
 
-Latest integration investigation: [verified workers and activation retries](evidence/gpu_verified_workers_20260905/RESULT.md).
+Current authority `c1447de`: [native publication dependency rewrite](evidence/gpu_publication_dependency_rewrite_20260906/RESULT.md).
+Retained integer spatial indexes replace per-member retirement scans, with
+directed closure traversal and live readiness checks. Independent references and
+both graphics backends pass correctness checks. The first route records p95/p99
+23.006/32.592 ms, seven-frame first feedback and 63-frame exact detail, with eight
+blocked steps. This supports the targeted rewrite, but does not qualify GPU.
+
+Previous integration investigation: [verified workers and activation retries](evidence/gpu_verified_workers_20260905/RESULT.md).
 The readiness runner had overridden all launcher mesh-worker changes with zero;
 those earlier worker comparisons were invalid. Corrected runs verify one worker.
 Bounded activation retries now advance up to four cheap queries within a 750 us
 budget. One route observed seven blocked steps and ten-frame initial feedback,
 but 89-frame exact detail and failing frame times. Qualification remains open.
 
-Latest pin: `674ecc3`, documented in the
+Previous pin: `674ecc3`, documented in the
 [local correction investigation](evidence/gpu_local_surface_shift_20260905/RESULT.md).
 Reusing unaffected corrections preserves exact output and cuts maximum coarse
 edit preparation to 3.4 ms in the latest route. Overall GPU timing still fails;

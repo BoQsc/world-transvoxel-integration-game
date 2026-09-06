@@ -1,0 +1,39 @@
+[
+  {
+    "experiment": "gpu_verified_activation_budget_run1_20260905",
+    "native_commit": "674ecc38462fd480a3ad8bb3c783f72a5f4f1794",
+    "observed_mesh_workers": 1,
+    "commit_frames": 4,
+    "collision_frames": 7,
+    "first_visual_frames": 10,
+    "lod0_visual_frames": 89,
+    "target_wait_frames": 0,
+    "divergence_frames": 3,
+    "blocked_steps": 7,
+    "longest_block": 5,
+    "p95_ms": 38.603,
+    "p99_ms": 56.855,
+    "failures": [
+      "frame_p95",
+      "frame_p99"
+    ]
+  },
+  {
+    "experiment": "gpu_publication_dependency_rewrite_run1_20260906",
+    "native_commit": "c1447defaef9987d8b79bc04331b34c1efe13449",
+    "observed_mesh_workers": 1,
+    "commit_frames": 4,
+    "collision_frames": 2,
+    "first_visual_frames": 7,
+    "lod0_visual_frames": 63,
+    "target_wait_frames": 0,
+    "divergence_frames": 5,
+    "blocked_steps": 8,
+    "longest_block": 7,
+    "p95_ms": 23.006,
+    "p99_ms": 32.592,
+    "failures": [
+      "frame_p95"
+    ]
+  }
+]

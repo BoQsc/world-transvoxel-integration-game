@@ -5,7 +5,15 @@ This checkpoint preserves interrupted work; it does not promote the GPU backend.
 
 ## Update after the rerun
 
-Latest measurement correction and checkpoint:
+Current authority `c1447de` replaces publication closure with a retained native
+spatial dependency graph after checkpoint `6271af5`. This is a subsystem rewrite,
+with independent reference/invalidation tests and unchanged publication safety.
+The first gameplay run has seven-frame first feedback, 63-frame exact detail,
+eight blocked steps, and p95/p99 23.006/32.592 ms. Only the existing p95 gate
+fails, but instant and nonhalting gameplay remain unresolved. See the
+[rewrite integration evidence](evidence/gpu_publication_dependency_rewrite_20260906/RESULT.md).
+
+Previous measurement correction and checkpoint:
 [verified workers and bounded activation retries](evidence/gpu_verified_workers_20260905/RESULT.md).
 Earlier readiness runs overrode the GPU launcher's mesh worker with zero; their
 worker-benefit attribution is invalid. The corrected runner verifies one worker.
@@ -13,7 +21,7 @@ Budgeted retries improve queue progress, but the latest single run still has
 seven blocked steps, 89-frame exact detail, and failing frame times. Instant and
 sustained nonhalting editing remain unresolved.
 
-Current authority `674ecc3` reuses unaffected coarse edge corrections during edit
+Previous authority `674ecc3` reuses unaffected coarse edge corrections during edit
 replay, with byte-exact and negative-control proofs. Maximum preparation in the
 large route falls from roughly 54 ms to 3.4 ms, but overall timing still fails:
 39-frame first feedback and 127-frame exact detail/collision. A separate initial
