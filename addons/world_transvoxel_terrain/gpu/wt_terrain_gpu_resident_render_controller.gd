@@ -247,6 +247,8 @@ func is_chunk_generation_active(position: Vector3i, lod: int, generation: int) -
 
 func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
 	_lifecycle_history_enabled = enabled
+	if _effect != null:
+		_effect.set_critical_path_timeline_enabled(enabled)
 	if not enabled:
 		_recent_lifecycle_events.clear()
 
@@ -885,6 +887,11 @@ func _drain_effect_events() -> void:
 				_mark_surface(group_key, "prepared", str(route.get("surface", "")))
 				_record_lifecycle_event("SURFACE_PREPARED", group_key, {
 					"surface": str(route.get("surface", "")),
+					"gpu_dispatch_ticks_usec": int(event.get("gpu_dispatch_ticks_usec", 0)),
+					"gpu_readback_ticks_usec": int(event.get("gpu_readback_ticks_usec", 0)),
+					"effect_ticks_usec": int(event.get("ticks_usec", 0)),
+					"regenerated_cells": int(event.get("entry_cell_count", 0)),
+					"output_triangles": int(event.get("entry_index_count", 0)) / 3,
 				})
 				if not bool(Dictionary(_groups.get(group_key, {})).get(
 					"retiring", false
@@ -904,6 +911,12 @@ func _drain_effect_events() -> void:
 					"retiring", false
 				)):
 					_try_commit_activation_cohort(group_key)
+			"FIRST_DRAW":
+				_record_lifecycle_event("FIRST_DRAW", group_key, {
+					"surface": str(route.get("surface", "")),
+					"effect_ticks_usec": int(event.get("ticks_usec", 0)),
+					"index_count": int(event.get("entry_index_count", 0)),
+				})
 			"REJECTED":
 				var rejection_error := str(event.get(
 					"error", "GPU entry rejected"
@@ -1926,6 +1939,7 @@ func _record_lifecycle_event(
 	)).get("terrain", {}))
 	var event := {
 		"frame": _process_frame,
+		"ticks_usec": Time.get_ticks_usec(),
 		"action": action,
 		"identity": Dictionary(terrain_request.get("identity", {})).duplicate(true),
 		"active": bool(group.get("active", false)),

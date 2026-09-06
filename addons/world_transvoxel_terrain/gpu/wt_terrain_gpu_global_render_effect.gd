@@ -80,6 +80,9 @@ var _initialization_attempted := false
 var _close_requested := false
 var _close_completed := false
 var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing")
+var _critical_path_timeline_enabled := OS.get_cmdline_user_args().has(
+	"--gpu-lifecycle-history"
+)
 var _stage_timing_usec: Dictionary = {}
 var _active_lod_inventory_dirty := false
 var _draw_bins: Array[Dictionary] = []
@@ -554,6 +557,10 @@ func get_status() -> Dictionary:
 	return result
 
 
+func set_critical_path_timeline_enabled(enabled_value: bool) -> void:
+	_critical_path_timeline_enabled = enabled_value
+
+
 func close() -> void:
 	enabled = false
 	_mutex.lock()
@@ -908,6 +915,8 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			continue
 		var request: Dictionary = _inflight_extractions[ticket]
 		_inflight_extractions.erase(ticket)
+		if _critical_path_timeline_enabled:
+			request["gpu_readback_ticks_usec"] = Time.get_ticks_usec()
 		if _cancelled_inflight_tickets.has(ticket):
 			_cancelled_inflight_tickets.erase(ticket)
 			_arena.discard_readback(ticket)
@@ -1003,6 +1012,8 @@ func _drain_pending_on_render_thread() -> void:
 				request, "resident arena did not return an extraction ticket"
 			)
 			continue
+		if _critical_path_timeline_enabled:
+			request["gpu_dispatch_ticks_usec"] = Time.get_ticks_usec()
 		_inflight_extractions[ticket] = request
 	if not deferred.is_empty():
 		_mutex.lock()
@@ -1046,6 +1057,13 @@ func _finish_entry_on_render_thread(
 		prepared_source["entry_index_count"] = int(entry.get("index_count", 0))
 		prepared_source["entry_failure_cell_count"] = int(entry.get(
 			"failure_cell_count", 0
+		))
+		prepared_source["entry_cell_count"] = int(entry.get("cell_count", 0))
+		prepared_source["gpu_dispatch_ticks_usec"] = int(request.get(
+			"gpu_dispatch_ticks_usec", 0
+		))
+		prepared_source["gpu_readback_ticks_usec"] = int(request.get(
+			"gpu_readback_ticks_usec", 0
 		))
 		_push_event_on_render_thread("PREPARED", prepared_source)
 	_mutex.lock()
@@ -1767,6 +1785,18 @@ func _draw_entry_on_render_thread(
 		int(entry.get("indirect_draw_count", 1)),
 		DRAW_COMMAND_STRIDE
 	)
+	if _critical_path_timeline_enabled \
+			and not bool(entry.get("first_draw_reported", false)):
+		entry["first_draw_reported"] = true
+		_push_event_on_render_thread("FIRST_DRAW", {
+			"publication_sequence": int(entry.get("publication_sequence", 0)),
+			"identity": Dictionary(entry.get("identity", {})).duplicate(true),
+			"entry_empty": bool(entry.get("empty", false)),
+			"entry_vertex_count": int(entry.get("vertex_count", 0)),
+			"entry_index_count": int(entry.get("index_count", 0)),
+			"entry_failure_cell_count": int(entry.get("failure_cell_count", 0)),
+			"entry_cell_count": int(entry.get("cell_count", 0)),
+		})
 
 
 static func _entry_push_bytes(
@@ -2119,6 +2149,7 @@ func _push_event_on_render_thread(
 	var event := {
 		"schema": "world_transvoxel.terrain.gpu_global_render_event.v1",
 		"status": event_status,
+		"ticks_usec": Time.get_ticks_usec() if _critical_path_timeline_enabled else 0,
 		"request_id": int(source.get("request_id", 0)),
 		"publication_sequence": int(source.get("publication_sequence", 0)),
 		"identity": Dictionary(source.get("identity", {})).duplicate(true),
@@ -2128,6 +2159,9 @@ func _push_event_on_render_thread(
 		"entry_failure_cell_count": int(source.get(
 			"entry_failure_cell_count", 0
 		)),
+		"entry_cell_count": int(source.get("entry_cell_count", 0)),
+		"gpu_dispatch_ticks_usec": int(source.get("gpu_dispatch_ticks_usec", 0)),
+		"gpu_readback_ticks_usec": int(source.get("gpu_readback_ticks_usec", 0)),
 		"error": error,
 	}
 	_mutex.lock()
