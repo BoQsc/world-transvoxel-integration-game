@@ -99,8 +99,8 @@ func _run() -> void:
 			or active_chunks < 2 or active_chunks > 9 \
 			or int(effect_status.get("active_entry_count", -1)) != active_chunks \
 			or str(effect_status.get("resource_architecture", "")) \
-				!= "bounded_scratch_compact_residency" \
-			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 5 \
+				!= "bounded_gpu_validated_provisional_residency" \
+			or int(effect_status.get("resident_buffer_count_per_entry", -1)) != 1 \
 			or int(effect_status.get("arena_active_slot_count", -1)) != active_chunks \
 			or int(effect_status.get("arena_page_count", 0)) > 3 \
 			or int(effect_status.get("arena_slot_reuses", 0)) < 2 \
@@ -108,10 +108,10 @@ func _run() -> void:
 			or int(effect_status.get("packing_requests", -1)) != 0 \
 			or int(effect_status.get("native_packed_requests", 0)) < 8 \
 			or int(effect_status.get("native_packed_bytes_total", 0)) <= 0 \
-			or not bool(effect_status.get(
-				"compacted_surface_indirect_commands", false
+			or bool(effect_status.get(
+				"compacted_surface_indirect_commands", true
 			)) \
-			or int(effect_status.get("indirect_commands_per_surface", 0)) != 1 \
+			or int(effect_status.get("indirect_commands_per_surface", 0)) != 32 \
 			or str(effect_status.get("visibility_bounds_position_space", "")) \
 				!= "world" \
 			or int(effect_status.get("visibility_test_count", 0)) <= 0 \

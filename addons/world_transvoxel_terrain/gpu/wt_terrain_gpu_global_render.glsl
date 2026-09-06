@@ -19,6 +19,9 @@ struct WtSceneDataMatrices {
 layout(set = 0, binding = 0, std140) uniform SceneDataBlock {
 	WtSceneDataMatrices data;
 } scene_data_block;
+layout(set = 3, binding = 0, std430) readonly buffer ActivationFlags {
+	uint values[];
+} activation_flags;
 
 layout(location = 0) in vec3 vertex_position;
 layout(location = 1) in vec2 vertex_normal;
@@ -55,6 +58,9 @@ void main() {
 			sign(decoded_normal.xy);
 	}
 	gl_Position = projection * view_matrix * vec4(world_position, 1.0);
+	if (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {
+		gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+	}
 	normal = normalize(decoded_normal);
 	material_id = int(vertex_meta.x);
 }

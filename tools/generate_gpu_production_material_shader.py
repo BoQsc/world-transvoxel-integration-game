@@ -34,6 +34,9 @@ struct WtSceneDataMatrices {
 layout(set = 0, binding = 0, std140) uniform SceneDataBlock {
 	WtSceneDataMatrices data;
 } scene_data_block;
+layout(set = 3, binding = 0, std430) readonly buffer ActivationFlags {
+	uint values[];
+} activation_flags;
 
 layout(location = 0) in vec3 vertex_position;
 layout(location = 1) in vec2 vertex_normal;
@@ -92,6 +95,9 @@ void main() {
 		transpose(mat3(view_matrix)) * -view_position
 	);
 	gl_Position = projection * vec4(view_position, 1.0);
+	if (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {
+		gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+	}
 	generated_material_weights_low = vec4(0.0);
 	generated_material_weights_high = vec4(0.0);
 	authored_material_weights_low = vec4(0.0);
@@ -294,6 +300,9 @@ struct WtSceneDataMatrices {{
 layout(set = 0, binding = 0, std140) uniform SceneDataBlock {{
 \tWtSceneDataMatrices data;
 }} scene_data_block;
+layout(set = 3, binding = 0, std430) readonly buffer ActivationFlags {{
+\tuint values[];
+}} activation_flags;
 
 layout(location = 0) in vec3 vertex_position;
 layout(location = 1) in vec2 vertex_normal;
@@ -337,6 +346,9 @@ void main() {{
 \t\ttranspose(mat3(view_matrix)) * -view_position
 \t);
 \tgl_Position = projection * vec4(view_position, 1.0);
+\tif (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {{
+\t\tgl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+\t}}
 }}
 
 #[fragment]

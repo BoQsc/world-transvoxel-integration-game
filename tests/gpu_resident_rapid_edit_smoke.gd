@@ -64,6 +64,15 @@ func _run() -> void:
 	if not settled:
 		_fail("rapid edit final revision did not become visible: %s" % str(_world.get_gpu_resident_render_status()))
 		return
+	var resident_status: Dictionary = _world.get_gpu_resident_render_status()
+	var effect_status: Dictionary = resident_status.get("effect_status", {})
+	var arena_status: Dictionary = effect_status.get("arena_status", {})
+	var readback_completions := int(arena_status.get("counter_readback_completions", 0))
+	if int(arena_status.get("incremental_dispatch_count", 0)) <= 0 \
+			or int(arena_status.get("counter_readback_bytes", -1)) \
+			!= readback_completions * 20:
+		_fail("rapid edit did not use incremental meshlets and 20-byte summaries: %s" % str(arena_status))
+		return
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	var capture := "res://.godot/world_transvoxel_captures/gpu_resident_rapid_edit"
@@ -72,7 +81,13 @@ func _run() -> void:
 	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
 		_fail("rapid edit world did not stop")
 		return
-	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0" % _checked_frames)
+	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 incremental_dispatches=%d regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
+		_checked_frames,
+		int(arena_status.get("incremental_dispatch_count", 0)),
+		int(arena_status.get("regenerated_cell_count", 0)),
+		int(arena_status.get("last_dispatch_uploaded_bytes", 0)),
+		int(arena_status.get("counter_readback_bytes", 0)),
+	])
 	quit(0)
 
 func _visible_pair() -> Array:

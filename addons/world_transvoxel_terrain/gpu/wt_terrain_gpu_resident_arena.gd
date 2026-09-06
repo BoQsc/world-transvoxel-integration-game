@@ -11,6 +11,10 @@ const LOCAL_SIZE := 64
 const MAXIMUM_VERTICES_PER_CELL := 12
 const MAXIMUM_INDICES_PER_CELL := 36
 const DRAW_COMMAND_STRIDE := 20
+const STATUS_STRIDE := 16
+const MAXIMUM_MESHLETS_PER_SLOT := 32
+const STATUS_SLOT_STRIDE := STATUS_STRIDE * MAXIMUM_MESHLETS_PER_SLOT
+const SUMMARY_STRIDE := 20
 const PACKED_POSITION_STRIDE := 12
 const PACKED_NORMAL_STRIDE := 4
 const PACKED_META_STRIDE := 4
@@ -18,6 +22,13 @@ const PACKED_META_STRIDE := 4
 var _rendering_device: RenderingDevice
 var _compute_shader := RID()
 var _compute_pipeline := RID()
+var _commit_shader := RID()
+var _commit_pipeline := RID()
+var _status_buffer := RID()
+var _summary_buffer := RID()
+var _activation_buffer := RID()
+var _commit_descriptor_buffer := RID()
+var _commit_uniform_set := RID()
 var _vertex_format := -1
 var _maximum_slots := 0
 var _pages: Array[Dictionary] = []
@@ -41,6 +52,10 @@ var _slot_reuses := 0
 var _slot_releases := 0
 var _uploaded_bytes := 0
 var _dispatch_count := 0
+var _incremental_dispatch_count := 0
+var _regenerated_cell_count := 0
+var _last_regenerated_cell_count := 0
+var _last_dispatch_uploaded_bytes := 0
 var _counter_readback_requests := 0
 var _counter_readback_completions := 0
 var _counter_readback_bytes := 0
@@ -57,19 +72,58 @@ func initialize(
 	rendering_device: RenderingDevice,
 	compute_shader: RID,
 	compute_pipeline: RID,
+	commit_shader: RID,
+	commit_pipeline: RID,
 	vertex_format: int,
 	maximum_slots: int
 ) -> bool:
 	if rendering_device == null or not compute_shader.is_valid() \
-			or not compute_pipeline.is_valid() or vertex_format < 0 \
+			or not compute_pipeline.is_valid() or not commit_shader.is_valid() \
+			or not commit_pipeline.is_valid() or vertex_format < 0 \
 			or maximum_slots <= 0:
 		_last_error = "resident arena initialization parameters are invalid"
 		return false
 	_rendering_device = rendering_device
 	_compute_shader = compute_shader
 	_compute_pipeline = compute_pipeline
+	_commit_shader = commit_shader
+	_commit_pipeline = commit_pipeline
 	_vertex_format = vertex_format
 	_maximum_slots = maximum_slots
+	_status_buffer = _rendering_device.storage_buffer_create(
+		maximum_slots * STATUS_SLOT_STRIDE, PackedByteArray()
+	)
+	_summary_buffer = _rendering_device.storage_buffer_create(
+		maximum_slots * SUMMARY_STRIDE, PackedByteArray()
+	)
+	_activation_buffer = _rendering_device.storage_buffer_create(
+		maximum_slots * 4, PackedByteArray()
+	)
+	# Header plus one candidate and one retirement slot per resident allocation.
+	_commit_descriptor_buffer = _rendering_device.storage_buffer_create(
+		(4 + maximum_slots * 2) * 4, PackedByteArray()
+	)
+	if not _status_buffer.is_valid() or not _summary_buffer.is_valid() \
+			or not _activation_buffer.is_valid() \
+			or not _commit_descriptor_buffer.is_valid():
+		_last_error = "resident arena GPU publication buffers could not be allocated"
+		return false
+	var commit_uniforms: Array[RDUniform] = []
+	for item in [
+		[0, _status_buffer], [1, _activation_buffer],
+		[2, _commit_descriptor_buffer], [3, _summary_buffer],
+	]:
+		var uniform := RDUniform.new()
+		uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+		uniform.binding = int(item[0])
+		uniform.add_id(item[1])
+		commit_uniforms.append(uniform)
+	_commit_uniform_set = _rendering_device.uniform_set_create(
+		commit_uniforms, _commit_shader, 0
+	)
+	if not _commit_uniform_set.is_valid():
+		_last_error = "resident arena GPU publication uniform set is invalid"
+		return false
 	_closed = false
 	_last_error = ""
 	return true
@@ -79,8 +133,14 @@ func lease_and_dispatch(
 	input_buffers: Array,
 	cell_count: int,
 	bounds_min: Vector3,
-	bounds_max: Vector3
+	bounds_max: Vector3,
+	previous_entry: Dictionary = {},
+	dirty_regular_brick_mask: int = 0xff,
+	cached_transition_mask: int = 0,
+	dirty_bounds_min: Vector3i = Vector3i.ZERO,
+	dirty_bounds_max: Vector3i = Vector3i.ZERO
 ) -> Dictionary:
+	var uploaded_before := _uploaded_bytes
 	var validation_error := _validate_request(input_buffers, cell_count)
 	if not validation_error.is_empty():
 		_last_error = validation_error
@@ -90,7 +150,8 @@ func lease_and_dispatch(
 			or bounds_min.z >= bounds_max.z:
 		_last_error = "resident arena bounds are invalid"
 		return {}
-	var page_index := _find_page(input_buffers, cell_count)
+	var previous_page_index := int(previous_entry.get("arena_page_index", -1))
+	var page_index := _find_page(input_buffers, cell_count, previous_page_index)
 	if page_index < 0:
 		page_index = _create_page(input_buffers, cell_count)
 	if page_index < 0:
@@ -115,32 +176,91 @@ func lease_and_dispatch(
 	_pages[page_index] = page
 	var strides: Array = page.get("strides", [])
 	var buffers: Array = page.get("buffers", [])
-	for binding in range(TABLE_BINDING_BEGIN):
-		var bytes: PackedByteArray = input_buffers[binding]
-		var offset := slot_index * int(strides[binding])
-		var update_error := _rendering_device.buffer_update(
-			buffers[binding], offset, bytes.size(), bytes
+	var global_slot := page_index * PAGE_SLOT_COUNT + slot_index
+	var page_field_mode := PackedByteArray(input_buffers[6]).decode_s32(12) == 1
+	var incremental := not previous_entry.is_empty() \
+		and int(previous_entry.get("cell_count", -1)) == cell_count \
+		and int(Dictionary(previous_entry.get("identity", {})).get(
+			"cached_transition_mask", -1
+		)) == cached_transition_mask \
+		and dirty_regular_brick_mask != 0xff and page_field_mode \
+		and dirty_bounds_min != dirty_bounds_max
+	if incremental:
+		incremental = _copy_previous_inputs(previous_entry, page, slot_index, input_buffers)
+	if incremental:
+		incremental = _patch_dirty_page_fields(
+			page, slot_index, input_buffers, dirty_bounds_min, dirty_bounds_max
 		)
-		if update_error != OK:
-			_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
-			_last_error = "resident arena input upload failed at binding %d: %s" % [
-				binding, error_string(update_error),
-			]
-			return {}
-		_uploaded_bytes += bytes.size()
+	if not incremental:
+		dirty_regular_brick_mask = 0xff
+		for binding in range(TABLE_BINDING_BEGIN):
+			var bytes: PackedByteArray = input_buffers[binding]
+			var offset := slot_index * int(strides[binding])
+			var update_error := _rendering_device.buffer_update(
+				buffers[binding], offset, bytes.size(), bytes
+			)
+			if update_error != OK:
+				_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
+				_last_error = "resident arena input upload failed at binding %d: %s" % [
+					binding, error_string(update_error),
+				]
+				return {}
+			_uploaded_bytes += bytes.size()
 	var indirect_offset := slot_index * int(strides[20])
-	var initial_command := PackedInt32Array([0, 1, 0, 0, 0]).to_byte_array()
+	if incremental and not _copy_previous_meshlets(previous_entry, page, slot_index):
+		incremental = false
+		dirty_regular_brick_mask = 0xff
+	var initial_commands := PackedInt32Array()
+	initial_commands.resize(MAXIMUM_MESHLETS_PER_SLOT * 5)
+	for meshlet in range(MAXIMUM_MESHLETS_PER_SLOT):
+		initial_commands[meshlet * 5 + 1] = 1
+		initial_commands[meshlet * 5 + 2] = _meshlet_index_base(meshlet)
+	var initial_command := initial_commands.to_byte_array()
 	var command_error := _rendering_device.buffer_update(
 		buffers[20], indirect_offset, initial_command.size(), initial_command
 	)
+	if incremental:
+		# Restore clean commands after the full initialization; dirty commands are
+		# cleared below together with their status records.
+		_rendering_device.buffer_copy(
+			previous_entry.get("indirect_buffer", RID()), buffers[20],
+			int(previous_entry.get("indirect_offset", 0)), indirect_offset,
+			int(strides[20])
+		)
 	if command_error != OK:
 		_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
 		_last_error = "resident arena counter initialization failed: %s" % [
 			error_string(command_error),
 		]
 		return {}
+	var status_zero := PackedByteArray()
+	status_zero.resize(STATUS_SLOT_STRIDE)
+	var status_error := OK
+	if incremental:
+		status_error = _initialize_incremental_status(
+			global_slot, dirty_regular_brick_mask, cell_count > 4096
+		)
+	else:
+		status_error = _rendering_device.buffer_update(
+			_status_buffer, global_slot * STATUS_SLOT_STRIDE,
+			STATUS_SLOT_STRIDE, status_zero
+		)
+	if status_error == OK and incremental:
+		status_error = _clear_dirty_meshlet_state(
+			buffers[20], indirect_offset, global_slot, dirty_regular_brick_mask,
+			cell_count > 4096
+		)
+	var inactive := PackedInt32Array([0]).to_byte_array()
+	var activation_error := _rendering_device.buffer_update(
+		_activation_buffer, global_slot * 4, 4, inactive
+	)
+	if status_error != OK or activation_error != OK:
+		_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
+		_last_error = "resident arena GPU publication state initialization failed"
+		return {}
 	var push_bytes := _push_constant_bytes(
-		strides, slot_index, bounds_min, bounds_max
+		strides, slot_index, global_slot, dirty_regular_brick_mask,
+		bounds_min, bounds_max
 	)
 	var compute_list := _rendering_device.compute_list_begin()
 	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _compute_pipeline)
@@ -155,6 +275,14 @@ func lease_and_dispatch(
 	)
 	_rendering_device.compute_list_end()
 	_dispatch_count += 1
+	var regenerated_cells := cell_count
+	if incremental:
+		regenerated_cells = _set_bit_count(dirty_regular_brick_mask) * 512 \
+			+ maxi(0, cell_count - 4096)
+		_incremental_dispatch_count += 1
+	_regenerated_cell_count += regenerated_cells
+	_last_regenerated_cell_count = regenerated_cells
+	_last_dispatch_uploaded_bytes = _uploaded_bytes - uploaded_before
 	var ticket := _next_ticket
 	_next_ticket += 1
 	_pending_readbacks[ticket] = {
@@ -163,32 +291,40 @@ func lease_and_dispatch(
 		"arena_slot_index": slot_index,
 		"arena_generation": int(page.get("generation", 0)),
 		"cell_count": cell_count,
+		"global_slot": global_slot,
+		"readback_requested": false,
 	}
-	var readback_error := _rendering_device.buffer_get_data_async(
-		buffers[20],
-		Callable(self, "_on_counter_readback").bind(ticket),
-		indirect_offset,
-		DRAW_COMMAND_STRIDE
-	)
-	if readback_error != OK:
-		_pending_readbacks.erase(ticket)
-		_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
-		_last_error = "resident arena asynchronous counter readback failed: %s" % [
-			error_string(readback_error),
-		]
-		return {}
 	_slot_leases += 1
 	_scratch_in_flight_count += 1
 	_peak_scratch_in_flight_count = maxi(
 		_peak_scratch_in_flight_count, _scratch_in_flight_count
 	)
-	_counter_readback_requests += 1
 	_last_error = ""
-	return {
-		"status": "PENDING_COUNTER_READBACK",
-		"arena_ticket": ticket,
-		"cell_count": cell_count,
-	}
+	var entry := _create_provisional_resident(
+		page, page_index, slot_index, global_slot, page_field_mode
+	)
+	if entry.is_empty():
+		_pending_readbacks.erase(ticket)
+		_release_scratch_slot(page_index, slot_index, int(page.get("generation", 0)))
+		return {}
+	entry["status"] = "GPU_PROVISIONAL_READY"
+	var input_sizes: Array[int] = []
+	for binding in range(TABLE_BINDING_BEGIN):
+		input_sizes.append(PackedByteArray(input_buffers[binding]).size())
+	entry["input_sizes"] = input_sizes
+	entry["arena_ticket"] = ticket
+	entry["cell_count"] = cell_count
+	entry["vertex_count"] = 0
+	entry["index_count"] = 0
+	entry["failure_cell_count"] = 0
+	entry["counts_pending"] = true
+	entry["incremental_edit"] = incremental
+	entry["dirty_regular_brick_mask"] = dirty_regular_brick_mask
+	entry["regenerated_cell_count"] = regenerated_cells
+	entry["uploaded_bytes"] = _last_dispatch_uploaded_bytes
+	_active_slot_count += 1
+	_peak_active_slot_count = maxi(_peak_active_slot_count, _active_slot_count)
+	return entry
 
 
 func pop_completed_readbacks() -> Array[Dictionary]:
@@ -220,6 +356,76 @@ func create_proven_empty(cell_count: int) -> Dictionary:
 	}
 
 
+func activation_buffer() -> RID:
+	return _activation_buffer
+
+
+func commit_visibility(activations: Array, retirements: Array) -> bool:
+	if _closed or not _commit_pipeline.is_valid() or not _commit_uniform_set.is_valid():
+		_last_error = "resident arena GPU publication pipeline is unavailable"
+		return false
+	var candidate_slots: Array[int] = []
+	var retirement_slots: Array[int] = []
+	for entry_value in activations:
+		var slot := int(Dictionary(entry_value).get("gpu_slot", -1))
+		if slot >= 0:
+			candidate_slots.append(slot)
+	for entry_value in retirements:
+		var slot := int(Dictionary(entry_value).get("gpu_slot", -1))
+		if slot >= 0:
+			retirement_slots.append(slot)
+	if candidate_slots.size() > _maximum_slots or retirement_slots.size() > _maximum_slots:
+		_last_error = "resident arena GPU publication cohort exceeds bounded capacity"
+		return false
+	var descriptor := PackedInt32Array()
+	descriptor.resize(4 + candidate_slots.size() + retirement_slots.size())
+	descriptor[0] = candidate_slots.size()
+	descriptor[1] = retirement_slots.size()
+	for index in range(candidate_slots.size()):
+		descriptor[4 + index] = candidate_slots[index]
+	for index in range(retirement_slots.size()):
+		descriptor[4 + candidate_slots.size() + index] = retirement_slots[index]
+	var bytes := descriptor.to_byte_array()
+	var update_error := _rendering_device.buffer_update(
+		_commit_descriptor_buffer, 0, bytes.size(), bytes
+	)
+	if update_error != OK:
+		_last_error = "resident arena GPU publication descriptor upload failed"
+		return false
+	var compute_list := _rendering_device.compute_list_begin()
+	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _commit_pipeline)
+	_rendering_device.compute_list_bind_uniform_set(compute_list, _commit_uniform_set, 0)
+	_rendering_device.compute_list_dispatch(compute_list, 1, 1, 1)
+	_rendering_device.compute_list_end()
+	# Publication is already queued. The small summary readback follows it and is
+	# used only for telemetry, validation cleanup, and slot reclamation.
+	for entry_value in activations:
+		var entry := Dictionary(entry_value)
+		var ticket := int(entry.get("arena_ticket", 0))
+		if ticket <= 0 or not _pending_readbacks.has(ticket):
+			continue
+		var pending: Dictionary = _pending_readbacks[ticket]
+		if bool(pending.get("readback_requested", false)):
+			continue
+		var slot := int(entry.get("gpu_slot", -1))
+		var readback_error := _rendering_device.buffer_get_data_async(
+			_summary_buffer,
+			Callable(self, "_on_counter_readback").bind(ticket),
+			slot * SUMMARY_STRIDE,
+			SUMMARY_STRIDE
+		)
+		if readback_error == OK:
+			pending["readback_requested"] = true
+			_pending_readbacks[ticket] = pending
+			_counter_readback_requests += 1
+		else:
+			_last_error = "resident arena asynchronous summary readback failed: %s" % [
+				error_string(readback_error),
+			]
+	_last_error = ""
+	return true
+
+
 func finalize_readback(ticket: int, data: PackedByteArray) -> Dictionary:
 	if not _pending_readbacks.has(ticket):
 		_last_error = "resident arena counter readback ticket is unknown"
@@ -228,26 +434,28 @@ func finalize_readback(ticket: int, data: PackedByteArray) -> Dictionary:
 	_pending_readbacks.erase(ticket)
 	_counter_readback_completions += 1
 	_counter_readback_bytes += data.size()
-	if data.size() != DRAW_COMMAND_STRIDE:
-		_release_scratch(scratch)
-		_last_error = "resident arena counter readback size is invalid"
+	if data.size() != SUMMARY_STRIDE:
+		_last_error = "resident arena status readback size is invalid"
 		return {}
 	var index_count := int(data.decode_u32(0))
+	var vertex_count := int(data.decode_u32(4))
 	var failure_cell_count := int(data.decode_u32(8))
-	var vertex_count := int(data.decode_u32(16))
+	var cohort_valid := int(data.decode_u32(12)) != 0
+	var summary_slot := int(data.decode_u32(16))
+	if summary_slot != int(scratch.get("global_slot", -1)):
+		_last_error = "resident arena status summary slot is stale"
+		return {}
 	_last_failure_cell_count = failure_cell_count
-	if failure_cell_count > 0:
+	if failure_cell_count > 0 or not cohort_valid:
 		_failed_extractions += 1
 		_failed_cell_count_total += failure_cell_count
-		_release_scratch(scratch)
 		_last_error = (
-			"resident arena GPU extraction reported %d failed cells"
+			"resident arena GPU cohort validation failed with %d failed cells"
 			% failure_cell_count
 		)
 		return {}
 	var page_index := int(scratch.get("arena_page_index", -1))
 	if page_index < 0 or page_index >= _pages.size():
-		_release_scratch(scratch)
 		_last_error = "resident arena scratch page disappeared"
 		return {}
 	var page: Dictionary = _pages[page_index]
@@ -256,47 +464,28 @@ func finalize_readback(ticket: int, data: PackedByteArray) -> Dictionary:
 	var maximum_index_count := int(strides[17]) / 4
 	if index_count > maximum_index_count or vertex_count > maximum_vertex_count \
 			or (index_count == 0) != (vertex_count == 0):
-		_release_scratch(scratch)
 		_last_error = "resident arena GPU counters exceed their bounded output"
 		return {}
 	if index_count == 0:
-		_release_scratch(scratch)
-		_active_slot_count += 1
-		_peak_active_slot_count = maxi(_peak_active_slot_count, _active_slot_count)
 		_empty_resident_entries += 1
-		_last_error = ""
-		return {
-			"resident_kind": "empty",
-			"empty": true,
-			"failure_cell_count": failure_cell_count,
-			"vertex_count": 0,
-			"index_count": 0,
-			"cell_count": int(scratch.get("cell_count", 0)),
-		}
-	var entry := _create_compact_resident(
-		page, int(scratch.get("arena_slot_index", -1)), vertex_count, index_count
-	)
-	_release_scratch(scratch)
-	if entry.is_empty():
-		return {}
-	entry["cell_count"] = int(scratch.get("cell_count", 0))
-	entry["vertex_count"] = vertex_count
-	entry["index_count"] = index_count
-	entry["empty"] = false
-	entry["failure_cell_count"] = failure_cell_count
-	_active_slot_count += 1
-	_peak_active_slot_count = maxi(_peak_active_slot_count, _active_slot_count)
-	_compacted_resident_entries += 1
 	_last_error = ""
-	return entry
+	return {
+		"valid": true,
+		"empty": index_count == 0,
+		"failure_cell_count": 0,
+		"vertex_count": vertex_count,
+		"index_count": index_count,
+		"cell_count": int(scratch.get("cell_count", 0)),
+		"global_slot": int(scratch.get("global_slot", -1)),
+	}
 
 
-func discard_readback(ticket: int) -> bool:
+func discard_readback(ticket: int, byte_count: int = 0) -> bool:
 	if not _pending_readbacks.has(ticket):
 		return false
-	var scratch: Dictionary = _pending_readbacks[ticket]
 	_pending_readbacks.erase(ticket)
-	_release_scratch(scratch)
+	_counter_readback_completions += 1
+	_counter_readback_bytes += byte_count
 	return true
 
 
@@ -305,12 +494,16 @@ func release(entry: Dictionary) -> bool:
 	if resident_kind == "empty":
 		_active_slot_count = maxi(0, _active_slot_count - 1)
 		return true
-	if resident_kind != "compact":
+	if resident_kind != "provisional":
 		return false
-	_free_rids(Array(entry.get("resident_rids", [])))
+	_free_rids(Array(entry.get("resident_view_rids", [])))
 	_resident_allocated_bytes = maxi(
-		0,
-		_resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
+		0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
+	)
+	_release_scratch_slot(
+		int(entry.get("arena_page_index", -1)),
+		int(entry.get("arena_slot_index", -1)),
+		int(entry.get("arena_generation", -1))
 	)
 	_active_slot_count = maxi(0, _active_slot_count - 1)
 	return true
@@ -325,18 +518,27 @@ func close() -> void:
 	if _rendering_device != null:
 		for page in _pages:
 			_free_page(page)
+		_free_rids([
+			_commit_uniform_set, _commit_descriptor_buffer,
+			_activation_buffer, _summary_buffer, _status_buffer,
+		])
 	_pages.clear()
 	_allocated_slot_count = 0
 	_scratch_in_flight_count = 0
 	_active_slot_count = 0
 	_scratch_allocated_bytes = 0
 	_resident_allocated_bytes = 0
+	_commit_uniform_set = RID()
+	_commit_descriptor_buffer = RID()
+	_activation_buffer = RID()
+	_summary_buffer = RID()
+	_status_buffer = RID()
 
 
 func get_status() -> Dictionary:
 	return {
-		"schema": "world_transvoxel.terrain.gpu_resident_arena.v3",
-		"architecture": "bounded_scratch_compact_residency",
+		"schema": "world_transvoxel.terrain.gpu_resident_arena.v4",
+		"architecture": "bounded_gpu_validated_provisional_residency",
 		"position_encoding": "float32_world_space",
 		"page_slot_capacity": PAGE_SLOT_COUNT,
 		"maximum_slots": _maximum_slots,
@@ -352,17 +554,25 @@ func get_status() -> Dictionary:
 		"slot_reuses": _slot_reuses,
 		"slot_releases": _slot_releases,
 		"binding_buffer_count_per_page": BINDING_COUNT,
-		"resident_buffer_count_per_entry": 5,
-		"compacted_surface_vertices": true,
-		"compacted_surface_indices": true,
-		"compacted_surface_indirect_commands": true,
-		"indirect_commands_per_surface": 1,
+		"resident_buffer_count_per_entry": 1,
+		"compacted_surface_vertices": false,
+		"compacted_surface_indices": false,
+		"compacted_surface_indirect_commands": false,
+		"gpu_cohort_validation": true,
+		"cpu_readback_blocks_publication": false,
+		"indirect_commands_per_surface": MAXIMUM_MESHLETS_PER_SLOT,
+		"meshlet_cells_per_axis": 8,
+		"asynchronous_summary_bytes": SUMMARY_STRIDE,
 		"allocated_bytes": _scratch_allocated_bytes + _resident_allocated_bytes,
 		"scratch_allocated_bytes": _scratch_allocated_bytes,
 		"resident_allocated_bytes": _resident_allocated_bytes,
 		"peak_resident_allocated_bytes": _peak_resident_allocated_bytes,
 		"uploaded_bytes": _uploaded_bytes,
 		"dispatch_count": _dispatch_count,
+		"incremental_dispatch_count": _incremental_dispatch_count,
+		"regenerated_cell_count": _regenerated_cell_count,
+		"last_regenerated_cell_count": _last_regenerated_cell_count,
+		"last_dispatch_uploaded_bytes": _last_dispatch_uploaded_bytes,
 		"counter_readback_requests": _counter_readback_requests,
 		"counter_readback_completions": _counter_readback_completions,
 		"counter_readback_bytes": _counter_readback_bytes,
@@ -478,6 +688,84 @@ func _create_compact_resident(
 			index_buffer, indirect_buffer,
 		],
 		"resident_allocated_bytes": allocated_bytes,
+	}
+
+
+func _create_provisional_resident(
+	page: Dictionary,
+	page_index: int,
+	slot_index: int,
+	global_slot: int,
+	page_field_mode: bool
+) -> Dictionary:
+	var buffers: Array = page.get("buffers", [])
+	var strides: Array = page.get("strides", [])
+	if slot_index < 0 or buffers.size() != BINDING_COUNT \
+			or strides.size() != BINDING_COUNT:
+		_last_error = "resident arena provisional source is invalid"
+		return {}
+	var maximum_vertex_count := int(strides[13]) / PACKED_POSITION_STRIDE
+	var maximum_index_count := int(strides[17]) / 4
+	var index_buffer := _rendering_device.index_buffer_create(
+		maximum_index_count, RenderingDevice.INDEX_BUFFER_FORMAT_UINT32
+	)
+	if not index_buffer.is_valid():
+		_last_error = "resident arena provisional index allocation failed"
+		return {}
+	var copy_error := _rendering_device.buffer_copy(
+		buffers[17], index_buffer,
+		slot_index * int(strides[17]), 0, int(strides[17])
+	)
+	if copy_error != OK:
+		_free_rids([index_buffer])
+		_last_error = "resident arena provisional index copy failed: %s" % error_string(copy_error)
+		return {}
+	var vertex_array := _rendering_device.vertex_array_create(
+		maximum_vertex_count,
+		_vertex_format,
+		[buffers[13], buffers[14], buffers[15]],
+		[
+			slot_index * int(strides[13]),
+			slot_index * int(strides[14]),
+			slot_index * int(strides[15]),
+		]
+	)
+	var index_array := _rendering_device.index_array_create(
+		index_buffer, 0, maximum_index_count
+	)
+	if not vertex_array.is_valid() or not index_array.is_valid():
+		_free_rids([vertex_array, index_array, index_buffer])
+		_last_error = "resident arena provisional vertex or index view creation failed"
+		return {}
+	_resident_allocated_bytes += int(strides[17])
+	_peak_resident_allocated_bytes = maxi(
+		_peak_resident_allocated_bytes, _resident_allocated_bytes
+	)
+	return {
+		"resident_kind": "provisional",
+		"vertex_array": vertex_array,
+		"index_array": index_array,
+		"position_buffer": buffers[13],
+		"normal_buffer": buffers[14],
+		"meta_buffer": buffers[15],
+		"position_offset": slot_index * int(strides[13]),
+		"normal_offset": slot_index * int(strides[14]),
+		"meta_offset": slot_index * int(strides[15]),
+		"index_buffer": index_buffer,
+		"indirect_buffer": buffers[20],
+		"indirect_offset": slot_index * int(strides[20]),
+		"indirect_draw_count": 8 + int(maxi(
+			0, int(page.get("cell_capacity", 4096)) - 4096
+		) / 64) if page_field_mode else 1,
+		"gpu_slot": global_slot,
+		"arena_page_index": page_index,
+		"arena_slot_index": slot_index,
+		"arena_generation": int(page.get("generation", 0)),
+		"resident_view_rids": [vertex_array, index_array, index_buffer],
+		"resident_allocated_bytes": int(strides[17]),
+		"input_buffers": buffers.slice(0, TABLE_BINDING_BEGIN),
+		"input_offsets": _slot_input_offsets(strides, slot_index),
+		"input_sizes": _input_sizes(strides),
 	}
 
 
@@ -655,8 +943,12 @@ func _release_scratch_slot(
 	return true
 
 
-func _find_page(input_buffers: Array, cell_count: int) -> int:
+func _find_page(
+	input_buffers: Array, cell_count: int, excluded_page_index: int = -1
+) -> int:
 	for page_index in range(_pages.size()):
+		if page_index == excluded_page_index:
+			continue
 		var page: Dictionary = _pages[page_index]
 		if not Array(page.get("free_slots", [])).is_empty() \
 				and _request_fits(page, input_buffers, cell_count):
@@ -724,6 +1016,11 @@ func _create_page(input_buffers: Array, cell_count: int) -> int:
 		uniform.binding = binding
 		uniform.add_id(buffers[binding])
 		uniforms.append(uniform)
+	var status_uniform := RDUniform.new()
+	status_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	status_uniform.binding = 21
+	status_uniform.add_id(_status_buffer)
+	uniforms.append(status_uniform)
 	var uniform_set := _rendering_device.uniform_set_create(
 		uniforms, _compute_shader, 0
 	)
@@ -806,6 +1103,8 @@ func _create_buffer(binding: int, size: int, data: PackedByteArray) -> RID:
 func _push_constant_bytes(
 	strides: Array,
 	slot_index: int,
+	global_slot: int,
+	dirty_regular_brick_mask: int,
 	bounds_min: Vector3,
 	bounds_max: Vector3
 ) -> PackedByteArray:
@@ -830,13 +1129,17 @@ func _push_constant_bytes(
 		int(slot_index * int(strides[14]) / 4),
 		int(slot_index * int(strides[15]) / 4),
 		int(slot_index * int(strides[17]) / 4),
+		global_slot * MAXIMUM_MESHLETS_PER_SLOT * 4,
+		dirty_regular_brick_mask,
+		0,
+		MAXIMUM_MESHLETS_PER_SLOT,
 	])
 	var bytes := values.to_byte_array()
-	bytes.resize(112)
+	bytes.resize(128)
 	var extent := bounds_max - bounds_min
 	for component in range(3):
-		bytes.encode_float(80 + component * 4, bounds_min[component])
-		bytes.encode_float(96 + component * 4, extent[component])
+		bytes.encode_float(96 + component * 4, bounds_min[component])
+		bytes.encode_float(112 + component * 4, extent[component])
 	return bytes
 
 
@@ -870,8 +1173,215 @@ static func _output_buffer_sizes(cell_count: int) -> Array[int]:
 		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
 		16,
 		48,
-		DRAW_COMMAND_STRIDE,
+		DRAW_COMMAND_STRIDE * MAXIMUM_MESHLETS_PER_SLOT,
 	]
+
+
+func _copy_previous_meshlets(
+	previous: Dictionary, page: Dictionary, slot_index: int
+) -> bool:
+	var buffers: Array = page.get("buffers", [])
+	var strides: Array = page.get("strides", [])
+	var sources := [
+		previous.get("position_buffer", RID()),
+		previous.get("normal_buffer", RID()),
+		previous.get("meta_buffer", RID()),
+		previous.get("index_buffer", RID()),
+	]
+	var source_offsets := [
+		int(previous.get("position_offset", 0)),
+		int(previous.get("normal_offset", 0)),
+		int(previous.get("meta_offset", 0)),
+		0,
+	]
+	for index in range(4):
+		var binding: int = [13, 14, 15, 17][index]
+		var source: RID = sources[index]
+		if not source.is_valid():
+			return false
+		var error := _rendering_device.buffer_copy(
+			source, buffers[binding], source_offsets[index],
+			slot_index * int(strides[binding]), int(strides[binding])
+		)
+		if error != OK:
+			return false
+	return true
+
+
+func _copy_previous_inputs(
+	previous: Dictionary, page: Dictionary, slot_index: int, input_buffers: Array
+) -> bool:
+	var sources: Array = previous.get("input_buffers", [])
+	var source_offsets: Array = previous.get("input_offsets", [])
+	var source_sizes: Array = previous.get("input_sizes", [])
+	var buffers: Array = page.get("buffers", [])
+	var strides: Array = page.get("strides", [])
+	if sources.size() != TABLE_BINDING_BEGIN \
+			or source_offsets.size() != TABLE_BINDING_BEGIN \
+			or source_sizes.size() != TABLE_BINDING_BEGIN:
+		return false
+	for binding in range(TABLE_BINDING_BEGIN):
+		var size := PackedByteArray(input_buffers[binding]).size()
+		if int(source_sizes[binding]) != size:
+			return false
+		var source: RID = sources[binding]
+		if not source.is_valid():
+			return false
+		if binding == 6:
+			var config_error := _rendering_device.buffer_update(
+				buffers[binding], slot_index * int(strides[binding]), size,
+				PackedByteArray(input_buffers[binding])
+			)
+			if config_error != OK:
+				return false
+			_uploaded_bytes += size
+			continue
+		if _rendering_device.buffer_copy(
+			source, buffers[binding], int(source_offsets[binding]),
+			slot_index * int(strides[binding]), size
+		) != OK:
+			return false
+	return true
+
+
+func _patch_dirty_page_fields(
+	page: Dictionary,
+	slot_index: int,
+	input_buffers: Array,
+	dirty_minimum: Vector3i,
+	dirty_maximum: Vector3i
+) -> bool:
+	var values: PackedByteArray = input_buffers[0]
+	var meta: PackedByteArray = input_buffers[1]
+	var origins: PackedByteArray = input_buffers[3]
+	var options: PackedByteArray = input_buffers[4]
+	var config: PackedByteArray = input_buffers[6]
+	var page_count := config.decode_s32(8)
+	var buffers: Array = page.get("buffers", [])
+	var strides: Array = page.get("strides", [])
+	for page_index in range(page_count):
+		var header := page_index * 16
+		var origin := Vector3i(
+			roundi(origins.decode_float(header)),
+			roundi(origins.decode_float(header + 4)),
+			roundi(origins.decode_float(header + 8))
+		)
+		var spacing := maxi(1, roundi(origins.decode_float(header + 12)))
+		var sample_minimum := roundi(options.decode_float(header + 8))
+		var sample_maximum := roundi(options.decode_float(header + 12))
+		var low := Vector3i(
+			floori(float(dirty_minimum.x - 1 - origin.x) / spacing),
+			floori(float(dirty_minimum.y - 1 - origin.y) / spacing),
+			floori(float(dirty_minimum.z - 1 - origin.z) / spacing)
+		)
+		var high := Vector3i(
+			ceili(float(dirty_maximum.x + 1 - origin.x) / spacing),
+			ceili(float(dirty_maximum.y + 1 - origin.y) / spacing),
+			ceili(float(dirty_maximum.z + 1 - origin.z) / spacing)
+		)
+		low = low.max(Vector3i.ONE * sample_minimum)
+		high = high.min(Vector3i.ONE * sample_maximum)
+		if low.x > high.x or low.y > high.y or low.z > high.z:
+			continue
+		var local_low := low - Vector3i.ONE * sample_minimum
+		var local_high := high - Vector3i.ONE * sample_minimum
+		for z in range(local_low.z, local_high.z + 1):
+			for y in range(local_low.y, local_high.y + 1):
+				var sample_index := page_index * 6859 + (z * 19 + y) * 19 + local_low.x
+				var byte_offset := sample_index * 8
+				var byte_count := (local_high.x - local_low.x + 1) * 8
+				for binding in range(2):
+					var source := values if binding == 0 else meta
+					var patch := source.slice(byte_offset, byte_offset + byte_count)
+					if _rendering_device.buffer_update(
+						buffers[binding], slot_index * int(strides[binding]) + byte_offset,
+						byte_count, patch
+					) != OK:
+						return false
+					_uploaded_bytes += byte_count
+	return true
+
+
+static func _slot_input_offsets(strides: Array, slot_index: int) -> Array[int]:
+	var offsets: Array[int] = []
+	for binding in range(TABLE_BINDING_BEGIN):
+		offsets.append(slot_index * int(strides[binding]))
+	return offsets
+
+
+static func _input_sizes(strides: Array) -> Array[int]:
+	var sizes: Array[int] = []
+	for binding in range(TABLE_BINDING_BEGIN):
+		sizes.append(int(strides[binding]))
+	return sizes
+
+
+func _clear_dirty_meshlet_state(
+	indirect_buffer: RID,
+	indirect_offset: int,
+	global_slot: int,
+	dirty_regular_brick_mask: int,
+	has_transitions: bool
+) -> int:
+	var zero_status := PackedByteArray()
+	zero_status.resize(STATUS_STRIDE)
+	for meshlet in range(MAXIMUM_MESHLETS_PER_SLOT):
+		var dirty := meshlet < 8 and (dirty_regular_brick_mask & (1 << meshlet)) != 0
+		dirty = dirty or (meshlet >= 8 and has_transitions)
+		if not dirty:
+			continue
+		var command := PackedInt32Array([
+			0, 1, _meshlet_index_base(meshlet), 0, 0,
+		]).to_byte_array()
+		var command_error := _rendering_device.buffer_update(
+			indirect_buffer, indirect_offset + meshlet * DRAW_COMMAND_STRIDE,
+			DRAW_COMMAND_STRIDE, command
+		)
+		if command_error != OK:
+			return command_error
+		var status_error := _rendering_device.buffer_update(
+			_status_buffer,
+			global_slot * STATUS_SLOT_STRIDE + meshlet * STATUS_STRIDE,
+			STATUS_STRIDE, zero_status
+		)
+		if status_error != OK:
+			return status_error
+	return OK
+
+
+func _initialize_incremental_status(
+	global_slot: int, dirty_regular_brick_mask: int, has_transitions: bool
+) -> int:
+	var values := PackedInt32Array()
+	values.resize(MAXIMUM_MESHLETS_PER_SLOT * 4)
+	for meshlet in range(MAXIMUM_MESHLETS_PER_SLOT):
+		var dirty := meshlet < 8 and (dirty_regular_brick_mask & (1 << meshlet)) != 0
+		dirty = dirty or (meshlet >= 8 and has_transitions)
+		if not dirty:
+			# Clean geometry was already validated in the previous slot. A paired
+			# sentinel preserves non-empty telemetry without rereading its counters.
+			values[meshlet * 4] = 1
+			values[meshlet * 4 + 1] = 1
+	return _rendering_device.buffer_update(
+		_status_buffer, global_slot * STATUS_SLOT_STRIDE,
+		STATUS_SLOT_STRIDE, values.to_byte_array()
+	)
+
+
+static func _meshlet_index_base(meshlet: int) -> int:
+	if meshlet < 8:
+		return meshlet * 512 * MAXIMUM_INDICES_PER_CELL
+	return 8 * 512 * MAXIMUM_INDICES_PER_CELL \
+		+ (meshlet - 8) * 64 * MAXIMUM_INDICES_PER_CELL
+
+
+static func _set_bit_count(value: int) -> int:
+	var count := 0
+	var remaining := value & 0xff
+	while remaining != 0:
+		remaining &= remaining - 1
+		count += 1
+	return count
 
 
 static func _round_up(value: int, alignment: int) -> int:

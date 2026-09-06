@@ -11,6 +11,9 @@ const ResidentArena := preload(
 const COMPUTE_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing.glsl"
 )
+const COMMIT_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_commit.glsl"
+)
 const RASTER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render.glsl"
 )
@@ -54,6 +57,8 @@ var _next_debug_geometry_request_id := 1
 var _resident_capacity := DEFAULT_RESIDENT_CAPACITY
 var _compute_shader := RID()
 var _compute_pipeline := RID()
+var _commit_shader := RID()
+var _commit_pipeline := RID()
 var _raster_shader := RID()
 var _raster_pipeline := RID()
 var _raster_pipeline_format := -1
@@ -94,8 +99,8 @@ var _status := {
 	"render_thread_owned": true,
 	"same_global_device_compute_raster": true,
 	"compositor_callback": "pre_transparent",
-	"resource_architecture": "bounded_scratch_compact_residency",
-	"resident_buffer_count_per_entry": 5,
+	"resource_architecture": "bounded_gpu_validated_provisional_residency",
+	"resident_buffer_count_per_entry": 1,
 	"arena_binding_buffer_count_per_page": 21,
 	"arena_page_slot_capacity": 4,
 	"arena_page_count": 0,
@@ -117,8 +122,10 @@ var _status := {
 	"native_packed_requests": 0,
 	"native_packed_bytes_total": 0,
 	"gpu_written_indirect_commands": true,
-	"compacted_surface_indirect_commands": true,
-	"indirect_commands_per_surface": 1,
+	"compacted_surface_indirect_commands": false,
+	"indirect_commands_per_surface": 32,
+	"meshlet_cells_per_axis": 8,
+	"asynchronous_summary_bytes": 20,
 	"device_local_index_copy_used": true,
 	"visibility_culling": "conservative_aabb_frustum",
 	"visibility_bounds_position_space": "world",
@@ -182,6 +189,8 @@ var _status := {
 	"array_mesh_upload_used": false,
 	"cpu_collision_authority": true,
 	"atomic_surface_set_activation": true,
+	"gpu_cohort_validation": true,
+	"cpu_readback_blocks_publication": false,
 	"production_chunk_replacement": false,
 	"production_material_parity": false,
 	"production_terrain_material_payload_ready": false,
@@ -626,7 +635,8 @@ func _record_stage_time(stage: String, start_us: int) -> int:
 
 
 func _ensure_shaders() -> bool:
-	if _compute_pipeline.is_valid() and _raster_shader.is_valid() \
+	if _compute_pipeline.is_valid() and _commit_pipeline.is_valid() \
+			and _raster_shader.is_valid() \
 			and _production_raster_shader.is_valid() \
 			and _production_water_shader.is_valid() \
 			and _scene_color_copy_pipeline.is_valid() \
@@ -639,20 +649,24 @@ func _ensure_shaders() -> bool:
 	_status["initialization_attempted"] = true
 	_mutex.unlock()
 	var compute_file := COMPUTE_SHADER_FILE as RDShaderFile
+	var commit_file := COMMIT_SHADER_FILE as RDShaderFile
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
 	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
 	var production_water_file := PRODUCTION_WATER_SHADER_FILE as RDShaderFile
 	var scene_color_copy_file := SCENE_COLOR_COPY_SHADER_FILE as RDShaderFile
-	if compute_file == null or raster_file == null or production_raster_file == null \
+	if compute_file == null or commit_file == null or raster_file == null \
+			or production_raster_file == null \
 			or production_water_file == null \
 			or scene_color_copy_file == null \
 			or not compute_file.get_base_error().is_empty() \
+			or not commit_file.get_base_error().is_empty() \
 			or not raster_file.get_base_error().is_empty() \
 			or not production_raster_file.get_base_error().is_empty() \
 			or not production_water_file.get_base_error().is_empty() \
 			or not scene_color_copy_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s %s %s %s" % [
+		_record_render_error("global render shader import is invalid: %s %s %s %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
+			commit_file.get_base_error() if commit_file != null else "commit missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
 			production_raster_file.get_base_error() \
 				if production_raster_file != null else "production raster missing",
@@ -665,6 +679,10 @@ func _ensure_shaders() -> bool:
 	var shader_compile_error := _shader_file_compile_error(
 		compute_file, RenderingDevice.SHADER_STAGE_COMPUTE
 	)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			commit_file, RenderingDevice.SHADER_STAGE_COMPUTE
+		)
 	if shader_compile_error.is_empty():
 		shader_compile_error = _shader_file_compile_error(
 			raster_file, RenderingDevice.SHADER_STAGE_VERTEX
@@ -699,6 +717,12 @@ func _ensure_shaders() -> bool:
 		return false
 	_compute_pipeline = _rendering_device.compute_pipeline_create(_compute_shader)
 	if not _compute_pipeline.is_valid():
+		return false
+	_commit_shader = _rendering_device.shader_create_from_spirv(commit_file.get_spirv())
+	if not _commit_shader.is_valid():
+		return false
+	_commit_pipeline = _rendering_device.compute_pipeline_create(_commit_shader)
+	if not _commit_pipeline.is_valid():
 		return false
 	_raster_shader = _rendering_device.shader_create_from_spirv(
 		raster_file.get_spirv()
@@ -749,8 +773,10 @@ func _ensure_shaders() -> bool:
 			_rendering_device,
 			_compute_shader,
 			_compute_pipeline,
+			_commit_shader,
+			_commit_pipeline,
 			_vertex_format,
-			REQUEST_CAPACITY
+			_resident_allocation_capacity()
 		):
 			_record_render_error(_arena.get_last_error())
 			_arena = null
@@ -910,8 +936,9 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 		return
 	for completion in _arena.pop_completed_readbacks():
 		var ticket := int(completion.get("ticket", 0))
+		var completion_data: PackedByteArray = completion.get("data", PackedByteArray())
 		if not _inflight_extractions.has(ticket):
-			_arena.discard_readback(ticket)
+			_arena.discard_readback(ticket, completion_data.size())
 			continue
 		var request: Dictionary = _inflight_extractions[ticket]
 		_inflight_extractions.erase(ticket)
@@ -919,7 +946,7 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			request["gpu_readback_ticks_usec"] = Time.get_ticks_usec()
 		if _cancelled_inflight_tickets.has(ticket):
 			_cancelled_inflight_tickets.erase(ticket)
-			_arena.discard_readback(ticket)
+			_arena.discard_readback(ticket, completion_data.size())
 			_sync_arena_status_on_render_thread()
 			_mutex.lock()
 			_status["inflight_extraction_count"] = _inflight_extractions.size()
@@ -935,21 +962,33 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 		_status["inflight_extraction_count"] = _inflight_extractions.size()
 		_mutex.unlock()
 		if sequence != latest_sequence:
-			_arena.discard_readback(ticket)
-			_reject_request_on_render_thread(
-				request, "request became stale during GPU extraction"
-			)
+			_arena.discard_readback(ticket, completion_data.size())
 			continue
-		var entry: Dictionary = _arena.finalize_readback(
-			ticket, completion.get("data", PackedByteArray())
+		var telemetry: Dictionary = _arena.finalize_readback(
+			ticket, completion_data
 		)
 		_sync_arena_status_on_render_thread()
-		if entry.is_empty():
+		if telemetry.is_empty():
+			_rollback_gpu_candidate_on_render_thread(request)
 			_reject_request_on_render_thread(
 				request, _arena.get_last_error()
 			)
 			continue
-		_finish_entry_on_render_thread(request, entry)
+		var token := _entry_token(key, sequence)
+		if _entries.has(token):
+			var entry := Dictionary(_entries[token])
+			entry["counts_pending"] = false
+			entry["empty"] = bool(telemetry.get("empty", false))
+			entry["vertex_count"] = int(telemetry.get("vertex_count", 0))
+			entry["index_count"] = int(telemetry.get("index_count", 0))
+			entry["failure_cell_count"] = int(telemetry.get("failure_cell_count", 0))
+			_finalize_gpu_candidate_on_render_thread(entry)
+			_entries[token] = entry
+			_active_lod_inventory_dirty = true
+			_mutex.lock()
+			_status["resident_entry_count"] = _entries.size()
+			_status["active_entry_count"] = _active_sequence_by_key.size()
+			_mutex.unlock()
 
 
 func _drain_pending_on_render_thread() -> void:
@@ -990,14 +1029,31 @@ func _drain_pending_on_render_thread() -> void:
 				continue
 			_finish_entry_on_render_thread(request, empty_entry)
 			continue
-		if _inflight_extractions.size() >= REQUEST_CAPACITY:
-			deferred.append(request)
-			continue
+		var previous_entry := {}
+		if _active_sequence_by_key.has(key):
+			var previous_token := _entry_token(
+				key, int(_active_sequence_by_key[key])
+			)
+			if _entries.has(previous_token):
+				previous_entry = Dictionary(_entries[previous_token])
 		var extraction: Dictionary = _arena.lease_and_dispatch(
 			Array(request.get("input_buffers", [])),
 			int(request.get("cell_count", 0)),
 			request.get("bounds_min", Vector3.ZERO),
-			request.get("bounds_max", Vector3.ZERO)
+			request.get("bounds_max", Vector3.ZERO),
+			previous_entry,
+			int(Dictionary(request.get("identity", {})).get(
+				"dirty_regular_brick_mask", 0xff
+			)),
+			int(Dictionary(request.get("identity", {})).get(
+				"cached_transition_mask", 0
+			)),
+			Dictionary(request.get("identity", {})).get(
+				"dirty_bounds_min", Vector3i.ZERO
+			),
+			Dictionary(request.get("identity", {})).get(
+				"dirty_bounds_max", Vector3i.ZERO
+			)
 		)
 		_sync_arena_status_on_render_thread()
 		if extraction.is_empty():
@@ -1015,6 +1071,7 @@ func _drain_pending_on_render_thread() -> void:
 		if _critical_path_timeline_enabled:
 			request["gpu_dispatch_ticks_usec"] = Time.get_ticks_usec()
 		_inflight_extractions[ticket] = request
+		_finish_entry_on_render_thread(request, extraction)
 	if not deferred.is_empty():
 		_mutex.lock()
 		_pending.append_array(deferred)
@@ -1046,10 +1103,14 @@ func _finish_entry_on_render_thread(
 	entry["bounds_max"] = request.get("bounds_max", Vector3.ZERO)
 	entry["mono_push_bytes"] = _entry_push_bytes(entry, 0, 1, Vector2i.ZERO, false)
 	var activate_immediately := bool(request.get("activate_immediately", true))
-	entry["active"] = activate_immediately
+	entry["active"] = false
 	_entries[token] = entry
 	if activate_immediately:
-		_activate_entry_on_render_thread(key, token, request)
+		if not _commit_single_activation_on_render_thread(key, token, request):
+			_free_entry_on_render_thread(_entries[token])
+			_entries.erase(token)
+			_reject_request_on_render_thread(request, _arena.get_last_error())
+			return
 	else:
 		var prepared_source := request.duplicate(true)
 		prepared_source["entry_empty"] = bool(entry.get("empty", false))
@@ -1058,7 +1119,11 @@ func _finish_entry_on_render_thread(
 		prepared_source["entry_failure_cell_count"] = int(entry.get(
 			"failure_cell_count", 0
 		))
-		prepared_source["entry_cell_count"] = int(entry.get("cell_count", 0))
+		prepared_source["entry_cell_count"] = int(entry.get(
+			"regenerated_cell_count", entry.get("cell_count", 0)
+		))
+		prepared_source["source_cell_count"] = int(entry.get("cell_count", 0))
+		prepared_source["gpu_uploaded_bytes"] = int(entry.get("uploaded_bytes", 0))
 		prepared_source["gpu_dispatch_ticks_usec"] = int(request.get(
 			"gpu_dispatch_ticks_usec", 0
 		))
@@ -1113,9 +1178,10 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 				_push_event_on_render_thread("REJECTED", command, \
 					"activation identity differs from prepared entry")
 				continue
-			entry["active"] = true
-			_entries[token] = entry
-			_activate_entry_on_render_thread(key, token, command)
+			if not _commit_single_activation_on_render_thread(key, token, command):
+				_push_event_on_render_thread(
+					"REJECTED", command, _arena.get_last_error()
+				)
 		elif action == "RETIRE":
 			_retire_entry_on_render_thread(key, token, command)
 	_sync_active_lod_inventory_on_render_thread()
@@ -1181,6 +1247,21 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 			"key": key,
 			"token": token,
 		})
+	var candidate_entries: Array = []
+	var replaced_entries: Array = []
+	for item in validated:
+		candidate_entries.append(Dictionary(_entries[str(item.get("token", ""))]))
+		var key := str(item.get("key", ""))
+		if _active_sequence_by_key.has(key):
+			var old_token := _entry_token(key, int(_active_sequence_by_key[key]))
+			if _entries.has(old_token) and old_token != str(item.get("token", "")):
+				replaced_entries.append(Dictionary(_entries[old_token]))
+	if not _arena.commit_visibility(candidate_entries, replaced_entries):
+		for item in validated:
+			_push_event_on_render_thread(
+				"REJECTED", Dictionary(item.get("source", {})), _arena.get_last_error()
+			)
+		return
 	for item in validated:
 		var token := str(item.get("token", ""))
 		var entry: Dictionary = _entries[token]
@@ -1220,20 +1301,36 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 			)
 			return
 		retirements.append({"source": source, "key": key, "token": token})
+	var candidate_entries: Array = []
+	var retired_entries: Array = []
+	for item in activations:
+		candidate_entries.append(Dictionary(_entries[str(item.get("token", ""))]))
+	for item in retirements:
+		retired_entries.append(Dictionary(_entries[str(item.get("token", ""))]))
+	if not _arena.commit_visibility(candidate_entries, retired_entries):
+		for item in activations:
+			_push_event_on_render_thread(
+				"REJECTED", Dictionary(item.get("source", {})), _arena.get_last_error()
+			)
+		return
+	if activations.is_empty():
+		for item in retirements:
+			_retire_entry_on_render_thread(
+				str(item.get("key", "")), str(item.get("token", "")),
+				Dictionary(item.get("source", {}))
+			)
+		return
 	for item in activations:
 		var token := str(item.get("token", ""))
 		var entry: Dictionary = _entries[token]
 		entry["active"] = true
+		entry["retained_retirements"] = retirements.duplicate(true)
 		_entries[token] = entry
 		_activate_entry_on_render_thread(
 			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
 		)
-	for item in retirements:
-		_retire_entry_on_render_thread(
-			str(item.get("key", "")),
-			str(item.get("token", "")),
-			Dictionary(item.get("source", {}))
-		)
+	# GPU validation owns retirement. The old entries remain submitted until the
+	# asynchronous summary confirms that the entire cohort committed.
 
 
 func _validated_activation_group_on_render_thread(
@@ -1274,8 +1371,9 @@ func _activate_entry_on_render_thread(
 		var old_token := _entry_token(key, old_sequence)
 		if old_token != token and _entries.has(old_token):
 			var old_entry: Dictionary = _entries[old_token]
-			_free_entry_on_render_thread(old_entry)
-			_entries.erase(old_token)
+			var candidate: Dictionary = _entries[token]
+			candidate["retained_previous_token"] = old_token
+			_entries[token] = candidate
 			_mutex.lock()
 			_status["superseded_entries"] = \
 				int(_status["superseded_entries"]) + 1
@@ -1292,6 +1390,25 @@ func _activate_entry_on_render_thread(
 	_active_lod_inventory_dirty = true
 	_mutex.unlock()
 	_push_event_on_render_thread("ACTIVE", source)
+
+
+func _commit_single_activation_on_render_thread(
+	key: String, token: String, source: Dictionary
+) -> bool:
+	if not _entries.has(token):
+		return false
+	var candidate: Dictionary = _entries[token]
+	var replaced_entries: Array = []
+	if _active_sequence_by_key.has(key):
+		var old_token := _entry_token(key, int(_active_sequence_by_key[key]))
+		if old_token != token and _entries.has(old_token):
+			replaced_entries.append(Dictionary(_entries[old_token]))
+	if not _arena.commit_visibility([candidate], replaced_entries):
+		return false
+	candidate["active"] = true
+	_entries[token] = candidate
+	_activate_entry_on_render_thread(key, token, source)
+	return true
 
 
 func _retire_entry_on_render_thread(
@@ -1313,6 +1430,47 @@ func _retire_entry_on_render_thread(
 	_active_lod_inventory_dirty = true
 	_mutex.unlock()
 	_push_event_on_render_thread("RETIRED", source)
+
+
+func _finalize_gpu_candidate_on_render_thread(entry: Dictionary) -> void:
+	var previous_token := str(entry.get("retained_previous_token", ""))
+	if not previous_token.is_empty() and _entries.has(previous_token):
+		var previous_entry: Dictionary = _entries[previous_token]
+		var previous_identity := Dictionary(previous_entry.get("identity", {}))
+		var previous_key := _identity_key(previous_identity)
+		if int(_active_sequence_by_key.get(previous_key, 0)) != int(
+				previous_entry.get("publication_sequence", 0)
+		):
+			_free_entry_on_render_thread(previous_entry)
+			_entries.erase(previous_token)
+	for retirement_value in Array(entry.get("retained_retirements", [])):
+		var retirement := Dictionary(retirement_value)
+		var retirement_token := str(retirement.get("token", ""))
+		if _entries.has(retirement_token):
+			_retire_entry_on_render_thread(
+				str(retirement.get("key", "")), retirement_token,
+				Dictionary(retirement.get("source", {}))
+			)
+	entry.erase("retained_previous_token")
+	entry.erase("retained_retirements")
+
+
+func _rollback_gpu_candidate_on_render_thread(request: Dictionary) -> void:
+	var key := str(request.get("key", ""))
+	var sequence := int(request.get("publication_sequence", 0))
+	var token := _entry_token(key, sequence)
+	if not _entries.has(token):
+		return
+	var entry: Dictionary = _entries[token]
+	var previous_token := str(entry.get("retained_previous_token", ""))
+	if not previous_token.is_empty() and _entries.has(previous_token):
+		var previous_entry: Dictionary = _entries[previous_token]
+		_active_sequence_by_key[key] = int(previous_entry.get("publication_sequence", 0))
+	elif int(_active_sequence_by_key.get(key, 0)) == sequence:
+		_active_sequence_by_key.erase(key)
+	_free_entry_on_render_thread(entry)
+	_entries.erase(token)
+	_active_lod_inventory_dirty = true
 
 
 func _cancel_unpublished_entry_on_render_thread(
@@ -1364,29 +1522,32 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 	var empty_examples: Array = []
 	var partial_examples: Array = []
 	var bins := {}
-	for key_value in _active_sequence_by_key.keys():
-		var key := str(key_value)
-		var token := _entry_token(key, int(_active_sequence_by_key[key]))
-		if not _entries.has(token):
-			continue
-		var identity := Dictionary(Dictionary(_entries[token]).get("identity", {}))
+	for token_value in _entries.keys():
+		var token := str(token_value)
 		var entry: Dictionary = _entries[token]
+		var identity := Dictionary(entry.get("identity", {}))
+		var key := _identity_key(identity)
+		var is_active := int(_active_sequence_by_key.get(key, 0)) \
+			== int(entry.get("publication_sequence", 0))
 		if bool(entry.get("empty", false)):
-			empty_count += 1
-			if empty_examples.size() < 32:
+			if is_active:
+				empty_count += 1
+			if is_active and empty_examples.size() < 32:
 				empty_examples.append(identity.duplicate(true))
 		if int(entry.get("failure_cell_count", 0)) > 0:
-			partial_count += 1
-			if partial_examples.size() < 32:
+			if is_active:
+				partial_count += 1
+			if is_active and partial_examples.size() < 32:
 				var example := identity.duplicate(true)
 				example["failure_cell_count"] = int(
 					entry.get("failure_cell_count", 0)
 				)
 				partial_examples.append(example)
-		var lod := str(int(identity.get("lod", 0)))
-		var counts := water_counts \
-			if str(identity.get("surface", "")) == "static_water" else terrain_counts
-		counts[lod] = int(counts.get(lod, 0)) + 1
+		if is_active:
+			var lod := str(int(identity.get("lod", 0)))
+			var counts := water_counts \
+				if str(identity.get("surface", "")) == "static_water" else terrain_counts
+			counts[lod] = int(counts.get(lod, 0)) + 1
 		if not bool(entry.get("empty", false)):
 			var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
 			var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
@@ -1651,6 +1812,9 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			_rendering_device.draw_list_bind_uniform_set(
 				draw_list, _production_material_set, 1
 			)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, _activation_set_for(_production_raster_shader), 3
+			)
 			for entry in production_entries:
 				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
 					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
@@ -1663,6 +1827,9 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		if not diagnostic_entries.is_empty():
 			_rendering_device.draw_list_bind_render_pipeline(draw_list, _raster_pipeline)
 			_rendering_device.draw_list_bind_uniform_set(draw_list, scene_set, 0)
+			_rendering_device.draw_list_bind_uniform_set(
+				draw_list, _activation_set_for(_raster_shader), 3
+			)
 			for entry in diagnostic_entries:
 				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
 					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
@@ -1703,6 +1870,9 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 			)
 			_rendering_device.draw_list_bind_uniform_set(
 				water_draw_list, water_scene_texture_set, 2
+			)
+			_rendering_device.draw_list_bind_uniform_set(
+				water_draw_list, _activation_set_for(_production_water_shader), 3
 			)
 			for entry in water_entries:
 				_draw_entry_on_render_thread(
@@ -1814,6 +1984,7 @@ static func _entry_push_bytes(
 	bytes.resize(bounds_offset + 32)
 	bytes.encode_s32(0, view)
 	bytes.encode_s32(4, view_count)
+	bytes.encode_s32(8, int(entry.get("gpu_slot", -1)))
 	if include_viewport:
 		bytes.encode_s32(16, viewport.x)
 		bytes.encode_s32(20, viewport.y)
@@ -1823,6 +1994,16 @@ static func _entry_push_bytes(
 			bounds_offset + 16 + component * 4, extent[component]
 		)
 	return bytes
+
+
+func _activation_set_for(shader: RID) -> RID:
+	if _arena == null or not shader.is_valid():
+		return RID()
+	var uniform := RDUniform.new()
+	uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	uniform.binding = 0
+	uniform.add_id(_arena.activation_buffer())
+	return UniformSetCacheRD.get_cache(shader, 3, [uniform])
 
 
 func _copy_scene_color_on_render_thread(
@@ -2021,7 +2202,7 @@ func _close_on_render_thread() -> void:
 		_production_water_shader, _scene_color_copy_pipeline,
 		_scene_color_copy_shader, _scene_color_sampler,
 		_raster_pipeline, _raster_shader,
-		_compute_pipeline, _compute_shader,
+		_commit_pipeline, _commit_shader, _compute_pipeline, _compute_shader,
 	])
 	_production_material_set = RID()
 	_production_material_buffer = RID()
@@ -2037,6 +2218,8 @@ func _close_on_render_thread() -> void:
 	_scene_color_sampler = RID()
 	_raster_pipeline = RID()
 	_raster_shader = RID()
+	_commit_pipeline = RID()
+	_commit_shader = RID()
 	_compute_pipeline = RID()
 	_compute_shader = RID()
 	_mutex.lock()
@@ -2160,6 +2343,8 @@ func _push_event_on_render_thread(
 			"entry_failure_cell_count", 0
 		)),
 		"entry_cell_count": int(source.get("entry_cell_count", 0)),
+		"source_cell_count": int(source.get("source_cell_count", 0)),
+		"gpu_uploaded_bytes": int(source.get("gpu_uploaded_bytes", 0)),
 		"gpu_dispatch_ticks_usec": int(source.get("gpu_dispatch_ticks_usec", 0)),
 		"gpu_readback_ticks_usec": int(source.get("gpu_readback_ticks_usec", 0)),
 		"error": error,

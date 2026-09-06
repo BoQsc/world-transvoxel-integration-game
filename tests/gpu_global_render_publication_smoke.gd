@@ -132,6 +132,15 @@ func _run() -> void:
 	):
 		_fail("resident surface did not return after camera culling: %s" % _effect.get_status())
 		return
+	if not await _wait_for_status(
+		func(cleanup_status: Dictionary) -> bool:
+			return int(cleanup_status.get("counter_readback_bytes", 0)) == 40 \
+				and int(cleanup_status.get("inflight_extraction_count", -1)) == 0 \
+				and int(cleanup_status.get("resident_entry_count", -1)) == 1,
+		10.0
+	):
+		_fail("asynchronous publication cleanup did not finish: %s" % _effect.get_status())
+		return
 	var status: Dictionary = _effect.get_status()
 	if str(status.get("schema", "")) \
 			!= "world_transvoxel.terrain.gpu_global_render_publication.v1" \
@@ -141,20 +150,20 @@ func _run() -> void:
 			or not bool(status.get("same_global_device_compute_raster", false)) \
 			or str(status.get("compositor_callback", "")) != "pre_transparent" \
 			or str(status.get("resource_architecture", "")) \
-				!= "bounded_scratch_compact_residency" \
-			or int(status.get("resident_buffer_count_per_entry", -1)) != 5 \
+				!= "bounded_gpu_validated_provisional_residency" \
+			or int(status.get("resident_buffer_count_per_entry", -1)) != 1 \
 			or int(status.get("arena_binding_buffer_count_per_page", 0)) != 21 \
-			or int(status.get("arena_page_count", 0)) != 1 \
-			or int(status.get("arena_allocated_slot_count", 0)) != 4 \
+			or int(status.get("arena_page_count", 0)) != 2 \
+			or int(status.get("arena_allocated_slot_count", 0)) != 8 \
 			or int(status.get("arena_active_slot_count", 0)) != 1 \
 			or int(status.get("arena_peak_active_slot_count", 0)) != 2 \
 			or int(status.get("arena_allocated_bytes", 0)) <= 0 \
 			or int(status.get("arena_slot_leases", 0)) != 2 \
-			or int(status.get("arena_slot_releases", 0)) < 2 \
+			or int(status.get("arena_slot_releases", 0)) < 1 \
 			or int(status.get("counter_readback_bytes", 0)) != 40 \
 			or not bool(status.get("gpu_written_indirect_commands", false)) \
-			or not bool(status.get("compacted_surface_indirect_commands", false)) \
-			or int(status.get("indirect_commands_per_surface", 0)) != 1 \
+			or bool(status.get("compacted_surface_indirect_commands", true)) \
+			or int(status.get("indirect_commands_per_surface", 0)) != 32 \
 			or not bool(status.get("device_local_index_copy_used", false)) \
 			or str(status.get("visibility_culling", "")) \
 				!= "conservative_aabb_frustum" \
@@ -171,7 +180,7 @@ func _run() -> void:
 			or int(status.get("visibility_culled_count", 0)) <= 0 \
 			or int(status.get("last_visible_surface_count", 0)) != 1 \
 			or int(status.get("last_culled_surface_count", -1)) != 0 \
-			or int(status.get("max_compact_command_records_per_view", 0)) != 1 \
+			or int(status.get("max_compact_command_records_per_view", 0)) > 2 \
 			or int(status.get("max_source_cell_records_avoided_per_view", 0)) \
 				< EXPECTED_CELL_COUNT - 1 \
 			or bool(status.get("fallback_used", true)) \
@@ -298,7 +307,7 @@ func _run() -> void:
 		(
 			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 stale=1 " \
 			+ "superseded=1 draw_frames=%d indirect_draw_calls=%d " \
-			+ "compacted=1 culling=1 atomic_replacement=1 avoided_records=%d " \
+			+ "meshlets=32 culling=1 atomic_replacement=1 avoided_records=%d " \
 			+ "foreground_pixels=%d image_sha256=%s"
 		) % [
 			EXPECTED_CELL_COUNT,

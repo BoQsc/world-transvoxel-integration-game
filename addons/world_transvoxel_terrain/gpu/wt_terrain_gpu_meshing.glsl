@@ -9,6 +9,7 @@ layout(push_constant, std430) uniform ArenaOffsets {
 	ivec4 output_a;
 	ivec4 output_b;
 	ivec4 compact_output;
+	ivec4 resident_status;
 	vec4 quantization_min;
 	vec4 quantization_extent;
 } arena;
@@ -85,6 +86,9 @@ struct DrawIndexedIndirectCommand {
 layout(set = 0, binding = 20, std430) buffer OutputDrawCommands {
 	DrawIndexedIndirectCommand values[];
 } output_draw_commands;
+layout(set = 0, binding = 21, std430) buffer ResidentStatus {
+	uint values[];
+} resident_status;
 
 const int CELL_REGULAR = 0;
 const int CELL_TRANSITION = 1;
@@ -101,6 +105,45 @@ const int CHUNK_EDGE_COUNT = 3 * AXIS_EDGE_COUNT;
 const float POSITION_SNAP_SCALE = 65536.0;
 const float NO_STATIC_WATER_DENSITY = 3.0e38;
 const int STATIC_WATER_MATERIAL = 9;
+const int REGULAR_BRICK_CELLS = 512;
+const int TRANSITION_BRICK_CELLS = 64;
+
+int meshlet_for_cell(int cell_index) {
+	if (cell_index < 4096) {
+		int x = cell_index % 16;
+		int y = (cell_index / 16) % 16;
+		int z = cell_index / 256;
+		return (x / 8) + (y / 8) * 2 + (z / 8) * 4;
+	}
+	int remaining = cell_index - 4096;
+	int transition_mask = config.values[arena.input_b.z + 3].w;
+	int face_ordinal = 0;
+	for (int face = 0; face < 6; ++face) {
+		if ((transition_mask & (1 << face)) == 0) continue;
+		if (remaining < 256) {
+			int u = remaining % 16;
+			int v = remaining / 16;
+			return 8 + face_ordinal * 4 + (u / 8) + (v / 8) * 2;
+		}
+		remaining -= 256;
+		++face_ordinal;
+	}
+	return 31;
+}
+
+int meshlet_vertex_base(int meshlet) {
+	return meshlet < 8
+		? meshlet * REGULAR_BRICK_CELLS * MAX_VERTICES
+		: 8 * REGULAR_BRICK_CELLS * MAX_VERTICES +
+			(meshlet - 8) * TRANSITION_BRICK_CELLS * MAX_VERTICES;
+}
+
+int meshlet_index_base(int meshlet) {
+	return meshlet < 8
+		? meshlet * REGULAR_BRICK_CELLS * MAX_INDICES
+		: 8 * REGULAR_BRICK_CELLS * MAX_INDICES +
+			(meshlet - 8) * TRANSITION_BRICK_CELLS * MAX_INDICES;
+}
 
 vec4 field_sample_at(int sample_index, bool page_field_mode) {
 	int base = arena.input_a.x;
@@ -195,9 +238,10 @@ void store_legacy_identity(int index, ivec4 value) {
 void store_cell_meta(bool compact_surface, int index, ivec4 value) {
 	if (compact_surface) {
 		if (value.x == STATUS_FAILURE) {
+			int cell_index = index - arena.output_a.z;
+			int meshlet = meshlet_for_cell(cell_index);
 			atomicAdd(
-				output_draw_commands.values[arena.output_b.x].first_index,
-				1u
+				resident_status.values[arena.resident_status.x + meshlet * 4 + 2], 1u
 			);
 		}
 	} else {
@@ -746,13 +790,19 @@ void main() {
 	}
 	int cell_index = int(cell_index_u);
 	bool compact_surface = arena.output_b.y != 0;
+	bool page_field_mode = config.values[config_base].w == 1;
+	int meshlet = page_field_mode ? meshlet_for_cell(cell_index) : 0;
+	if (compact_surface && page_field_mode && meshlet < 8 &&
+			(arena.resident_status.y & (1 << meshlet)) == 0) {
+		return;
+	}
 	int local_vertex_base = cell_index * MAX_VERTICES;
 	int local_index_base = cell_index * MAX_INDICES;
 	int vertex_base = arena.output_a.x + local_vertex_base;
 	int index_base = (compact_surface ? arena.compact_output.w : arena.output_a.y) +
 		local_index_base;
 	int cell_meta_index = arena.output_a.z + cell_index;
-	int draw_index = arena.output_b.x + (compact_surface ? 0 : cell_index);
+	int draw_index = arena.output_b.x + (compact_surface ? meshlet : cell_index);
 	if (!compact_surface) {
 		output_draw_commands.values[draw_index] = DrawIndexedIndirectCommand(
 			0u, 0u, uint(local_index_base), local_vertex_base, 0u
@@ -787,7 +837,6 @@ void main() {
 		);
 	}
 
-	bool page_field_mode = config.values[config_base].w == 1;
 	int surface_mode = config.values[config_base + 3].z;
 	ivec4 header = ivec4(0, 0, 0, 8);
 	vec4 origin_and_spacing = vec4(0.0);
@@ -1157,12 +1206,19 @@ void main() {
 		ivec4(STATUS_OK, case_code, vertex_count, output_index_count)
 	);
 	if (compact_surface) {
+		int compact_vertex_offset = page_field_mode ? meshlet_vertex_base(meshlet) : 0;
+		int compact_index_offset = page_field_mode ? meshlet_index_base(meshlet) : 0;
+		int status_base = arena.resident_status.x + meshlet * 4;
 		uint compact_vertex_base = atomicAdd(
-			output_draw_commands.values[draw_index].first_instance,
+			resident_status.values[status_base + 1],
 			uint(vertex_count)
-		);
+		) + uint(compact_vertex_offset);
 		uint compact_index_base = atomicAdd(
 			output_draw_commands.values[draw_index].index_count,
+			uint(output_index_count)
+		) + uint(compact_index_offset);
+		atomicAdd(
+			resident_status.values[status_base],
 			uint(output_index_count)
 		);
 		for (int vertex_index = 0; vertex_index < vertex_count; ++vertex_index) {
