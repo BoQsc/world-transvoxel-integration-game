@@ -70,6 +70,7 @@ var _previous_compositor: Compositor
 var _compositor: Compositor
 var _effect
 var _groups: Dictionary = {}
+var _deferred_interaction_requests: Array[Dictionary] = []
 var _render_request_routes: Dictionary = {}
 var _entry_routes: Dictionary = {}
 var _prepared_group_routes: Dictionary = {}
@@ -102,6 +103,7 @@ var _stale_incomplete_groups_superseded := 0
 var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
 var _same_callback_edit_precommits := 0
+var _interaction_application_deferrals := 0
 var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
@@ -175,6 +177,7 @@ func start(
 	_world_environment = world_environment
 	_directional_light = _resolve_directional_light()
 	_groups.clear()
+	_deferred_interaction_requests.clear()
 	_render_request_routes.clear()
 	_entry_routes.clear()
 	_prepared_group_routes.clear()
@@ -205,6 +208,7 @@ func stop() -> void:
 	if _effect != null:
 		_effect.close()
 	_groups.clear()
+	_deferred_interaction_requests.clear()
 	_render_request_routes.clear()
 	_entry_routes.clear()
 	_prepared_group_routes.clear()
@@ -222,6 +226,10 @@ func stop() -> void:
 	_production_texture_cache.clear()
 	_production_material_signature = ""
 	_production_water_signature = ""
+
+
+func _exit_tree() -> void:
+	stop()
 
 
 func is_running() -> bool:
@@ -359,6 +367,8 @@ func get_status() -> Dictionary:
 		"activation_cohorts_queued": _activation_cohorts_queued,
 		"activation_cohorts_committed": _activation_cohorts_committed,
 		"same_callback_edit_precommits": _same_callback_edit_precommits,
+		"deferred_interaction_requests": _deferred_interaction_requests.size(),
+		"interaction_application_deferrals": _interaction_application_deferrals,
 		"cpu_only_regional_retirements": _cpu_only_regional_retirements,
 		"lifecycle_history_enabled": _lifecycle_history_enabled,
 		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
@@ -802,9 +812,9 @@ func _submit_native_captures() -> void:
 	var submitted_this_frame := 0
 	while _render_request_routes.size() < RENDER_SUBMISSION_CAPACITY \
 			and submitted_this_frame < NATIVE_SUBMISSIONS_PER_FRAME:
-		var request := Dictionary(_backend_terrain.call(
-			"pop_gpu_resident_render_request"
-		))
+		var request := _deferred_interaction_requests.pop_front() \
+				if not _deferred_interaction_requests.is_empty() \
+				else Dictionary(_backend_terrain.call("pop_gpu_resident_render_request"))
 		var request_status := str(request.get("status", ""))
 		if request_status in ["EMPTY", "DISABLED"]:
 			return
@@ -813,6 +823,21 @@ func _submit_native_captures() -> void:
 			_reject_native_request(request, request_error)
 			continue
 		var identity: Dictionary = request.get("identity", {})
+		if bool(identity.get("incremental_edit", false)):
+			var readiness := Dictionary(_backend_terrain.call(
+				"get_gpu_resident_render_chunk_readiness", identity
+			))
+			var readiness_status := str(readiness.get("status", ""))
+			if readiness_status == "WAITING_APPLICATION":
+				_deferred_interaction_requests.append(request)
+				_interaction_application_deferrals += 1
+				return
+			if readiness_status != "READY" \
+					or not bool(readiness.get("ready", false)):
+				_reject_native_request(request, str(readiness.get(
+					"error", "interactive GPU request became stale before admission"
+				)))
+				continue
 		var group_key := _group_key(identity)
 		if _groups.has(group_key) and bool(Dictionary(_groups[group_key]).get(
 			"retiring", false
@@ -2075,6 +2100,8 @@ func _record_lifecycle_event(
 func _restore_cpu_and_release_native_requests() -> void:
 	if _backend_terrain == null or not is_instance_valid(_backend_terrain):
 		return
+	for request in _deferred_interaction_requests:
+		_reject_native_request(request, "resident renderer stopped")
 	for group_value in _groups.values():
 		var group := Dictionary(group_value)
 		if bool(group.get("native_active", false)):

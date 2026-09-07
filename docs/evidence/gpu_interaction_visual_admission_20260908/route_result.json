@@ -1,0 +1,11 @@
+{
+  "vulkan_autonomous_exit_code": 0,
+  "vulkan_trace_bytes": 29373041,
+  "vulkan_trace_sha256": "d9cca1c55739bbda49be671160553a179fce1d87bd164f3254e2b380e1f5be26",
+  "qualification_classification": "BLOCKED_PRODUCTION_GPU_RESIDENT_ARCHITECTURE",
+  "remaining_gates": [
+    "compacted_surface_indirect_commands",
+    "blocked movement",
+    "frame p95/p99"
+  ]
+}

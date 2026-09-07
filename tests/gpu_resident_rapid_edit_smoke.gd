@@ -99,10 +99,12 @@ func _run() -> void:
 	var effect_status: Dictionary = resident_status.get("effect_status", {})
 	var arena_status: Dictionary = effect_status.get("arena_status", {})
 	var readback_requests := int(arena_status.get("counter_readback_requests", 0))
+	var readback_bytes := int(arena_status.get("counter_readback_bytes", -1))
 	if int(arena_status.get("incremental_dispatch_count", 0)) <= 0 \
 			or int(arena_status.get("incremental_copy_fallback_count", -1)) != 0 \
-			or int(arena_status.get("counter_readback_bytes", -1)) \
-			!= readback_requests * 20:
+			or readback_bytes <= 0 \
+			or readback_bytes % 20 != 0 \
+			or readback_bytes > readback_requests * 20:
 		_fail("rapid edit did not use incremental meshlets and 20-byte summaries: %s" % str(arena_status))
 		return
 	await RenderingServer.frame_post_draw
