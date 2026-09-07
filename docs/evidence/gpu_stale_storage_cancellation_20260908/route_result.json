@@ -1,0 +1,29 @@
+{
+  "schema": "world_transvoxel.gpu_stale_storage_cancellation.v1",
+  "native_commit": "2fc88ab3f5013075d0b6a15a55b18266a1f12f94",
+  "runtime_artifact_digest_sha256": "3278230c03b3226d862123f0cd873f1f36912f0ca1c35e570c52e7af4b4dbd29",
+  "focused_d3d12": {
+    "exit_code": 0,
+    "submit_max_us": 371,
+    "hot_first_draw_max_us": 30965,
+    "hot_observed_ready_max_us": 59155,
+    "cold_ready_us": 83815
+  },
+  "large_trace_on": {
+    "d3d12": {
+      "exit_code": 0,
+      "blocked_movement_frames": 1,
+      "previous_checkpoint_blocked_movement_frames": 196,
+      "maximum_relocated_edit_pipeline_ms": 2326.9991,
+      "frame_p99_ms": 69.80688
+    },
+    "vulkan": {
+      "exit_code": 0,
+      "blocked_movement_frames": 124,
+      "previous_checkpoint_blocked_movement_frames": 10,
+      "maximum_relocated_edit_pipeline_ms": 4016.9976,
+      "frame_p99_ms": 64.75964
+    }
+  },
+  "decision": "STORAGE_LANE_FIX_ACCEPTED_OVERALL_GPU_PROMOTION_BLOCKED"
+}
