@@ -96,17 +96,41 @@ func _run() -> void:
 
 	_phase = "cold_approach"
 	var cold_position := Vector3(104, 8, 8)
+	var cold_key := Vector3i(6, 0, 0)
 	var camera := root.get_camera_3d()
 	if camera != null:
 		camera.position = Vector3(104, 42, 82)
 		camera.look_at(cold_position, Vector3.UP)
+	var warm_before: Dictionary = _world.get_runtime_metrics()
+	var warm_started_us := Time.get_ticks_usec()
+	var warm_started_frame := _frames.size()
+	if not _world.update_foreground_priority_lease(9001, 1, 1, [cold_key]):
+		_fail("cold approach interaction warm lease was rejected")
+		return
+	var warm_ready := false
+	for _index in range(1200):
+		await process_frame
+		_observe_frame()
+		var warm_now: Dictionary = _world.get_runtime_metrics()
+		if int(warm_now.get("interaction_warm_completions", 0)) > int(
+			warm_before.get("interaction_warm_completions", 0)
+		) or int(warm_now.get("interaction_warm_cache_hits", 0)) > int(
+			warm_before.get("interaction_warm_cache_hits", 0)
+		):
+			warm_ready = true
+			break
+	if not warm_ready:
+		_fail("cold approach interaction page did not warm")
+		return
+	var cold_warm_settle_us := Time.get_ticks_usec() - warm_started_us
+	var cold_warm_settle_frames := _frames.size() - warm_started_frame
 	var cold_started_us := Time.get_ticks_usec()
 	var cold_started_frame := _frames.size()
 	if not _world.update_viewer(1, 2, cold_position, 1, 0) \
 			or not _world.update_collision_viewer(2, 2, cold_position, 0):
 		_fail("cold approach viewers were rejected")
 		return
-	if not await _wait_for_target(Vector3i(6, 0, 0), 0, -1, 1200):
+	if not await _wait_for_target(cold_key, 0, -1, 1200):
 		_fail("cold approach target did not become ready")
 		return
 	var cold_ready_us := Time.get_ticks_usec() - cold_started_us
@@ -133,6 +157,8 @@ func _run() -> void:
 		"hot_edits": edits,
 		"cold_approach_ready_us": cold_ready_us,
 		"cold_approach_ready_frames": cold_ready_frames,
+		"cold_warm_settle_us": cold_warm_settle_us,
+		"cold_warm_settle_frames": cold_warm_settle_frames,
 		"frames": _frames,
 		"maximum_queues": _maximum_queues,
 		"metrics_before": metrics_before,
@@ -236,6 +262,12 @@ func _measurement_snapshot() -> Dictionary:
 		"arena_counter_readback_bytes": int(effect.get("arena_counter_readback_bytes", 0)),
 		"geometry_readback_bytes": int(effect.get("geometry_readback_bytes", 0)),
 		"counter_readback_bytes": int(effect.get("counter_readback_bytes", 0)),
+		"interaction_warm_requests": int(runtime.get("interaction_warm_requests", 0)),
+		"interaction_warm_admissions": int(runtime.get("interaction_warm_admissions", 0)),
+		"interaction_warm_coalesced": int(runtime.get("interaction_warm_coalesced", 0)),
+		"interaction_warm_cache_hits": int(runtime.get("interaction_warm_cache_hits", 0)),
+		"interaction_warm_completions": int(runtime.get("interaction_warm_completions", 0)),
+		"interaction_warm_rejections": int(runtime.get("interaction_warm_rejections", 0)),
 		"draw_frames": int(effect.get("draw_frames", 0)),
 		"indirect_draw_calls": int(effect.get("indirect_draw_calls", 0)),
 	}

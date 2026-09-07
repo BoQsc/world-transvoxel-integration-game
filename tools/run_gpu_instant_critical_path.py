@@ -65,6 +65,7 @@ def run_profile(
     print(
         f"[{driver}/{layout}/{label}] GPU_INSTANT_CRITICAL_PATH_RESULT "
         f"submit_max_us={max(submissions)} hot_ready_max_us={max(ready)} "
+        f"warm_settle_us={payload['cold_warm_settle_us']} "
         f"cold_ready_us={payload['cold_approach_ready_us']} "
         f"queues={payload['maximum_queues']} evidence={retained}"
     )

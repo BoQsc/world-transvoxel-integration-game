@@ -126,6 +126,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
 		"PRIOR support %d  focus %d  matched %d  missing %d  changes %d\n" +
+		"WARM  request %d  admit %d  join %d  hit %d  done %d  reject %d\n" +
 		"VIS   replace %d  blocked %d  ready %d  retire %d  render-retire %d\n" +
 		"FIRST %s"
 	) % [
@@ -157,6 +158,12 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("foreground_priority_matched_keys", 0)),
 		int(metrics.get("foreground_priority_missing_keys", 0)),
 		int(metrics.get("foreground_priority_changed_priorities", 0)),
+		int(metrics.get("interaction_warm_requests", 0)),
+		int(metrics.get("interaction_warm_admissions", 0)),
+		int(metrics.get("interaction_warm_coalesced", 0)),
+		int(metrics.get("interaction_warm_cache_hits", 0)),
+		int(metrics.get("interaction_warm_completions", 0)),
+		int(metrics.get("interaction_warm_rejections", 0)),
 		int(metrics.get("pending_chunk_replacements", 0)),
 		int(metrics.get("blocked_pending_chunk_replacements", 0)),
 		int(metrics.get("ready_staged_chunk_replacements", 0)),
