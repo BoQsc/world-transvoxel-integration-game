@@ -10,6 +10,8 @@ const FOREGROUND_PRIORITY_PLAYER_SUPPORT := 0
 const FOREGROUND_PRIORITY_INTERACTION_FOCUS := 1
 const FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID := 1
 const FOREGROUND_PRIORITY_FOCUS_SOURCE_ID := 2
+const FOREGROUND_PRIORITY_KEY_CAPACITY := 64
+const FOREGROUND_PRIORITY_SHELL_RADIUS := 1
 const RuntimeScene := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -1853,14 +1855,17 @@ func _update_player_foreground_priority_leases(force: bool) -> bool:
 		return _fail("player does not expose foreground priority targets")
 	var targets: Dictionary = _player.call("get_foreground_priority_targets")
 	var support_keys := _foreground_chunk_keys(
-		Array(targets.get("support_points", []))
+		Array(targets.get("support_points", [])),
+		FOREGROUND_PRIORITY_SHELL_RADIUS
 	)
 	var focus_keys: Array = []
 	if bool(targets.get("focus_valid", false)):
 		var focus_points: Array = targets.get("focus_points", [])
 		if focus_points.is_empty():
 			focus_points = [targets.get("focus_point", _player.global_position)]
-		focus_keys = _foreground_chunk_keys(focus_points)
+		focus_keys = _foreground_chunk_keys(
+			focus_points, FOREGROUND_PRIORITY_SHELL_RADIUS
+		)
 	if force or support_keys != _last_foreground_support_keys:
 		_foreground_support_revision += 1
 		if not _submit_foreground_priority_lease(
@@ -1944,8 +1949,8 @@ func _submit_foreground_priority_lease(
 	return true
 
 
-func _foreground_chunk_keys(points: Array) -> Array:
-	var keys: Array = []
+func _foreground_chunk_keys(points: Array, shell_radius: int = 0) -> Array:
+	var centers: Array[Vector3i] = []
 	for value in points:
 		if not value is Vector3:
 			continue
@@ -1955,8 +1960,26 @@ func _foreground_chunk_keys(points: Array) -> Array:
 			floori(point.y / COLLISION_INVOKER_CHUNK_EXTENT),
 			floori(point.z / COLLISION_INVOKER_CHUNK_EXTENT)
 		)
-		if not keys.has(key):
-			keys.append(key)
+		if not centers.has(key):
+			centers.append(key)
+	var keys: Array = centers.duplicate()
+	if shell_radius <= 0:
+		return keys
+	# Admit every ray center before its halo, then fill nearest Manhattan shells
+	# across all centers. This retains the aimed path when the 64-key lease fills.
+	for distance in range(1, shell_radius * 3 + 1):
+		for z_offset in range(-shell_radius, shell_radius + 1):
+			for y_offset in range(-shell_radius, shell_radius + 1):
+				for x_offset in range(-shell_radius, shell_radius + 1):
+					if absi(x_offset) + absi(y_offset) + absi(z_offset) != distance:
+						continue
+					var offset := Vector3i(x_offset, y_offset, z_offset)
+					for center in centers:
+						var key := center + offset
+						if not keys.has(key):
+							keys.append(key)
+							if keys.size() >= FOREGROUND_PRIORITY_KEY_CAPACITY:
+								return keys
 	return keys
 
 

@@ -65,6 +65,10 @@ func _run() -> void:
 			or priority_keys.front() != Vector3i(35, 4, 35) \
 			or priority_keys.back() != Vector3i(35, -2, 35):
 		return _fail("cursor priority did not cover the bounded interaction ray")
+	var shell_keys: Array = world.call("_foreground_chunk_keys", priority_points, 1)
+	if shell_keys.size() != 64 or not shell_keys.has(Vector3i(35, 4, 35)) \
+			or not shell_keys.has(Vector3i(36, -2, 35)):
+		return _fail("cursor priority shell did not preserve the complete aimed path")
 	world.set("_reference_scene", scene)
 	world.set("_player", player)
 	if world.player_interaction_collision_invoker_enabled or \
@@ -100,7 +104,7 @@ func _run() -> void:
 	world.queue_free()
 	scene.queue_free()
 	await process_frame
-	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=2 coalesced=1 retired=1 priority_ray=7 gpu_cpu_visual_scan=0" % checks)
+	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=2 coalesced=1 retired=1 priority_ray=7 priority_shell=64 gpu_cpu_visual_scan=0" % checks)
 	quit(0)
 
 func _fail(message: String) -> void:

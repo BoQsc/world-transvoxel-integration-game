@@ -1,0 +1,486 @@
+{
+  "acceptance": {
+    "cold_cached_target_us": 100000,
+    "hot_visual_target_frames": 2,
+    "hot_visual_target_us": 33334,
+    "submission_p99_target_us": 1000
+  },
+  "cold_approach_ready_frames": 5,
+  "cold_approach_ready_us": 83299,
+  "cold_warm_key_count": 27,
+  "cold_warm_settle_frames": 4,
+  "cold_warm_settle_us": 66471,
+  "driver": "vulkan",
+  "edit_layout": "cross_brick",
+  "frames": [
+    {
+      "frame_us": 0,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "startup",
+      "scheduler_queued": 0,
+      "storage_queued": 7,
+      "ticks_usec": 1977649
+    },
+    {
+      "frame_us": 16714,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "startup",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 1994363
+    },
+    {
+      "frame_us": 16636,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "startup",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2010999
+    },
+    {
+      "frame_us": 16655,
+      "gpu_oldest_inactive_age_frames": 1,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "startup",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2027654
+    },
+    {
+      "frame_us": 16678,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "startup",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2044332
+    },
+    {
+      "frame_us": 16085,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 1,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2060991
+    },
+    {
+      "frame_us": 16665,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2077656
+    },
+    {
+      "frame_us": 16666,
+      "gpu_oldest_inactive_age_frames": 1,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2094322
+    },
+    {
+      "frame_us": 16683,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2111005
+    },
+    {
+      "frame_us": 16650,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2127655
+    },
+    {
+      "frame_us": 16666,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2144321
+    },
+    {
+      "frame_us": 16675,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2160996
+    },
+    {
+      "frame_us": 16654,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2177650
+    },
+    {
+      "frame_us": 16666,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2194316
+    },
+    {
+      "frame_us": 16668,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2210984
+    },
+    {
+      "frame_us": 16666,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2227650
+    },
+    {
+      "frame_us": 16668,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2244318
+    },
+    {
+      "frame_us": 16661,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2260979
+    },
+    {
+      "frame_us": 16672,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2277651
+    },
+    {
+      "frame_us": 16664,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2294315
+    },
+    {
+      "frame_us": 16665,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2310980
+    },
+    {
+      "frame_us": 16666,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2327646
+    },
+    {
+      "frame_us": 16668,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2344314
+    },
+    {
+      "frame_us": 16727,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "hot_edit",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2361041
+    },
+    {
+      "frame_us": 16602,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 22,
+      "ticks_usec": 2377643
+    },
+    {
+      "frame_us": 16665,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 13,
+      "ticks_usec": 2394308
+    },
+    {
+      "frame_us": 16665,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 4,
+      "ticks_usec": 2410973
+    },
+    {
+      "frame_us": 16664,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2427637
+    },
+    {
+      "frame_us": 16668,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 1,
+      "storage_queued": 0,
+      "ticks_usec": 2444305
+    },
+    {
+      "frame_us": 16673,
+      "gpu_oldest_inactive_age_frames": 1,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2460978
+    },
+    {
+      "frame_us": 16662,
+      "gpu_oldest_inactive_age_frames": 2,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2477640
+    },
+    {
+      "frame_us": 16660,
+      "gpu_oldest_inactive_age_frames": 3,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2494300
+    },
+    {
+      "frame_us": 16670,
+      "gpu_oldest_inactive_age_frames": 0,
+      "mesh_active": 0,
+      "mesh_queued": 0,
+      "phase": "cold_approach",
+      "scheduler_queued": 0,
+      "storage_queued": 0,
+      "ticks_usec": 2510970
+    }
+  ],
+  "gpu_event_counts": {
+    "ACTIVE": 0,
+    "CAPTURE_SUBMITTED": 0,
+    "FIRST_DRAW": 0,
+    "SURFACE_PREPARED": 0
+  },
+  "gpu_lifecycle": [],
+  "hot_edit_count": 6,
+  "hot_edits": [
+    {
+      "index": 0,
+      "mode": "construct",
+      "ready_frames": 4,
+      "ready_ticks_usec": 2111677,
+      "ready_us": 66415,
+      "revision": 1,
+      "submission_us": 334,
+      "submitted_ticks_usec": 2045262,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    },
+    {
+      "index": 1,
+      "mode": "dig",
+      "ready_frames": 3,
+      "ready_ticks_usec": 2161787,
+      "ready_us": 50084,
+      "revision": 2,
+      "submission_us": 303,
+      "submitted_ticks_usec": 2111703,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    },
+    {
+      "index": 2,
+      "mode": "construct",
+      "ready_frames": 3,
+      "ready_ticks_usec": 2211688,
+      "ready_us": 49875,
+      "revision": 3,
+      "submission_us": 343,
+      "submitted_ticks_usec": 2161813,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    },
+    {
+      "index": 3,
+      "mode": "dig",
+      "ready_frames": 3,
+      "ready_ticks_usec": 2261661,
+      "ready_us": 49946,
+      "revision": 4,
+      "submission_us": 308,
+      "submitted_ticks_usec": 2211715,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    },
+    {
+      "index": 4,
+      "mode": "construct",
+      "ready_frames": 3,
+      "ready_ticks_usec": 2311674,
+      "ready_us": 49988,
+      "revision": 5,
+      "submission_us": 316,
+      "submitted_ticks_usec": 2261686,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    },
+    {
+      "index": 5,
+      "mode": "dig",
+      "ready_frames": 3,
+      "ready_ticks_usec": 2361762,
+      "ready_us": 50062,
+      "revision": 6,
+      "submission_us": 301,
+      "submitted_ticks_usec": 2311700,
+      "visual_first_draw_ticks_usec": 0,
+      "visual_first_draw_us": -1
+    }
+  ],
+  "maximum_queues": {
+    "gpu_oldest_inactive_age_frames": 3,
+    "mesh_active": 1,
+    "mesh_queued": 0,
+    "scheduler_queued": 1,
+    "storage_queued": 22
+  },
+  "metrics_after": {
+    "arena_counter_readback_bytes": 200,
+    "arena_uploaded_bytes": 1757760,
+    "counter_readback_bytes": 200,
+    "draw_frames": 31,
+    "edit_queried_chunks": 6,
+    "edit_replaced_chunks": 6,
+    "geometry_readback_bytes": 0,
+    "indirect_draw_calls": 123,
+    "interaction_warm_admissions": 27,
+    "interaction_warm_cache_hits": 0,
+    "interaction_warm_coalesced": 0,
+    "interaction_warm_completions": 27,
+    "interaction_warm_rejections": 0,
+    "interaction_warm_requests": 27,
+    "mesh_prepare_time_ns_total": 5492400,
+    "native_packed_bytes_total": 2545728,
+    "world_revision": 6
+  },
+  "metrics_before": {
+    "arena_counter_readback_bytes": 0,
+    "arena_uploaded_bytes": 439440,
+    "counter_readback_bytes": 0,
+    "draw_frames": 3,
+    "edit_queried_chunks": 0,
+    "edit_replaced_chunks": 0,
+    "geometry_readback_bytes": 0,
+    "indirect_draw_calls": 8,
+    "interaction_warm_admissions": 0,
+    "interaction_warm_cache_hits": 0,
+    "interaction_warm_coalesced": 0,
+    "interaction_warm_completions": 0,
+    "interaction_warm_rejections": 0,
+    "interaction_warm_requests": 0,
+    "mesh_prepare_time_ns_total": 346600,
+    "native_packed_bytes_total": 636432,
+    "world_revision": 0
+  },
+  "native_event_counts": {
+    "collision_payload_prepared": 0,
+    "collision_sink_applied": 0,
+    "edit_dirty_page_admitted": 0,
+    "edit_journal_committed": 0
+  },
+  "native_trace": {
+    "events": []
+  },
+  "schema": "world_transvoxel.gpu_instant_critical_path.v1",
+  "trace_enabled": false,
+  "trace_started_ticks_usec": 2044906
+}

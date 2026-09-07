@@ -117,7 +117,14 @@ func _run() -> void:
 	var warm_before: Dictionary = _world.get_runtime_metrics()
 	var warm_started_us := Time.get_ticks_usec()
 	var warm_started_frame := _frames.size()
-	if not _world.update_foreground_priority_lease(9001, 1, 1, [cold_key]):
+	var cold_warm_keys: Array[Vector3i] = []
+	for z_offset in range(-1, 2):
+		for y_offset in range(-1, 2):
+			for x_offset in range(-1, 2):
+				cold_warm_keys.append(
+					cold_key + Vector3i(x_offset, y_offset, z_offset)
+				)
+	if not _world.update_foreground_priority_lease(9001, 1, 1, cold_warm_keys):
 		_fail("cold approach interaction warm lease was rejected")
 		return
 	var warm_ready := false
@@ -125,15 +132,23 @@ func _run() -> void:
 		await process_frame
 		_observe_frame()
 		var warm_now: Dictionary = _world.get_runtime_metrics()
-		if int(warm_now.get("interaction_warm_completions", 0)) > int(
-			warm_before.get("interaction_warm_completions", 0)
-		) or int(warm_now.get("interaction_warm_cache_hits", 0)) > int(
-			warm_before.get("interaction_warm_cache_hits", 0)
-		):
+		var warmed_count := (
+			int(warm_now.get("interaction_warm_completions", 0))
+			- int(warm_before.get("interaction_warm_completions", 0))
+			+ int(warm_now.get("interaction_warm_cache_hits", 0))
+			- int(warm_before.get("interaction_warm_cache_hits", 0))
+		)
+		if warmed_count >= cold_warm_keys.size():
 			warm_ready = true
 			break
 	if not warm_ready:
 		_fail("cold approach interaction page did not warm")
+		return
+	var warm_after: Dictionary = _world.get_runtime_metrics()
+	if int(warm_after.get("interaction_warm_rejections", 0)) != int(
+		warm_before.get("interaction_warm_rejections", 0)
+	):
+		_fail("cold approach interaction shell exceeded its reserved warm lane")
 		return
 	var cold_warm_settle_us := Time.get_ticks_usec() - warm_started_us
 	var cold_warm_settle_frames := _frames.size() - warm_started_frame
@@ -148,6 +163,9 @@ func _run() -> void:
 		return
 	var cold_ready_us := Time.get_ticks_usec() - cold_started_us
 	var cold_ready_frames := _frames.size() - cold_started_frame
+	if cold_ready_us > 100000:
+		_fail("cached cold approach missed 100 ms readiness: %d us" % cold_ready_us)
+		return
 	if _trace_enabled:
 		_world.end_cpu_causal_trace()
 	var native: Dictionary = _world.get_cpu_causal_trace_events(0, 65536) \
@@ -172,6 +190,7 @@ func _run() -> void:
 		"cold_approach_ready_frames": cold_ready_frames,
 		"cold_warm_settle_us": cold_warm_settle_us,
 		"cold_warm_settle_frames": cold_warm_settle_frames,
+		"cold_warm_key_count": cold_warm_keys.size(),
 		"frames": _frames,
 		"maximum_queues": _maximum_queues,
 		"metrics_before": metrics_before,
