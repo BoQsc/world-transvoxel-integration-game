@@ -10,10 +10,14 @@ var _phase := "startup"
 var _last_tick_us := 0
 var _maximum_queues := {}
 var _trace_enabled := true
+var _single_brick_edits := false
 
 
 func _run() -> void:
 	_trace_enabled = not OS.get_cmdline_user_args().has("--gpu-critical-path-trace-off")
+	_single_brick_edits = OS.get_cmdline_user_args().has(
+		"--gpu-critical-path-single-brick"
+	)
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
@@ -50,7 +54,15 @@ func _run() -> void:
 	var edits: Array[Dictionary] = []
 	_phase = "hot_edit"
 	for index in range(HOT_EDIT_COUNT):
-		var center := Vector3(6.0 + float(index % 3) * 2.0, 8.0, 6.0 + float(index / 3) * 3.0)
+		var center := Vector3(
+			2.5 + float(index % 3) * 0.25,
+			2.5,
+			2.5 + float(index / 3) * 0.25
+		) if _single_brick_edits else Vector3(
+			6.0 + float(index % 3) * 2.0,
+			8.0,
+			6.0 + float(index / 3) * 3.0
+		)
 		var operation := EditOperation.new()
 		operation.mode = EditOperation.Mode.CONSTRUCT if index % 2 == 0 else EditOperation.Mode.CARVE
 		operation.brush_shape = EditOperation.BrushShape.SPHERE
@@ -115,6 +127,7 @@ func _run() -> void:
 		"schema": "world_transvoxel.gpu_instant_critical_path.v1",
 		"driver": RenderingServer.get_current_rendering_driver_name().to_lower(),
 		"trace_enabled": _trace_enabled,
+		"edit_layout": "single_brick" if _single_brick_edits else "cross_brick",
 		"trace_started_ticks_usec": trace_started_us,
 		"hot_edit_count": HOT_EDIT_COUNT,
 		"hot_edits": edits,

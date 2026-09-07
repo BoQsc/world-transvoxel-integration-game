@@ -963,6 +963,12 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 		_mutex.unlock()
 		if sequence != latest_sequence:
 			_arena.discard_readback(ticket, completion_data.size())
+			var stale_token := _entry_token(key, sequence)
+			if _entries.has(stale_token):
+				var stale_entry := Dictionary(_entries[stale_token])
+				stale_entry["counts_pending"] = false
+				_finalize_gpu_candidate_on_render_thread(stale_entry)
+				_entries[stale_token] = stale_entry
 			continue
 		var telemetry: Dictionary = _arena.finalize_readback(
 			ticket, completion_data
@@ -989,6 +995,12 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			_status["resident_entry_count"] = _entries.size()
 			_status["active_entry_count"] = _active_sequence_by_key.size()
 			_mutex.unlock()
+	_sync_arena_status_on_render_thread()
+	_mutex.lock()
+	_status["resident_entry_count"] = _entries.size()
+	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_status["inflight_extraction_count"] = _inflight_extractions.size()
+	_mutex.unlock()
 
 
 func _drain_pending_on_render_thread() -> void:
@@ -1434,15 +1446,23 @@ func _retire_entry_on_render_thread(
 
 func _finalize_gpu_candidate_on_render_thread(entry: Dictionary) -> void:
 	var previous_token := str(entry.get("retained_previous_token", ""))
-	if not previous_token.is_empty() and _entries.has(previous_token):
+	var traversed := 0
+	while not previous_token.is_empty() and _entries.has(previous_token) \
+			and traversed < maxi(1, _resident_capacity * 6):
 		var previous_entry: Dictionary = _entries[previous_token]
 		var previous_identity := Dictionary(previous_entry.get("identity", {}))
 		var previous_key := _identity_key(previous_identity)
-		if int(_active_sequence_by_key.get(previous_key, 0)) != int(
-				previous_entry.get("publication_sequence", 0)
+		if int(_active_sequence_by_key.get(previous_key, 0)) == int(
+			previous_entry.get("publication_sequence", 0)
 		):
-			_free_entry_on_render_thread(previous_entry)
-			_entries.erase(previous_token)
+			break
+		var next_previous_token := str(previous_entry.get(
+			"retained_previous_token", ""
+		))
+		_free_entry_on_render_thread(previous_entry)
+		_entries.erase(previous_token)
+		previous_token = next_previous_token
+		traversed += 1
 	for retirement_value in Array(entry.get("retained_retirements", [])):
 		var retirement := Dictionary(retirement_value)
 		var retirement_token := str(retirement.get("token", ""))
@@ -1501,13 +1521,21 @@ func _cancel_unpublished_entry_on_render_thread(
 				or int(request.get("publication_sequence", 0)) != publication_sequence \
 				or _cancelled_inflight_tickets.has(ticket):
 			continue
-		_cancelled_inflight_tickets[ticket] = true
+		# An unpublished candidate has no commit dependency. Render-thread command
+		# ordering makes its slot reusable after the already-recorded extraction,
+		# so reclaim it immediately instead of waiting for a readback that is only
+		# requested after activation.
+		_inflight_extractions.erase(ticket)
+		_arena.discard_readback(ticket)
+		_rollback_gpu_candidate_on_render_thread(request)
 		cancelled_inflight += 1
 	if cancelled_inflight > 0:
+		_sync_arena_status_on_render_thread()
 		_mutex.lock()
 		_status["cancelled_inflight_requests"] = int(
 			_status["cancelled_inflight_requests"]
 		) + cancelled_inflight
+		_status["inflight_extraction_count"] = _inflight_extractions.size()
 		_mutex.unlock()
 
 
@@ -1548,7 +1576,7 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 			var counts := water_counts \
 				if str(identity.get("surface", "")) == "static_water" else terrain_counts
 			counts[lod] = int(counts.get(lod, 0)) + 1
-		if not bool(entry.get("empty", false)):
+		if is_active and not bool(entry.get("empty", false)):
 			var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
 			var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
 			var center := (minimum + maximum) * 0.5

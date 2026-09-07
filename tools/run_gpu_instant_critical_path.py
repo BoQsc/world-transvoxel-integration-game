@@ -20,12 +20,18 @@ DEFAULT_GODOT = pathlib.Path(
 PASS_MARKER = "GPU_INSTANT_CRITICAL_PATH_SMOKE_PASS"
 
 
-def run_profile(godot: pathlib.Path, project: pathlib.Path, driver: str, trace: bool) -> int:
+def run_profile(
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    driver: str,
+    trace: bool,
+    layout: str,
+) -> int:
     capture = project / ".godot" / "world_transvoxel_captures" / "gpu_instant_critical_path"
     result = capture / "result.json"
     label = "trace_on" if trace else "trace_off"
-    retained = capture / f"{driver}_{label}.json"
-    log = capture / f"{driver}_{label}.log"
+    retained = capture / f"{driver}_{layout}_{label}.json"
+    log = capture / f"{driver}_{layout}_{label}.log"
     capture.mkdir(parents=True, exist_ok=True)
     result.unlink(missing_ok=True)
     process = psutil.Process()
@@ -38,6 +44,10 @@ def run_profile(godot: pathlib.Path, project: pathlib.Path, driver: str, trace: 
     ]
     if not trace:
         command.extend(["--", "--gpu-critical-path-trace-off"])
+    if layout == "single_brick":
+        if "--" not in command:
+            command.append("--")
+        command.append("--gpu-critical-path-single-brick")
     try:
         code = subprocess.run(command, cwd=project, timeout=300, check=False).returncode
     finally:
@@ -45,7 +55,7 @@ def run_profile(godot: pathlib.Path, project: pathlib.Path, driver: str, trace: 
     output = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
     relevant = [line for line in output.splitlines() if "GPU_INSTANT_CRITICAL_PATH" in line or line.startswith(("ERROR:", "SCRIPT ERROR:"))]
     for line in relevant:
-        print(f"[{driver}/{label}] {line}")
+        print(f"[{driver}/{layout}/{label}] {line}")
     if code != 0 or not result.exists() or not any(PASS_MARKER in line for line in relevant):
         return code or 1
     shutil.copy2(result, retained)
@@ -53,7 +63,7 @@ def run_profile(godot: pathlib.Path, project: pathlib.Path, driver: str, trace: 
     submissions = sorted(int(edit["submission_us"]) for edit in payload["hot_edits"])
     ready = sorted(int(edit["ready_us"]) for edit in payload["hot_edits"])
     print(
-        f"[{driver}/{label}] GPU_INSTANT_CRITICAL_PATH_RESULT "
+        f"[{driver}/{layout}/{label}] GPU_INSTANT_CRITICAL_PATH_RESULT "
         f"submit_max_us={max(submissions)} hot_ready_max_us={max(ready)} "
         f"cold_ready_us={payload['cold_approach_ready_us']} "
         f"queues={payload['maximum_queues']} evidence={retained}"
@@ -67,13 +77,21 @@ def main() -> int:
     parser.add_argument("--project", type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
     parser.add_argument("--driver", choices=("vulkan", "d3d12", "both"), default="both")
     parser.add_argument("--trace", choices=("on", "off", "both"), default="both")
+    parser.add_argument(
+        "--layout", choices=("cross_brick", "single_brick", "both"),
+        default="cross_brick",
+    )
     args = parser.parse_args()
     drivers = ("vulkan", "d3d12") if args.driver == "both" else (args.driver,)
     traces = (True, False) if args.trace == "both" else (args.trace == "on",)
+    layouts = ("cross_brick", "single_brick") if args.layout == "both" else (args.layout,)
     for driver in drivers:
-        for trace in traces:
-            if run_profile(args.godot.resolve(), args.project.resolve(), driver, trace) != 0:
-                return 1
+        for layout in layouts:
+            for trace in traces:
+                if run_profile(
+                    args.godot.resolve(), args.project.resolve(), driver, trace, layout
+                ) != 0:
+                    return 1
     return 0
 
 
