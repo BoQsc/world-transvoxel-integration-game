@@ -1,12 +1,6 @@
-# Most Godot cache is local. Keep only the portable launch/import subset so a
-# clean clone can load the native backend and imported assets immediately.
-/.godot/*
-!/.godot/.gdignore
-!/.godot/extension_list.cfg
-!/.godot/global_script_class_cache.cfg
-!/.godot/uid_cache.bin
-!/.godot/imported/
-!/.godot/imported/**
+# Godot recreates this cache from project sources. Tracking it produces binary
+# churn on every editor, test, and renderer run.
+/.godot/
 /artifacts/
 /build/
 /CURRENT_PLAYTEST_FRESHNESS.json
@@ -16,3 +10,11 @@
 __pycache__/
 *.pyc
 assets/terrain_textures/material_layers/*.url
+
+# Godot editor sidecars for generated shaders and retained evidence images.
+/addons/world_transvoxel_terrain/gpu/*.glsl.import
+/docs/evidence/**/*.import
+
+# Raw exploratory capture set retained locally. Its reviewed conclusions belong
+# in compact RESULT/qualification files rather than a 1 GiB capture history.
+/docs/evidence/tqp64_gpu_compact_residency_20260826/
