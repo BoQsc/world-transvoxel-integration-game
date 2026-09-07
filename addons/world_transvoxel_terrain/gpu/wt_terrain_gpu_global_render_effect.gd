@@ -445,6 +445,10 @@ func activate_entries(entries: Array) -> bool:
 	return _queue_activation_group_command("ACTIVATE_GROUP", entries)
 
 
+func activate_pending_entries(entries: Array) -> bool:
+	return _queue_activation_group_command("ACTIVATE_GROUP", entries, [], false)
+
+
 func replace_entries(entries: Array, retirements: Array) -> bool:
 	if retirements.is_empty():
 		return activate_entries(entries)
@@ -454,7 +458,8 @@ func replace_entries(entries: Array, retirements: Array) -> bool:
 
 
 func _queue_activation_group_command(
-	action: String, entries: Array, retirements: Array = []
+	action: String, entries: Array, retirements: Array = [],
+	dispatch_immediately: bool = true
 ) -> bool:
 	if entries.is_empty() and (action != "REPLACE_GROUP" or retirements.is_empty()):
 		_record_rejection("global render activation group is empty")
@@ -496,9 +501,10 @@ func _queue_activation_group_command(
 		"retirements": retained_retirements,
 	})
 	_mutex.unlock()
-	RenderingServer.call_on_render_thread(
-		Callable(self, "_drain_lifecycle_commands_on_render_thread")
-	)
+	if dispatch_immediately:
+		RenderingServer.call_on_render_thread(
+			Callable(self, "_drain_lifecycle_commands_on_render_thread")
+		)
 	return true
 
 

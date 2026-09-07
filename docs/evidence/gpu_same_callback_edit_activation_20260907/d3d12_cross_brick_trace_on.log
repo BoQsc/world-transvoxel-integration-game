@@ -1,0 +1,4 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+D3D12 12_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design
+
+GPU_INSTANT_CRITICAL_PATH_SMOKE_PASS edits=6 cold_us=84489 native={ "edit_journal_committed": 6, "edit_dirty_page_admitted": 6, "collision_payload_prepared": 7, "collision_sink_applied": 7 } gpu={ "CAPTURE_SUBMITTED": 18, "SURFACE_PREPARED": 18, "ACTIVE": 18, "FIRST_DRAW": 12 }

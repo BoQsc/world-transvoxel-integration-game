@@ -1,0 +1,4 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+Vulkan 1.3.289 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design
+
+GPU_INSTANT_CRITICAL_PATH_SMOKE_PASS edits=6 cold_us=117052 native={ "edit_journal_committed": 0, "edit_dirty_page_admitted": 0, "collision_payload_prepared": 0, "collision_sink_applied": 0 } gpu={ "CAPTURE_SUBMITTED": 0, "SURFACE_PREPARED": 0, "ACTIVE": 0, "FIRST_DRAW": 0 }

@@ -83,6 +83,17 @@ func _run() -> void:
 		if not ready:
 			_fail("hot edit %d did not reach visual/collision readiness" % index)
 			return
+		var first_draw_ticks_usec := _first_draw_ticks_usec(revision, Vector3i.ZERO, 0)
+		if _trace_enabled and first_draw_ticks_usec <= 0:
+			_fail("hot edit %d has no render-thread first-draw timestamp" % index)
+			return
+		var visual_first_draw_us := first_draw_ticks_usec - submitted_us \
+			if first_draw_ticks_usec > 0 else -1
+		if _trace_enabled and visual_first_draw_us > 33334:
+			_fail("hot edit %d missed two-frame visual publication: %d us" % [
+				index, visual_first_draw_us,
+			])
+			return
 		edits.append({
 			"index": index,
 			"revision": revision,
@@ -92,6 +103,8 @@ func _run() -> void:
 			"ready_frames": _frames.size() - submitted_frame,
 			"submitted_ticks_usec": submitted_us,
 			"ready_ticks_usec": Time.get_ticks_usec(),
+			"visual_first_draw_ticks_usec": first_draw_ticks_usec,
+			"visual_first_draw_us": visual_first_draw_us,
 		})
 
 	_phase = "cold_approach"
@@ -168,6 +181,7 @@ func _run() -> void:
 		"acceptance": {
 			"submission_p99_target_us": 1000,
 			"hot_visual_target_frames": 2,
+			"hot_visual_target_us": 33334,
 			"cold_cached_target_us": 100000,
 		},
 	}
@@ -224,6 +238,22 @@ func _wait_for_target(key: Vector3i, lod: int, revision: int, limit: int) -> boo
 		if visual_ready and collision_ready and (revision < 0 or _world.get_world_revision() >= revision):
 			return true
 	return false
+
+
+func _first_draw_ticks_usec(revision: int, key: Vector3i, lod: int) -> int:
+	var gpu_status: Dictionary = _world.get_gpu_resident_render_status()
+	for event_value in Array(gpu_status.get("recent_lifecycle_events", [])):
+		var event := Dictionary(event_value)
+		if str(event.get("action", "")) != "FIRST_DRAW":
+			continue
+		var identity := Dictionary(event.get("identity", {}))
+		if int(identity.get("world_revision", -1)) == revision \
+				and int(identity.get("page_x", -999)) == key.x \
+				and int(identity.get("page_y", -999)) == key.y \
+				and int(identity.get("page_z", -999)) == key.z \
+				and int(identity.get("lod", -1)) == lod:
+			return int(event.get("effect_ticks_usec", event.get("ticks_usec", 0)))
+	return 0
 
 
 func _observe_frame() -> void:

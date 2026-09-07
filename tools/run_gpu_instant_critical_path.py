@@ -62,9 +62,16 @@ def run_profile(
     payload = json.loads(retained.read_text(encoding="utf-8"))
     submissions = sorted(int(edit["submission_us"]) for edit in payload["hot_edits"])
     ready = sorted(int(edit["ready_us"]) for edit in payload["hot_edits"])
+    first_draw = sorted(
+        int(edit["visual_first_draw_us"])
+        for edit in payload["hot_edits"]
+        if int(edit["visual_first_draw_us"]) >= 0
+    )
+    first_draw_summary = str(max(first_draw)) if first_draw else "n/a"
     print(
         f"[{driver}/{layout}/{label}] GPU_INSTANT_CRITICAL_PATH_RESULT "
-        f"submit_max_us={max(submissions)} hot_ready_max_us={max(ready)} "
+        f"submit_max_us={max(submissions)} hot_first_draw_max_us={first_draw_summary} "
+        f"hot_observed_ready_max_us={max(ready)} "
         f"warm_settle_us={payload['cold_warm_settle_us']} "
         f"cold_ready_us={payload['cold_approach_ready_us']} "
         f"queues={payload['maximum_queues']} evidence={retained}"

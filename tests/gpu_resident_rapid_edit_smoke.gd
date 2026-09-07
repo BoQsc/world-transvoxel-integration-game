@@ -88,17 +88,21 @@ func _run() -> void:
 	var same_layout_chunks := int(native_metrics.get(
 		"same_layout_edit_activation_chunks", 0
 	))
+	var same_callback_precommits := int(resident_status.get(
+		"same_callback_edit_precommits", 0
+	))
+	var retired_chunks := int(native_metrics.get("retired_chunks", 0))
 	if same_layout_cohorts <= 0 or same_layout_chunks < 2 \
-			or _maximum_pending_retirements <= 0:
+			or retired_chunks <= 0:
 		_fail("rapid edit did not use the loaded same-layout cohort: %s" % str(native_metrics))
 		return
 	var effect_status: Dictionary = resident_status.get("effect_status", {})
 	var arena_status: Dictionary = effect_status.get("arena_status", {})
-	var readback_completions := int(arena_status.get("counter_readback_completions", 0))
+	var readback_requests := int(arena_status.get("counter_readback_requests", 0))
 	if int(arena_status.get("incremental_dispatch_count", 0)) <= 0 \
 			or int(arena_status.get("incremental_copy_fallback_count", -1)) != 0 \
 			or int(arena_status.get("counter_readback_bytes", -1)) \
-			!= readback_completions * 20:
+			!= readback_requests * 20:
 		_fail("rapid edit did not use incremental meshlets and 20-byte summaries: %s" % str(arena_status))
 		return
 	await RenderingServer.frame_post_draw
@@ -109,11 +113,13 @@ func _run() -> void:
 	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
 		_fail("rapid edit world did not stop")
 		return
-	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 same_layout_cohorts=%d same_layout_chunks=%d maximum_pending_retirements=%d incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
+	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 same_layout_cohorts=%d same_layout_chunks=%d same_callback_precommits=%d maximum_pending_retirements=%d retired_chunks=%d incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
 		_checked_frames,
 		same_layout_cohorts,
 		same_layout_chunks,
+		same_callback_precommits,
 		_maximum_pending_retirements,
+		retired_chunks,
 		int(arena_status.get("incremental_dispatch_count", 0)),
 		int(arena_status.get("regenerated_cell_count", 0)),
 		int(arena_status.get("last_dispatch_uploaded_bytes", 0)),

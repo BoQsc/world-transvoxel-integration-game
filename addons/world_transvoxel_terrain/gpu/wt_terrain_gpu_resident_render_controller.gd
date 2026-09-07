@@ -101,6 +101,7 @@ var _has_retirement_candidates := false
 var _stale_incomplete_groups_superseded := 0
 var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
+var _same_callback_edit_precommits := 0
 var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
@@ -357,6 +358,7 @@ func get_status() -> Dictionary:
 		),
 		"activation_cohorts_queued": _activation_cohorts_queued,
 		"activation_cohorts_committed": _activation_cohorts_committed,
+		"same_callback_edit_precommits": _same_callback_edit_precommits,
 		"cpu_only_regional_retirements": _cpu_only_regional_retirements,
 		"lifecycle_history_enabled": _lifecycle_history_enabled,
 		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
@@ -863,6 +865,124 @@ func _submit_native_captures() -> void:
 		_entry_routes[_entry_token(identity, sequence)] = route
 		_submitted_surfaces += 1
 		submitted_this_frame += 1
+		_try_precommit_same_layout_edit(group_key)
+
+
+func _try_precommit_same_layout_edit(group_key: String) -> bool:
+	if not _groups.has(group_key):
+		return false
+	var group: Dictionary = _groups[group_key]
+	if bool(group.get("retiring", false)) \
+			or bool(group.get("active", false)) \
+			or bool(group.get("activation_queued", false)):
+		return false
+	var requests: Dictionary = group.get("requests", {})
+	for surface in _required_surfaces(group):
+		if not requests.has(surface):
+			return false
+	var terrain_request: Dictionary = requests.get("terrain", {})
+	var terrain_identity: Dictionary = terrain_request.get("identity", {})
+	if not bool(terrain_identity.get("incremental_edit", false)):
+		return false
+	var preflight := Dictionary(_backend_terrain.call(
+		"get_gpu_resident_render_activation_cohort", terrain_identity
+	))
+	if not bool(preflight.get("cohort_built", false)) \
+			or not bool(preflight.get("authoritative_coverage_complete", false)) \
+			or not bool(preflight.get("same_layout_edit", false)) \
+			or bool(preflight.get("regional", true)) \
+			or int(preflight.get("replacement_count", 0)) != 1 \
+			or int(preflight.get("retirement_count", 0)) != 0:
+		return false
+	var inventories: Array = [_group_identities(group)]
+	var preparation := Dictionary(_backend_terrain.call(
+		"prepare_gpu_resident_render_chunk", inventories[0]
+	))
+	if str(preparation.get("status", "")) != "PREPARED" \
+			or not bool(preparation.get("prepared", false)):
+		return false
+	var cohort := Dictionary(_backend_terrain.call(
+		"get_gpu_resident_render_activation_cohort", terrain_identity
+	))
+	var chunks: Array = cohort.get("chunks", [])
+	if str(cohort.get("status", "")) != "READY" \
+			or not bool(cohort.get("ready", false)) \
+			or not bool(cohort.get("same_layout_edit", false)) \
+			or bool(cohort.get("regional", true)) \
+			or chunks.size() != 1 \
+			or int(cohort.get("activation_required_count", 0)) != 1 \
+			or not Array(cohort.get("retirements", [])).is_empty():
+		return false
+	var native_validated := {}
+	for surface in _required_surfaces(group):
+		var request: Dictionary = requests.get(surface, {})
+		var validation := Dictionary(_backend_terrain.call(
+			"validate_gpu_resident_render_request",
+			int(request.get("request_id", 0)),
+			Dictionary(request.get("identity", {}))
+		))
+		if str(validation.get("status", "")) != "READY" \
+				or not bool(validation.get("ready", false)) \
+				or not bool(validation.get("request_accepted", false)):
+			return false
+		native_validated[surface] = true
+	var activation := Dictionary(_backend_terrain.call(
+		"activate_gpu_resident_render_cohort", inventories
+	))
+	if str(activation.get("status", "")) != "ACTIVE" \
+			or not bool(activation.get("active", false)):
+		return false
+	var activation_entries: Array[Dictionary] = []
+	var sequences: Dictionary = group.get("sequences", {})
+	for surface in _required_surfaces(group):
+		var request: Dictionary = requests.get(surface, {})
+		activation_entries.append({
+			"identity": Dictionary(request.get("identity", {})),
+			"publication_sequence": int(sequences.get(surface, 0)),
+		})
+	var cohort_id := _next_activation_cohort_id
+	_next_activation_cohort_id += 1
+	group["native_validated"] = native_validated
+	group["validated"] = true
+	group["native_prepared"] = true
+	group["native_active"] = true
+	group["activation_queued"] = true
+	group["activation_cohort_id"] = cohort_id
+	group["collision_activation_priority"] = true
+	_groups[group_key] = group
+	_prepared_group_routes[_activation_chunk_key(terrain_identity)] = group_key
+	_activation_retry_membership.erase(group_key)
+	_activation_cohorts[cohort_id] = {
+		"group_keys": [group_key],
+		"inventories": inventories.duplicate(true),
+		"activation_entries": activation_entries.duplicate(true),
+		"retirement_group_keys": [],
+		"retirement_entries": [],
+		"selected_chunks": chunks.duplicate(true),
+		"native_committed": true,
+		"regional": false,
+	}
+	_validated_surfaces += native_validated.size()
+	_record_lifecycle_event("NATIVE_PREPARED", group_key, {
+		"collision_priority": true,
+		"same_callback_precommit": true,
+	})
+	_record_lifecycle_event("COHORT_SELECTED", group_key, {
+		"cohort_id": cohort_id,
+		"regional": false,
+		"member_count": 1,
+		"same_callback_precommit": true,
+	})
+	_activation_cohorts_queued += 1
+	_same_callback_edit_precommits += 1
+	if not _effect.activate_pending_entries(activation_entries):
+		_fail_closed("global renderer rejected precommitted same-layout edit")
+		return false
+	_record_lifecycle_event("ACTIVATION_REQUESTED", group_key, {
+		"cohort_id": cohort_id,
+		"same_callback_precommit": true,
+	})
+	return true
 
 
 func _drain_effect_events() -> void:
