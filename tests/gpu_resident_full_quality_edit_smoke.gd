@@ -92,6 +92,14 @@ func _run() -> void:
 	if commit_frame < 0 or first_visual_frame < 0 or first_visual_lod != 0:
 		_fail("first edit did not publish full-quality feedback: commit=%d visual=%d lod=%d" % [commit_frame, first_visual_frame, first_visual_lod])
 		return
+	var activation_display_frame := int(Dictionary(stage_first_seen.get(
+		"activation_queued", {}
+	)).get("frame", -1))
+	if activation_display_frame < 0 or activation_display_frame - commit_frame > 2:
+		_fail("relocated edit missed the two-display-frame activation bound: commit=%d activation=%d" % [
+			commit_frame, activation_display_frame,
+		])
+		return
 	print("GPU_RESIDENT_FULL_QUALITY_EDIT_TIMELINE " + JSON.stringify(stage_first_seen))
 	var refined := false
 	for _frame in range(900):
@@ -108,7 +116,7 @@ func _run() -> void:
 	if not refined:
 		_fail("first edit content published but refinement stopped")
 		return
-	print("GPU_RESIDENT_FULL_QUALITY_EDIT_SMOKE_PASS commit=%d visual_after_commit=%d first_lod=%d refined=1 prepare_until_feedback_us=%d" % [commit_frame, first_visual_frame - commit_frame, first_visual_lod, prepare_at_feedback / 1000])
+	print("GPU_RESIDENT_FULL_QUALITY_EDIT_SMOKE_PASS commit=%d display_activation_after_commit=%d controller_visible_after_commit=%d first_lod=%d refined=1 prepare_until_feedback_us=%d" % [commit_frame, activation_display_frame - commit_frame, first_visual_frame - commit_frame, first_visual_lod, prepare_at_feedback / 1000])
 	_world.stop_backend_world()
 	await _wait_for_state("stopped")
 	quit(0)
