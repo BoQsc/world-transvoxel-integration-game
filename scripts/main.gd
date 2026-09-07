@@ -412,12 +412,23 @@ func _start_profile() -> void:
 	game_world.player_viewer_coalesce_while_streaming = \
 		gpu_resident_render_candidate_requested
 	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
+	if gpu_resident_render_candidate_requested:
+		predictive_viewer_enabled = true
 	if autonomous and human_visual_capture_path.is_empty():
 		predictive_viewer_enabled = false
 	game_world.player_predictive_viewer_enabled = predictive_viewer_enabled
-	game_world.player_predictive_viewer_distance = float(settings.get("player_predictive_viewer_distance", 0.0))
-	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and bool(settings.get("player_focus_viewer_enabled", false))
-	game_world.player_focus_viewer_distance = float(settings.get("player_focus_viewer_distance", 0.0))
+	game_world.player_predictive_viewer_distance = maxf(
+		float(settings.get("player_predictive_viewer_distance", 0.0)),
+		48.0 if gpu_resident_render_candidate_requested else 0.0
+	)
+	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and (
+		bool(settings.get("player_focus_viewer_enabled", false)) or
+		gpu_resident_render_candidate_requested
+	)
+	game_world.player_focus_viewer_distance = maxf(
+		float(settings.get("player_focus_viewer_distance", 0.0)),
+		16.0 if gpu_resident_render_candidate_requested else 0.0
+	)
 	var collision_invoker_enabled := gpu_resident_render_candidate_requested or bool(
 		settings.get("player_collision_invoker_enabled", false)
 	)
@@ -432,6 +443,11 @@ func _start_profile() -> void:
 		player_collision_prediction_distance_override \
 		if player_collision_prediction_distance_override >= 0.0 else \
 		float(settings.get("player_collision_prediction_distance", 16.0))
+	if gpu_resident_render_candidate_requested and \
+			player_collision_prediction_distance_override < 0.0:
+		game_world.player_collision_prediction_distance = maxf(
+			game_world.player_collision_prediction_distance, 32.0
+		)
 	game_world.player_interaction_collision_invoker_enabled = \
 		collision_invoker_enabled and gpu_resident_render_candidate_requested and \
 		OS.get_cmdline_user_args().has("--gpu-interaction-collision-demand")

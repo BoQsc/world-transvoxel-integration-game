@@ -1395,8 +1395,11 @@ func _update_predictive_player_viewer(
 	if not force and not _should_update_predictive_player_viewer(predicted_position):
 		return true
 	_viewer_revision += 1
+	# Prediction is an interaction shell. Inheriting the primary streaming
+	# radius joins distant LOD replacements to the foreground publication.
 	if not bool(_reference_scene.call(
-		"update_runtime_viewer", _player_predictive_viewer_id, _viewer_revision, predicted_position, _viewer_radius_chunks, _viewer_maximum_lod
+		"update_runtime_viewer", _player_predictive_viewer_id, _viewer_revision,
+		predicted_position, 1, 0
 	)):
 		return _fail("predictive player viewer update failed: %s" % _terrain_world_error())
 	_last_predictive_viewer_position = predicted_position
@@ -1805,7 +1808,8 @@ func _update_focus_player_viewer(force: bool) -> bool:
 		return true
 	_viewer_revision += 1
 	if not bool(_reference_scene.call(
-		"update_runtime_viewer", _player_focus_viewer_id, _viewer_revision, focus_position, _viewer_radius_chunks, _viewer_maximum_lod
+		"update_runtime_viewer", _player_focus_viewer_id, _viewer_revision,
+		focus_position, 1, 0
 	)):
 		return _fail("focus player viewer update failed: %s" % _terrain_world_error())
 	_last_focus_viewer_position = focus_position
