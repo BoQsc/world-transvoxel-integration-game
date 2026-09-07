@@ -3,6 +3,7 @@ extends "res://tests/gpu_resident_multichunk_relocation_smoke.gd"
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 var _checked_frames := 0
+var _maximum_pending_retirements := 0
 
 func _run() -> void:
 	_setup_viewport()
@@ -13,7 +14,7 @@ func _run() -> void:
 	_world.storage_profile = _storage_profile()
 	_world.runtime_gpu_resident_render_candidate_enabled = true
 	_world.runtime_gpu_meshing_shadow_capacity = 3
-	_world.runtime_gpu_resident_chunk_capacity = 12
+	_world.runtime_gpu_resident_chunk_capacity = 32
 	root.add_child(_world)
 	if not _world.start_backend_world() or not await _wait_for_state("running"):
 		_fail("rapid edit world did not start")
@@ -23,9 +24,24 @@ func _run() -> void:
 			or not await _wait_for_resident_state(2, 0):
 		_fail("rapid edit initial chunks did not settle")
 		return
+	# Keep the edited pair loaded through viewer 1 while viewer 3 creates an
+	# unrelated LOD retirement backlog. The edit cohort must not join it.
+	if not _world.update_viewer(3, 1, Vector3(40, 8, 40), 1, 0):
+		_fail("background viewer admission was rejected")
+		return
+	for _frame in range(180):
+		await process_frame
+	if not _world.update_viewer(3, 2, Vector3(56, 8, 56), 1, 0):
+		_fail("background viewer relocation was rejected")
+		return
 	# Every brush straddles x=16, so both visible halves must have one revision.
 	# Submit the next edit after commit, without waiting for visual completion.
 	for revision in range(1, 13):
+		var background_position := Vector3(40, 8, 40) \
+			if revision % 2 == 0 else Vector3(56, 8, 56)
+		if not _world.update_viewer(3, 2 + revision, background_position, 1, 0):
+			_fail("background viewer churn was rejected")
+			return
 		var operation := EditOperation.new()
 		operation.mode = EditOperation.Mode.CONSTRUCT if revision % 2 == 1 else EditOperation.Mode.CARVE
 		operation.brush_shape = EditOperation.BrushShape.SPHERE
@@ -65,6 +81,17 @@ func _run() -> void:
 		_fail("rapid edit final revision did not become visible: %s" % str(_world.get_gpu_resident_render_status()))
 		return
 	var resident_status: Dictionary = _world.get_gpu_resident_render_status()
+	var native_metrics: Dictionary = resident_status.get("native_metrics", {})
+	var same_layout_cohorts := int(native_metrics.get(
+		"same_layout_edit_activation_cohorts", 0
+	))
+	var same_layout_chunks := int(native_metrics.get(
+		"same_layout_edit_activation_chunks", 0
+	))
+	if same_layout_cohorts <= 0 or same_layout_chunks < 2 \
+			or _maximum_pending_retirements <= 0:
+		_fail("rapid edit did not use the loaded same-layout cohort: %s" % str(native_metrics))
+		return
 	var effect_status: Dictionary = resident_status.get("effect_status", {})
 	var arena_status: Dictionary = effect_status.get("arena_status", {})
 	var readback_completions := int(arena_status.get("counter_readback_completions", 0))
@@ -82,8 +109,11 @@ func _run() -> void:
 	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
 		_fail("rapid edit world did not stop")
 		return
-	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
+	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 same_layout_cohorts=%d same_layout_chunks=%d maximum_pending_retirements=%d incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
 		_checked_frames,
+		same_layout_cohorts,
+		same_layout_chunks,
+		_maximum_pending_retirements,
 		int(arena_status.get("incremental_dispatch_count", 0)),
 		int(arena_status.get("regenerated_cell_count", 0)),
 		int(arena_status.get("last_dispatch_uploaded_bytes", 0)),
@@ -106,6 +136,10 @@ func _visible_pair() -> Array:
 
 func _check_edit_pair() -> bool:
 	_checked_frames += 1
+	_maximum_pending_retirements = maxi(
+		_maximum_pending_retirements,
+		int(_world.get_runtime_metrics().get("pending_chunk_retirements", 0))
+	)
 	var revisions := _visible_pair()
 	if revisions[0] < 0 or revisions[0] != revisions[1]:
 		_fail("rapid edit exposed mixed visible revisions: %s frame=%d" % [str(revisions), _checked_frames])
