@@ -396,6 +396,8 @@ func _refresh_performance_hud() -> void:
 			var counts := Pipeline.stage_counts(_gpu_states)
 			var wait: Dictionary = gpu.get("last_activation_cohort_wait", {})
 			var native: Dictionary = gpu.get("native_metrics", {})
+			var effect: Dictionary = gpu.get("effect_status", {})
+			var arena: Dictionary = effect.get("arena_status", {})
 			_last_snapshot["gpu"] = {
 				"stages": counts, "waiting": wait,
 				"wait_age_frames": gpu.get("last_activation_wait_age_frames", -1),
@@ -404,16 +406,29 @@ func _refresh_performance_hud() -> void:
 				"native_queued": native.get("queued_requests", 0),
 				"native_in_flight": native.get("in_flight_requests", 0),
 				"stage_timing_usec": gpu.get("stage_timing_usec", {}),
+				"arena": arena.duplicate(true),
 			}
 			_performance_label.text += (
 				"\nGPU extracting %d  Prepare wait %d\nCohort wait %d  Activating %d\n" +
 				"Active (incl. empty) %d  Retiring %d  Native queue %d\n" +
-				"Activation retries %d  Stale seeds removed %d\nLast wait (%d frames ago): %s"
+				"Activation retries %d  Stale seeds removed %d\n" +
+				"Meshlets incremental %d / dispatch %d  Copy fallback %d\n" +
+				"Last regenerated %d cells  Upload %d B  Device copy %d B\n" +
+				"Arena pages %d  Active slots %d  Extraction failures %d\n" +
+				"Last wait (%d frames ago): %s\nArena: %s"
 			) % [counts.get("extracting", 0), counts.get("native_prepare_wait", 0),
 				counts.get("cohort_wait", 0), counts.get("activation_queued", 0),
 				counts.get("visible", 0), counts.get("retiring", 0), native.get("queued_requests", 0),
 				gpu.get("pending_activation_retry_groups", 0), gpu.get("activation_stale_seed_skips", 0),
-				gpu.get("last_activation_wait_age_frames", -1), wait.get("status", "none")]
+				arena.get("incremental_dispatch_count", 0), arena.get("dispatch_count", 0),
+				arena.get("incremental_copy_fallback_count", 0),
+				arena.get("last_regenerated_cell_count", 0),
+				arena.get("last_dispatch_uploaded_bytes", 0),
+				arena.get("last_incremental_meshlet_copy_bytes", 0),
+				arena.get("page_count", 0), arena.get("active_slots", 0),
+				arena.get("failed_extractions", 0),
+				gpu.get("last_activation_wait_age_frames", -1), wait.get("status", "none"),
+				arena.get("last_error", "ok") if not str(arena.get("last_error", "")).is_empty() else "ok"]
 	var history_sample := {
 		"ticks_us": _last_snapshot.ticks_us, "post_draw_p95_ms": p95,
 		"queued_jobs": metrics.get("scheduler_queued_jobs", 0),

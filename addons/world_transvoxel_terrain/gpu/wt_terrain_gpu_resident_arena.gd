@@ -53,6 +53,9 @@ var _slot_releases := 0
 var _uploaded_bytes := 0
 var _dispatch_count := 0
 var _incremental_dispatch_count := 0
+var _incremental_copy_fallback_count := 0
+var _incremental_meshlet_copy_bytes := 0
+var _last_incremental_meshlet_copy_bytes := 0
 var _regenerated_cell_count := 0
 var _last_regenerated_cell_count := 0
 var _last_dispatch_uploaded_bytes := 0
@@ -207,7 +210,11 @@ func lease_and_dispatch(
 				return {}
 			_uploaded_bytes += bytes.size()
 	var indirect_offset := slot_index * int(strides[20])
-	if incremental and not _copy_previous_meshlets(previous_entry, page, slot_index):
+	if incremental and not _copy_previous_meshlets(
+			previous_entry, page, slot_index, cell_count
+	):
+		_incremental_copy_fallback_count += 1
+		_last_incremental_meshlet_copy_bytes = 0
 		incremental = false
 		dirty_regular_brick_mask = 0xff
 	var initial_commands := PackedInt32Array()
@@ -570,6 +577,9 @@ func get_status() -> Dictionary:
 		"uploaded_bytes": _uploaded_bytes,
 		"dispatch_count": _dispatch_count,
 		"incremental_dispatch_count": _incremental_dispatch_count,
+		"incremental_copy_fallback_count": _incremental_copy_fallback_count,
+		"incremental_meshlet_copy_bytes": _incremental_meshlet_copy_bytes,
+		"last_incremental_meshlet_copy_bytes": _last_incremental_meshlet_copy_bytes,
 		"regenerated_cell_count": _regenerated_cell_count,
 		"last_regenerated_cell_count": _last_regenerated_cell_count,
 		"last_dispatch_uploaded_bytes": _last_dispatch_uploaded_bytes,
@@ -763,6 +773,10 @@ func _create_provisional_resident(
 		"arena_generation": int(page.get("generation", 0)),
 		"resident_view_rids": [vertex_array, index_array, index_buffer],
 		"resident_allocated_bytes": int(strides[17]),
+		"meshlet_buffer_sizes": [
+			int(strides[13]), int(strides[14]),
+			int(strides[15]), int(strides[17]),
+		],
 		"input_buffers": buffers.slice(0, TABLE_BINDING_BEGIN),
 		"input_offsets": _slot_input_offsets(strides, slot_index),
 		"input_sizes": _input_sizes(strides),
@@ -1178,10 +1192,15 @@ static func _output_buffer_sizes(cell_count: int) -> Array[int]:
 
 
 func _copy_previous_meshlets(
-	previous: Dictionary, page: Dictionary, slot_index: int
+	previous: Dictionary, page: Dictionary, slot_index: int, cell_count: int
 ) -> bool:
+	if str(previous.get("resident_kind", "")) != "provisional" \
+			or int(previous.get("cell_count", -1)) != cell_count:
+		return false
 	var buffers: Array = page.get("buffers", [])
 	var strides: Array = page.get("strides", [])
+	if buffers.size() != BINDING_COUNT or strides.size() != BINDING_COUNT:
+		return false
 	var sources := [
 		previous.get("position_buffer", RID()),
 		previous.get("normal_buffer", RID()),
@@ -1194,17 +1213,35 @@ func _copy_previous_meshlets(
 		int(previous.get("meta_offset", 0)),
 		0,
 	]
+	var source_sizes: Array = previous.get("meshlet_buffer_sizes", [])
+	if source_sizes.size() != 4:
+		return false
+	var output_sizes := _output_buffer_sizes(cell_count)
+	var copy_sizes := [
+		int(output_sizes[0]), int(output_sizes[1]),
+		int(output_sizes[2]), int(output_sizes[4]),
+	]
+	# Pages are capacity classes. A replacement can land in a larger page even
+	# when its logical cell count is unchanged, so copying the destination stride
+	# can read past the previous slot. Copy only the logical meshlet payload.
+	for index in range(4):
+		var source: RID = sources[index]
+		if not source.is_valid() or source_offsets[index] < 0 \
+				or copy_sizes[index] > int(source_sizes[index]):
+			return false
 	for index in range(4):
 		var binding: int = [13, 14, 15, 17][index]
 		var source: RID = sources[index]
-		if not source.is_valid():
-			return false
 		var error := _rendering_device.buffer_copy(
 			source, buffers[binding], source_offsets[index],
-			slot_index * int(strides[binding]), int(strides[binding])
+			slot_index * int(strides[binding]), copy_sizes[index]
 		)
 		if error != OK:
 			return false
+	_last_incremental_meshlet_copy_bytes = 0
+	for size in copy_sizes:
+		_last_incremental_meshlet_copy_bytes += int(size)
+	_incremental_meshlet_copy_bytes += _last_incremental_meshlet_copy_bytes
 	return true
 
 

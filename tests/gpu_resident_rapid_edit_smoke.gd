@@ -69,6 +69,7 @@ func _run() -> void:
 	var arena_status: Dictionary = effect_status.get("arena_status", {})
 	var readback_completions := int(arena_status.get("counter_readback_completions", 0))
 	if int(arena_status.get("incremental_dispatch_count", 0)) <= 0 \
+			or int(arena_status.get("incremental_copy_fallback_count", -1)) != 0 \
 			or int(arena_status.get("counter_readback_bytes", -1)) \
 			!= readback_completions * 20:
 		_fail("rapid edit did not use incremental meshlets and 20-byte summaries: %s" % str(arena_status))
@@ -81,7 +82,7 @@ func _run() -> void:
 	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
 		_fail("rapid edit world did not stop")
 		return
-	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 incremental_dispatches=%d regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
+	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
 		_checked_frames,
 		int(arena_status.get("incremental_dispatch_count", 0)),
 		int(arena_status.get("regenerated_cell_count", 0)),

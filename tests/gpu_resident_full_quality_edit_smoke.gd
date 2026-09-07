@@ -24,13 +24,23 @@ func _run() -> void:
 	if not _world.update_viewer(1, 1, Vector3(8, 8, 8), 1, 2):
 		_fail("first edit viewer rejected")
 		return
+	var edit_center := Vector3(56, 8, 56)
+	# Warm one region, then relocate to an edge chunk with a different transition
+	# capacity class. This reproduces the human fly-then-edit path.
+	for _frame in range(900):
+		await process_frame
+		if bool(_world.get_cold_idle_summary().get("cold_idle", false)):
+			break
+	if not _world.update_viewer(1, 2, edit_center, 1, 2):
+		_fail("relocated first edit viewer rejected")
+		return
 	var full_resolution_ready := false
 	for _frame in range(900):
 		await process_frame
 		for state_value in _world.get_debug_gpu_processing_states():
 			var state := Dictionary(state_value)
 			var identity := Dictionary(state.get("identity", {}))
-			if state.get("stage", "") == "visible" and int(identity.get("lod", -1)) == 0 and int(identity.get("page_x", -1)) == 0 and int(identity.get("page_y", -1)) == 0 and int(identity.get("page_z", -1)) == 0:
+			if state.get("stage", "") == "visible" and int(identity.get("lod", -1)) == 0 and int(identity.get("page_x", -1)) == 3 and int(identity.get("page_y", -1)) == 0 and int(identity.get("page_z", -1)) == 3:
 				full_resolution_ready = true
 		if full_resolution_ready:
 			break
@@ -41,7 +51,7 @@ func _run() -> void:
 	var prepare_before := int(_world.get_runtime_metrics().get("mesh_prepare_time_ns_total", 0))
 	operation.mode = EditOperation.Mode.CONSTRUCT
 	operation.brush_shape = EditOperation.BrushShape.SPHERE
-	operation.center = Vector3(8, 8, 8)
+	operation.center = edit_center
 	operation.radius = 4.0
 	operation.material_id = 3
 	operation.density_value = 1.0
@@ -71,8 +81,9 @@ func _run() -> void:
 			if state.get("stage", "") == "visible" and int(identity.get("world_revision", 0)) == 1:
 				var minimum: Vector3 = state.get("bounds_min", Vector3.INF)
 				var maximum: Vector3 = state.get("bounds_max", -Vector3.INF)
-				if minimum.x <= 8.0 and minimum.y <= 8.0 and minimum.z <= 8.0 \
-						and maximum.x >= 8.0 and maximum.y >= 8.0 and maximum.z >= 8.0:
+				if minimum.x <= edit_center.x and minimum.y <= edit_center.y \
+						and minimum.z <= edit_center.z and maximum.x >= edit_center.x \
+						and maximum.y >= edit_center.y and maximum.z >= edit_center.z:
 					first_visual_frame = frame
 					first_visual_lod = int(identity.get("lod", -1))
 		if first_visual_frame >= 0:
@@ -89,8 +100,8 @@ func _run() -> void:
 			var state := Dictionary(state_value)
 			var identity := Dictionary(state.get("identity", {}))
 			if state.get("stage", "") == "visible" and int(identity.get("world_revision", 0)) == 1 \
-					and int(identity.get("lod", -1)) == 0 and int(identity.get("page_x", -1)) == 0 \
-					and int(identity.get("page_y", -1)) == 0 and int(identity.get("page_z", -1)) == 0:
+					and int(identity.get("lod", -1)) == 0 and int(identity.get("page_x", -1)) == 3 \
+					and int(identity.get("page_y", -1)) == 0 and int(identity.get("page_z", -1)) == 3:
 				refined = true
 		if refined:
 			break

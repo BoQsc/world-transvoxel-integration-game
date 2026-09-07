@@ -34,7 +34,19 @@ class Terrain:
 		return {}
 	func get_gpu_resident_render_status() -> Dictionary:
 		queries += 1
-		return {"running": true}
+		return {
+			"running": true,
+			"effect_status": {
+				"arena_status": {
+					"dispatch_count": 7,
+					"incremental_dispatch_count": 5,
+					"incremental_copy_fallback_count": 0,
+					"last_regenerated_cell_count": 512,
+					"last_dispatch_uploaded_bytes": 128,
+					"last_incremental_meshlet_copy_bytes": 256,
+				},
+			},
+		}
 	func get_debug_gpu_processing_states() -> Array:
 		queries += 1
 		return [{"stage": "cohort_wait", "bounds_min": Vector3.ZERO, "bounds_max": Vector3.ONE * 16}]
@@ -130,6 +142,9 @@ func _run_test() -> void:
 	var snapshot: Dictionary = diagnostics.get_diagnostic_snapshot()
 	if int(snapshot.get("visualized_gpu_records", 0)) != 1 \
 			or int(snapshot.get("live_collision_wireframes", 0)) != 1 \
+			or int(Dictionary(snapshot.get("gpu", {})).get(
+				"arena", {}
+			).get("incremental_dispatch_count", 0)) != 5 \
 			or not terrain.timing or not snapshot.enabled:
 		_fail("debug view lacks actual collision mesh or GPU stage")
 		return
