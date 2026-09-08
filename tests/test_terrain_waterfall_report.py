@@ -434,6 +434,19 @@ class TerrainWaterfallReportTest(unittest.TestCase):
                     "is_collision_ready": True,
                 },
                 "gpu_resident_render": {
+                    "recent_incremental_activations": [{
+                        "surface": "terrain",
+                        "empty": False,
+                        "identity": {
+                            "page_x": 10,
+                            "page_y": 2,
+                            "page_z": 10,
+                            "lod": 0,
+                            "generation": 3,
+                            "world_revision": 10,
+                            "incremental_edit": True,
+                        },
+                    }],
                     "recent_incremental_first_draws": [{
                         "surface": "terrain",
                         "effect_ticks_usec": 123,
@@ -470,11 +483,11 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         }
         frame["pipeline"]["gpu_resident_render"][
             "recent_incremental_activations"
-        ] = [{
+        ].append({
             "surface": "terrain",
             "empty": True,
             "identity": empty_identity,
-        }]
+        })
         gpu = report.gpu_incremental_first_draw_analysis(
             [frame],
             {(10, 2, 10, 0, 2), (11, 2, 11, 0, 2)},

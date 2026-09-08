@@ -1978,31 +1978,32 @@ def gpu_incremental_first_draw_analysis(
     request_elapsed_us: int,
     origin_ns: int,
 ) -> dict[str, Any]:
-    expected = set(replacement_identities)
-    observed: dict[tuple[int, int, int, int, int], dict[str, Any]] = {}
-    empty_activations: dict[tuple[int, int, int, int, int], dict[str, Any]] = {}
+    expected = {identity[:4] for identity in replacement_identities}
+    observed: dict[ChunkKey, dict[str, Any]] = {}
+    activations: dict[ChunkKey, dict[str, Any]] = {}
     for frame in edit_frames:
         elapsed_us = int(frame.get("elapsed_us", -1))
         gpu_status = (frame.get("pipeline") or {}).get("gpu_resident_render") or {}
         for activation in gpu_status.get("recent_incremental_activations", []):
             if not isinstance(activation, dict) \
-                    or str(activation.get("surface", "")) != "terrain" \
-                    or not bool(activation.get("empty", False)):
+                    or str(activation.get("surface", "")) != "terrain":
                 continue
             identity = activation.get("identity") or {}
             if not isinstance(identity, dict) \
                     or int(identity.get("world_revision", -1)) != world_revision:
                 continue
-            key = tuple(
+            key: ChunkKey = tuple(
                 int(identity.get(name, 0))
-                for name in ("page_x", "page_y", "page_z", "lod", "generation")
+                for name in ("page_x", "page_y", "page_z", "lod")
             )
-            if key in expected and key not in empty_activations:
-                empty_activations[key] = {
+            if key in expected and key not in activations:
+                activations[key] = {
                     "identity": {
                         "x": key[0], "y": key[1], "z": key[2],
-                        "lod": key[3], "generation": key[4],
+                        "lod": key[3],
+                        "generation": int(identity.get("generation", 0)),
                     },
+                    "empty": bool(activation.get("empty", False)),
                     "frame": int(frame.get("frame", -1)),
                     "elapsed_us": elapsed_us,
                     "effect_ticks_usec": int(activation.get("effect_ticks_usec", 0)),
@@ -2015,32 +2016,32 @@ def gpu_incremental_first_draw_analysis(
                 continue
             if int(identity.get("world_revision", -1)) != world_revision:
                 continue
-            key = tuple(
+            key: ChunkKey = tuple(
                 int(identity.get(name, 0))
-                for name in ("page_x", "page_y", "page_z", "lod", "generation")
+                for name in ("page_x", "page_y", "page_z", "lod")
             )
             if key not in expected or key in observed:
                 continue
             observed[key] = {
                 "identity": {
                     "x": key[0], "y": key[1], "z": key[2],
-                    "lod": key[3], "generation": key[4],
+                    "lod": key[3],
+                    "generation": int(identity.get("generation", 0)),
                 },
                 "frame": int(frame.get("frame", -1)),
                 "elapsed_us": elapsed_us,
                 "effect_ticks_usec": int(draw.get("effect_ticks_usec", 0)),
             }
-    completed = {**empty_activations, **observed}
-    complete = bool(expected) and expected.issubset(completed)
+    complete = bool(expected) and expected.issubset(activations)
     completion_elapsed_us = (
-        max(completed[key]["elapsed_us"] for key in expected) if complete else None
+        max(activations[key]["elapsed_us"] for key in expected) if complete else None
     )
     request_frame = next((
         int(frame.get("frame", -1)) for frame in edit_frames
         if int(frame.get("elapsed_us", -1)) >= request_elapsed_us
     ), -1)
     completion_frame = (
-        max(completed[key]["frame"] for key in expected) if complete else None
+        max(activations[key]["frame"] for key in expected) if complete else None
     )
     return {
         "available": any(
@@ -2052,9 +2053,11 @@ def gpu_incremental_first_draw_analysis(
         "complete": complete,
         "world_revision": world_revision,
         "expected_chunk_count": len(expected),
-        "published_chunk_count": len(completed),
+        "published_chunk_count": len(activations),
         "drawn_chunk_count": len(observed),
-        "empty_chunk_count": len(empty_activations),
+        "empty_chunk_count": sum(
+            1 for activation in activations.values() if activation["empty"]
+        ),
         "completion_after_request_ms": (
             (completion_elapsed_us - request_elapsed_us) / 1000.0
             if completion_elapsed_us is not None else None
@@ -2074,8 +2077,8 @@ def gpu_incremental_first_draw_analysis(
                 "x", "y", "z", "lod", "generation"
             )),
         ),
-        "empty_activations": sorted(
-            empty_activations.values(),
+        "activations": sorted(
+            activations.values(),
             key=lambda item: tuple(item["identity"][name] for name in (
                 "x", "y", "z", "lod", "generation"
             )),
