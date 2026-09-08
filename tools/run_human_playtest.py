@@ -38,6 +38,32 @@ def marker_root(project: pathlib.Path) -> pathlib.Path:
     return project / ".godot" / "world_transvoxel_captures" / "human_artifact_marks"
 
 
+def failure_report_path(project: pathlib.Path) -> pathlib.Path:
+    return (
+        project / ".godot" / "world_transvoxel_captures"
+        / "startup_failure" / "latest.json"
+    )
+
+
+def print_failure_self_report(project: pathlib.Path) -> None:
+    path = failure_report_path(project)
+    payload = load_json(path) if path.is_file() else None
+    if not payload:
+        return
+    summary = payload.get("summary", {})
+    print(
+        "WT_TERRAIN_FAILURE "
+        f"cause={payload.get('primary_blocker', 'unknown')} "
+        f"visual={summary.get('render_resources', 0)} "
+        f"collision={summary.get('collision_resources', 0)} "
+        f"gpu_active={summary.get('gpu_resident_active_chunks', 0)} "
+        f"gpu_tracked={summary.get('gpu_resident_tracked_chunks', 0)} "
+        f"pending={summary.get('pending_chunk_replacements', 0)} "
+        f"report={path}",
+        flush=True,
+    )
+
+
 def load_json(path: pathlib.Path) -> dict[str, Any] | None:
     try:
         import json
@@ -333,6 +359,7 @@ def run_waterfall_session(
         paths["usage"], samples, affinity, wall_seconds, exit_code,
         sampling_started_unix_seconds, time.time(),
     )
+    print_failure_self_report(project)
 
     trace_paths = _waterfall_trace_paths(paths["trace"])
     if trace_paths:
@@ -521,9 +548,13 @@ def main(argv: list[str]) -> int:
     print(" ".join(command), flush=True)
     if args.print_only:
         return 0
+    failure_path = failure_report_path(project)
+    failure_path.unlink(missing_ok=True)
     if paths is not None:
         return run_waterfall_session(command, project, paths)
-    return subprocess.call(command, cwd=project)
+    exit_code = subprocess.call(command, cwd=project)
+    print_failure_self_report(project)
+    return exit_code
 
 
 if __name__ == "__main__":

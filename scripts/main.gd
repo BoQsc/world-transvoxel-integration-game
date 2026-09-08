@@ -1077,8 +1077,15 @@ func _build_loading_overlay() -> void:
 	loading_label.name = "StartupLoadingLabel"
 	loading_label.text = "Loading terrain..."
 	loading_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	loading_label.offset_left = 96.0
+	loading_label.offset_top = 72.0
+	loading_label.offset_right = -96.0
+	loading_label.offset_bottom = -72.0
 	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loading_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	loading_label.add_theme_font_size_override("font_size", 20)
+	loading_label.add_theme_constant_override("line_spacing", 6)
 	loading_overlay.add_child(loading_label)
 
 
@@ -10931,6 +10938,15 @@ func _wait_for_capture_camera_visual_ready() -> bool:
 
 func _fail(message: String) -> void:
 	push_error("WT_PRODUCTION_GAME_P2_FAIL: " + message)
+	var report_path := _write_failure_self_report(message)
+	var display_message := _format_failure_self_report(message, report_path)
+	print("WT_TERRAIN_SELF_REPORT ", JSON.stringify({
+		"phase": "startup" if game_world == null or not bool(
+			game_world.get_game_world_summary().get("world_running", false)
+		) else "runtime",
+		"cause": _failure_primary_blocker(),
+		"report": report_path,
+	}))
 	if autonomous or not human_visual_capture_path.is_empty():
 		if gpu_resident_failure_quit_scheduled:
 			return
@@ -10938,7 +10954,101 @@ func _fail(message: String) -> void:
 		call_deferred("_quit_after_failure_cleanup")
 	elif loading_label != null:
 		_set_human_loading_visible(true)
-		loading_label.text = "Terrain startup failed\n%s" % message
+		loading_label.text = display_message
+		loading_label.tooltip_text = message
+
+
+func _failure_summary() -> Dictionary:
+	if game_world == null or not game_world.has_method("get_last_settle_summary"):
+		return {}
+	return Dictionary(game_world.call("get_last_settle_summary"))
+
+
+func _failure_primary_blocker() -> String:
+	var summary := _failure_summary()
+	if summary.is_empty():
+		return "runtime initialization"
+	var active := int(summary.get("gpu_resident_active_chunks", 0))
+	var tracked := int(summary.get("gpu_resident_tracked_chunks", 0))
+	if tracked > active:
+		return "GPU activation backlog (%d tracked, %d active)" % [tracked, active]
+	var visual_deficit := int(summary.get("non_retiring_chunk_records", 0)) - int(
+		summary.get("non_retiring_visual_ready_chunk_records", 0)
+	)
+	if visual_deficit > 0:
+		return "visual readiness backlog (%d chunks)" % visual_deficit
+	var pending := int(summary.get("pending_chunk_replacements", 0))
+	if pending > 0:
+		return "publication backlog (%d replacements)" % pending
+	var collision_deficit := maxi(0, int(game_world.get(
+		"startup_minimum_collision_resources"
+	)) - int(summary.get("collision_resources", 0))) if game_world != null else 0
+	if collision_deficit > 0:
+		return "collision readiness deficit (%d resources)" % collision_deficit
+	if int(summary.get("storage_queued_requests", 0)) > 0 \
+			or int(summary.get("storage_in_flight_requests", 0)) > 0:
+		return "storage backlog"
+	if int(summary.get("scheduler_queued_jobs", 0)) > 0:
+		return "scheduler backlog"
+	return "startup readiness contract"
+
+
+func _format_failure_self_report(message: String, report_path: String) -> String:
+	var summary := _failure_summary()
+	if summary.is_empty():
+		return "Terrain runtime failed\n\n%s\n\nFull report: %s" % [message, report_path]
+	var render_ready := int(summary.get("render_resources", 0))
+	var collision_ready := int(summary.get("collision_resources", 0))
+	var render_target := int(game_world.get("startup_minimum_render_resources"))
+	var collision_target := int(game_world.get("startup_minimum_collision_resources"))
+	var timeout_frames := int(game_world.get("startup_world_state_timeout_frames"))
+	if bool(game_world.get("runtime_gpu_resident_render_candidate_enabled")):
+		timeout_frames *= 2
+	return (
+		"Terrain startup timed out\n\n"
+		+ "Primary blocker: %s\n" % _failure_primary_blocker()
+		+ "Ready resources: visual %d/%d    collision %d/%d\n" % [
+			render_ready, render_target, collision_ready, collision_target,
+		]
+		+ "GPU chunks: %d active / %d tracked    pending replacements: %d\n" % [
+			int(summary.get("gpu_resident_active_chunks", 0)),
+			int(summary.get("gpu_resident_tracked_chunks", 0)),
+			int(summary.get("pending_chunk_replacements", 0)),
+		]
+		+ "Queues: scheduler %d    storage %d queued + %d active    mesh %d\n" % [
+			int(summary.get("scheduler_queued_jobs", 0)),
+			int(summary.get("storage_queued_requests", 0)),
+			int(summary.get("storage_in_flight_requests", 0)),
+			int(summary.get("mesh_worker_queued_jobs", 0)),
+		]
+		+ "Timeout: %d frames    elapsed: %.1f s\n\n" % [
+			timeout_frames, float(Time.get_ticks_msec()) / 1000.0,
+		]
+		+ "Full report: %s" % report_path
+	)
+
+
+func _write_failure_self_report(message: String) -> String:
+	var directory := ProjectSettings.globalize_path(
+		"res://.godot/world_transvoxel_captures/startup_failure"
+	)
+	DirAccess.make_dir_recursive_absolute(directory)
+	var path := directory.path_join("latest.json")
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return "Godot log (report file could not be opened)"
+	file.store_string(JSON.stringify({
+		"schema": "world_transvoxel.terrain_failure.v1",
+		"unix_time": Time.get_unix_time_from_system(),
+		"elapsed_msec": Time.get_ticks_msec(),
+		"profile": str(selected_profile),
+		"gpu_candidate": gpu_resident_render_candidate_requested,
+		"message": message,
+		"primary_blocker": _failure_primary_blocker(),
+		"summary": _failure_summary(),
+	}, "  ") + "\n")
+	file.close()
+	return path
 
 
 func _quit_after_failure_cleanup() -> void:

@@ -106,6 +106,32 @@ func _run() -> void:
 			"visual_first_draw_ticks_usec": first_draw_ticks_usec,
 			"visual_first_draw_us": visual_first_draw_us,
 		})
+	# Allow the final independently published collision to release its completed
+	# shared frontend marker; edit latency above is measured before this audit.
+	var hot_metrics_after := _measurement_snapshot()
+	var hot_detached := 0
+	for _audit_frame in range(8):
+		hot_detached = int(hot_metrics_after.get(
+			"completed_split_replacements_detached", 0
+		)) - int(metrics_before.get("completed_split_replacements_detached", 0))
+		if hot_detached >= HOT_EDIT_COUNT:
+			break
+		await process_frame
+		_observe_frame()
+		hot_metrics_after = _measurement_snapshot()
+	var hot_regional_publications := int(hot_metrics_after.get(
+		"regional_visibility_publications", 0
+	)) - int(metrics_before.get("regional_visibility_publications", 0))
+	var hot_same_callback_precommits := int(hot_metrics_after.get(
+		"same_callback_edit_precommits", 0
+	)) - int(metrics_before.get("same_callback_edit_precommits", 0))
+	if hot_same_callback_precommits != HOT_EDIT_COUNT \
+			or hot_detached < HOT_EDIT_COUNT \
+			or hot_regional_publications != 0:
+		_fail("hot edits leaked into regional publication: precommits=%d detached=%d regional=%d" % [
+			hot_same_callback_precommits, hot_detached, hot_regional_publications,
+		])
+		return
 
 	_phase = "cold_approach"
 	var cold_position := Vector3(104, 8, 8)
@@ -186,6 +212,10 @@ func _run() -> void:
 		"trace_started_ticks_usec": trace_started_us,
 		"hot_edit_count": HOT_EDIT_COUNT,
 		"hot_edits": edits,
+		"hot_metrics_after": hot_metrics_after,
+		"hot_same_callback_precommits": hot_same_callback_precommits,
+		"hot_completed_split_replacements_detached": hot_detached,
+		"hot_regional_visibility_publications": hot_regional_publications,
 		"cold_approach_ready_us": cold_ready_us,
 		"cold_approach_ready_frames": cold_ready_frames,
 		"cold_warm_settle_us": cold_warm_settle_us,
@@ -303,6 +333,15 @@ func _measurement_snapshot() -> Dictionary:
 	var arena: Dictionary = effect.get("arena_status", {})
 	return {
 		"world_revision": _world.get_world_revision(),
+		"completed_split_replacements_detached": int(runtime.get(
+			"completed_split_replacements_detached", 0
+		)),
+		"regional_visibility_publications": int(runtime.get(
+			"regional_visibility_publications", 0
+		)),
+		"same_callback_edit_precommits": int(gpu.get(
+			"same_callback_edit_precommits", 0
+		)),
 		"edit_queried_chunks": int(runtime.get("edit_queried_chunks", 0)),
 		"edit_replaced_chunks": int(runtime.get("edit_replaced_chunks", 0)),
 		"mesh_prepare_time_ns_total": int(runtime.get("mesh_prepare_time_ns_total", 0)),
