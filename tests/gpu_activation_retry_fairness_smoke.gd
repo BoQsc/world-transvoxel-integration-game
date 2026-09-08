@@ -101,6 +101,43 @@ class RetryProbe:
 		return true
 
 
+class EventEffect:
+	extends RefCounted
+	var pending: Array[Dictionary] = []
+	var probe
+	var pop_cost_usec := 0
+
+	func pop_event() -> Dictionary:
+		if pending.is_empty():
+			return {}
+		probe.simulated_usec += pop_cost_usec
+		return pending.pop_front()
+
+
+class EventDrainProbe:
+	extends "res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_render_controller.gd"
+	var simulated_usec := 0
+
+	func _effect_event_clock_usec() -> int:
+		return simulated_usec
+
+
+class VisibilityArenaStub:
+	extends RefCounted
+
+	func commit_visibility(_candidates: Array, _replaced: Array) -> bool:
+		return true
+
+	func get_last_error() -> String:
+		return ""
+
+	func release(_entry: Dictionary) -> void:
+		pass
+
+	func get_status() -> Dictionary:
+		return {}
+
+
 class PreparationBackend:
 	extends Node
 	var preparations := 0
@@ -155,6 +192,12 @@ func _initialize() -> void:
 		_fail(probe, "cancelled retry was retained")
 		return
 	probe.free()
+	if not _test_effect_event_drain_budget():
+		quit(1)
+		return
+	if not _test_effect_event_priority():
+		quit(1)
+		return
 	if not _test_retry_time_budget():
 		quit(1)
 		return
@@ -191,8 +234,71 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
 	quit(0)
+
+
+func _test_effect_event_drain_budget() -> bool:
+	var count_probe := EventDrainProbe.new()
+	var count_effect := EventEffect.new()
+	count_effect.probe = count_probe
+	count_probe._effect = count_effect
+	var total := count_probe.EFFECT_EVENT_CAPACITY_PER_FRAME * 2 + 3
+	for index in range(total):
+		count_effect.pending.append({"status": "FIRST_DRAW", "request_id": index + 1})
+	count_probe._drain_effect_events()
+	if count_effect.pending.size() != total - count_probe.EFFECT_EVENT_CAPACITY_PER_FRAME:
+		push_error("effect-event count budget did not defer backlog")
+		count_probe.free()
+		return false
+	count_probe._drain_effect_events()
+	count_probe._drain_effect_events()
+	if not count_effect.pending.is_empty() \
+			or count_probe._effect_events_processed != total \
+			or count_probe._effect_event_max_processed_per_frame \
+				!= count_probe.EFFECT_EVENT_CAPACITY_PER_FRAME:
+		push_error("effect-event count budget lost or duplicated events")
+		count_probe.free()
+		return false
+	count_probe.free()
+
+	var time_probe := EventDrainProbe.new()
+	var time_effect := EventEffect.new()
+	time_effect.probe = time_probe
+	time_effect.pop_cost_usec = time_probe.EFFECT_EVENT_BUDGET_USEC + 1
+	time_probe._effect = time_effect
+	for index in range(3):
+		time_effect.pending.append({"status": "FIRST_DRAW", "request_id": index + 1})
+	time_probe._drain_effect_events()
+	var ok := time_effect.pending.size() == 2 \
+		and time_probe._effect_events_processed == 1 \
+		and time_probe._effect_event_budget_stops == 1
+	time_probe.free()
+	return ok
+
+
+func _test_effect_event_priority() -> bool:
+	var effect := Controller.GlobalRenderEffect.new()
+	effect._push_event_on_render_thread("PREPARED", {
+		"request_id": 1,
+		"identity": {"surface": "terrain", "generation": 1},
+	})
+	effect._push_event_on_render_thread("PREPARED", {
+		"request_id": 2,
+		"identity": {
+			"surface": "terrain", "generation": 2, "incremental_edit": true,
+		},
+	})
+	var first := effect.pop_event()
+	var second := effect.pop_event()
+	var status := effect.get_status()
+	var ok := int(first.get("request_id", 0)) == 2 \
+		and int(second.get("request_id", 0)) == 1 \
+		and int(status.get("event_count", -1)) == 0 \
+		and int(status.get("priority_event_count", -1)) == 0
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: interactive event priority")
+	return ok
 
 
 func _test_collision_activation_lane() -> bool:
@@ -545,13 +651,19 @@ func _test_spatial_retirement_routes() -> bool:
 
 func _test_batched_inventory() -> bool:
 	var effect := Controller.GlobalRenderEffect.new()
+	effect._arena = VisibilityArenaStub.new()
 	var entries: Array = []
 	for index in range(64):
 		var identity := {"surface": "terrain", "page_x": index, "lod": index % 4}
 		var key := effect._identity_key(identity)
 		var token := effect._entry_token(key, 1)
 		effect._latest_sequence_by_key[key] = 1
-		effect._entries[token] = {"identity": identity, "empty": true, "active": false}
+		effect._entries[token] = {
+			"identity": identity,
+			"publication_sequence": 1,
+			"empty": true,
+			"active": false,
+		}
 		entries.append({"identity": identity, "publication_sequence": 1})
 	effect._lifecycle_commands.append({"action": "ACTIVATE_GROUP", "entries": entries})
 	effect._drain_lifecycle_commands_on_render_thread()

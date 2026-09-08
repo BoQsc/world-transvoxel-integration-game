@@ -1,0 +1,59 @@
+{
+  "schema": "world_transvoxel.gpu_bounded_effect_events.v1",
+  "baseline": {
+    "effect_event_max_usec": 953007,
+    "activation_retry_max_usec": 308898,
+    "frame_max_ms": 3756.493,
+    "frame_p95_ms": 45.6725,
+    "frame_p99_ms": 88.7153,
+    "blocked_movement_frames": 37,
+    "edit_pipeline_ms": [
+      3551.2828,
+      6053.2257
+    ]
+  },
+  "bounded": {
+    "effect_event_max_usec": 27564,
+    "activation_retry_max_usec": 115791,
+    "frame_max_ms": 2422.791,
+    "frame_p95_ms": 37.5295,
+    "frame_p99_ms": 59.86555,
+    "blocked_movement_frames": 0,
+    "edit_pipeline_ms": [
+      1018.0062,
+      3554.8909
+    ],
+    "effect_events_processed": 5943,
+    "budget_stops": 493,
+    "max_events_per_frame": 32
+  },
+  "focused": {
+    "vulkan": {
+      "submit_max_usec": 439,
+      "first_draw_max_usec": 28048,
+      "ready_max_usec": 59258,
+      "cold_ready_usec": 83816
+    },
+    "d3d12": {
+      "submit_max_usec": 452,
+      "first_draw_max_usec": 29683,
+      "ready_max_usec": 57525,
+      "cold_ready_usec": 84142
+    }
+  },
+  "o1_queue_followup": {
+    "effect_event_max_usec": 18316,
+    "activation_retry_max_usec": 211722,
+    "frame_max_ms": 5812.581,
+    "frame_p95_ms": 60.455,
+    "frame_p99_ms": 62.60082,
+    "blocked_movement_frames": 34,
+    "edit_pipeline_ms": [
+      5568.7392,
+      9821.6485
+    ],
+    "effect_events_processed": 5016,
+    "budget_stops": 501,
+    "max_events_per_frame": 32
+  }
+}

@@ -157,6 +157,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         command.append("--gpu-meshing-publication-candidate")
     if args.gpu_resident_render_candidate:
         command.append("--gpu-resident-render-candidate")
+    if args.gpu_stage_timing:
+        command.append("--gpu-stage-timing")
     if getattr(args, "debug_view", None):
         command.extend(["--human-debug-view", args.debug_view])
     if inspect_marker is not None:
@@ -476,6 +478,11 @@ def main(argv: list[str]) -> int:
             "the resident GPU renderer. CPU collision remains authoritative and "
             "production material parity is not yet qualified."
         ),
+    )
+    parser.add_argument(
+        "--gpu-stage-timing",
+        action="store_true",
+        help="Record opt-in GPU controller and render-effect stage timings.",
     )
     parser.add_argument(
         "--debug-view", choices=("collision", "lod", "pipeline", "all", "menu"),

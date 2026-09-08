@@ -110,7 +110,9 @@ func _run() -> void:
 	# shared frontend marker; edit latency above is measured before this audit.
 	var hot_metrics_after := _measurement_snapshot()
 	var hot_detached := 0
-	for _audit_frame in range(8):
+	# This verifies eventual marker disposal after readiness was already measured;
+	# loaded-edit latency and its two-frame visual gate are recorded above.
+	for _audit_frame in range(32):
 		hot_detached = int(hot_metrics_after.get(
 			"completed_split_replacements_detached", 0
 		)) - int(metrics_before.get("completed_split_replacements_detached", 0))
@@ -128,8 +130,13 @@ func _run() -> void:
 	if hot_same_callback_precommits != HOT_EDIT_COUNT \
 			or hot_detached < HOT_EDIT_COUNT \
 			or hot_regional_publications != 0:
-		_fail("hot edits leaked into regional publication: precommits=%d detached=%d regional=%d" % [
+		_fail("hot edits leaked into regional publication: precommits=%d detached=%d regional=%d gpu_active=%d gpu_incomplete=%d effect_events=%d priority_events=%d budget_stops=%d" % [
 			hot_same_callback_precommits, hot_detached, hot_regional_publications,
+			int(hot_metrics_after.get("gpu_active_chunks", 0)),
+			int(hot_metrics_after.get("gpu_incomplete_chunks", 0)),
+			int(hot_metrics_after.get("effect_event_count", 0)),
+			int(hot_metrics_after.get("priority_event_count", 0)),
+			int(hot_metrics_after.get("effect_event_budget_stops", 0)),
 		])
 		return
 
@@ -342,6 +349,11 @@ func _measurement_snapshot() -> Dictionary:
 		"same_callback_edit_precommits": int(gpu.get(
 			"same_callback_edit_precommits", 0
 		)),
+		"gpu_active_chunks": int(gpu.get("active_chunks", 0)),
+		"gpu_incomplete_chunks": int(gpu.get("incomplete_chunks", 0)),
+		"effect_event_budget_stops": int(gpu.get("effect_event_budget_stops", 0)),
+		"effect_event_count": int(effect.get("event_count", 0)),
+		"priority_event_count": int(effect.get("priority_event_count", 0)),
 		"edit_queried_chunks": int(runtime.get("edit_queried_chunks", 0)),
 		"edit_replaced_chunks": int(runtime.get("edit_replaced_chunks", 0)),
 		"mesh_prepare_time_ns_total": int(runtime.get("mesh_prepare_time_ns_total", 0)),

@@ -58,6 +58,8 @@ const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 4
 const ACTIVATION_COHORT_RETRY_BUDGET_USEC := 750
+const EFFECT_EVENT_CAPACITY_PER_FRAME := 32
+const EFFECT_EVENT_BUDGET_USEC := 2000
 const COLLISION_ACTIVATION_RETRY_BURST := 3
 const LIFECYCLE_HISTORY_CAPACITY := 4096
 const MATERIAL_SYNC_INTERVAL_FRAMES := 30
@@ -115,6 +117,9 @@ var _stale_activation_cohorts_retained := 0
 var _stale_activation_examples: Array = []
 var _unrouted_effect_events := 0
 var _unrouted_effect_event_examples: Array = []
+var _effect_events_processed := 0
+var _effect_event_budget_stops := 0
+var _effect_event_max_processed_per_frame := 0
 var _process_frame := 0
 var _production_material_signature := ""
 var _production_water_signature := ""
@@ -188,6 +193,9 @@ func start(
 	_activation_collision_retry_streak = 0
 	_unrouted_effect_events = 0
 	_unrouted_effect_event_examples.clear()
+	_effect_events_processed = 0
+	_effect_event_budget_stops = 0
+	_effect_event_max_processed_per_frame = 0
 	_running = true
 	_last_error = ""
 	set_process(true)
@@ -387,6 +395,11 @@ func get_status() -> Dictionary:
 		"unrouted_effect_event_examples": (
 			_unrouted_effect_event_examples.duplicate(true)
 		),
+		"effect_event_capacity_per_frame": EFFECT_EVENT_CAPACITY_PER_FRAME,
+		"effect_event_budget_usec": EFFECT_EVENT_BUDGET_USEC,
+		"effect_events_processed": _effect_events_processed,
+		"effect_event_budget_stops": _effect_event_budget_stops,
+		"effect_event_max_processed_per_frame": _effect_event_max_processed_per_frame,
 		"pending_activation_cohorts": _activation_cohorts.size(),
 		"last_error": _last_error,
 		"native_metrics": native_metrics,
@@ -1011,10 +1024,17 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 
 
 func _drain_effect_events() -> void:
-	while true:
+	var deadline := _effect_event_clock_usec() + EFFECT_EVENT_BUDGET_USEC
+	var processed := 0
+	while processed < EFFECT_EVENT_CAPACITY_PER_FRAME:
+		if processed > 0 and _effect_event_clock_usec() >= deadline:
+			_effect_event_budget_stops += 1
+			break
 		var event: Dictionary = _effect.pop_event()
 		if event.is_empty():
-			return
+			break
+		processed += 1
+		_effect_events_processed += 1
 		var route := _route_for_event(event)
 		if route.is_empty():
 			_unrouted_effect_events += 1
@@ -1091,6 +1111,15 @@ func _drain_effect_events() -> void:
 			"RETIRED", "SUPERSEDED":
 				_mark_surface(group_key, "retired", str(route.get("surface", "")))
 				_try_finish_retirement(group_key)
+	_effect_event_max_processed_per_frame = maxi(
+		_effect_event_max_processed_per_frame, processed
+	)
+	if processed >= EFFECT_EVENT_CAPACITY_PER_FRAME:
+		_effect_event_budget_stops += 1
+
+
+func _effect_event_clock_usec() -> int:
+	return Time.get_ticks_usec()
 
 
 func _try_validate_group(group_key: String) -> void:

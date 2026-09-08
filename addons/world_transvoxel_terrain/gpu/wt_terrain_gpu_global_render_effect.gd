@@ -45,7 +45,12 @@ var _pending: Array[Dictionary] = []
 var _inflight_extractions: Dictionary = {}
 var _cancelled_inflight_tickets: Dictionary = {}
 var _lifecycle_commands: Array[Dictionary] = []
-var _events: Array[Dictionary] = []
+var _priority_events: Dictionary = {}
+var _events: Dictionary = {}
+var _priority_event_head := 0
+var _priority_event_tail := 0
+var _event_head := 0
+var _event_tail := 0
 var _debug_geometry_requests: Array[Dictionary] = []
 var _debug_geometry_results: Dictionary = {}
 var _latest_sequence_by_key: Dictionary = {}
@@ -179,6 +184,7 @@ var _status := {
 	"active_empty_entry_examples": [],
 	"active_partial_entry_examples": [],
 	"event_count": 0,
+	"priority_event_count": 0,
 	"queued_request_count": 0,
 	"inflight_extraction_count": 0,
 	"counter_readback_bytes": 0,
@@ -514,11 +520,20 @@ func retire_entry(identity: Dictionary, publication_sequence: int) -> bool:
 
 func pop_event() -> Dictionary:
 	_mutex.lock()
-	if _events.is_empty():
+	if _priority_events.is_empty() and _events.is_empty():
 		_mutex.unlock()
 		return {}
-	var event: Dictionary = _events.pop_front()
-	_status["event_count"] = _events.size()
+	var event: Dictionary
+	if not _priority_events.is_empty():
+		event = Dictionary(_priority_events.get(_priority_event_head, {}))
+		_priority_events.erase(_priority_event_head)
+		_priority_event_head += 1
+	else:
+		event = Dictionary(_events.get(_event_head, {}))
+		_events.erase(_event_head)
+		_event_head += 1
+	_status["event_count"] = _priority_events.size() + _events.size()
+	_status["priority_event_count"] = _priority_events.size()
 	_mutex.unlock()
 	return event
 
@@ -2384,8 +2399,14 @@ func _push_event_on_render_thread(
 		"error": error,
 	}
 	_mutex.lock()
-	_events.append(event)
-	_status["event_count"] = _events.size()
+	if bool(Dictionary(event.get("identity", {})).get("incremental_edit", false)):
+		_priority_events[_priority_event_tail] = event
+		_priority_event_tail += 1
+	else:
+		_events[_event_tail] = event
+		_event_tail += 1
+	_status["event_count"] = _priority_events.size() + _events.size()
+	_status["priority_event_count"] = _priority_events.size()
 	_mutex.unlock()
 
 
