@@ -52,6 +52,7 @@ func _run() -> void:
 	_last_tick_us = trace_started_us
 	var metrics_before := _measurement_snapshot()
 	var edits: Array[Dictionary] = []
+	var visual_deadline_miss := {}
 	_phase = "hot_edit"
 	for index in range(HOT_EDIT_COUNT):
 		var center := Vector3(
@@ -90,10 +91,11 @@ func _run() -> void:
 		var visual_first_draw_us := first_draw_ticks_usec - submitted_us \
 			if first_draw_ticks_usec > 0 else -1
 		if _trace_enabled and visual_first_draw_us > 33334:
-			_fail("hot edit %d missed two-frame visual publication: %d us" % [
-				index, visual_first_draw_us,
-			])
-			return
+			if visual_deadline_miss.is_empty():
+				visual_deadline_miss = {
+					"index": index,
+					"visual_first_draw_us": visual_first_draw_us,
+				}
 		edits.append({
 			"index": index,
 			"revision": revision,
@@ -127,11 +129,30 @@ func _run() -> void:
 	var hot_same_callback_precommits := int(hot_metrics_after.get(
 		"same_callback_edit_precommits", 0
 	)) - int(metrics_before.get("same_callback_edit_precommits", 0))
+	var hot_empty_collision_generations := int(hot_metrics_after.get(
+		"empty_collision_generations", 0
+	))
+	var target_state: RefCounted = _world.query_chunk_state(Vector3i.ZERO, 0)
+	var target_generations := {
+		"application": target_state.call("get_generation"),
+		"render": target_state.call("get_render_generation"),
+		"staged_render": target_state.call("get_staged_render_generation"),
+		"collision": target_state.call("get_collision_generation"),
+		"staged_collision": target_state.call("get_staged_collision_generation"),
+	} if target_state != null else {}
+	var final_generation_exact := not target_generations.is_empty() \
+			and int(target_generations["application"]) > 0 \
+			and int(target_generations["render"]) == int(target_generations["application"]) \
+			and int(target_generations["collision"]) == int(target_generations["application"]) \
+			and int(target_generations["staged_render"]) == 0 \
+			and int(target_generations["staged_collision"]) == 0
 	if hot_same_callback_precommits != HOT_EDIT_COUNT \
-			or hot_detached < HOT_EDIT_COUNT \
-			or hot_regional_publications != 0:
-		_fail("hot edits leaked into regional publication: precommits=%d detached=%d regional=%d gpu_active=%d gpu_incomplete=%d effect_events=%d priority_events=%d budget_stops=%d" % [
+			or hot_regional_publications != 0 \
+			or int(hot_metrics_after.get("pending_chunk_replacements", -1)) != 0 \
+			or not final_generation_exact:
+		_fail("hot edits did not close split publication: precommits=%d detached=%d regional=%d empty_collision_generations=%d target=%s gpu_active=%d gpu_incomplete=%d effect_events=%d priority_events=%d budget_stops=%d" % [
 			hot_same_callback_precommits, hot_detached, hot_regional_publications,
+			hot_empty_collision_generations, str(target_generations),
 			int(hot_metrics_after.get("gpu_active_chunks", 0)),
 			int(hot_metrics_after.get("gpu_incomplete_chunks", 0)),
 			int(hot_metrics_after.get("effect_event_count", 0)),
@@ -223,6 +244,7 @@ func _run() -> void:
 		"hot_same_callback_precommits": hot_same_callback_precommits,
 		"hot_completed_split_replacements_detached": hot_detached,
 		"hot_regional_visibility_publications": hot_regional_publications,
+		"hot_empty_collision_generations": hot_empty_collision_generations,
 		"cold_approach_ready_us": cold_ready_us,
 		"cold_approach_ready_frames": cold_ready_frames,
 		"cold_warm_settle_us": cold_warm_settle_us,
@@ -240,6 +262,7 @@ func _run() -> void:
 			"hot_visual_target_us": 33334,
 			"cold_cached_target_us": 100000,
 		},
+		"visual_deadline_miss": visual_deadline_miss,
 	}
 	var required_native := {
 		"edit_journal_committed": 0,
@@ -259,6 +282,12 @@ func _run() -> void:
 	result["native_event_counts"] = required_native
 	result["gpu_event_counts"] = required_gpu
 	_write_result(result)
+	if not visual_deadline_miss.is_empty():
+		_fail("hot edit %d missed two-frame visual publication: %d us" % [
+			int(visual_deadline_miss["index"]),
+			int(visual_deadline_miss["visual_first_draw_us"]),
+		])
+		return
 	if _trace_enabled:
 		for count in required_native.values():
 			if int(count) <= 0:
@@ -348,6 +377,12 @@ func _measurement_snapshot() -> Dictionary:
 		)),
 		"same_callback_edit_precommits": int(gpu.get(
 			"same_callback_edit_precommits", 0
+		)),
+		"empty_collision_generations": int(runtime.get(
+			"empty_collision_generations", 0
+		)),
+		"pending_chunk_replacements": int(runtime.get(
+			"pending_chunk_replacements", 0
 		)),
 		"gpu_active_chunks": int(gpu.get("active_chunks", 0)),
 		"gpu_incomplete_chunks": int(gpu.get("incomplete_chunks", 0)),
