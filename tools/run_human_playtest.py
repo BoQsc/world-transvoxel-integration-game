@@ -51,14 +51,27 @@ def print_failure_self_report(project: pathlib.Path) -> None:
     if not payload:
         return
     summary = payload.get("summary", {})
+    first_blocked = (
+        f"{summary.get('first_blocked_replacement_key_x', 0)}:"
+        f"{summary.get('first_blocked_replacement_key_y', 0)}:"
+        f"{summary.get('first_blocked_replacement_key_z', 0)}:"
+        f"lod{summary.get('first_blocked_replacement_key_lod', 0)}"
+    )
     print(
         "WT_TERRAIN_FAILURE "
         f"cause={payload.get('primary_blocker', 'unknown')} "
+        f"elapsed_ms={payload.get('elapsed_msec', 0)} "
         f"visual={summary.get('render_resources', 0)} "
         f"collision={summary.get('collision_resources', 0)} "
         f"gpu_active={summary.get('gpu_resident_active_chunks', 0)} "
         f"gpu_tracked={summary.get('gpu_resident_tracked_chunks', 0)} "
         f"pending={summary.get('pending_chunk_replacements', 0)} "
+        f"blocked={summary.get('blocked_pending_chunk_replacements', 0)} "
+        f"first_blocked={first_blocked} "
+        f"scheduler={summary.get('scheduler_queued_jobs', 0)} "
+        f"storage={summary.get('storage_queued_requests', 0)}/"
+        f"{summary.get('storage_in_flight_requests', 0)} "
+        f"mesh={summary.get('mesh_worker_queued_jobs', 0)} "
         f"report={path}",
         flush=True,
     )
@@ -318,6 +331,9 @@ def run_waterfall_session(
     ):
         path.unlink()
 
+    failure_path = failure_report_path(project)
+    failure_path.unlink(missing_ok=True)
+
     launcher = psutil.Process()
     available_affinity = launcher.cpu_affinity()
     affinity = available_affinity[:3]
@@ -335,6 +351,8 @@ def run_waterfall_session(
     sampling_started_unix_seconds = time.time()
     started = time.perf_counter()
     next_gpu_sample = 0.0
+    failure_reported = False
+    failure_seen_at: float | None = None
     while process.poll() is None:
         time.sleep(WATERFALL_SAMPLE_INTERVAL_SECONDS)
         try:
@@ -355,13 +373,25 @@ def run_waterfall_session(
             samples.append(sample)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             break
+        if failure_path.is_file():
+            if not failure_reported:
+                print_failure_self_report(project)
+                failure_reported = True
+                failure_seen_at = time.perf_counter()
+            if (
+                "--terrain-waterfall-autonomous-route" in command
+                and failure_seen_at is not None
+                and time.perf_counter() - failure_seen_at >= 5.0
+            ):
+                process.terminate()
     exit_code = process.wait()
     wall_seconds = time.perf_counter() - started
     _write_usage_report(
         paths["usage"], samples, affinity, wall_seconds, exit_code,
         sampling_started_unix_seconds, time.time(),
     )
-    print_failure_self_report(project)
+    if not failure_reported:
+        print_failure_self_report(project)
 
     trace_paths = _waterfall_trace_paths(paths["trace"])
     if trace_paths:

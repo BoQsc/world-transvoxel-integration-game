@@ -10950,7 +10950,8 @@ func _fail(message: String) -> void:
 		"cause": _failure_primary_blocker(),
 		"report": report_path,
 	}))
-	if autonomous or not human_visual_capture_path.is_empty():
+	if autonomous or terrain_waterfall_autonomous_route or \
+			not human_visual_capture_path.is_empty():
 		if gpu_resident_failure_quit_scheduled:
 			return
 		gpu_resident_failure_quit_scheduled = true
