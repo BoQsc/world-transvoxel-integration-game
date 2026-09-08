@@ -1,0 +1,432 @@
+extends "res://tests/gpu_resident_multichunk_relocation_smoke.gd"
+
+const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
+const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
+const MaterialProfile := preload("res://addons/world_transvoxel_terrain/material/wt_terrain_material_profile.gd")
+const ReferenceScene := preload("res://addons/world_transvoxel_terrain/debug/wt_terrain_reference_scene.gd")
+const GameMaterialApplicator := preload("res://addons/world_transvoxel_gameworld/material/wt_game_terrain_material_applicator.gd")
+const OUTPUT_PATH := "res://.godot/world_transvoxel_captures/gpu_moving_road_stress/result.json"
+const STRESS_CAPTURE_ROOT := "res://.godot/world_transvoxel_captures/gpu_moving_road_stress"
+const FRAMES_PER_WAYPOINT := 4
+const OUTBOUND_WAYPOINTS := 12
+const FRAME_TARGET_US := 16667
+
+var _samples: Array[Dictionary] = []
+var _phase := "startup"
+var _last_ticks_usec := 0
+var _current_target := Vector3i.ZERO
+var _viewer_revision := 0
+var _edit_attempts := 0
+var _edit_submission_failures := 0
+var _maximums := {}
+var _reference_scene: Node
+var _material_applicator: Node
+var _target_activations: Array[Dictionary] = []
+
+
+func _setup_viewport() -> void:
+	root.size = Vector2i(640, 480)
+	root.content_scale_size = Vector2i(640, 480)
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.02, 0.025, 0.03, 1.0)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.72, 0.76, 0.80)
+	environment.ambient_light_energy = 0.55
+	_world_environment = WorldEnvironment.new()
+	_world_environment.environment = environment
+	root.add_child(_world_environment)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48.0, 35.0, 0.0)
+	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.light_energy = 1.25
+	sun.shadow_enabled = false
+	root.add_child(sun)
+	var camera := Camera3D.new()
+	camera.position = Vector3(8, 12, 28)
+	root.add_child(camera)
+	camera.look_at(Vector3(8, 8, 8), Vector3.UP)
+	camera.current = true
+
+
+func _run() -> void:
+	_setup_viewport()
+	_world = TerrainWorld.new()
+	_world.terrain_profile = _terrain_profile()
+	var runtime: Resource = RuntimeProfile.create_builtin(RuntimeProfile.Preset.BALANCED)
+	runtime.profile_id = &"gpu_moving_road_stress"
+	runtime.viewer_radius_chunks = 2
+	runtime.maximum_lod = 2
+	runtime.lod_refinement_radius_chunks = 1
+	runtime.active_chunk_capacity = 384
+	runtime.render_entry_capacity = 256
+	runtime.mesh_entry_capacity = 256
+	runtime.collision_entry_capacity = 128
+	runtime.decoded_page_entry_capacity = 256
+	runtime.procedural_generation_worker_count = 2
+	runtime.meshing_worker_count = 2
+	_world.runtime_profile = runtime
+	var generation := _generation_profile()
+	generation.profile_id = &"gpu_moving_road_stress"
+	generation.source_revision = 640399
+	generation.world_chunk_count_x = 16
+	generation.world_chunk_count_y = 4
+	generation.world_chunk_origin_y = 0
+	generation.world_chunk_count_z = 6
+	_world.generation_profile = generation
+	_world.storage_profile = _storage_profile()
+	_world.material_profile = MaterialProfile.new()
+	_world.runtime_gpu_resident_render_candidate_enabled = true
+	_world.runtime_gpu_resident_background_refinement_enabled = true
+	_world.runtime_gpu_resident_viewer_refinement_enabled = true
+	_world.runtime_gpu_meshing_shadow_capacity = 8
+	_world.runtime_gpu_resident_request_capacity = 16
+	_world.runtime_gpu_resident_chunk_capacity = 256
+	_world.name = "TerrainWorld"
+	_reference_scene = ReferenceScene.new()
+	_reference_scene.name = "WtTerrainReferenceScene"
+	_reference_scene.refresh_on_ready = false
+	_reference_scene.add_child(_world)
+	root.add_child(_reference_scene)
+	_material_applicator = GameMaterialApplicator.new()
+	_material_applicator.auto_apply = false
+	_material_applicator.reference_scene_path = NodePath("../WtTerrainReferenceScene")
+	root.add_child(_material_applicator)
+	if not _world.start_backend_world() or not await _wait_for_state("running"):
+		_fail("world did not start")
+		return
+	var material_summary: Dictionary = _material_applicator.apply_materials_now()
+	if not bool(material_summary.get("native_render_material_override", false)) or not bool(material_summary.get("production_texture_active", false)):
+		_fail("production terrain material did not initialize: %s" % material_summary)
+		return
+	_world.set_debug_gpu_resident_lifecycle_history_enabled(true)
+	_world.set_debug_gpu_stage_timing_enabled(true)
+	_last_ticks_usec = Time.get_ticks_usec()
+	var road := _road_waypoints()
+	if not await _move_viewers(road[0]):
+		return
+	if not await _settle(1200):
+		_fail("initial road shell did not settle")
+		return
+	var metrics_before := _snapshot_metrics()
+	_phase = "cold_outbound_editing"
+	for index in range(road.size()):
+		if not await _move_viewers(road[index]):
+			return
+		for local_frame in range(FRAMES_PER_WAYPOINT):
+			if local_frame == 0 and index > 0:
+				_submit_moving_edit(road[index], index)
+			if index == 6 and local_frame == 1:
+				_submit_burst_edit(road[index])
+			await process_frame
+			_observe_frame()
+	await _capture("cold_outbound")
+	_phase = "cold_outbound_settle"
+	var outbound_settle_started := Time.get_ticks_usec()
+	var outbound_settle_frames := await _settle_count(300)
+	var outbound_settle_us := Time.get_ticks_usec() - outbound_settle_started
+	var outbound_metrics := _snapshot_metrics()
+	_phase = "cached_return"
+	for reverse_index in range(road.size() - 1, -1, -1):
+		if not await _move_viewers(road[reverse_index]):
+			return
+		for _local_frame in range(FRAMES_PER_WAYPOINT):
+			await process_frame
+			_observe_frame()
+	await _capture("cached_return")
+	_phase = "cached_return_settle"
+	var return_settle_started := Time.get_ticks_usec()
+	var return_settle_frames := await _settle_count(1200)
+	var return_settle_us := Time.get_ticks_usec() - return_settle_started
+	var final_metrics := _snapshot_metrics()
+	var frame_times: Array[int] = []
+	var outbound_frames: Array[int] = []
+	var return_frames: Array[int] = []
+	var coverage_gap_frames := 0
+	var collision_pending_frames := 0
+	var visual_activation_frames: Array[int] = []
+	var collision_activation_frames: Array[int] = []
+	for sample in _samples:
+		var frame_us := int(sample.frame_us)
+		if frame_us > 0:
+			frame_times.append(frame_us)
+			if sample.phase == "cold_outbound_editing": outbound_frames.append(frame_us)
+			if sample.phase == "cached_return": return_frames.append(frame_us)
+		if sample.phase in ["cold_outbound_editing", "cached_return"]:
+			coverage_gap_frames += 0 if bool(sample.visual_coverage) else 1
+			collision_pending_frames += 0 if bool(sample.collision_ready) else 1
+	var unresolved_visual_targets := 0
+	var unresolved_collision_targets := 0
+	for activation in _target_activations:
+		if activation.visual_ready_frame == null:
+			unresolved_visual_targets += 1
+		else:
+			visual_activation_frames.append(int(activation.visual_ready_frame))
+		if activation.collision_ready_frame == null:
+			unresolved_collision_targets += 1
+		else:
+			collision_activation_frames.append(int(activation.collision_ready_frame))
+	var edit_commits := int(final_metrics.runtime.get("edit_commits", 0)) - int(metrics_before.runtime.get("edit_commits", 0))
+	var edit_rejections := int(final_metrics.runtime.get("edit_rejections", 0)) - int(metrics_before.runtime.get("edit_rejections", 0))
+	var result := {
+		"schema": "world_transvoxel.gpu_moving_road_stress.v1",
+		"driver": RenderingServer.get_current_rendering_driver_name().to_lower(),
+		"route": {
+			"waypoints": road.size(),
+			"frames_per_waypoint": FRAMES_PER_WAYPOINT,
+			"nominal_speed_world_units_per_second": 16.0 * 60.0 / FRAMES_PER_WAYPOINT,
+			"cold_outbound": true,
+			"cached_return": true,
+		},
+		"editing": {
+			"attempts": _edit_attempts,
+			"submission_failures": _edit_submission_failures,
+			"commits": edit_commits,
+			"runtime_rejections": edit_rejections,
+			"moving_interval_frames": FRAMES_PER_WAYPOINT,
+			"burst_operations": 8,
+		},
+		"frames": {
+			"count": frame_times.size(),
+			"p50_us": _percentile(frame_times, 0.50),
+			"p95_us": _percentile(frame_times, 0.95),
+			"p99_us": _percentile(frame_times, 0.99),
+			"maximum_us": frame_times.max() if not frame_times.is_empty() else 0,
+			"outbound_p99_us": _percentile(outbound_frames, 0.99),
+			"cached_return_p99_us": _percentile(return_frames, 0.99),
+			"over_16_7ms": frame_times.filter(func(value: int) -> bool: return value > FRAME_TARGET_US).size(),
+		},
+		"seamlessness": {
+			"visual_coverage_gap_frames": coverage_gap_frames,
+			"collision_pending_frames": collision_pending_frames,
+			"outbound_settle_frames": outbound_settle_frames,
+			"outbound_settle_us": outbound_settle_us,
+			"cached_return_settle_frames": return_settle_frames,
+			"cached_return_settle_us": return_settle_us,
+		},
+		"target_activation": {
+			"records": _target_activations,
+			"visual_p99_frames": _percentile(visual_activation_frames, 0.99),
+			"collision_p99_frames": _percentile(collision_activation_frames, 0.99),
+			"unresolved_visual_targets": unresolved_visual_targets,
+			"unresolved_collision_targets": unresolved_collision_targets,
+		},
+		"maximums": _maximums,
+		"metrics_before": metrics_before,
+		"metrics_outbound": outbound_metrics,
+		"metrics_final": final_metrics,
+		"samples": _samples,
+		"acceptance": {
+			"trace_complete": not _samples.is_empty(),
+			"no_submission_failures": _edit_submission_failures == 0,
+			"all_accepted_edits_committed": edit_commits == _edit_attempts,
+			"no_runtime_edit_rejections": edit_rejections == 0,
+			"no_visual_coverage_gaps": coverage_gap_frames == 0,
+			"no_collision_pending_frames": collision_pending_frames == 0,
+			"all_targets_visually_resolved": unresolved_visual_targets == 0,
+			"all_targets_collision_resolved": unresolved_collision_targets == 0,
+			"visual_activation_within_2_frames": unresolved_visual_targets == 0 and _percentile(visual_activation_frames, 0.99) <= 2,
+			"collision_activation_before_next_frame": unresolved_collision_targets == 0 and _percentile(collision_activation_frames, 0.99) <= 1,
+			"no_geometry_readback": int(final_metrics.gpu.get("geometry_readback_bytes", -1)) == 0,
+			"production_material_parity": bool(final_metrics.gpu.get("production_terrain_material_parity", false)),
+			"frame_p95_target_us": 16667,
+			"frame_p99_target_us": 25000,
+			"frame_p95_pass": _percentile(frame_times, 0.95) <= 16667,
+			"frame_p99_pass": _percentile(frame_times, 0.99) <= 25000,
+		},
+	}
+	_write_result(result)
+	if _samples.is_empty() or int(final_metrics.gpu.get("geometry_readback_bytes", -1)) != 0:
+		_fail("measurement integrity failed")
+		return
+	print("GPU_MOVING_ROAD_STRESS_COMPLETE driver=%s edits=%d/%d rejected=%d coverage_gaps=%d collision_pending=%d frame_p95_us=%d frame_p99_us=%d outbound_settle_us=%d return_settle_us=%d" % [
+		result.driver, edit_commits, _edit_attempts, edit_rejections,
+		coverage_gap_frames, collision_pending_frames,
+		int(result.frames.p95_us), int(result.frames.p99_us),
+		outbound_settle_us, return_settle_us,
+	])
+	_world.stop_backend_world()
+	await _wait_for_state("stopped")
+	quit(0)
+
+
+func _road_waypoints() -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	for index in range(OUTBOUND_WAYPOINTS):
+		result.append(Vector3(8.0 + float(index) * 16.0, 8.0, 24.0 + float((index % 4) - 2) * 4.0))
+	return result
+
+
+func _move_viewers(position: Vector3) -> bool:
+	_viewer_revision += 1
+	_current_target = Vector3i(floori(position.x / 16.0), 0, floori(position.z / 16.0))
+	var camera := root.get_camera_3d()
+	if camera != null:
+		camera.position = position + Vector3(0, 28, 34)
+		camera.look_at(position, Vector3.UP)
+	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) or not _world.update_collision_viewer(2, _viewer_revision, position, 1):
+		_fail("viewer update rejected at %s" % position)
+		return false
+	if _phase in ["cold_outbound_editing", "cached_return"]:
+		_target_activations.append({
+			"phase": _phase,
+			"target": _current_target,
+			"requested_ticks_usec": Time.get_ticks_usec(),
+			"requested_sample_index": _samples.size(),
+			"visual_ready_frame": null,
+			"visual_ready_us": null,
+			"collision_ready_frame": null,
+			"collision_ready_us": null,
+		})
+	return true
+
+
+func _submit_moving_edit(position: Vector3, index: int) -> void:
+	var operation := EditOperation.new()
+	operation.mode = EditOperation.Mode.CARVE if index % 2 == 0 else EditOperation.Mode.CONSTRUCT
+	operation.brush_shape = EditOperation.BrushShape.SPHERE
+	operation.center = position + Vector3(0, -0.5, 0)
+	operation.radius = 2.5
+	operation.material_id = 3
+	operation.density_value = 1.0
+	var batch := EditBatch.new()
+	batch.add_operation(operation)
+	_edit_attempts += 1
+	if not _world.submit_edit_batch(batch, 9000 + _edit_attempts):
+		_edit_submission_failures += 1
+
+
+func _submit_burst_edit(position: Vector3) -> void:
+	var batch := EditBatch.new()
+	for index in range(8):
+		var angle := TAU * float(index) / 8.0
+		var operation := EditOperation.new()
+		operation.mode = EditOperation.Mode.CARVE if index % 2 == 0 else EditOperation.Mode.CONSTRUCT
+		operation.brush_shape = EditOperation.BrushShape.SPHERE
+		operation.center = position + Vector3(cos(angle) * 5.0, -1.0, sin(angle) * 5.0)
+		operation.radius = 2.75
+		operation.material_id = 3
+		operation.density_value = 1.0
+		batch.add_operation(operation)
+	_edit_attempts += 1
+	if not _world.submit_edit_batch(batch, 9900):
+		_edit_submission_failures += 1
+
+
+func _observe_frame() -> void:
+	var now := Time.get_ticks_usec()
+	var runtime: Dictionary = _world.get_runtime_metrics()
+	var gpu_status: Dictionary = _world.get_gpu_resident_render_status()
+	var effect: Dictionary = gpu_status.get("effect_status", {})
+	var arena: Dictionary = effect.get("arena_status", {})
+	var state: RefCounted = _world.query_chunk_state(_current_target, 0)
+	var collision_ready := state != null and bool(state.call("is_collision_ready"))
+	var sample := {
+		"phase": _phase,
+		"ticks_usec": now,
+		"frame_us": now - _last_ticks_usec,
+		"target": _current_target,
+		"visual_coverage": _has_visual_coverage(_current_target),
+		"collision_ready": collision_ready,
+		"scheduler_queued": int(runtime.get("scheduler_queued_jobs", 0)),
+		"storage_queued": int(runtime.get("storage_queued_requests", 0)),
+		"storage_active": int(runtime.get("storage_active_requests", 0)),
+		"mesh_queued": int(runtime.get("mesh_worker_queued_jobs", 0)),
+		"mesh_active": int(runtime.get("mesh_worker_active_jobs", 0)),
+		"pending_replacements": int(runtime.get("pending_chunk_replacements", 0)),
+		"gpu_queued": int(effect.get("queued_request_count", 0)),
+		"gpu_inflight": int(effect.get("inflight_extraction_count", 0)),
+		"gpu_resident_entries": int(effect.get("resident_entry_count", 0)),
+		"gpu_uploaded_bytes": int(arena.get("uploaded_bytes", 0)),
+		"decoded_bytes": int(runtime.get("page_cache_decoded_resident_bytes", 0)),
+		"render_bytes": int(runtime.get("resource_cache_render_resident_bytes", 0)),
+		"collision_bytes": int(runtime.get("resource_cache_collision_resident_bytes", 0)),
+	}
+	_last_ticks_usec = now
+	_samples.append(sample)
+	_update_target_activations(now)
+	for key in ["scheduler_queued", "storage_queued", "storage_active", "mesh_queued", "mesh_active", "pending_replacements", "gpu_queued", "gpu_inflight", "gpu_resident_entries", "gpu_uploaded_bytes", "decoded_bytes", "render_bytes", "collision_bytes"]:
+		_maximums[key] = maxi(int(_maximums.get(key, 0)), int(sample[key]))
+
+
+func _update_target_activations(now: int) -> void:
+	for activation in _target_activations:
+		var key: Vector3i = activation.target
+		var frame_latency := _samples.size() - int(activation.requested_sample_index)
+		if activation.visual_ready_frame == null and _has_visual_coverage(key):
+			activation.visual_ready_frame = frame_latency
+			activation.visual_ready_us = now - int(activation.requested_ticks_usec)
+		if activation.collision_ready_frame == null:
+			var state: RefCounted = _world.query_chunk_state(key, 0)
+			if state != null and bool(state.call("is_collision_ready")):
+				activation.collision_ready_frame = frame_latency
+				activation.collision_ready_us = now - int(activation.requested_ticks_usec)
+
+
+func _has_visual_coverage(key: Vector3i) -> bool:
+	for lod in range(0, 3):
+		var scale := 1 << lod
+		var ancestor := Vector3i(
+			floori(float(key.x) / float(scale)),
+			floori(float(key.y) / float(scale)),
+			floori(float(key.z) / float(scale))
+		)
+		var state: RefCounted = _world.query_chunk_state(ancestor, lod)
+		if state != null and bool(state.call("is_visual_ready")) and (
+				int(state.call("get_render_generation")) > 0 or
+				int(state.call("get_staged_render_generation")) == 0
+		):
+			return true
+	return false
+
+
+func _settle(limit: int) -> bool:
+	return await _settle_count(limit) >= 0
+
+
+func _settle_count(limit: int) -> int:
+	for frame in range(limit):
+		await process_frame
+		_observe_frame()
+		var runtime: Dictionary = _world.get_runtime_metrics()
+		var gpu: Dictionary = _world.get_gpu_resident_render_status()
+		var effect: Dictionary = gpu.get("effect_status", {})
+		if int(runtime.get("scheduler_queued_jobs", 0)) == 0 and int(runtime.get("storage_queued_requests", 0)) == 0 and int(runtime.get("storage_active_requests", 0)) == 0 and int(runtime.get("mesh_worker_queued_jobs", 0)) == 0 and int(runtime.get("mesh_worker_active_jobs", 0)) == 0 and int(runtime.get("pending_chunk_replacements", 0)) == 0 and int(runtime.get("pending_chunk_retirements", 0)) == 0 and int(runtime.get("collision_required_not_ready_chunk_records", 0)) == 0 and int(effect.get("queued_request_count", 0)) == 0 and int(effect.get("inflight_extraction_count", 0)) == 0:
+			return frame + 1
+	return -1
+
+
+func _snapshot_metrics() -> Dictionary:
+	var runtime: Dictionary = _world.get_runtime_metrics()
+	var status: Dictionary = _world.get_gpu_resident_render_status()
+	var effect: Dictionary = status.get("effect_status", {})
+	return {"runtime": runtime, "gpu": effect, "resident": status}
+
+
+func _percentile(values: Array[int], fraction: float) -> int:
+	if values.is_empty(): return 0
+	var ordered := values.duplicate()
+	ordered.sort()
+	return ordered[clampi(ceili(float(ordered.size()) * fraction) - 1, 0, ordered.size() - 1)]
+
+
+func _capture(label: String) -> void:
+	await RenderingServer.frame_post_draw
+	var absolute_root := ProjectSettings.globalize_path(STRESS_CAPTURE_ROOT)
+	DirAccess.make_dir_recursive_absolute(absolute_root)
+	root.get_texture().get_image().save_png(absolute_root.path_join("%s_%s.png" % [RenderingServer.get_current_rendering_driver_name().to_lower(), label]))
+
+
+func _write_result(result: Dictionary) -> void:
+	var absolute := ProjectSettings.globalize_path(OUTPUT_PATH)
+	DirAccess.make_dir_recursive_absolute(absolute.get_base_dir())
+	var file := FileAccess.open(absolute, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(result, "  ") + "\n")
+		file.close()
+
+
+func _fail(message: String) -> void:
+	push_error("GPU_MOVING_ROAD_STRESS_FAIL: " + message)
+	if _world != null: _world.stop_backend_world()
+	quit(1)
