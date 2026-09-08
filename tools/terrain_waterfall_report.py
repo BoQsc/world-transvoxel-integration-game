@@ -29,6 +29,7 @@ CHUNK_CELLS_PER_AXIS = 16
 STAGE_BY_KIND = {
     "viewer_plan_started": "viewer",
     "viewer_plan_applied": "viewer",
+    "viewer_plan_cancelled": "viewer",
     "chunk_demand_accepted": "demand",
     "edit_submitted": "authority",
     "edit_processing_started": "authority",

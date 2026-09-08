@@ -11,6 +11,7 @@ const HITCH_THRESHOLD_US := 33300
 
 const PIPELINE_METRICS := [
 	"viewer_updates", "collision_viewer_updates", "coalesced_viewer_events",
+	"viewer_plan_cancellations", "viewer_plan_cancel_latency_ns_maximum",
 	"planned_demands", "sample_jobs", "mesh_jobs", "storage_completions",
 	"mesh_completions", "transition_mesh_completions", "edit_commits",
 	"edit_rejections", "edit_replacements", "published_events",
