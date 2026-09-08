@@ -105,6 +105,7 @@ var _stale_incomplete_groups_superseded := 0
 var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
 var _same_callback_edit_precommits := 0
+var _same_callback_edit_precommit_chunks := 0
 var _interaction_application_deferrals := 0
 var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
@@ -375,6 +376,7 @@ func get_status() -> Dictionary:
 		"activation_cohorts_queued": _activation_cohorts_queued,
 		"activation_cohorts_committed": _activation_cohorts_committed,
 		"same_callback_edit_precommits": _same_callback_edit_precommits,
+		"same_callback_edit_precommit_chunks": _same_callback_edit_precommit_chunks,
 		"deferred_interaction_requests": _deferred_interaction_requests.size(),
 		"interaction_application_deferrals": _interaction_application_deferrals,
 		"cpu_only_regional_retirements": _cpu_only_regional_retirements,
@@ -925,20 +927,50 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 	var preflight := Dictionary(_backend_terrain.call(
 		"get_gpu_resident_render_activation_cohort", terrain_identity
 	))
+	var expected_members := int(preflight.get("replacement_count", 0))
 	if not bool(preflight.get("cohort_built", false)) \
 			or not bool(preflight.get("authoritative_coverage_complete", false)) \
 			or not bool(preflight.get("same_layout_edit", false)) \
-			or bool(preflight.get("regional", true)) \
-			or int(preflight.get("replacement_count", 0)) != 1 \
+			or expected_members <= 0 \
 			or int(preflight.get("retirement_count", 0)) != 0:
 		return false
-	var inventories: Array = [_group_identities(group)]
-	var preparation := Dictionary(_backend_terrain.call(
-		"prepare_gpu_resident_render_chunk", inventories[0]
-	))
-	if str(preparation.get("status", "")) != "PREPARED" \
-			or not bool(preparation.get("prepared", false)):
+	var cohort_group_keys: Array[String] = []
+	var source_revision := int(terrain_identity.get("source_revision", 0))
+	var world_revision := int(terrain_identity.get("world_revision", 0))
+	for candidate_key_value in _groups.keys():
+		var candidate_key := str(candidate_key_value)
+		var candidate := Dictionary(_groups[candidate_key])
+		if bool(candidate.get("retiring", false)) \
+				or bool(candidate.get("active", false)) \
+				or bool(candidate.get("activation_queued", false)):
+			continue
+		var candidate_requests := Dictionary(candidate.get("requests", {}))
+		var candidate_identity := Dictionary(Dictionary(candidate_requests.get(
+			"terrain", {}
+		)).get("identity", {}))
+		if not bool(candidate_identity.get("incremental_edit", false)) \
+				or int(candidate_identity.get("source_revision", 0)) != source_revision \
+				or int(candidate_identity.get("world_revision", 0)) != world_revision:
+			continue
+		for surface in _required_surfaces(candidate):
+			if not candidate_requests.has(surface):
+				return false
+		cohort_group_keys.append(candidate_key)
+	if cohort_group_keys.size() != expected_members \
+			or not cohort_group_keys.has(group_key):
 		return false
+	cohort_group_keys.sort()
+	var inventories: Array = []
+	for candidate_key in cohort_group_keys:
+		var candidate := Dictionary(_groups[candidate_key])
+		var inventory := _group_identities(candidate)
+		var preparation := Dictionary(_backend_terrain.call(
+			"prepare_gpu_resident_render_chunk", inventory
+		))
+		if str(preparation.get("status", "")) != "PREPARED" \
+				or not bool(preparation.get("prepared", false)):
+			return false
+		inventories.append(inventory)
 	var cohort := Dictionary(_backend_terrain.call(
 		"get_gpu_resident_render_activation_cohort", terrain_identity
 	))
@@ -946,73 +978,100 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 	if str(cohort.get("status", "")) != "READY" \
 			or not bool(cohort.get("ready", false)) \
 			or not bool(cohort.get("same_layout_edit", false)) \
-			or bool(cohort.get("regional", true)) \
-			or chunks.size() != 1 \
-			or int(cohort.get("activation_required_count", 0)) != 1 \
+			or chunks.size() != expected_members \
+			or int(cohort.get("activation_required_count", 0)) != expected_members \
 			or not Array(cohort.get("retirements", [])).is_empty():
 		return false
-	var native_validated := {}
-	for surface in _required_surfaces(group):
-		var request: Dictionary = requests.get(surface, {})
-		var validation := Dictionary(_backend_terrain.call(
-			"validate_gpu_resident_render_request",
-			int(request.get("request_id", 0)),
-			Dictionary(request.get("identity", {}))
-		))
-		if str(validation.get("status", "")) != "READY" \
-				or not bool(validation.get("ready", false)) \
-				or not bool(validation.get("request_accepted", false)):
+	var expected_chunk_routes := {}
+	for candidate_key in cohort_group_keys:
+		var candidate := Dictionary(_groups[candidate_key])
+		var candidate_identity := Dictionary(Dictionary(Dictionary(candidate.get(
+			"requests", {}
+		)).get("terrain", {})).get("identity", {}))
+		expected_chunk_routes[_activation_chunk_key(candidate_identity)] = candidate_key
+	for chunk_value in chunks:
+		if not expected_chunk_routes.has(_activation_chunk_key(Dictionary(chunk_value))):
 			return false
-		native_validated[surface] = true
+	var validated_by_group := {}
+	var activation_entries: Array[Dictionary] = []
+	var newly_validated_surfaces := 0
+	for candidate_key in cohort_group_keys:
+		var candidate := Dictionary(_groups[candidate_key])
+		var candidate_requests := Dictionary(candidate.get("requests", {}))
+		var candidate_sequences := Dictionary(candidate.get("sequences", {}))
+		var native_validated := Dictionary(candidate.get(
+			"native_validated", {}
+		)).duplicate()
+		for surface in _required_surfaces(candidate):
+			var request: Dictionary = candidate_requests.get(surface, {})
+			if not bool(native_validated.get(surface, false)):
+				var validation := Dictionary(_backend_terrain.call(
+					"validate_gpu_resident_render_request",
+					int(request.get("request_id", 0)),
+					Dictionary(request.get("identity", {}))
+				))
+				if str(validation.get("status", "")) != "READY" \
+						or not bool(validation.get("ready", false)) \
+						or not bool(validation.get("request_accepted", false)):
+					return false
+				native_validated[surface] = true
+				newly_validated_surfaces += 1
+			activation_entries.append({
+				"identity": Dictionary(request.get("identity", {})),
+				"publication_sequence": int(candidate_sequences.get(surface, 0)),
+			})
+		validated_by_group[candidate_key] = native_validated
 	var activation := Dictionary(_backend_terrain.call(
+		"activate_gpu_resident_render_cohort", inventories, terrain_identity
+	)) if expected_members > 1 else Dictionary(_backend_terrain.call(
 		"activate_gpu_resident_render_cohort", inventories
 	))
 	if str(activation.get("status", "")) != "ACTIVE" \
 			or not bool(activation.get("active", false)):
 		return false
-	var activation_entries: Array[Dictionary] = []
-	var sequences: Dictionary = group.get("sequences", {})
-	for surface in _required_surfaces(group):
-		var request: Dictionary = requests.get(surface, {})
-		activation_entries.append({
-			"identity": Dictionary(request.get("identity", {})),
-			"publication_sequence": int(sequences.get(surface, 0)),
-		})
 	var cohort_id := _next_activation_cohort_id
 	_next_activation_cohort_id += 1
-	group["native_validated"] = native_validated
-	group["validated"] = true
-	group["native_prepared"] = true
-	group["native_active"] = true
-	group["activation_queued"] = true
-	group["activation_cohort_id"] = cohort_id
-	group["collision_activation_priority"] = true
-	_groups[group_key] = group
-	_prepared_group_routes[_activation_chunk_key(terrain_identity)] = group_key
-	_activation_retry_membership.erase(group_key)
+	for candidate_key in cohort_group_keys:
+		var candidate := Dictionary(_groups[candidate_key])
+		var candidate_requests := Dictionary(candidate.get("requests", {}))
+		var candidate_identity := Dictionary(Dictionary(candidate_requests.get(
+			"terrain", {}
+		)).get("identity", {}))
+		candidate["native_validated"] = Dictionary(validated_by_group[candidate_key])
+		candidate["validated"] = true
+		candidate["native_prepared"] = true
+		candidate["native_active"] = true
+		candidate["activation_queued"] = true
+		candidate["activation_cohort_id"] = cohort_id
+		candidate["collision_activation_priority"] = true
+		_groups[candidate_key] = candidate
+		_prepared_group_routes[_activation_chunk_key(candidate_identity)] = candidate_key
+		_activation_retry_membership.erase(candidate_key)
+		_record_lifecycle_event("NATIVE_PREPARED", candidate_key, {
+			"collision_priority": true,
+			"same_callback_precommit": true,
+			"cohort_members": expected_members,
+		})
 	_activation_cohorts[cohort_id] = {
-		"group_keys": [group_key],
+		"group_keys": cohort_group_keys.duplicate(),
 		"inventories": inventories.duplicate(true),
 		"activation_entries": activation_entries.duplicate(true),
 		"retirement_group_keys": [],
 		"retirement_entries": [],
 		"selected_chunks": chunks.duplicate(true),
 		"native_committed": true,
-		"regional": false,
+		"regional": expected_members > 1,
 	}
-	_validated_surfaces += native_validated.size()
-	_record_lifecycle_event("NATIVE_PREPARED", group_key, {
-		"collision_priority": true,
-		"same_callback_precommit": true,
-	})
 	_record_lifecycle_event("COHORT_SELECTED", group_key, {
 		"cohort_id": cohort_id,
-		"regional": false,
-		"member_count": 1,
+		"regional": expected_members > 1,
+		"member_count": expected_members,
 		"same_callback_precommit": true,
 	})
 	_activation_cohorts_queued += 1
+	_validated_surfaces += newly_validated_surfaces
 	_same_callback_edit_precommits += 1
+	_same_callback_edit_precommit_chunks += expected_members
 	if not _effect.activate_pending_entries(activation_entries):
 		_fail_closed("global renderer rejected precommitted same-layout edit")
 		return false

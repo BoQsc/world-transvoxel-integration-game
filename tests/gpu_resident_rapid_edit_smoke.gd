@@ -91,10 +91,17 @@ func _run() -> void:
 	var same_callback_precommits := int(resident_status.get(
 		"same_callback_edit_precommits", 0
 	))
+	var same_callback_precommit_chunks := int(resident_status.get(
+		"same_callback_edit_precommit_chunks", 0
+	))
 	var retired_chunks := int(native_metrics.get("retired_chunks", 0))
 	if same_layout_cohorts <= 0 or same_layout_chunks < 2 \
+			or same_callback_precommits != 12 \
+			or same_callback_precommit_chunks < 24 \
 			or retired_chunks <= 0:
-		_fail("rapid edit did not use the loaded same-layout cohort: %s" % str(native_metrics))
+		_fail("rapid edit did not precommit every two-chunk same-layout cohort: native=%s controller=%s" % [
+			str(native_metrics), str(resident_status),
+		])
 		return
 	var effect_status: Dictionary = resident_status.get("effect_status", {})
 	var arena_status: Dictionary = effect_status.get("arena_status", {})
@@ -115,11 +122,12 @@ func _run() -> void:
 	if not _world.stop_backend_world() or not await _wait_for_state("stopped"):
 		_fail("rapid edit world did not stop")
 		return
-	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 same_layout_cohorts=%d same_layout_chunks=%d same_callback_precommits=%d maximum_pending_retirements=%d retired_chunks=%d incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
+	print("GPU_RESIDENT_RAPID_EDIT_SMOKE_PASS edits=12 checked_frames=%d mixed_revisions=0 same_layout_cohorts=%d same_layout_chunks=%d same_callback_precommits=%d same_callback_precommit_chunks=%d maximum_pending_retirements=%d retired_chunks=%d incremental_dispatches=%d copy_fallbacks=0 regenerated_cells=%d last_upload_bytes=%d readback_bytes=%d" % [
 		_checked_frames,
 		same_layout_cohorts,
 		same_layout_chunks,
 		same_callback_precommits,
+		same_callback_precommit_chunks,
 		_maximum_pending_retirements,
 		retired_chunks,
 		int(arena_status.get("incremental_dispatch_count", 0)),
