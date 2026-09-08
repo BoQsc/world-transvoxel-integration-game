@@ -2201,6 +2201,19 @@ func _begin_group_retirement(
 	if not _groups.has(group_key):
 		return
 	var group: Dictionary = _groups[group_key]
+	var cohort_id := int(group.get("activation_cohort_id", 0))
+	var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+	if bool(cohort.get("native_committed", false)):
+		# Native visibility changed for the whole cohort. No member may leave
+		# the route table until all rendering-device callbacks complete.
+		for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
+			var member_group_key := str(member_group_key_value)
+			if not _groups.has(member_group_key):
+				continue
+			var member_group := Dictionary(_groups[member_group_key])
+			member_group["retire_after_activation"] = true
+			_groups[member_group_key] = member_group
+		return
 	if bool(group.get("retiring", false)):
 		return
 	group["retiring"] = true
@@ -2295,6 +2308,17 @@ func _reject_native_request(request: Dictionary, error: String) -> void:
 
 func _cleanup_group(group_key: String) -> void:
 	if not _groups.has(group_key):
+		return
+	var pending_group := Dictionary(_groups[group_key])
+	var pending_cohort_id := int(pending_group.get("activation_cohort_id", 0))
+	var pending_cohort := Dictionary(_activation_cohorts.get(pending_cohort_id, {}))
+	if bool(pending_cohort.get("native_committed", false)):
+		# A late retirement callback can race the already-committed activation.
+		# Preserve the route, then issue a fresh retirement after activation.
+		pending_group["retire_after_activation"] = true
+		pending_group["retiring"] = false
+		pending_group["retired"] = {}
+		_groups[group_key] = pending_group
 		return
 	_activation_retry_membership.erase(group_key)
 	var group: Dictionary = _groups[group_key]

@@ -27,6 +27,9 @@ class AdmissionBackend:
 			chunks.append(member)
 		return {"status": "ACTIVE", "active": true, "chunks": chunks}
 
+	func set_gpu_resident_render_chunk_active(_identities: Array, _active: bool) -> Dictionary:
+		return {"status": "OK"}
+
 class AdmissionEffect:
 	extends RefCounted
 	var submitted_entries := 0
@@ -760,7 +763,9 @@ func _test_regional_commit_barrier() -> bool:
 func _test_committed_cohort_supersession() -> bool:
 	var controller := Controller.new()
 	var effect := RetireEffect.new()
+	var backend := AdmissionBackend.new()
 	controller._effect = effect
+	controller._backend_terrain = backend
 	controller._activation_cohorts[7] = {
 		"native_committed": true,
 		"group_keys": ["left", "right"],
@@ -776,24 +781,28 @@ func _test_committed_cohort_supersession() -> bool:
 			"sequences": {"terrain": index + 1},
 			"activated": {"terrain": true},
 		}
-	controller._supersede_activation_cohort("left")
+	controller._groups["left"]["retiring"] = true
+	controller._groups["left"]["retired"] = {"terrain": true}
+	controller._try_finish_retirement("left")
 	var retained := controller._activation_cohorts.has(7) \
 		and controller._groups.has("left") and controller._groups.has("right") \
 		and bool(controller._groups["left"].get("retire_after_activation", false)) \
-		and bool(controller._groups["right"].get("retire_after_activation", false))
+		and not bool(controller._groups["left"].get("retiring", false))
 	controller._try_finish_activation_cohort("right")
 	var retired_after_callback := not controller._activation_cohorts.has(7) \
 		and bool(controller._groups["left"].get("retiring", false)) \
-		and bool(controller._groups["right"].get("retiring", false)) \
-		and effect.retired == [1, 2]
+		and bool(controller._groups["right"].get("active", false)) \
+		and effect.retired == [1]
 	if not retained or not retired_after_callback:
 		push_error(
 			"committed cohort supersession mismatch: retained=%s retired=%s groups=%s cohorts=%s"
 			% [retained, retired_after_callback, str(controller._groups), str(controller._activation_cohorts)]
 		)
 		controller.free()
+		backend.free()
 		return false
 	controller.free()
+	backend.free()
 	return true
 
 
