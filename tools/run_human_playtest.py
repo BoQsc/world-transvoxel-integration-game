@@ -28,6 +28,7 @@ LATEST_HUMAN_PROFILE = "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand"
 LATEST_HUMAN_MATERIAL = "production_texture_array"
 WATERFALL_SAMPLE_INTERVAL_SECONDS = 0.25
 WATERFALL_GPU_SAMPLE_INTERVAL_SECONDS = 0.5
+DEFAULT_WATERFALL_MEMORY_LIMIT_GIB = 4.0
 
 
 def repo_root() -> pathlib.Path:
@@ -232,6 +233,8 @@ def _write_usage_report(
     exit_code: int,
     sampling_started_unix_seconds: float,
     sampling_ended_unix_seconds: float,
+    termination_reason: str | None,
+    memory_limit_bytes: int,
 ) -> None:
     cpu_values = [float(sample["process_cpu_percent"]) for sample in samples]
     rss_values = [int(sample["rss_bytes"]) for sample in samples]
@@ -265,6 +268,8 @@ def _write_usage_report(
         "sampling_started_unix_seconds": sampling_started_unix_seconds,
         "sampling_ended_unix_seconds": sampling_ended_unix_seconds,
         "exit_code": exit_code,
+        "termination_reason": termination_reason,
+        "memory_limit_bytes": memory_limit_bytes,
         "sample_count": len(samples),
         "process_cpu_percent_mean": (
             sum(cpu_values) / len(cpu_values) if cpu_values else 0.0
@@ -320,7 +325,10 @@ def _gpu_board_sample() -> dict[str, float | str] | None:
 
 
 def run_waterfall_session(
-    command: list[str], project: pathlib.Path, paths: dict[str, pathlib.Path]
+    command: list[str],
+    project: pathlib.Path,
+    paths: dict[str, pathlib.Path],
+    memory_limit_bytes: int,
 ) -> int:
     for path in [paths["trace"], paths["usage"], paths["report"], paths["summary"]]:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -353,6 +361,7 @@ def run_waterfall_session(
     next_gpu_sample = 0.0
     failure_reported = False
     failure_seen_at: float | None = None
+    termination_reason: str | None = None
     while process.poll() is None:
         time.sleep(WATERFALL_SAMPLE_INTERVAL_SECONDS)
         try:
@@ -371,6 +380,16 @@ def run_waterfall_session(
                     sample.update(gpu_sample)
                 next_gpu_sample = elapsed_seconds + WATERFALL_GPU_SAMPLE_INTERVAL_SECONDS
             samples.append(sample)
+            if memory.rss >= memory_limit_bytes:
+                termination_reason = "rss_memory_limit_exceeded"
+                print(
+                    "WT_TERRAIN_WATERFALL_MEMORY_ABORT "
+                    f"rss_bytes={memory.rss} limit_bytes={memory_limit_bytes} "
+                    f"usage={paths['usage']}",
+                    flush=True,
+                )
+                process.terminate()
+                break
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             break
         if failure_path.is_file():
@@ -384,11 +403,17 @@ def run_waterfall_session(
                 and time.perf_counter() - failure_seen_at >= 5.0
             ):
                 process.terminate()
-    exit_code = process.wait()
+    try:
+        exit_code = process.wait(timeout=10.0)
+    except subprocess.TimeoutExpired:
+        termination_reason = termination_reason or "termination_timeout"
+        process.kill()
+        exit_code = process.wait(timeout=10.0)
     wall_seconds = time.perf_counter() - started
     _write_usage_report(
         paths["usage"], samples, affinity, wall_seconds, exit_code,
-        sampling_started_unix_seconds, time.time(),
+        sampling_started_unix_seconds, time.time(), termination_reason,
+        memory_limit_bytes,
     )
     if not failure_reported:
         print_failure_self_report(project)
@@ -565,6 +590,12 @@ def main(argv: list[str]) -> int:
             "construction route, then close and analyze it."
         ),
     )
+    parser.add_argument(
+        "--terrain-waterfall-memory-limit-gib",
+        type=float,
+        default=DEFAULT_WATERFALL_MEMORY_LIMIT_GIB,
+        help="Terminate a waterfall capture before Godot exceeds this RSS limit.",
+    )
     args = parser.parse_args(argv)
     if args.cpu_causal_trace_output:
         args.cpu_causal_trace = True
@@ -588,7 +619,10 @@ def main(argv: list[str]) -> int:
     failure_path = failure_report_path(project)
     failure_path.unlink(missing_ok=True)
     if paths is not None:
-        return run_waterfall_session(command, project, paths)
+        memory_limit_bytes = int(args.terrain_waterfall_memory_limit_gib * 1024**3)
+        if memory_limit_bytes <= 0:
+            raise ValueError("terrain waterfall memory limit must be positive")
+        return run_waterfall_session(command, project, paths, memory_limit_bytes)
     exit_code = subprocess.call(command, cwd=project)
     print_failure_self_report(project)
     return exit_code
