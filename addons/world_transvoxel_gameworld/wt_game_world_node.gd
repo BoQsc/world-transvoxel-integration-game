@@ -217,7 +217,8 @@ func start_world() -> bool:
 	if not _submit_initial_viewers():
 		return false
 	if _player != null and player_driven_viewer_enabled:
-		update_player_viewer(true)
+		if not update_player_viewer(true):
+			return _fail("initial player terrain viewers were rejected: %s" % _terrain_world_error())
 	if startup_requires_cold_idle:
 		if not await wait_for_cold_idle(_expected_resource_count, _expected_resource_count):
 			return _fail("terrain did not settle: %s" % str(_last_cold_idle_summary))
@@ -257,6 +258,10 @@ func update_player_viewer(force: bool = false) -> bool:
 		if not _update_player_collision_invoker(position, force):
 			return false
 		if not _update_player_interaction_collision_invoker(force):
+			return false
+		# Aim changes without player translation. Keep the LOD0 interaction
+		# viewer on the current tool target even while the broad viewer is still.
+		if not _update_focus_player_viewer(force):
 			return false
 		return _update_player_foreground_priority_leases(force)
 	if not force and player_viewer_coalesce_while_streaming:
@@ -1814,10 +1819,14 @@ func _vector3_summary(value: Vector3) -> Dictionary:
 func _update_focus_player_viewer(force: bool) -> bool:
 	if not player_focus_viewer_enabled or player_focus_viewer_distance <= 0.0:
 		return true
-	var camera := _player.get_node_or_null("FirstPersonCamera") as Camera3D
-	if camera == null:
+	if not _player.has_method("get_foreground_priority_targets"):
 		return true
-	var focus_position := camera.global_position + (-camera.global_transform.basis.z * player_focus_viewer_distance)
+	var targets: Dictionary = _player.call("get_foreground_priority_targets")
+	if not bool(targets.get("focus_valid", false)):
+		return true
+	var focus_position: Vector3 = targets.get("focus_point", _player.global_position)
+	if not focus_position.is_finite():
+		return _fail("interaction focus viewer target is not finite")
 	if not force and not _should_update_focus_player_viewer(focus_position):
 		return true
 	_viewer_revision += 1

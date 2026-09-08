@@ -475,6 +475,21 @@ func _start_profile() -> void:
 	game_world.startup_minimum_collision_resources = int(settings.get("startup_minimum_collision_resources", expected_resources))
 	game_world.runtime_active_chunk_capacity = int(settings.get("runtime_active_chunk_capacity", 0))
 	game_world.runtime_viewer_capacity = int(settings.get("runtime_viewer_capacity", 0))
+	# The native limit applies independently to visual and collision viewers.
+	# GPU play uses the persistent coverage, player, predictive and aim-focus
+	# visual viewers concurrently; admitting fewer silently rejects the later
+	# interaction viewers before their LOD0 topology can be planned.
+	var configured_viewers: Array = settings.get("viewers", [])
+	var required_visual_viewers := configured_viewers.size()
+	if game_world.player_driven_viewer_enabled:
+		required_visual_viewers += 1
+	if game_world.player_predictive_viewer_enabled:
+		required_visual_viewers += 1
+	if game_world.player_focus_viewer_enabled:
+		required_visual_viewers += 1
+	game_world.runtime_viewer_capacity = maxi(
+		game_world.runtime_viewer_capacity, required_visual_viewers
+	)
 	if game_world.player_interaction_collision_invoker_enabled:
 		game_world.runtime_viewer_capacity = maxi(game_world.runtime_viewer_capacity, 4)
 	game_world.runtime_demand_capacity_per_viewer = int(settings.get("runtime_demand_capacity_per_viewer", 0))
