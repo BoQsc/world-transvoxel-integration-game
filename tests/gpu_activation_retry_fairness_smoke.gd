@@ -231,10 +231,13 @@ func _initialize() -> void:
 	if not _test_regional_commit_barrier():
 		quit(1)
 		return
+	if not _test_committed_cohort_supersession():
+		quit(1)
+		return
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1 committed_cohort_supersession=1")
 	quit(0)
 
 
@@ -751,6 +754,46 @@ func _test_regional_commit_barrier() -> bool:
 		return false
 	controller.free()
 	backend.free()
+	return true
+
+
+func _test_committed_cohort_supersession() -> bool:
+	var controller := Controller.new()
+	var effect := RetireEffect.new()
+	controller._effect = effect
+	controller._activation_cohorts[7] = {
+		"native_committed": true,
+		"group_keys": ["left", "right"],
+	}
+	for index in range(2):
+		var key := "left" if index == 0 else "right"
+		controller._groups[key] = {
+			"active": false,
+			"native_active": true,
+			"activation_queued": true,
+			"activation_cohort_id": 7,
+			"requests": {"terrain": {"identity": {"generation": index + 1}}},
+			"sequences": {"terrain": index + 1},
+			"activated": {"terrain": true},
+		}
+	controller._supersede_activation_cohort("left")
+	var retained := controller._activation_cohorts.has(7) \
+		and controller._groups.has("left") and controller._groups.has("right") \
+		and bool(controller._groups["left"].get("retire_after_activation", false)) \
+		and bool(controller._groups["right"].get("retire_after_activation", false))
+	controller._try_finish_activation_cohort("right")
+	var retired_after_callback := not controller._activation_cohorts.has(7) \
+		and bool(controller._groups["left"].get("retiring", false)) \
+		and bool(controller._groups["right"].get("retiring", false)) \
+		and effect.retired == [1, 2]
+	if not retained or not retired_after_callback:
+		push_error(
+			"committed cohort supersession mismatch: retained=%s retired=%s groups=%s cohorts=%s"
+			% [retained, retired_after_callback, str(controller._groups), str(controller._activation_cohorts)]
+		)
+		controller.free()
+		return false
+	controller.free()
 	return true
 
 

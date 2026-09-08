@@ -1886,6 +1886,7 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 				Dictionary(_groups[member_group_key]), "activated"
 		):
 			return
+	var retire_after_activation: Array[String] = []
 	for member_group_key_value in group_keys:
 		var member_group_key := str(member_group_key_value)
 		var member_group := Dictionary(_groups[member_group_key])
@@ -1893,10 +1894,14 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 		member_group["activation_queued"] = false
 		member_group["activation_cohort_id"] = 0
 		_groups[member_group_key] = member_group
+		if bool(member_group.get("retire_after_activation", false)):
+			retire_after_activation.append(member_group_key)
 		_record_lifecycle_event("ACTIVE", member_group_key)
 		_activated_chunks += 1
 	_activation_cohorts.erase(cohort_id)
 	_activation_cohorts_committed += 1
+	for member_group_key in retire_after_activation:
+		_begin_group_retirement(member_group_key, "superseded_after_activation")
 
 
 func _reconcile_active_chunks() -> int:
@@ -2166,6 +2171,18 @@ func _supersede_activation_cohort(group_key: String) -> void:
 	var group := Dictionary(_groups.get(group_key, {}))
 	var cohort_id := int(group.get("activation_cohort_id", 0))
 	var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+	if bool(cohort.get("native_committed", false)):
+		# Native indirect draws changed atomically already. Keep every cohort
+		# member alive until the rendering-device activation callbacks finish,
+		# then retire the superseded set as a normal complete cohort.
+		for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
+			var member_group_key := str(member_group_key_value)
+			if not _groups.has(member_group_key):
+				continue
+			var member_group := Dictionary(_groups[member_group_key])
+			member_group["retire_after_activation"] = true
+			_groups[member_group_key] = member_group
+		return
 	_activation_cohorts.erase(cohort_id)
 	for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
 		var member_group_key := str(member_group_key_value)
