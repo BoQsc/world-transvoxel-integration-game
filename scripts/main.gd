@@ -414,7 +414,8 @@ func _start_profile() -> void:
 	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
 	if gpu_resident_render_candidate_requested:
 		predictive_viewer_enabled = true
-	if autonomous and human_visual_capture_path.is_empty():
+	if autonomous and human_visual_capture_path.is_empty() and \
+			not gpu_resident_render_candidate_requested:
 		predictive_viewer_enabled = false
 	game_world.player_predictive_viewer_enabled = predictive_viewer_enabled
 	game_world.player_predictive_viewer_distance = maxf(
@@ -432,7 +433,8 @@ func _start_profile() -> void:
 	var collision_invoker_enabled := gpu_resident_render_candidate_requested or bool(
 		settings.get("player_collision_invoker_enabled", false)
 	)
-	if autonomous and human_visual_capture_path.is_empty():
+	if autonomous and human_visual_capture_path.is_empty() and \
+			not gpu_resident_render_candidate_requested:
 		collision_invoker_enabled = false
 	game_world.player_collision_invoker_enabled = collision_invoker_enabled
 	game_world.player_collision_invoker_radius_chunks = \
@@ -460,7 +462,8 @@ func _start_profile() -> void:
 		foreground_priority_enabled = true
 	elif foreground_priority_override == "disabled":
 		foreground_priority_enabled = false
-	elif autonomous and human_visual_capture_path.is_empty():
+	elif autonomous and human_visual_capture_path.is_empty() and \
+			not gpu_resident_render_candidate_requested:
 		foreground_priority_enabled = false
 	game_world.player_foreground_priority_enabled = foreground_priority_enabled
 	game_world.player_foreground_priority_update_interval_ms = int(settings.get(
