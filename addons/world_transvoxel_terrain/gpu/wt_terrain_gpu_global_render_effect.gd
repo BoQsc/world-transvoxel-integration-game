@@ -14,6 +14,9 @@ const COMPUTE_SHADER_FILE := preload(
 const COMMIT_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_commit.glsl"
 )
+const COMPLETION_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_completion.glsl"
+)
 const RASTER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render.glsl"
 )
@@ -28,6 +31,9 @@ const SCENE_COLOR_COPY_SHADER_FILE := preload(
 )
 const RESULT_SCHEMA := "world_transvoxel.terrain.gpu_global_render_publication.v1"
 const REQUEST_CAPACITY := 16
+const INTERACTION_REQUEST_CAPACITY := 8
+const BACKGROUND_DISPATCH_CAPACITY := 4
+const INTERACTION_DISPATCH_CAPACITY := 8
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
 const DRAW_COMMAND_STRIDE := 20
@@ -42,7 +48,9 @@ var _packer = MeshingCandidate.new()
 var _arena
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
+var _pending_interaction: Array[Dictionary] = []
 var _inflight_extractions: Dictionary = {}
+var _dispatch_pending_tickets: Dictionary = {}
 var _cancelled_inflight_tickets: Dictionary = {}
 var _lifecycle_commands: Array[Dictionary] = []
 var _priority_events: Dictionary = {}
@@ -64,6 +72,8 @@ var _compute_shader := RID()
 var _compute_pipeline := RID()
 var _commit_shader := RID()
 var _commit_pipeline := RID()
+var _completion_shader := RID()
+var _completion_pipeline := RID()
 var _raster_shader := RID()
 var _raster_pipeline := RID()
 var _raster_pipeline_format := -1
@@ -157,6 +167,9 @@ var _status := {
 	"last_tested_bounds_max": Vector3.ZERO,
 	"fallback_used": false,
 	"request_capacity": REQUEST_CAPACITY,
+	"interaction_request_capacity": INTERACTION_REQUEST_CAPACITY,
+	"background_dispatch_capacity": BACKGROUND_DISPATCH_CAPACITY,
+	"interaction_dispatch_capacity": INTERACTION_DISPATCH_CAPACITY,
 	"resident_capacity": DEFAULT_RESIDENT_CAPACITY,
 	"resident_allocation_capacity": (
 		DEFAULT_RESIDENT_CAPACITY * MAXIMUM_SURFACES_PER_CHUNK + REQUEST_CAPACITY
@@ -186,7 +199,19 @@ var _status := {
 	"event_count": 0,
 	"priority_event_count": 0,
 	"queued_request_count": 0,
+	"queued_interaction_request_count": 0,
 	"inflight_extraction_count": 0,
+	"dispatch_pending_count": 0,
+	"background_dispatch_pending_count": 0,
+	"interaction_dispatch_pending_count": 0,
+	"peak_background_dispatch_pending_count": 0,
+	"peak_interaction_dispatch_pending_count": 0,
+	"background_dispatch_deferrals": 0,
+	"interaction_dispatch_deferrals": 0,
+	"invalid_dispatch_completions": 0,
+	"dispatch_completion_requests": 0,
+	"dispatch_completion_completions": 0,
+	"dispatch_completion_bytes": 0,
 	"counter_readback_bytes": 0,
 	"geometry_readback_bytes": 0,
 	"render_target_readback_bytes": 0,
@@ -394,10 +419,13 @@ func _queue_packed_request(
 	proven_empty: bool = false
 ) -> int:
 	var key := _identity_key(identity)
+	var interaction := bool(identity.get("incremental_edit", false)) \
+			or bool(identity.get("interaction_priority", false))
 	_mutex.lock()
 	var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
 	if _close_requested or publication_sequence <= latest_sequence \
-			or _pending.size() >= REQUEST_CAPACITY:
+			or (interaction and _pending_interaction.size() >= INTERACTION_REQUEST_CAPACITY) \
+			or (not interaction and _pending.size() >= REQUEST_CAPACITY):
 		_status["rejected"] = int(_status["rejected"]) + 1
 		_status["last_error"] = "global render request is stale, closed, or saturated"
 		_mutex.unlock()
@@ -405,7 +433,7 @@ func _queue_packed_request(
 	var request_id := _next_request_id
 	_next_request_id += 1
 	_latest_sequence_by_key[key] = publication_sequence
-	_pending.append({
+	var request := {
 		"request_id": request_id,
 		"key": key,
 		"publication_sequence": publication_sequence,
@@ -416,9 +444,14 @@ func _queue_packed_request(
 		"bounds_max": bounds_max,
 		"proven_empty": proven_empty,
 		"input_buffers": input_buffers.duplicate(),
-	})
+	}
+	if interaction:
+		_pending_interaction.append(request)
+	else:
+		_pending.append(request)
 	_status["requested"] = int(_status["requested"]) + 1
-	_status["queued_request_count"] = _pending.size()
+	_status["queued_request_count"] = _pending.size() + _pending_interaction.size()
+	_status["queued_interaction_request_count"] = _pending_interaction.size()
 	_status["last_error"] = ""
 	_mutex.unlock()
 	return request_id
@@ -427,6 +460,7 @@ func _queue_packed_request(
 func configure_resident_capacity(capacity: int) -> bool:
 	_mutex.lock()
 	if _status.get("initialized", false) or not _pending.is_empty() \
+			or not _pending_interaction.is_empty() \
 			or not _entries.is_empty():
 		_status["last_error"] = "resident capacity cannot change after use"
 		_mutex.unlock()
@@ -596,8 +630,10 @@ func close() -> void:
 	_mutex.lock()
 	_close_requested = true
 	_pending.clear()
+	_pending_interaction.clear()
 	_lifecycle_commands.clear()
 	_status["queued_request_count"] = 0
+	_status["queued_interaction_request_count"] = 0
 	_mutex.unlock()
 	RenderingServer.call_on_render_thread(Callable(self, "_close_on_render_thread"))
 
@@ -621,6 +657,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_apply_pending_production_water_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("materials", phase_start)
+	_drain_dispatch_completions_on_render_thread()
 	_drain_arena_readbacks_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("arena_readback", phase_start)
@@ -657,6 +694,7 @@ func _record_stage_time(stage: String, start_us: int) -> int:
 
 func _ensure_shaders() -> bool:
 	if _compute_pipeline.is_valid() and _commit_pipeline.is_valid() \
+			and _completion_pipeline.is_valid() \
 			and _raster_shader.is_valid() \
 			and _production_raster_shader.is_valid() \
 			and _production_water_shader.is_valid() \
@@ -671,23 +709,28 @@ func _ensure_shaders() -> bool:
 	_mutex.unlock()
 	var compute_file := COMPUTE_SHADER_FILE as RDShaderFile
 	var commit_file := COMMIT_SHADER_FILE as RDShaderFile
+	var completion_file := COMPLETION_SHADER_FILE as RDShaderFile
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
 	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
 	var production_water_file := PRODUCTION_WATER_SHADER_FILE as RDShaderFile
 	var scene_color_copy_file := SCENE_COLOR_COPY_SHADER_FILE as RDShaderFile
-	if compute_file == null or commit_file == null or raster_file == null \
+	if compute_file == null or commit_file == null or completion_file == null \
+			or raster_file == null \
 			or production_raster_file == null \
 			or production_water_file == null \
 			or scene_color_copy_file == null \
 			or not compute_file.get_base_error().is_empty() \
 			or not commit_file.get_base_error().is_empty() \
+			or not completion_file.get_base_error().is_empty() \
 			or not raster_file.get_base_error().is_empty() \
 			or not production_raster_file.get_base_error().is_empty() \
 			or not production_water_file.get_base_error().is_empty() \
 			or not scene_color_copy_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s %s %s %s %s" % [
+		_record_render_error("global render shader import is invalid: %s %s %s %s %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
 			commit_file.get_base_error() if commit_file != null else "commit missing",
+			completion_file.get_base_error() \
+				if completion_file != null else "completion missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
 			production_raster_file.get_base_error() \
 				if production_raster_file != null else "production raster missing",
@@ -703,6 +746,10 @@ func _ensure_shaders() -> bool:
 	if shader_compile_error.is_empty():
 		shader_compile_error = _shader_file_compile_error(
 			commit_file, RenderingDevice.SHADER_STAGE_COMPUTE
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			completion_file, RenderingDevice.SHADER_STAGE_COMPUTE
 		)
 	if shader_compile_error.is_empty():
 		shader_compile_error = _shader_file_compile_error(
@@ -744,6 +791,14 @@ func _ensure_shaders() -> bool:
 		return false
 	_commit_pipeline = _rendering_device.compute_pipeline_create(_commit_shader)
 	if not _commit_pipeline.is_valid():
+		return false
+	_completion_shader = _rendering_device.shader_create_from_spirv(
+		completion_file.get_spirv()
+	)
+	if not _completion_shader.is_valid():
+		return false
+	_completion_pipeline = _rendering_device.compute_pipeline_create(_completion_shader)
+	if not _completion_pipeline.is_valid():
 		return false
 	_raster_shader = _rendering_device.shader_create_from_spirv(
 		raster_file.get_spirv()
@@ -796,6 +851,8 @@ func _ensure_shaders() -> bool:
 			_compute_pipeline,
 			_commit_shader,
 			_commit_pipeline,
+			_completion_shader,
+			_completion_pipeline,
 			_vertex_format,
 			_resident_allocation_capacity()
 		):
@@ -952,12 +1009,40 @@ func _apply_pending_production_water_on_render_thread() -> void:
 	_mutex.unlock()
 
 
+func _drain_dispatch_completions_on_render_thread() -> void:
+	if _arena == null:
+		return
+	for completion in _arena.pop_completed_dispatches():
+		var ticket := int(completion.get("ticket", 0))
+		_dispatch_pending_tickets.erase(ticket)
+		if bool(completion.get("valid", false)):
+			continue
+		if not _inflight_extractions.has(ticket):
+			continue
+		var request: Dictionary = _inflight_extractions[ticket]
+		_inflight_extractions.erase(ticket)
+		_arena.discard_readback(ticket)
+		_rollback_gpu_candidate_on_render_thread(request)
+		_reject_request_on_render_thread(
+			request, str(completion.get("error", "GPU extraction completion failed"))
+		)
+		_mutex.lock()
+		_status["invalid_dispatch_completions"] = int(
+			_status["invalid_dispatch_completions"]
+		) + 1
+		_mutex.unlock()
+	_sync_arena_status_on_render_thread()
+	_sync_dispatch_lane_status_on_render_thread()
+
+
 func _drain_arena_readbacks_on_render_thread() -> void:
 	if _arena == null:
 		return
 	for completion in _arena.pop_completed_readbacks():
 		var ticket := int(completion.get("ticket", 0))
 		var completion_data: PackedByteArray = completion.get("data", PackedByteArray())
+		_dispatch_pending_tickets.erase(ticket)
+		_arena.discard_dispatch_completion(ticket)
 		if not _inflight_extractions.has(ticket):
 			_arena.discard_readback(ticket, completion_data.size())
 			continue
@@ -1022,16 +1107,21 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 	_status["active_entry_count"] = _active_sequence_by_key.size()
 	_status["inflight_extraction_count"] = _inflight_extractions.size()
 	_mutex.unlock()
+	_sync_dispatch_lane_status_on_render_thread()
 
 
 func _drain_pending_on_render_thread() -> void:
 	var requests: Array[Dictionary] = []
 	_mutex.lock()
-	requests.assign(_pending)
+	requests.assign(_pending_interaction)
+	requests.append_array(_pending)
+	_pending_interaction.clear()
 	_pending.clear()
 	_status["queued_request_count"] = 0
+	_status["queued_interaction_request_count"] = 0
 	_mutex.unlock()
 	var deferred: Array[Dictionary] = []
+	var deferred_interaction: Array[Dictionary] = []
 	for request in requests:
 		var key := str(request.get("key", ""))
 		var sequence := int(request.get("publication_sequence", 0))
@@ -1061,6 +1151,23 @@ func _drain_pending_on_render_thread() -> void:
 				_reject_request_on_render_thread(request, _arena.get_last_error())
 				continue
 			_finish_entry_on_render_thread(request, empty_entry)
+			continue
+		var request_identity := Dictionary(request.get("identity", {}))
+		var interaction := bool(request_identity.get("incremental_edit", false)) \
+				or bool(request_identity.get("interaction_priority", false))
+		var lane_pending := _dispatch_lane_count(interaction)
+		var lane_capacity := INTERACTION_DISPATCH_CAPACITY \
+				if interaction else BACKGROUND_DISPATCH_CAPACITY
+		if lane_pending >= lane_capacity:
+			if interaction:
+				deferred_interaction.append(request)
+			else:
+				deferred.append(request)
+			_mutex.lock()
+			var deferral_key := "interaction_dispatch_deferrals" \
+					if interaction else "background_dispatch_deferrals"
+			_status[deferral_key] = int(_status[deferral_key]) + 1
+			_mutex.unlock()
 			continue
 		var previous_entry := {}
 		if _active_sequence_by_key.has(key):
@@ -1104,14 +1211,42 @@ func _drain_pending_on_render_thread() -> void:
 		if _critical_path_timeline_enabled:
 			request["gpu_dispatch_ticks_usec"] = Time.get_ticks_usec()
 		_inflight_extractions[ticket] = request
+		_dispatch_pending_tickets[ticket] = interaction
 		_finish_entry_on_render_thread(request, extraction)
-	if not deferred.is_empty():
+	if not deferred.is_empty() or not deferred_interaction.is_empty():
 		_mutex.lock()
+		_pending_interaction.append_array(deferred_interaction)
 		_pending.append_array(deferred)
-		_status["queued_request_count"] = _pending.size()
+		_status["queued_request_count"] = _pending.size() + _pending_interaction.size()
+		_status["queued_interaction_request_count"] = _pending_interaction.size()
 		_mutex.unlock()
 	_mutex.lock()
 	_status["inflight_extraction_count"] = _inflight_extractions.size()
+	_mutex.unlock()
+	_sync_dispatch_lane_status_on_render_thread()
+
+
+func _dispatch_lane_count(interaction: bool) -> int:
+	var count := 0
+	for lane_value in _dispatch_pending_tickets.values():
+		if bool(lane_value) == interaction:
+			count += 1
+	return count
+
+
+func _sync_dispatch_lane_status_on_render_thread() -> void:
+	var interaction_count := _dispatch_lane_count(true)
+	var background_count := _dispatch_lane_count(false)
+	_mutex.lock()
+	_status["dispatch_pending_count"] = interaction_count + background_count
+	_status["interaction_dispatch_pending_count"] = interaction_count
+	_status["background_dispatch_pending_count"] = background_count
+	_status["peak_interaction_dispatch_pending_count"] = maxi(
+		int(_status["peak_interaction_dispatch_pending_count"]), interaction_count
+	)
+	_status["peak_background_dispatch_pending_count"] = maxi(
+		int(_status["peak_background_dispatch_pending_count"]), background_count
+	)
 	_mutex.unlock()
 
 
@@ -1518,8 +1653,16 @@ func _cancel_unpublished_entry_on_render_thread(
 	key: String, publication_sequence: int
 ) -> void:
 	var retained_pending: Array[Dictionary] = []
+	var retained_interaction: Array[Dictionary] = []
 	var cancelled_queued := 0
 	_mutex.lock()
+	for request_value in _pending_interaction:
+		var request := Dictionary(request_value)
+		if str(request.get("key", "")) == key \
+				and int(request.get("publication_sequence", 0)) == publication_sequence:
+			cancelled_queued += 1
+		else:
+			retained_interaction.append(request)
 	for request_value in _pending:
 		var request := Dictionary(request_value)
 		if str(request.get("key", "")) == key \
@@ -1527,8 +1670,10 @@ func _cancel_unpublished_entry_on_render_thread(
 			cancelled_queued += 1
 		else:
 			retained_pending.append(request)
+	_pending_interaction = retained_interaction
 	_pending = retained_pending
-	_status["queued_request_count"] = _pending.size()
+	_status["queued_request_count"] = _pending.size() + _pending_interaction.size()
+	_status["queued_interaction_request_count"] = _pending_interaction.size()
 	_status["cancelled_queued_requests"] = int(
 		_status["cancelled_queued_requests"]
 	) + cancelled_queued
@@ -1547,6 +1692,8 @@ func _cancel_unpublished_entry_on_render_thread(
 		# so reclaim it immediately instead of waiting for a readback that is only
 		# requested after activation.
 		_inflight_extractions.erase(ticket)
+		_dispatch_pending_tickets.erase(ticket)
+		_arena.discard_dispatch_completion(ticket)
 		_arena.discard_readback(ticket)
 		_rollback_gpu_candidate_on_render_thread(request)
 		cancelled_inflight += 1
@@ -1558,6 +1705,7 @@ func _cancel_unpublished_entry_on_render_thread(
 		) + cancelled_inflight
 		_status["inflight_extraction_count"] = _inflight_extractions.size()
 		_mutex.unlock()
+	_sync_dispatch_lane_status_on_render_thread()
 
 
 func _sync_active_lod_inventory_on_render_thread() -> void:
@@ -2234,6 +2382,7 @@ func _close_on_render_thread() -> void:
 		_free_entry_on_render_thread(entry)
 	_entries.clear()
 	_inflight_extractions.clear()
+	_dispatch_pending_tickets.clear()
 	_cancelled_inflight_tickets.clear()
 	_active_sequence_by_key.clear()
 	if _arena != null:
@@ -2252,6 +2401,7 @@ func _close_on_render_thread() -> void:
 		_production_water_shader, _scene_color_copy_pipeline,
 		_scene_color_copy_shader, _scene_color_sampler,
 		_raster_pipeline, _raster_shader,
+		_completion_pipeline, _completion_shader,
 		_commit_pipeline, _commit_shader, _compute_pipeline, _compute_shader,
 	])
 	_production_material_set = RID()
@@ -2270,12 +2420,17 @@ func _close_on_render_thread() -> void:
 	_raster_shader = RID()
 	_commit_pipeline = RID()
 	_commit_shader = RID()
+	_completion_pipeline = RID()
+	_completion_shader = RID()
 	_compute_pipeline = RID()
 	_compute_shader = RID()
 	_mutex.lock()
 	_status["resident_entry_count"] = 0
 	_status["active_entry_count"] = 0
 	_status["inflight_extraction_count"] = 0
+	_status["dispatch_pending_count"] = 0
+	_status["background_dispatch_pending_count"] = 0
+	_status["interaction_dispatch_pending_count"] = 0
 	_close_completed = true
 	_mutex.unlock()
 
@@ -2318,6 +2473,15 @@ func _sync_arena_status_on_render_thread() -> void:
 	)
 	_status["counter_readback_bytes"] = int(
 		arena_status.get("counter_readback_bytes", 0)
+	)
+	_status["dispatch_completion_requests"] = int(
+		arena_status.get("dispatch_completion_requests", 0)
+	)
+	_status["dispatch_completion_completions"] = int(
+		arena_status.get("dispatch_completion_completions", 0)
+	)
+	_status["dispatch_completion_bytes"] = int(
+		arena_status.get("dispatch_completion_bytes", 0)
 	)
 	_mutex.unlock()
 

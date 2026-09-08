@@ -15,6 +15,8 @@ const STATUS_STRIDE := 16
 const MAXIMUM_MESHLETS_PER_SLOT := 32
 const STATUS_SLOT_STRIDE := STATUS_STRIDE * MAXIMUM_MESHLETS_PER_SLOT
 const SUMMARY_STRIDE := 20
+const COMPLETION_STRIDE := 16
+const COMPLETION_MARKER := 0x57544350
 const PACKED_POSITION_STRIDE := 12
 const PACKED_NORMAL_STRIDE := 4
 const PACKED_META_STRIDE := 4
@@ -24,16 +26,22 @@ var _compute_shader := RID()
 var _compute_pipeline := RID()
 var _commit_shader := RID()
 var _commit_pipeline := RID()
+var _completion_shader := RID()
+var _completion_pipeline := RID()
 var _status_buffer := RID()
 var _summary_buffer := RID()
 var _activation_buffer := RID()
 var _commit_descriptor_buffer := RID()
 var _commit_uniform_set := RID()
+var _completion_buffer := RID()
+var _completion_uniform_set := RID()
 var _vertex_format := -1
 var _maximum_slots := 0
 var _pages: Array[Dictionary] = []
 var _pending_readbacks: Dictionary = {}
 var _completed_readbacks: Array[Dictionary] = []
+var _pending_dispatch_completions: Dictionary = {}
+var _completed_dispatch_completions: Array[Dictionary] = []
 var _readback_mutex := Mutex.new()
 var _next_ticket := 1
 var _closed := false
@@ -62,6 +70,9 @@ var _last_dispatch_uploaded_bytes := 0
 var _counter_readback_requests := 0
 var _counter_readback_completions := 0
 var _counter_readback_bytes := 0
+var _dispatch_completion_requests := 0
+var _dispatch_completion_completions := 0
+var _dispatch_completion_bytes := 0
 var _compacted_resident_entries := 0
 var _empty_resident_entries := 0
 var _proven_empty_resident_entries := 0
@@ -77,12 +88,15 @@ func initialize(
 	compute_pipeline: RID,
 	commit_shader: RID,
 	commit_pipeline: RID,
+	completion_shader: RID,
+	completion_pipeline: RID,
 	vertex_format: int,
 	maximum_slots: int
 ) -> bool:
 	if rendering_device == null or not compute_shader.is_valid() \
 			or not compute_pipeline.is_valid() or not commit_shader.is_valid() \
-			or not commit_pipeline.is_valid() or vertex_format < 0 \
+			or not commit_pipeline.is_valid() or not completion_shader.is_valid() \
+			or not completion_pipeline.is_valid() or vertex_format < 0 \
 			or maximum_slots <= 0:
 		_last_error = "resident arena initialization parameters are invalid"
 		return false
@@ -91,6 +105,8 @@ func initialize(
 	_compute_pipeline = compute_pipeline
 	_commit_shader = commit_shader
 	_commit_pipeline = commit_pipeline
+	_completion_shader = completion_shader
+	_completion_pipeline = completion_pipeline
 	_vertex_format = vertex_format
 	_maximum_slots = maximum_slots
 	_status_buffer = _rendering_device.storage_buffer_create(
@@ -102,12 +118,15 @@ func initialize(
 	_activation_buffer = _rendering_device.storage_buffer_create(
 		maximum_slots * 4, PackedByteArray()
 	)
+	_completion_buffer = _rendering_device.storage_buffer_create(
+		maximum_slots * COMPLETION_STRIDE, PackedByteArray()
+	)
 	# Header plus one candidate and one retirement slot per resident allocation.
 	_commit_descriptor_buffer = _rendering_device.storage_buffer_create(
 		(4 + maximum_slots * 2) * 4, PackedByteArray()
 	)
 	if not _status_buffer.is_valid() or not _summary_buffer.is_valid() \
-			or not _activation_buffer.is_valid() \
+			or not _activation_buffer.is_valid() or not _completion_buffer.is_valid() \
 			or not _commit_descriptor_buffer.is_valid():
 		_last_error = "resident arena GPU publication buffers could not be allocated"
 		return false
@@ -124,7 +143,14 @@ func initialize(
 	_commit_uniform_set = _rendering_device.uniform_set_create(
 		commit_uniforms, _commit_shader, 0
 	)
-	if not _commit_uniform_set.is_valid():
+	var completion_uniform := RDUniform.new()
+	completion_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	completion_uniform.binding = 0
+	completion_uniform.add_id(_completion_buffer)
+	_completion_uniform_set = _rendering_device.uniform_set_create(
+		[completion_uniform], _completion_shader, 0
+	)
+	if not _commit_uniform_set.is_valid() or not _completion_uniform_set.is_valid():
 		_last_error = "resident arena GPU publication uniform set is invalid"
 		return false
 	_closed = false
@@ -269,6 +295,8 @@ func lease_and_dispatch(
 		strides, slot_index, global_slot, dirty_regular_brick_mask,
 		bounds_min, bounds_max
 	)
+	var ticket := _next_ticket
+	_next_ticket += 1
 	var compute_list := _rendering_device.compute_list_begin()
 	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _compute_pipeline)
 	_rendering_device.compute_list_bind_uniform_set(
@@ -280,6 +308,20 @@ func lease_and_dispatch(
 	_rendering_device.compute_list_dispatch(
 		compute_list, int((cell_count + LOCAL_SIZE - 1) / LOCAL_SIZE), 1, 1
 	)
+	_rendering_device.compute_list_add_barrier(compute_list)
+	_rendering_device.compute_list_bind_compute_pipeline(
+		compute_list, _completion_pipeline
+	)
+	_rendering_device.compute_list_bind_uniform_set(
+		compute_list, _completion_uniform_set, 0
+	)
+	var completion_parameters := PackedInt32Array([
+		global_slot, ticket, int(page.get("generation", 0)), COMPLETION_MARKER,
+	]).to_byte_array()
+	_rendering_device.compute_list_set_push_constant(
+		compute_list, completion_parameters, completion_parameters.size()
+	)
+	_rendering_device.compute_list_dispatch(compute_list, 1, 1, 1)
 	_rendering_device.compute_list_end()
 	_dispatch_count += 1
 	var regenerated_cells := cell_count
@@ -290,8 +332,6 @@ func lease_and_dispatch(
 	_regenerated_cell_count += regenerated_cells
 	_last_regenerated_cell_count = regenerated_cells
 	_last_dispatch_uploaded_bytes = _uploaded_bytes - uploaded_before
-	var ticket := _next_ticket
-	_next_ticket += 1
 	_pending_readbacks[ticket] = {
 		"ticket": ticket,
 		"arena_page_index": page_index,
@@ -331,6 +371,26 @@ func lease_and_dispatch(
 	entry["uploaded_bytes"] = _last_dispatch_uploaded_bytes
 	_active_slot_count += 1
 	_peak_active_slot_count = maxi(_peak_active_slot_count, _active_slot_count)
+	_pending_dispatch_completions[ticket] = {
+		"ticket": ticket,
+		"global_slot": global_slot,
+		"arena_generation": int(page.get("generation", 0)),
+	}
+	var completion_error := _rendering_device.buffer_get_data_async(
+		_completion_buffer,
+		Callable(self, "_on_dispatch_completion").bind(ticket),
+		global_slot * COMPLETION_STRIDE,
+		COMPLETION_STRIDE
+	)
+	if completion_error != OK:
+		_pending_dispatch_completions.erase(ticket)
+		_pending_readbacks.erase(ticket)
+		release(entry)
+		_last_error = "resident arena dispatch completion readback failed: %s" % [
+			error_string(completion_error),
+		]
+		return {}
+	_dispatch_completion_requests += 1
 	return entry
 
 
@@ -341,6 +401,39 @@ func pop_completed_readbacks() -> Array[Dictionary]:
 	_completed_readbacks.clear()
 	_readback_mutex.unlock()
 	return completed
+
+
+func pop_completed_dispatches() -> Array[Dictionary]:
+	_readback_mutex.lock()
+	var completed: Array[Dictionary] = []
+	completed.assign(_completed_dispatch_completions)
+	_completed_dispatch_completions.clear()
+	_readback_mutex.unlock()
+	var results: Array[Dictionary] = []
+	for completion in completed:
+		var ticket := int(completion.get("ticket", 0))
+		if not _pending_dispatch_completions.has(ticket):
+			continue
+		var expected: Dictionary = _pending_dispatch_completions[ticket]
+		_pending_dispatch_completions.erase(ticket)
+		var data: PackedByteArray = completion.get("data", PackedByteArray())
+		_dispatch_completion_completions += 1
+		_dispatch_completion_bytes += data.size()
+		var valid := data.size() == COMPLETION_STRIDE \
+			and int(data.decode_u32(0)) == int(expected.get("global_slot", -1)) \
+			and int(data.decode_u32(4)) == ticket \
+			and int(data.decode_u32(8)) == int(expected.get("arena_generation", -1)) \
+			and int(data.decode_u32(12)) == COMPLETION_MARKER
+		results.append({
+			"ticket": ticket,
+			"valid": valid,
+			"error": "" if valid else "GPU extraction completion token is stale",
+		})
+	return results
+
+
+func discard_dispatch_completion(ticket: int) -> void:
+	_pending_dispatch_completions.erase(ticket)
 
 
 func create_proven_empty(cell_count: int) -> Dictionary:
@@ -519,8 +612,10 @@ func release(entry: Dictionary) -> bool:
 func close() -> void:
 	_closed = true
 	_pending_readbacks.clear()
+	_pending_dispatch_completions.clear()
 	_readback_mutex.lock()
 	_completed_readbacks.clear()
+	_completed_dispatch_completions.clear()
 	_readback_mutex.unlock()
 	if _rendering_device != null:
 		for page in _pages:
@@ -528,6 +623,7 @@ func close() -> void:
 		_free_rids([
 			_commit_uniform_set, _commit_descriptor_buffer,
 			_activation_buffer, _summary_buffer, _status_buffer,
+			_completion_uniform_set, _completion_buffer,
 		])
 	_pages.clear()
 	_allocated_slot_count = 0
@@ -540,6 +636,8 @@ func close() -> void:
 	_activation_buffer = RID()
 	_summary_buffer = RID()
 	_status_buffer = RID()
+	_completion_uniform_set = RID()
+	_completion_buffer = RID()
 
 
 func get_status() -> Dictionary:
@@ -570,6 +668,10 @@ func get_status() -> Dictionary:
 		"indirect_commands_per_surface": MAXIMUM_MESHLETS_PER_SLOT,
 		"meshlet_cells_per_axis": 8,
 		"asynchronous_summary_bytes": SUMMARY_STRIDE,
+		"dispatch_completion_bytes_per_request": COMPLETION_STRIDE,
+		"dispatch_completion_requests": _dispatch_completion_requests,
+		"dispatch_completion_completions": _dispatch_completion_completions,
+		"dispatch_completion_bytes": _dispatch_completion_bytes,
 		"allocated_bytes": _scratch_allocated_bytes + _resident_allocated_bytes,
 		"scratch_allocated_bytes": _scratch_allocated_bytes,
 		"resident_allocated_bytes": _resident_allocated_bytes,
@@ -606,6 +708,14 @@ func _on_counter_readback(data: PackedByteArray, ticket: int) -> void:
 		return
 	_readback_mutex.lock()
 	_completed_readbacks.append({"ticket": ticket, "data": data})
+	_readback_mutex.unlock()
+
+
+func _on_dispatch_completion(data: PackedByteArray, ticket: int) -> void:
+	if _closed:
+		return
+	_readback_mutex.lock()
+	_completed_dispatch_completions.append({"ticket": ticket, "data": data})
 	_readback_mutex.unlock()
 
 

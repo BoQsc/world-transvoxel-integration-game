@@ -1,0 +1,13 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://rwfj5squwkdk"
+path="res://.godot/imported/wt_terrain_gpu_resident_completion.glsl-73dade2491105813fce2e65ddb40ecc8.res"
+
+[deps]
+
+source_file="res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_completion.glsl"
+dest_files=["res://.godot/imported/wt_terrain_gpu_resident_completion.glsl-73dade2491105813fce2e65ddb40ecc8.res"]
+
+[params]

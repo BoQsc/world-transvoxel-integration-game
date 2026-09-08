@@ -21,6 +21,7 @@ PROOF_PATTERN = re.compile(
     r"cells=(?P<cells>\d+).*draw_frames=(?P<draw_frames>\d+) "
     r"indirect_draw_calls=(?P<draw_calls>\d+) "
     r"meshlets=32 culling=1 atomic_replacement=1 "
+    r"dispatch_lanes=4\+8 "
     r"avoided_records=(?P<avoided>\d+) "
     r"foreground_pixels=(?P<foreground>\d+) "
     r"image_sha256=(?P<sha256>[0-9a-f]{64})$"

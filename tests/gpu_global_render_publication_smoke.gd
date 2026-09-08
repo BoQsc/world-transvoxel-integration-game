@@ -256,6 +256,69 @@ func _run() -> void:
 	if replacement_activated != 1 or replaced_retired != 1:
 		_fail("atomic replacement did not publish a complete event pair")
 		return
+	var saturation_identities: Array[Dictionary] = []
+	var prepared_before_saturation := int(
+		Dictionary(_effect.get_status()).get("prepared_entries", 0)
+	)
+	# Queue both lanes before the next render callback. Interaction work must be
+	# admitted first while background extraction remains bounded to four tokens.
+	for index in range(12):
+		var background_identity := _identity(
+			batch, 500 + index, 0x500000100 + index, 0x600000100 + index
+		)
+		background_identity["page_x"] = 10 + index
+		saturation_identities.append(background_identity)
+		if _submit(batch, background_identity, 1, false) <= 0:
+			_fail("background saturation request %d was rejected" % index)
+			return
+	for index in range(4):
+		var interaction_identity := _identity(
+			batch, 600 + index, 0x500000200 + index, 0x600000200 + index
+		)
+		interaction_identity["page_x"] = 100 + index
+		interaction_identity["incremental_edit"] = true
+		interaction_identity["dirty_regular_brick_mask"] = 1
+		saturation_identities.append(interaction_identity)
+		if _submit(batch, interaction_identity, 1, false) <= 0:
+			_fail("interaction saturation request %d was rejected" % index)
+			return
+	if not await _wait_for_status(
+		func(saturation_status: Dictionary) -> bool:
+			return int(saturation_status.get("prepared_entries", 0)) \
+					>= prepared_before_saturation + saturation_identities.size() \
+				and int(saturation_status.get("dispatch_pending_count", -1)) == 0 \
+				and int(saturation_status.get("dispatch_completion_requests", 0)) \
+					== int(saturation_status.get("dispatch_completion_completions", -1)),
+		30.0
+	):
+		_fail("dispatch lanes did not drain after saturation: %s" % _effect.get_status())
+		return
+	var saturation_status: Dictionary = _effect.get_status()
+	if int(saturation_status.get("peak_background_dispatch_pending_count", 0)) != 4 \
+			or int(saturation_status.get("peak_interaction_dispatch_pending_count", 0)) < 4 \
+			or int(saturation_status.get("peak_interaction_dispatch_pending_count", 0)) > 8 \
+			or int(saturation_status.get("background_dispatch_deferrals", 0)) < 8 \
+			or int(saturation_status.get("interaction_dispatch_deferrals", -1)) != 0 \
+			or int(saturation_status.get("invalid_dispatch_completions", -1)) != 0 \
+			or int(saturation_status.get("dispatch_completion_bytes", 0)) \
+				!= int(saturation_status.get("dispatch_completion_completions", 0)) * 16:
+		_fail("independent dispatch-lane contract failed: %s" % saturation_status)
+		return
+	for saturation_identity in saturation_identities:
+		if not _effect.retire_entry(saturation_identity, 1):
+			_fail("saturation candidate retirement was rejected")
+			return
+	if not await _wait_for_status(
+		func(retired_status: Dictionary) -> bool:
+			return int(retired_status.get("resident_entry_count", -1)) == 1 \
+				and int(retired_status.get("inflight_extraction_count", -1)) == 0,
+		10.0
+	):
+		_fail("saturation candidates were not reclaimed: %s" % _effect.get_status())
+		return
+	var cancellation_count_before := int(
+		Dictionary(_effect.get_status()).get("cancelled_queued_requests", 0)
+	) + int(Dictionary(_effect.get_status()).get("cancelled_inflight_requests", 0))
 	var cancelled_identity := _identity(batch, 401, 0x500000041, 0x600000061)
 	cancelled_identity["page_x"] = 2
 	var cancelled_request := _submit(batch, cancelled_identity, 1, false)
@@ -268,7 +331,8 @@ func _run() -> void:
 			return int(cancelled_status.get("queued_request_count", -1)) == 0 \
 				and int(cancelled_status.get("inflight_extraction_count", -1)) == 0 \
 				and int(cancelled_status.get("cancelled_queued_requests", 0)) \
-					+ int(cancelled_status.get("cancelled_inflight_requests", 0)) == 1,
+					+ int(cancelled_status.get("cancelled_inflight_requests", 0)) \
+					== cancellation_count_before + 1,
 		10.0
 	):
 		_fail("pre-publication retirement did not cancel extraction: %s" \
@@ -307,7 +371,8 @@ func _run() -> void:
 		(
 			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 stale=1 " \
 			+ "superseded=1 draw_frames=%d indirect_draw_calls=%d " \
-			+ "meshlets=32 culling=1 atomic_replacement=1 avoided_records=%d " \
+			+ "meshlets=32 culling=1 atomic_replacement=1 dispatch_lanes=4+8 " \
+			+ "avoided_records=%d " \
 			+ "foreground_pixels=%d image_sha256=%s"
 		) % [
 			EXPECTED_CELL_COUNT,
