@@ -8,7 +8,7 @@ const EditBatch := preload(
 )
 
 const SUPPORT_XZ := Vector2(2.0, 2.0)
-const EDIT_XZ := Vector2(8.0, 8.0)
+const EDIT_XZ := Vector2(12.0, 12.0)
 
 
 func _run() -> void:
@@ -37,14 +37,19 @@ func _run() -> void:
 	if support.is_empty() or edit_hit.is_empty():
 		_fail("fixture did not expose two standing surfaces")
 		return
+	if not _world.begin_cpu_causal_trace():
+		_fail("collision continuity causal trace did not start")
+		return
+	var trace_started_ticks_usec := Time.get_ticks_usec()
 	var operation := EditOperation.new()
 	operation.mode = EditOperation.Mode.CARVE
 	operation.brush_shape = EditOperation.BrushShape.SPHERE
 	operation.center = Vector3(EDIT_XZ.x, float(edit_hit.position.y) - 0.5, EDIT_XZ.y)
-	operation.radius = 3.0
+	operation.radius = 1.5
 	operation.density_value = 1.0
 	var batch := EditBatch.new()
 	batch.add_operation(operation)
+	var submitted_ticks_usec := Time.get_ticks_usec()
 	if not _world.submit_edit_batch(batch, 6751):
 		_fail("collision continuity carve was rejected")
 		return
@@ -70,10 +75,76 @@ func _run() -> void:
 	if not committed or not replacement_ready:
 		_fail("edited collision generation did not become authoritative")
 		return
+	# The runtime record becomes query-visible inside the sink call. Poll the
+	# still-open trace until the frontend has recorded completion of that call.
+	var trace: Dictionary = {}
+	for _trace_frame in range(10):
+		trace = _world.get_cpu_causal_trace_events(0, 65536)
+		var sink_recorded := false
+		for event_variant in trace.get("events", []):
+			var event: Dictionary = event_variant
+			if str(event.get("kind", "")) == "collision_sink_applied" \
+					and int(event.get("cause_id", 0)) == 1:
+				sink_recorded = true
+				break
+		if sink_recorded:
+			break
+		await process_frame
+	_world.end_cpu_causal_trace()
+	var dirty_block_mask := 0
+	var collision_sink_us := -1
+	var collision_prepared_us := -1
+	var mesh_started_us := -1
+	var mesh_finished_us := -1
+	var collision_events: Array[String] = []
+	for event_variant in trace.get("events", []):
+		var event: Dictionary = event_variant
+		if str(event.get("kind", "")) in [
+			"collision_payload_prepared", "collision_sink_applied"
+		]:
+			collision_events.append("%s:cause=%d:key=%d,%d,%d,L%d:status=%d" % [
+				str(event.get("kind", "")), int(event.get("cause_id", 0)),
+				int(event.get("chunk_x", -1)), int(event.get("chunk_y", -1)),
+				int(event.get("chunk_z", -1)), int(event.get("chunk_lod", -1)),
+				int(event.get("status", 0)),
+			])
+		if int(event.get("cause_id", 0)) != 1 \
+				or int(event.get("chunk_lod", -1)) != 0 \
+				or int(event.get("chunk_x", -1)) != 0 \
+				or int(event.get("chunk_y", -1)) != 0 \
+				or int(event.get("chunk_z", -1)) != 0:
+			continue
+		if str(event.get("kind", "")) == "collision_payload_prepared":
+			dirty_block_mask = int(event.get("status", 0))
+			collision_prepared_us = trace_started_ticks_usec \
+				+ int(event.get("elapsed_ns", 0)) / 1000 - submitted_ticks_usec
+		elif str(event.get("kind", "")) == "collision_sink_applied":
+			collision_sink_us = trace_started_ticks_usec \
+				+ int(event.get("elapsed_ns", 0)) / 1000 - submitted_ticks_usec
+		elif str(event.get("kind", "")) == "mesh_started":
+			mesh_started_us = trace_started_ticks_usec \
+				+ int(event.get("elapsed_ns", 0)) / 1000 - submitted_ticks_usec
+		elif str(event.get("kind", "")) == "mesh_finished":
+			mesh_finished_us = trace_started_ticks_usec \
+				+ int(event.get("elapsed_ns", 0)) / 1000 - submitted_ticks_usec
+	if dirty_block_mask <= 0 or dirty_block_mask >= 255:
+		_fail("edit did not exercise a partial collision patch: mask=%d events=%s" % [
+			dirty_block_mask, str(collision_events),
+		])
+		return
+	if collision_sink_us < 0:
+		_fail("collision sink application was absent from causal trace: %s" % [
+			str(collision_events),
+		])
+		return
 	print(("GPU_COLLISION_CONTINUITY_EDIT_SMOKE_PASS support_frames=600 " \
-		+ "support_y=%.3f edit_y=%.3f collision_resources=%d") % [
+		+ "support_y=%.3f edit_y=%.3f collision_resources=%d " \
+		+ "dirty_block_mask=%d mesh_started_us=%d mesh_finished_us=%d " \
+		+ "collision_prepared_us=%d collision_sink_us=%d") % [
 		float(support.position.y), float(edit_hit.position.y),
 		int(_world.get_runtime_metrics().get("collision_resources", 0)),
+		dirty_block_mask, mesh_started_us, mesh_finished_us,
+		collision_prepared_us, collision_sink_us,
 	])
 	_world.stop_backend_world()
 	await _wait_for_state("stopped")
