@@ -459,6 +459,34 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         self.assertEqual(edit["cpu_visibility_completion_ms"], 92.0)
         self.assertNotEqual(edit["dominant_wait"]["stage"], "visibility_staging")
 
+        empty_identity = {
+            "page_x": 11,
+            "page_y": 2,
+            "page_z": 11,
+            "lod": 0,
+            "generation": 2,
+            "world_revision": 10,
+            "incremental_edit": True,
+        }
+        frame["pipeline"]["gpu_resident_render"][
+            "recent_incremental_activations"
+        ] = [{
+            "surface": "terrain",
+            "empty": True,
+            "identity": empty_identity,
+        }]
+        gpu = report.gpu_incremental_first_draw_analysis(
+            [frame],
+            {(10, 2, 10, 0, 2), (11, 2, 11, 0, 2)},
+            10,
+            3_000_000,
+            3_000_000_000,
+        )
+        self.assertTrue(gpu["complete"])
+        self.assertEqual(gpu["published_chunk_count"], 2)
+        self.assertEqual(gpu["drawn_chunk_count"], 1)
+        self.assertEqual(gpu["empty_chunk_count"], 1)
+
     def test_complete_human_session_is_analyzed(self) -> None:
         native = [native_event(0, 0.0, "trace_started")]
         first_chain = edit_chain(1, 3000.0, 10, 10)

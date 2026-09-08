@@ -106,6 +106,7 @@ var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
 var _same_callback_edit_precommits := 0
 var _same_callback_edit_precommit_chunks := 0
+var _recent_incremental_activations: Array[Dictionary] = []
 var _recent_incremental_first_draws: Array[Dictionary] = []
 var _interaction_application_deferrals := 0
 var _cpu_only_regional_retirements := 0
@@ -270,6 +271,7 @@ func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
 		_effect.set_critical_path_timeline_enabled(enabled)
 	if not enabled:
 		_recent_lifecycle_events.clear()
+		_recent_incremental_activations.clear()
 		_recent_incremental_first_draws.clear()
 
 
@@ -379,6 +381,7 @@ func get_status() -> Dictionary:
 		"activation_cohorts_committed": _activation_cohorts_committed,
 		"same_callback_edit_precommits": _same_callback_edit_precommits,
 		"same_callback_edit_precommit_chunks": _same_callback_edit_precommit_chunks,
+		"recent_incremental_activations": _recent_incremental_activations.duplicate(true),
 		"recent_incremental_first_draws": _recent_incremental_first_draws.duplicate(true),
 		"deferred_interaction_requests": _deferred_interaction_requests.size(),
 		"interaction_application_deferrals": _interaction_application_deferrals,
@@ -1125,6 +1128,22 @@ func _drain_effect_events() -> void:
 				)):
 					_try_validate_group(group_key)
 			"ACTIVE":
+				var active_group := Dictionary(_groups.get(group_key, {}))
+				var active_request := Dictionary(Dictionary(active_group.get(
+					"requests", {}
+				)).get(str(route.get("surface", "")), {}))
+				var active_identity := Dictionary(active_request.get("identity", {}))
+				if bool(active_identity.get("incremental_edit", false)):
+					_recent_incremental_activations.append({
+						"identity": active_identity.duplicate(true),
+						"surface": str(route.get("surface", "")),
+						"empty": bool(event.get("entry_empty", false)),
+						"effect_ticks_usec": int(event.get("ticks_usec", 0)),
+						"observed_ticks_usec": Time.get_ticks_usec(),
+						"frame": _process_frame,
+					})
+					while _recent_incremental_activations.size() > 32:
+						_recent_incremental_activations.pop_front()
 				_mark_surface(group_key, "activated", str(route.get("surface", "")))
 				if not bool(Dictionary(_groups.get(group_key, {})).get(
 					"retiring", false
