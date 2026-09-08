@@ -116,6 +116,12 @@ func _run() -> void:
 	if not refined:
 		_fail("first edit content published but refinement stopped")
 		return
+	var first_draws: Array = _world.get_gpu_resident_render_status().get(
+		"recent_incremental_first_draws", []
+	)
+	if first_draws.is_empty():
+		_fail("incremental first draw was not retained for self-reporting")
+		return
 	print("GPU_RESIDENT_FULL_QUALITY_EDIT_SMOKE_PASS commit=%d display_activation_after_commit=%d controller_visible_after_commit=%d first_lod=%d refined=1 prepare_until_feedback_us=%d" % [commit_frame, activation_display_frame - commit_frame, first_visual_frame - commit_frame, first_visual_lod, prepare_at_feedback / 1000])
 	_world.stop_backend_world()
 	await _wait_for_state("stopped")

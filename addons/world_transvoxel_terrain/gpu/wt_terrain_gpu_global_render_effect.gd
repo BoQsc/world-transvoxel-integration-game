@@ -2004,7 +2004,8 @@ func _draw_entry_on_render_thread(
 		int(entry.get("indirect_draw_count", 1)),
 		DRAW_COMMAND_STRIDE
 	)
-	if _critical_path_timeline_enabled \
+	if (_critical_path_timeline_enabled \
+			or bool(Dictionary(entry.get("identity", {})).get("incremental_edit", false))) \
 			and not bool(entry.get("first_draw_reported", false)):
 		entry["first_draw_reported"] = true
 		_push_event_on_render_thread("FIRST_DRAW", {
@@ -2381,7 +2382,10 @@ func _push_event_on_render_thread(
 	var event := {
 		"schema": "world_transvoxel.terrain.gpu_global_render_event.v1",
 		"status": event_status,
-		"ticks_usec": Time.get_ticks_usec() if _critical_path_timeline_enabled else 0,
+		"ticks_usec": Time.get_ticks_usec() if (
+			_critical_path_timeline_enabled
+			or event_status == "FIRST_DRAW"
+		) else 0,
 		"request_id": int(source.get("request_id", 0)),
 		"publication_sequence": int(source.get("publication_sequence", 0)),
 		"identity": Dictionary(source.get("identity", {})).duplicate(true),
