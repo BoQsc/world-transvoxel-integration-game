@@ -322,14 +322,18 @@ func _update_collision_wait_feedback() -> void:
 			not _player.has_method("get_streaming_collision_status"):
 		return
 	var status: Dictionary = _player.call("get_streaming_collision_status")
-	var waiting := bool(status.get("waiting", false))
-	_collision_wait_label.visible = waiting and not is_menu_open()
-	if not waiting:
+	var collision_pending := bool(status.get("collision_pending", false))
+	_collision_wait_label.visible = collision_pending and not is_menu_open()
+	if not collision_pending:
 		return
 	var readiness: Dictionary = status.get("readiness", {})
-	_collision_wait_label.text = "TERRAIN COLLISION PENDING  %.2f s  |  %d support chunks" % [
+	var movement_note := "MOVEMENT AVAILABLE" if bool(
+		status.get("movement_permitted", false)
+	) else "MOVEMENT CONSTRAINED"
+	_collision_wait_label.text = "TERRAIN COLLISION UPDATING  %.2f s  |  %d chunks  |  %s" % [
 		float(status.get("wait_seconds", 0.0)),
 		Array(readiness.get("not_ready_chunks", [])).size(),
+		movement_note,
 	]
 
 

@@ -1645,6 +1645,7 @@ func get_player_collision_readiness_at(
 	)
 	var checked_chunks: Array = []
 	var not_ready_chunks: Array = []
+	var movement_unsafe_chunks: Array = []
 	for chunk_value in probe_chunks:
 		var chunk: Vector3i = chunk_value
 		if allow_outside_vertical_volume and _is_chunk_outside_vertical_volume(chunk):
@@ -1661,17 +1662,28 @@ func get_player_collision_readiness_at(
 			),
 			"physical_coverage_lod": coverage.get("physical_coverage_lod", -1),
 			"coverage_source": coverage.get("source", "none"),
+			"movement_safe": coverage.get("movement_safe", false),
+			"preserved_ancestor_lods": coverage.get("preserved_ancestor_lods", []),
 		}
 		checked_chunks.append(summary)
 		if not bool(coverage.get("ready", false)):
 			not_ready_chunks.append(summary)
+		if not bool(coverage.get("movement_safe", false)):
+			movement_unsafe_chunks.append(summary)
 	_last_player_collision_readiness = {
 		"ready": not_ready_chunks.is_empty(),
+		"movement_safe": movement_unsafe_chunks.is_empty(),
 		"enabled": true,
-		"reason": "ready" if not_ready_chunks.is_empty() else "support_collision_pending",
+		"reason": (
+			"ready" if not_ready_chunks.is_empty()
+			else "collision_pending_with_physical_coverage"
+			if movement_unsafe_chunks.is_empty()
+			else "collision_pending_without_physical_coverage"
+		),
 		"position": _vector3_summary(position),
 		"probe_chunks": checked_chunks,
 		"not_ready_chunks": not_ready_chunks,
+		"movement_unsafe_chunks": movement_unsafe_chunks,
 	}
 	return _last_player_collision_readiness.duplicate(true)
 
@@ -1701,6 +1713,7 @@ func _collision_coverage_for_lod0_chunk(
 	)
 	var result := {
 		"ready": false,
+		"movement_safe": false,
 		"source": "none",
 		"physical_coverage_lod": -1,
 		"present": present,
@@ -1711,6 +1724,7 @@ func _collision_coverage_for_lod0_chunk(
 	}
 	if collision_generation > 0:
 		result.ready = true
+		result.movement_safe = true
 		result.source = "applied_lod0"
 		result.physical_coverage_lod = 0
 		return result
@@ -1735,10 +1749,13 @@ func _collision_coverage_for_lod0_chunk(
 		) > 0:
 			preserved_ancestor_lods.append(lod)
 	result.preserved_ancestor_lods = preserved_ancestor_lods
+	if not preserved_ancestor_lods.is_empty():
+		result.movement_safe = true
 	# A completed empty payload is authoritative: no collision should exist here.
 	if present and collision_required and collision_ready and \
 			staged_collision_generation == 0:
 		result.ready = true
+		result.movement_safe = true
 		result.source = "resolved_empty_lod0"
 	return result
 

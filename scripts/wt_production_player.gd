@@ -45,6 +45,8 @@ var _collision_wait_started_us := 0
 var _collision_blocked_frame_count := 0
 var _last_streaming_collision_status := {
 	"waiting": false,
+	"collision_pending": false,
+	"movement_permitted": true,
 	"wait_seconds": 0.0,
 	"blocked_frame_count": 0,
 	"readiness": {"ready": true, "enabled": false},
@@ -133,7 +135,7 @@ func get_last_interaction_summary() -> Dictionary:
 
 func get_streaming_collision_status() -> Dictionary:
 	var result := _last_streaming_collision_status.duplicate(true)
-	if bool(result.get("waiting", false)) and _collision_wait_started_us > 0:
+	if bool(result.get("collision_pending", false)) and _collision_wait_started_us > 0:
 		result["wait_seconds"] = float(
 			Time.get_ticks_usec() - _collision_wait_started_us
 		) / 1000000.0
@@ -379,25 +381,35 @@ func _move_with_streaming_collision(
 	if not bool(readiness.get("ready", false)):
 		if _collision_wait_started_us <= 0:
 			_collision_wait_started_us = Time.get_ticks_usec()
-		_collision_blocked_frame_count += 1
+		var movement_safe := bool(readiness.get("movement_safe", false))
+		var applied_velocity := requested_velocity if movement_safe else \
+			_collision_pending_escape_velocity(requested_velocity)
+		var downward_constrained := applied_velocity.y != requested_velocity.y
 		_last_streaming_collision_status = {
-			"waiting": true,
+			"waiting": false,
+			"collision_pending": true,
+			"movement_permitted": true,
+			"downward_constrained": downward_constrained,
 			"wait_seconds": float(
 				Time.get_ticks_usec() - _collision_wait_started_us
 			) / 1000000.0,
 			"blocked_frame_count": _collision_blocked_frame_count,
 			"requested_velocity": requested_velocity,
+			"applied_velocity": applied_velocity,
 			"position": position_before,
 			"readiness": readiness.duplicate(true),
 		}
-		velocity = Vector3.ZERO
+		velocity = applied_velocity
+		move_and_slide()
 		_note_cpu_causal_trace_movement(
-			false, requested_velocity, position_before, global_position
+			true, requested_velocity, position_before, global_position
 		)
-		return false
+		return true
 	move_and_slide()
 	_last_streaming_collision_status = {
 		"waiting": false,
+		"collision_pending": false,
+		"movement_permitted": true,
 		"wait_seconds": 0.0,
 		"blocked_frame_count": _collision_blocked_frame_count,
 		"requested_velocity": requested_velocity,
@@ -410,6 +422,16 @@ func _move_with_streaming_collision(
 		true, requested_velocity, position_before, global_position
 	)
 	return true
+
+
+func _collision_pending_escape_velocity(requested_velocity: Vector3) -> Vector3:
+	# Missing collision must not pull the player through terrain, but it also
+	# must never form an artificial cage. Preserve horizontal and upward escape.
+	return Vector3(
+		requested_velocity.x,
+		maxf(0.0, requested_velocity.y),
+		requested_velocity.z
+	)
 
 
 func _note_cpu_causal_trace_movement(
