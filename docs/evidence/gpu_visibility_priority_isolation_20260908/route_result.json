@@ -1,0 +1,24 @@
+{
+  "native_commit": "1d01cc0500414210a50e11eadd3fc8b286568ccb",
+  "runtime_artifact_digest": "67b6101b8146049c8d23b9a3dcae794187f448c22ef9afe6218cbe6714b306bd",
+  "vulkan": {
+    "blocked_movement_frames": 28,
+    "frame_p95_ms": 38.7162,
+    "frame_p99_ms": 60.00379999999995,
+    "maximum_relocated_edit_pipeline_ms": 2533.3424,
+    "edit_pipeline_ms": [
+      2489.2027,
+      2533.3424
+    ],
+    "max_priority_background_jobs_near_edits": [
+      0,
+      0
+    ]
+  },
+  "d3d12_critical_path": {
+    "submit_max_us": 442,
+    "hot_first_draw_max_us": 28547,
+    "hot_observed_ready_max_us": 57655,
+    "cold_ready_us": 83673
+  }
+}
