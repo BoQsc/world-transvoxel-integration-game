@@ -412,6 +412,53 @@ class TerrainWaterfallReportTest(unittest.TestCase):
         )
         self.assertEqual(result["overall_dominant"]["duration_ms"], 29.0)
 
+    def test_gpu_first_draw_replaces_later_cpu_visual_tail(self) -> None:
+        native = edit_chain(1, 3000.0, 10, 10)
+        request = {
+            "elapsed_us": 3_000_000,
+            "kind": "edit_submission_requested",
+            "payload": {"mode": "carve", "center": {"x": 160, "y": 40, "z": 160}},
+            "pipeline": {"target": {"get_generation": 1}},
+        }
+        frame = {
+            "elapsed_us": 3_030_000,
+            "frame": 102,
+            "kind": "physics_frame",
+            "pipeline": {
+                "target": {
+                    "present": True,
+                    "get_generation": 2,
+                    "get_render_generation": 2,
+                    "get_collision_generation": 2,
+                    "is_visual_ready": True,
+                    "is_collision_ready": True,
+                },
+                "gpu_resident_render": {
+                    "recent_incremental_first_draws": [{
+                        "surface": "terrain",
+                        "effect_ticks_usec": 123,
+                        "identity": {
+                            "page_x": 10,
+                            "page_y": 2,
+                            "page_z": 10,
+                            "lod": 0,
+                            "generation": 2,
+                            "world_revision": 10,
+                            "incremental_edit": True,
+                        },
+                    }],
+                },
+            },
+        }
+        edit = report.edit_analysis([request, frame], native)[0]
+        self.assertTrue(edit["gpu_visual_completion"]["complete"])
+        self.assertEqual(edit["gpu_visual_completion"]["drawn_chunk_count"], 1)
+        self.assertEqual(edit["gpu_visual_completion"]["completion_after_request_ms"], 30.0)
+        self.assertEqual(edit["collision_publication_ms"], 78.0)
+        self.assertEqual(edit["pipeline_completion_ms"], 78.0)
+        self.assertEqual(edit["cpu_visibility_completion_ms"], 92.0)
+        self.assertNotEqual(edit["dominant_wait"]["stage"], "visibility_staging")
+
     def test_complete_human_session_is_analyzed(self) -> None:
         native = [native_event(0, 0.0, "trace_started")]
         first_chain = edit_chain(1, 3000.0, 10, 10)

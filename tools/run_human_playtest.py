@@ -186,6 +186,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         )
         if args.terrain_waterfall_autonomous:
             command.append("--terrain-waterfall-autonomous-route")
+            if args.gpu_resident_render_candidate:
+                command.append("--gpu-lifecycle-history")
     elif args.cpu_causal_trace:
         trace_path = (
             pathlib.Path(args.cpu_causal_trace_output).resolve()

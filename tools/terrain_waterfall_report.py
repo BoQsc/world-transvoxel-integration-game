@@ -1971,6 +1971,85 @@ def publication_blocker_critical_path_analysis(
     }
 
 
+def gpu_incremental_first_draw_analysis(
+    edit_frames: list[dict[str, Any]],
+    replacement_identities: set[tuple[int, int, int, int, int]],
+    world_revision: int,
+    request_elapsed_us: int,
+    origin_ns: int,
+) -> dict[str, Any]:
+    expected = set(replacement_identities)
+    observed: dict[tuple[int, int, int, int, int], dict[str, Any]] = {}
+    for frame in edit_frames:
+        elapsed_us = int(frame.get("elapsed_us", -1))
+        gpu_status = (frame.get("pipeline") or {}).get("gpu_resident_render") or {}
+        for draw in gpu_status.get("recent_incremental_first_draws", []):
+            if not isinstance(draw, dict) or str(draw.get("surface", "")) != "terrain":
+                continue
+            identity = draw.get("identity") or {}
+            if not isinstance(identity, dict) or not bool(identity.get("incremental_edit", False)):
+                continue
+            if int(identity.get("world_revision", -1)) != world_revision:
+                continue
+            key = tuple(
+                int(identity.get(name, 0))
+                for name in ("page_x", "page_y", "page_z", "lod", "generation")
+            )
+            if key not in expected or key in observed:
+                continue
+            observed[key] = {
+                "identity": {
+                    "x": key[0], "y": key[1], "z": key[2],
+                    "lod": key[3], "generation": key[4],
+                },
+                "frame": int(frame.get("frame", -1)),
+                "elapsed_us": elapsed_us,
+                "effect_ticks_usec": int(draw.get("effect_ticks_usec", 0)),
+            }
+    complete = bool(expected) and expected.issubset(observed)
+    completion_elapsed_us = (
+        max(item["elapsed_us"] for item in observed.values()) if complete else None
+    )
+    request_frame = next((
+        int(frame.get("frame", -1)) for frame in edit_frames
+        if int(frame.get("elapsed_us", -1)) >= request_elapsed_us
+    ), -1)
+    completion_frame = (
+        max(item["frame"] for item in observed.values()) if complete else None
+    )
+    return {
+        "available": any(
+            ((frame.get("pipeline") or {}).get("gpu_resident_render") or {}).get(
+                "recent_incremental_first_draws"
+            ) is not None
+            for frame in edit_frames
+        ),
+        "complete": complete,
+        "world_revision": world_revision,
+        "expected_chunk_count": len(expected),
+        "drawn_chunk_count": len(observed),
+        "completion_after_request_ms": (
+            (completion_elapsed_us - request_elapsed_us) / 1000.0
+            if completion_elapsed_us is not None else None
+        ),
+        "completion_after_submission_ms": (
+            (completion_elapsed_us - origin_ns // 1000) / 1000.0
+            if completion_elapsed_us is not None else None
+        ),
+        "completion_frame": completion_frame,
+        "displayed_frame_delta": (
+            completion_frame - request_frame
+            if completion_frame is not None and request_frame >= 0 else None
+        ),
+        "draws": sorted(
+            observed.values(),
+            key=lambda item: tuple(item["identity"][name] for name in (
+                "x", "y", "z", "lod", "generation"
+            )),
+        ),
+    }
+
+
 def edit_analysis(
     downstream_events: list[dict[str, Any]], native_events: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -2076,6 +2155,13 @@ def edit_analysis(
             if str((event.get("movement") or {}).get("mode", "walk")) == "fly"
         ]
         committed = _first_event(events, "edit_committed", cause_id)
+        gpu_visual = gpu_incremental_first_draw_analysis(
+            edit_frames,
+            replacement_identities,
+            cause_id,
+            request_elapsed_us,
+            origin_ns,
+        )
         stage_rows = stage_window(replacement_events, origin_ns)
         gaps = []
         previous_end = 0.0
@@ -2093,7 +2179,7 @@ def edit_analysis(
             gaps, key=lambda item: float(item["wait_from_previous_stage_ms"]),
             default={"stage": "unattributed", "wait_from_previous_stage_ms": 0.0},
         )
-        if blocker_event is not None and batch_event is not None:
+        if blocker_event is not None and batch_event is not None and not gpu_visual["complete"]:
             blocker_wait = (
                 int(batch_event.get("elapsed_ns", ready_ns)) - ready_ns
             ) / 1_000_000.0
@@ -2102,17 +2188,57 @@ def edit_analysis(
                     "stage": "visibility_staging",
                     "wait_from_previous_stage_ms": blocker_wait,
                 }
-        final_event = batch_event or ready_event or _last_event(
+        cpu_final_event = batch_event or ready_event or _last_event(
             replacement_events, {"render_sink_applied", "collision_sink_applied"}
         ) or committed
+        cpu_completion_ms = (
+            (int(cpu_final_event.get("elapsed_ns", origin_ns)) - origin_ns) / 1_000_000.0
+            if cpu_final_event is not None else None
+        )
+        gpu_completion_ms = gpu_visual["completion_after_submission_ms"]
+        collision_event = _last_event(replacement_events, {"collision_sink_applied"})
+        collision_completion_ms = (
+            (int(collision_event.get("elapsed_ns", origin_ns)) - origin_ns) / 1_000_000.0
+            if collision_event is not None else
+            (int(target_collision_frame.get("elapsed_us", request_elapsed_us)) - origin_ns // 1000) / 1000.0
+            if target_collision_frame is not None else None
+        )
+        authoritative_completions = [
+            value for value in (gpu_completion_ms, collision_completion_ms)
+            if value is not None
+        ]
         completion_ms = (
-            (int(final_event.get("elapsed_ns", origin_ns)) - origin_ns) / 1_000_000.0
-            if final_event is not None else None
+            max(authoritative_completions)
+            if gpu_visual["complete"] and authoritative_completions
+            else cpu_completion_ms
         )
         completion_elapsed_us = (
-            int(final_event.get("elapsed_ns", origin_ns)) // 1000
-            if final_event is not None else next_request_elapsed_us
+            origin_ns // 1000 + int(completion_ms * 1000.0)
+            if completion_ms is not None else next_request_elapsed_us
         )
+        if gpu_visual["complete"] and completion_ms is not None:
+            bounded_gaps = []
+            bounded_previous_end = 0.0
+            for row in stage_rows:
+                if float(row["start_ms"]) > completion_ms:
+                    continue
+                bounded_end = min(completion_ms, float(row["end_ms"]))
+                bounded_gaps.append({
+                    "stage": row["stage"],
+                    "wait_from_previous_stage_ms": max(
+                        0.0, float(row["start_ms"]) - bounded_previous_end
+                    ),
+                    "stage_end_ms": max(bounded_previous_end, bounded_end),
+                })
+                bounded_previous_end = max(bounded_previous_end, bounded_end)
+            dominant_gap = max(
+                bounded_gaps,
+                key=lambda item: float(item["wait_from_previous_stage_ms"]),
+                default={
+                    "stage": "gpu_visual_or_collision_publication",
+                    "wait_from_previous_stage_ms": completion_ms,
+                },
+            )
         blocker_analysis = sampled_blocker_analysis(
             [
                 event for event in edit_frames
@@ -2174,6 +2300,9 @@ def edit_analysis(
                 if target_collision_frame is not None else None
             ),
             "pipeline_completion_ms": completion_ms,
+            "gpu_visual_completion": gpu_visual,
+            "collision_publication_ms": collision_completion_ms,
+            "cpu_visibility_completion_ms": cpu_completion_ms,
             "visibility_wait_after_replacements_ms": (
                 (int(batch_event.get("elapsed_ns", ready_ns)) - ready_ns) / 1_000_000.0
                 if batch_event is not None and ready_event is not None else None
@@ -2189,7 +2318,7 @@ def edit_analysis(
             "correlated_visibility_publication": publication_analysis,
             "dominant_wait": dominant_gap,
             "waterfall": stage_rows,
-            "complete": committed is not None and bool(replacement_identities) and final_event is not None,
+            "complete": committed is not None and bool(replacement_identities) and completion_ms is not None,
         })
     return reports
 
