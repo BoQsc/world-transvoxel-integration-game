@@ -186,11 +186,15 @@ func get_foreground_priority_targets() -> Dictionary:
 	query.collide_with_bodies = true
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var focus_points := _interaction_priority_points(origin, direction, interaction_distance)
+	# Topology focus is the current tool target. The game-world shell adds the
+	# neighboring LOD0 chunks required by a brush; predictive movement remains a
+	# separate viewer. Refining the entire ray creates a large atomic cohort.
+	var focus_point: Vector3 = hit.get("position", end)
+	var focus_points: Array[Vector3] = [focus_point]
 	return {
 		"support_points": [global_position, global_position + Vector3.DOWN * 2.0],
 		"focus_valid": not focus_points.is_empty(),
-		"focus_point": hit.get("position", end),
+		"focus_point": focus_point,
 		"focus_points": focus_points,
 	}
 

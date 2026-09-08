@@ -422,9 +422,12 @@ func _start_profile() -> void:
 		float(settings.get("player_predictive_viewer_distance", 0.0)),
 		48.0 if gpu_resident_render_candidate_requested else 0.0
 	)
-	game_world.player_focus_viewer_enabled = predictive_viewer_enabled and (
-		bool(settings.get("player_focus_viewer_enabled", false)) or
-		gpu_resident_render_candidate_requested
+	# Interaction-focus lease keys now drive exact LOD0 refinement in native
+	# planning. A second radius-one visual viewer expands the same target into a
+	# large regional cohort and defeats the dedicated foreground path.
+	game_world.player_focus_viewer_enabled = (
+		predictive_viewer_enabled and
+		bool(settings.get("player_focus_viewer_enabled", false))
 	)
 	game_world.player_focus_viewer_distance = maxf(
 		float(settings.get("player_focus_viewer_distance", 0.0)),
