@@ -109,6 +109,7 @@ var _same_callback_edit_precommit_chunks := 0
 var _recent_incremental_activations: Array[Dictionary] = []
 var _recent_incremental_first_draws: Array[Dictionary] = []
 var _interaction_application_deferrals := 0
+var _last_interaction_application_deferral := {}
 var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
@@ -385,6 +386,9 @@ func get_status() -> Dictionary:
 		"recent_incremental_first_draws": _recent_incremental_first_draws.duplicate(true),
 		"deferred_interaction_requests": _deferred_interaction_requests.size(),
 		"interaction_application_deferrals": _interaction_application_deferrals,
+		"last_interaction_application_deferral": (
+			_last_interaction_application_deferral.duplicate(true)
+		),
 		"cpu_only_regional_retirements": _cpu_only_regional_retirements,
 		"lifecycle_history_enabled": _lifecycle_history_enabled,
 		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
@@ -831,11 +835,15 @@ static func _append_vec4(values: PackedFloat32Array, value: Vector4) -> void:
 
 func _submit_native_captures() -> void:
 	var submitted_this_frame := 0
+	var deferred_attempts_remaining := _deferred_interaction_requests.size()
 	while _render_request_routes.size() < RENDER_SUBMISSION_CAPACITY \
 			and submitted_this_frame < NATIVE_SUBMISSIONS_PER_FRAME:
+		var retry_deferred := deferred_attempts_remaining > 0
 		var request := _deferred_interaction_requests.pop_front() \
-				if not _deferred_interaction_requests.is_empty() \
+				if retry_deferred \
 				else Dictionary(_backend_terrain.call("pop_gpu_resident_render_request"))
+		if retry_deferred:
+			deferred_attempts_remaining -= 1
 		var request_status := str(request.get("status", ""))
 		if request_status in ["EMPTY", "DISABLED"]:
 			return
@@ -852,7 +860,12 @@ func _submit_native_captures() -> void:
 			if readiness_status == "WAITING_APPLICATION":
 				_deferred_interaction_requests.append(request)
 				_interaction_application_deferrals += 1
-				return
+				_last_interaction_application_deferral = {
+					"identity": identity.duplicate(true),
+					"readiness": readiness.duplicate(true),
+					"process_frame": _process_frame,
+				}
+				continue
 			if readiness_status != "READY" \
 					or not bool(readiness.get("ready", false)):
 				_reject_native_request(request, str(readiness.get(
