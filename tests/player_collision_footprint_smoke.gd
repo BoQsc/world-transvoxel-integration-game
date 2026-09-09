@@ -210,7 +210,30 @@ func _run_test() -> void:
 			not bool(pending_status.get("movement_permitted", false)):
 		_fail("pending collision self-report still describes blocked movement: %s" % pending_status)
 		return
-	print("%s interior=1 boundary=%d transition_guard=pass dual_invokers=pass" % [
+	var report_path := ProjectSettings.globalize_path(
+		"res://.godot/world_transvoxel_captures/collision_failure/latest.json"
+	)
+	DirAccess.remove_absolute(report_path)
+	player.set("_last_grounded_position", Vector3(4.0, 5.0, 6.0))
+	player.set("_recent_edit_ticks_usec", Time.get_ticks_usec())
+	player.set("_recent_edit_support_must_remain", true)
+	player.set("_recent_edit_center", Vector3(12.0, 5.0, 6.0))
+	player.set("_recent_edit_radius", 1.8)
+	player.global_position = Vector3(4.0, 3.0, 6.0)
+	player.call("_monitor_recent_edit_support")
+	if player.global_position != Vector3(4.0, 5.1, 6.0) or \
+			not FileAccess.file_exists(report_path):
+		_fail("unexpected post-edit support loss was not recovered and reported")
+		return
+	var report: Dictionary = JSON.parse_string(
+		FileAccess.get_file_as_string(report_path)
+	)
+	if str(report.get("schema", "")) != \
+			"world_transvoxel.collision_fall_incident.v1" or \
+			not bool(report.get("recovered", false)):
+		_fail("collision fall report was incomplete: %s" % report)
+		return
+	print("%s interior=1 boundary=%d transition_guard=pass dual_invokers=pass fall_recovery=pass" % [
 		MARKER,
 		boundary.size(),
 	])

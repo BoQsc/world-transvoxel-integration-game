@@ -155,6 +155,7 @@ var gpu_meshing_shadow_requested := false
 var gpu_meshing_publication_candidate_requested := false
 var gpu_resident_render_candidate_requested := false
 var gpu_resident_failure_quit_scheduled := false
+var gpu_standing_mine_regression_requested := false
 var visual_reference_pixel := Vector2i(-1, -1)
 var visual_reference_label := ""
 var gpu_render_status_update_frame := 0
@@ -168,6 +169,9 @@ func _ready() -> void:
 	)
 	gpu_resident_render_candidate_requested = args.has(
 		"--gpu-resident-render-candidate"
+	)
+	gpu_standing_mine_regression_requested = args.has(
+		"--gpu-standing-mine-regression"
 	)
 	autonomous = args.has("--p2-autonomous")
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
@@ -459,8 +463,7 @@ func _start_profile() -> void:
 			game_world.player_collision_prediction_distance, 32.0
 		)
 	game_world.player_interaction_collision_invoker_enabled = \
-		collision_invoker_enabled and gpu_resident_render_candidate_requested and \
-		OS.get_cmdline_user_args().has("--gpu-interaction-collision-demand")
+		collision_invoker_enabled and gpu_resident_render_candidate_requested
 	var foreground_priority_enabled := bool(settings.get(
 		"player_foreground_priority_enabled", false
 	))
@@ -576,6 +579,9 @@ func _start_profile() -> void:
 		if not await _wait_for_human_startup_visual_ready():
 			return
 		_set_human_loading_visible(false)
+	if gpu_standing_mine_regression_requested:
+		call_deferred("_run_gpu_standing_mine_regression")
+		return
 	_update_telemetry()
 	if not human_artifact_live_replay_fixture_path.is_empty():
 		call_deferred("_run_human_artifact_live_replay")
@@ -4797,6 +4803,103 @@ func _stabilize_player_spawn() -> bool:
 		collision_summary
 	))
 	return false
+
+
+func _run_gpu_standing_mine_regression() -> void:
+	if player == null or game_world == null or not gpu_resident_render_candidate_requested:
+		_fail("GPU standing-mine regression requires the GPU candidate player")
+		return
+	player.call("set_human_input_enabled", false)
+	for _settle_frame in range(90):
+		player.call("diagnostic_walk_step", Vector3.ZERO, 1.0 / 60.0)
+		await get_tree().physics_frame
+		if player.is_on_floor():
+			break
+	if not player.is_on_floor():
+		_fail("GPU standing-mine player did not settle before editing")
+		return
+	var position_before := player.global_position
+	var floor_before := _physics_floor_hit(position_before)
+	if floor_before.is_empty():
+		_fail("GPU standing-mine support ray was absent before editing")
+		return
+	var aim_target := position_before + Vector3(0.0, -1.0, -6.0)
+	if not bool(player.call("autonomous_look_at", aim_target)):
+		_fail("GPU standing-mine aim setup failed")
+		return
+	await get_tree().physics_frame
+	var terrain_world: Node = game_world.get_terrain_world()
+	var committed_revision := int(terrain_world.call("get_backend_world_revision")) + 1
+	if not bool(player.call("autonomous_submit_interaction", &"carve")):
+		var rejected_interaction: Dictionary = player.call(
+			"get_last_interaction_summary"
+		)
+		var rejected_summary: Dictionary = game_world.get_game_world_summary()
+		push_error("GPU_STANDING_MINE_REGRESSION_FAIL carve rejected: interaction=%s runtime=%s" % [
+			str(rejected_interaction), str(rejected_summary),
+		])
+		get_tree().quit(1)
+		return
+	var interaction: Dictionary = player.call("get_last_interaction_summary")
+	var edit_position: Vector3 = interaction.get("position", Vector3.INF)
+	var horizontal_edit_distance := Vector2(
+		edit_position.x - position_before.x,
+		edit_position.z - position_before.z
+	).length()
+	if horizontal_edit_distance <= float(player.get("edit_radius")) + 0.5:
+		_fail("GPU standing-mine target overlapped player support: %s" % str(interaction))
+		return
+	var minimum_y := player.global_position.y
+	var maximum_collision_resources := 0
+	var minimum_collision_resources := 9223372036854775807
+	var pending_frames := 0
+	for frame in range(360):
+		player.call("diagnostic_walk_step", Vector3.ZERO, 1.0 / 60.0)
+		await get_tree().physics_frame
+		minimum_y = minf(minimum_y, player.global_position.y)
+		var summary: Dictionary = game_world.get_game_world_summary()
+		var collision_resources := int(summary.get("collision_resources", 0))
+		maximum_collision_resources = maxi(maximum_collision_resources, collision_resources)
+		minimum_collision_resources = mini(minimum_collision_resources, collision_resources)
+		var collision_status: Dictionary = player.call("get_streaming_collision_status")
+		pending_frames += 1 if bool(collision_status.get("collision_pending", false)) else 0
+		if player.global_position.y < position_before.y - 2.0:
+			_fail(("GPU standing-mine player fell through terrain at frame %d: " +
+				"before=%s after=%s interaction=%s collision=%s runtime=%s") % [
+				frame, str(position_before), str(player.global_position),
+				str(interaction), str(collision_status), str(summary),
+			])
+			return
+		if int(terrain_world.call("get_backend_world_revision")) >= committed_revision and \
+				int(summary.get("total_collision_backlog", 1)) == 0 and \
+				int(summary.get("pending_chunk_replacements", 1)) == 0:
+			break
+	var floor_after := _physics_floor_hit(position_before)
+	if floor_after.is_empty() or player.global_position.y < position_before.y - 0.5:
+		_fail(("GPU standing-mine support did not survive: before=%s after=%s " +
+			"player=%s interaction=%s") % [
+				str(floor_before), str(floor_after), str(player.global_position),
+				str(interaction),
+			])
+		return
+	print(("GPU_STANDING_MINE_REGRESSION_PASS driver=%s edit_distance=%.3f " +
+		"minimum_y=%.3f collision_resources=%d/%d pending_frames=%d") % [
+		RenderingServer.get_current_rendering_driver_name().to_lower(),
+		horizontal_edit_distance, minimum_y, minimum_collision_resources,
+		maximum_collision_resources, pending_frames,
+	])
+	get_tree().quit(0)
+
+
+func _physics_floor_hit(position: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(
+		position + Vector3.UP * 2.0,
+		position + Vector3.DOWN * 32.0
+	)
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	query.exclude = [player.get_rid()]
+	return player.get_world_3d().direct_space_state.intersect_ray(query)
 
 
 func _verify_playable_spawn(summary: Dictionary) -> bool:

@@ -43,6 +43,12 @@ var cpu_causal_trace: RefCounted
 var cpu_causal_trace_last_tick_us := 0
 var _collision_wait_started_us := 0
 var _collision_blocked_frame_count := 0
+var _last_grounded_position := Vector3.INF
+var _recent_edit_ticks_usec := 0
+var _recent_edit_support_must_remain := false
+var _recent_edit_center := Vector3.ZERO
+var _recent_edit_radius := 0.0
+var _recent_edit_fall_reported := false
 var _last_streaming_collision_status := {
 	"waiting": false,
 	"collision_pending": false,
@@ -115,6 +121,7 @@ func diagnostic_walk_step(
 	else:
 		velocity.y = 0.0
 	var accepted := _move_with_streaming_collision(delta)
+	_monitor_recent_edit_support()
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 	_capture_cpu_causal_trace_frame()
@@ -279,6 +286,15 @@ func submit_edit_input(mode_name: StringName, center: Vector3, ray_hit: bool = f
 	var material_id := -1 if mode_name == &"carve" else _selected_place_material_id()
 	var accepted := bool(game_world.call("submit_sphere_edit", mode_name, center, edit_radius, material_id, 1.0))
 	_record_interaction(mode_name, ray_hit, accepted, "raycast_hit" if ray_hit and accepted else ("direct_center" if accepted else "edit_rejected"), center)
+	if accepted:
+		_recent_edit_ticks_usec = Time.get_ticks_usec()
+		_recent_edit_center = center
+		_recent_edit_radius = edit_radius
+		_recent_edit_fall_reported = false
+		var support_point := (_last_grounded_position if _last_grounded_position.is_finite() \
+			else global_position) - Vector3.UP * COLLISION_HALF_HEIGHT
+		_recent_edit_support_must_remain = support_point.distance_to(center) > \
+			edit_radius + COLLISION_SUPPORT_MARGIN
 	if game_world.has_method("get_last_edit_summary"):
 		_last_interaction_summary["edit_summary"] = game_world.call("get_last_edit_summary")
 	return accepted
@@ -308,6 +324,7 @@ func _physics_process(delta: float) -> void:
 	elif Input.is_key_pressed(KEY_SPACE):
 		velocity.y = 7.0
 	_move_with_streaming_collision(delta)
+	_monitor_recent_edit_support()
 	if game_world != null and game_world.has_method("update_player_viewer"):
 		game_world.call("update_player_viewer", false)
 	_capture_cpu_causal_trace_frame()
@@ -432,6 +449,69 @@ func _collision_pending_escape_velocity(requested_velocity: Vector3) -> Vector3:
 		maxf(0.0, requested_velocity.y),
 		requested_velocity.z
 	)
+
+
+func _monitor_recent_edit_support() -> void:
+	if is_on_floor():
+		_last_grounded_position = global_position
+		return
+	if not _recent_edit_support_must_remain or _recent_edit_fall_reported or \
+			not _last_grounded_position.is_finite():
+		return
+	var elapsed_usec := Time.get_ticks_usec() - _recent_edit_ticks_usec
+	if elapsed_usec < 0 or elapsed_usec > 2000000:
+		return
+	if Vector2(
+		global_position.x - _last_grounded_position.x,
+		global_position.z - _last_grounded_position.z
+	).length() > 1.5 or global_position.y >= _last_grounded_position.y - 1.5:
+		return
+	_recent_edit_fall_reported = true
+	var failed_position := global_position
+	global_position = _last_grounded_position + Vector3.UP * 0.1
+	velocity = Vector3.ZERO
+	var report_path := _write_collision_fall_report(failed_position)
+	print("WT_COLLISION_FALL_RECOVERED report=%s" % report_path)
+
+
+func _write_collision_fall_report(failed_position: Vector3) -> String:
+	var capture_root := ProjectSettings.globalize_path(
+		"res://.godot/world_transvoxel_captures/collision_failure"
+	)
+	DirAccess.make_dir_recursive_absolute(capture_root)
+	var report_path := capture_root.path_join("latest.json")
+	var runtime := {}
+	var readiness := {}
+	if game_world != null:
+		if game_world.has_method("get_player_collision_readiness_at"):
+			readiness = game_world.call(
+				"get_player_collision_readiness_at", _last_grounded_position,
+				false, COLLISION_RADIUS, COLLISION_HALF_HEIGHT,
+				COLLISION_SUPPORT_MARGIN
+			)
+		if game_world.has_method("get_terrain_world"):
+			var terrain_world: Node = game_world.call("get_terrain_world")
+			if terrain_world != null and terrain_world.has_method("get_runtime_metrics"):
+				runtime = terrain_world.call("get_runtime_metrics")
+	var payload := {
+		"schema": "world_transvoxel.collision_fall_incident.v1",
+		"ticks_usec": Time.get_ticks_usec(),
+		"recovered": true,
+		"last_grounded_position": _last_grounded_position,
+		"failed_position": failed_position,
+		"edit_center": _recent_edit_center,
+		"edit_radius": _recent_edit_radius,
+		"interaction": _last_interaction_summary.duplicate(true),
+		"streaming_collision": _last_streaming_collision_status.duplicate(true),
+		"readiness": readiness,
+		"runtime": runtime,
+	}
+	var file := FileAccess.open(report_path, FileAccess.WRITE)
+	if file == null:
+		return "unwritten:%d" % FileAccess.get_open_error()
+	file.store_string(JSON.stringify(payload, "  ") + "\n")
+	file.close()
+	return report_path
 
 
 func _note_cpu_causal_trace_movement(

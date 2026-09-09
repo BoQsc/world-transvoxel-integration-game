@@ -11,6 +11,9 @@ const SUPPORT_XZ := Vector2(2.0, 2.0)
 const EDIT_XZ := Vector2(5.0, 5.0)
 const SECOND_EDIT_XZ := Vector2(9.0, 5.0)
 
+var _standing_body: CharacterBody3D
+var _standing_floor_y := 0.0
+
 
 func _run() -> void:
 	_setup_viewport()
@@ -38,6 +41,24 @@ func _run() -> void:
 	if support.is_empty() or edit_hit.is_empty():
 		_fail("fixture did not expose two standing surfaces")
 		return
+	_standing_floor_y = float(support.position.y)
+	_standing_body = CharacterBody3D.new()
+	_standing_body.floor_snap_length = 0.25
+	var standing_shape := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	standing_shape.shape = capsule
+	_standing_body.add_child(standing_shape)
+	_world.add_child(_standing_body)
+	_standing_body.global_position = Vector3(
+		SUPPORT_XZ.x, _standing_floor_y + 0.91, SUPPORT_XZ.y
+	)
+	for _settle_frame in range(12):
+		await _step_standing_body()
+	if not _standing_body.is_on_floor():
+		_fail("standing-body fixture did not settle onto collision")
+		return
 	if not _world.begin_cpu_causal_trace():
 		_fail("collision continuity causal trace did not start")
 		return
@@ -57,7 +78,12 @@ func _run() -> void:
 	var committed := false
 	var replacement_ready := false
 	for frame in range(600):
-		await physics_frame
+		await _step_standing_body()
+		if _standing_body.global_position.y < _standing_floor_y + 0.5:
+			_fail("standing body fell through replacement collision at frame %d: y=%.3f floor=%.3f" % [
+				frame, _standing_body.global_position.y, _standing_floor_y,
+			])
+			return
 		if _vertical_hit(SUPPORT_XZ).is_empty():
 			_fail("unmodified player support disappeared at frame %d" % frame)
 			return
@@ -129,7 +155,12 @@ func _run() -> void:
 		return
 	var second_replacement_ready := false
 	for frame in range(600):
-		await physics_frame
+		await _step_standing_body()
+		if _standing_body.global_position.y < _standing_floor_y + 0.5:
+			_fail("standing body fell through revision two at frame %d: y=%.3f floor=%.3f" % [
+				frame, _standing_body.global_position.y, _standing_floor_y,
+			])
+			return
 		if _vertical_hit(SUPPORT_XZ).is_empty():
 			_fail("support disappeared during revision two at frame %d" % frame)
 			return
@@ -226,6 +257,17 @@ func _vertical_hit(xz: Vector2) -> Dictionary:
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
 	return _world.get_world_3d().direct_space_state.intersect_ray(query)
+
+
+func _step_standing_body() -> void:
+	await physics_frame
+	_standing_body.velocity.x = 0.0
+	_standing_body.velocity.z = 0.0
+	if not _standing_body.is_on_floor():
+		_standing_body.velocity.y -= 24.0 / 60.0
+	else:
+		_standing_body.velocity.y = 0.0
+	_standing_body.move_and_slide()
 
 
 func _fail(message: String) -> void:
