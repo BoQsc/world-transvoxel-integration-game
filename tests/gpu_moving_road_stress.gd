@@ -266,7 +266,11 @@ func _move_viewers(position: Vector3) -> bool:
 	if camera != null:
 		camera.position = position + Vector3(0, 28, 34)
 		camera.look_at(position, Vector3.UP)
-	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) or not _world.update_collision_viewer(2, _viewer_revision, position, 1):
+	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) \
+			or not _world.update_collision_viewer(2, _viewer_revision, position, 1) \
+			or not _world.update_collision_viewer(
+				3, _viewer_revision, position + Vector3(16.0, 0.0, 0.0), 1
+			):
 		_fail("viewer update rejected at %s" % position)
 		return false
 	var focus_keys: Array = []
