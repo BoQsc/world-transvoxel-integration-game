@@ -409,8 +409,10 @@ func _start_profile() -> void:
 	# GPU publication swaps complete LOD regions atomically. Keep only the latest
 	# visual destination while one region is outstanding; collision viewers below
 	# continue to follow the player independently.
-	game_world.player_viewer_coalesce_while_streaming = \
-		gpu_resident_render_candidate_requested
+	# Native batches the latest primary and predictive viewer positions into one
+	# desired-set plan. Holding either position behind unrelated streaming debt
+	# leaves fast-moving GPU play aimed at an obsolete LOD cut.
+	game_world.player_viewer_coalesce_while_streaming = false
 	var predictive_viewer_enabled := bool(settings.get("player_predictive_viewer_enabled", false))
 	if gpu_resident_render_candidate_requested:
 		predictive_viewer_enabled = true
