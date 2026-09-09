@@ -273,14 +273,24 @@ func _road_waypoints() -> Array[Vector3]:
 func _move_viewers(position: Vector3) -> bool:
 	_viewer_revision += 1
 	_current_target = Vector3i(floori(position.x / 16.0), 0, floori(position.z / 16.0))
+	var prediction_direction := -1.0 if _phase == "cached_return" else 1.0
+	var predictive_position := position + Vector3(
+		48.0 * prediction_direction, 0.0, 0.0
+	)
+	var collision_predictive_position := position + Vector3(
+		32.0 * prediction_direction, 0.0, 0.0
+	)
 	var camera := root.get_camera_3d()
 	if camera != null:
 		camera.position = position + Vector3(0, 28, 34)
 		camera.look_at(position, Vector3.UP)
 	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) \
+			or not _world.update_viewer(
+				64, _viewer_revision, predictive_position, 1, 0
+			) \
 			or not _world.update_collision_viewer(2, _viewer_revision, position, 1) \
 			or not _world.update_collision_viewer(
-				3, _viewer_revision, position + Vector3(16.0, 0.0, 0.0), 1
+				3, _viewer_revision, collision_predictive_position, 1
 			):
 		_fail("viewer update rejected at %s" % position)
 		return false

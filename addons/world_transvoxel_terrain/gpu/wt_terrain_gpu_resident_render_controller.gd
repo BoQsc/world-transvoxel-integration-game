@@ -106,6 +106,7 @@ var _activation_cohorts_queued := 0
 var _activation_cohorts_committed := 0
 var _same_callback_edit_precommits := 0
 var _same_callback_edit_precommit_chunks := 0
+var _same_callback_edit_precommit_rejections: Dictionary = {}
 var _recent_incremental_activations: Array[Dictionary] = []
 var _recent_incremental_first_draws: Array[Dictionary] = []
 var _interaction_application_deferrals := 0
@@ -382,6 +383,9 @@ func get_status() -> Dictionary:
 		"activation_cohorts_committed": _activation_cohorts_committed,
 		"same_callback_edit_precommits": _same_callback_edit_precommits,
 		"same_callback_edit_precommit_chunks": _same_callback_edit_precommit_chunks,
+		"same_callback_edit_precommit_rejections": (
+			_same_callback_edit_precommit_rejections.duplicate(true)
+		),
 		"recent_incremental_activations": _recent_incremental_activations.duplicate(true),
 		"recent_incremental_first_draws": _recent_incremental_first_draws.duplicate(true),
 		"deferred_interaction_requests": _deferred_interaction_requests.size(),
@@ -952,6 +956,25 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 			or not bool(preflight.get("same_layout_edit", false)) \
 			or expected_members <= 0 \
 			or int(preflight.get("retirement_count", 0)) != 0:
+		var rejection_reason := str(preflight.get(
+			"same_layout_edit_rejection_reason", "preflight_contract"
+		))
+		if rejection_reason == "none" or rejection_reason.is_empty():
+			rejection_reason = "preflight_contract"
+		_same_callback_edit_precommit_rejections[rejection_reason] = int(
+			_same_callback_edit_precommit_rejections.get(rejection_reason, 0)
+		) + 1
+		_record_lifecycle_event("EDIT_PRECOMMIT_REJECTED", group_key, {
+			"reason": rejection_reason,
+			"status": str(preflight.get("status", "")),
+			"cohort_built": bool(preflight.get("cohort_built", false)),
+			"same_layout_edit": bool(preflight.get("same_layout_edit", false)),
+			"rejection_key": Dictionary(preflight.get(
+				"same_layout_edit_rejection_key", {}
+			)).duplicate(true),
+			"replacement_count": expected_members,
+			"retirement_count": int(preflight.get("retirement_count", 0)),
+		})
 		return false
 	var cohort_group_keys: Array[String] = []
 	var source_revision := int(terrain_identity.get("source_revision", 0))
