@@ -8,7 +8,7 @@ const EditBatch := preload(
 )
 
 const SUPPORT_XZ := Vector2(2.0, 2.0)
-const EDIT_XZ := Vector2(12.0, 12.0)
+const EDIT_XZ := Vector2(5.0, 5.0)
 
 
 func _run() -> void:
@@ -74,6 +74,13 @@ func _run() -> void:
 			break
 	if not committed or not replacement_ready:
 		_fail("edited collision generation did not become authoritative")
+		return
+	var edited_after := _vertical_hit(EDIT_XZ)
+	if not edited_after.is_empty() and \
+			float(edited_after.position.y) > float(edit_hit.position.y) - 0.25:
+		_fail("mined collision surface did not open: before=%.3f after=%.3f" % [
+			float(edit_hit.position.y), float(edited_after.position.y),
+		])
 		return
 	# The runtime record becomes query-visible inside the sink call. Poll the
 	# still-open trace until the frontend has recorded completion of that call.
