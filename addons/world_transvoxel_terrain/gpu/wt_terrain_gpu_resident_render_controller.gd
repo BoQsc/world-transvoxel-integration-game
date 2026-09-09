@@ -352,6 +352,7 @@ func get_status() -> Dictionary:
 		"render_submission_capacity": RENDER_SUBMISSION_CAPACITY,
 		"native_submissions_per_frame": NATIVE_SUBMISSIONS_PER_FRAME,
 		"resident_capacity": _resident_capacity,
+		"tracked_group_capacity": _tracked_group_capacity(),
 		"tracked_chunks": _groups.size(),
 		"active_chunks": active_groups,
 		"incomplete_chunks": incomplete_groups,
@@ -882,7 +883,8 @@ func _submit_native_captures() -> void:
 		)):
 			_reject_native_request(request, "resident chunk group is retiring")
 			continue
-		if not _groups.has(group_key) and _groups.size() >= _resident_capacity:
+		if not _groups.has(group_key) \
+				and _groups.size() >= _tracked_group_capacity():
 			_reject_native_request(request, "resident chunk capacity reached")
 			continue
 		var surface := str(identity.get("surface", ""))
@@ -929,6 +931,13 @@ func _submit_native_captures() -> void:
 		_submitted_surfaces += 1
 		submitted_this_frame += 1
 		_try_precommit_same_layout_edit(group_key)
+
+
+func _tracked_group_capacity() -> int:
+	# Resident capacity bounds active chunks. The effect arena separately reserves
+	# candidate slots for the next generation, so the controller must admit both
+	# halves of that double buffer or an atomic replacement cohort can deadlock.
+	return _resident_capacity * 2
 
 
 func _try_precommit_same_layout_edit(group_key: String) -> bool:

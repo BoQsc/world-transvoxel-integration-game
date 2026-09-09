@@ -216,6 +216,9 @@ func _initialize() -> void:
 	if not _test_empty_admission_budget():
 		quit(1)
 		return
+	if not _test_candidate_generation_headroom():
+		quit(1)
+		return
 	if not _test_spatial_retirement_routes() or not _test_batched_inventory():
 		quit(1)
 		return
@@ -240,7 +243,7 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1 committed_cohort_supersession=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 candidate_headroom=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1 committed_cohort_supersession=1")
 	quit(0)
 
 
@@ -590,6 +593,38 @@ func _test_empty_admission_budget() -> bool:
 		backend.free()
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: empty admission or extraction budget")
+	return ok
+
+
+func _test_candidate_generation_headroom() -> bool:
+	var controller := Controller.new()
+	var backend := RetiringAdmissionBackend.new()
+	var effect := RetiringAdmissionEffect.new()
+	controller._backend_terrain = backend
+	controller._effect = effect
+	controller._resident_capacity = 4
+	for index in range(4):
+		controller._groups["active:%d" % index] = {
+			"active": true,
+			"retiring": false,
+		}
+		var request := _resident_request({
+			"generation": index + 1,
+			"page_x": index + 100,
+			"surface": "terrain",
+			"input_stage": "pre_mesh_field",
+		})
+		request["request_id"] = index + 1
+		backend.pending.append(request)
+	controller._submit_native_captures()
+	var ok := controller._tracked_group_capacity() == 8 \
+			and controller._groups.size() == 8 \
+			and effect.submissions == 4 \
+			and backend.rejections.is_empty()
+	controller.free()
+	backend.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: candidate generation headroom")
 	return ok
 
 

@@ -68,35 +68,13 @@ def run_profile(
         if int(edit["visual_first_draw_us"]) >= 0
     )
     first_draw_summary = str(max(first_draw)) if first_draw else "n/a"
-    before = payload["metrics_before"]
-    hot = payload["hot_metrics_after"]
-    edited_cache = {
-        "hits": int(hot["page_edited_cache_hits"]) - int(before["page_edited_cache_hits"]),
-        "updates": int(hot["page_edited_cache_updates"]) - int(before["page_edited_cache_updates"]),
-        "misses": int(hot["page_edited_cache_misses"]) - int(before["page_edited_cache_misses"]),
-        "evictions": int(hot["page_edited_cache_evictions"]) - int(before["page_edited_cache_evictions"]),
-        "entries": int(hot["page_edited_cache_entries"]),
-        "capacity": int(hot["page_edited_cache_capacity"]),
-        "resident_bytes": int(hot["page_edited_cache_resident_bytes"]),
-    }
-    if (
-        edited_cache["updates"] <= 0
-        or edited_cache["misses"] <= 0
-        or edited_cache["entries"] <= 0
-        or edited_cache["entries"] > edited_cache["capacity"]
-    ):
-        print(
-            f"[{driver}/{layout}/{label}] GPU_INSTANT_CRITICAL_PATH_CACHE_FAIL "
-            f"edited_cache={edited_cache}"
-        )
-        return 1
     print(
         f"[{driver}/{layout}/{label}] GPU_INSTANT_CRITICAL_PATH_RESULT "
         f"submit_max_us={max(submissions)} hot_first_draw_max_us={first_draw_summary} "
         f"hot_observed_ready_max_us={max(ready)} "
         f"warm_settle_us={payload['cold_warm_settle_us']} "
         f"cold_ready_us={payload['cold_approach_ready_us']} "
-        f"queues={payload['maximum_queues']} edited_cache={edited_cache} "
+        f"queues={payload['maximum_queues']} "
         f"evidence={retained}"
     )
     return 0

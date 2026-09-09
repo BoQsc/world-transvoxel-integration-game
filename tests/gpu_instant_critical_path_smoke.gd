@@ -21,7 +21,9 @@ func _run() -> void:
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
-	_world.runtime_profile = _runtime_profile()
+	var runtime: Resource = _runtime_profile()
+	runtime.meshing_worker_count = 2
+	_world.runtime_profile = runtime
 	var generation: Resource = _generation_profile()
 	generation.world_chunk_count_x = 8
 	generation.world_chunk_count_y = 2
