@@ -106,7 +106,9 @@ func _run() -> void:
 	if not await _move_viewers(road[0]):
 		return
 	if not await _settle(1200):
-		_fail("initial road shell did not settle")
+		_fail("initial road shell did not settle: %s" % JSON.stringify(
+			_settle_failure_summary()
+		))
 		return
 	var metrics_before := _snapshot_metrics()
 	_phase = "cold_outbound_editing"
@@ -267,6 +269,16 @@ func _move_viewers(position: Vector3) -> bool:
 	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) or not _world.update_collision_viewer(2, _viewer_revision, position, 1):
 		_fail("viewer update rejected at %s" % position)
 		return false
+	var focus_keys: Array = []
+	for z in range(_current_target.z - 1, _current_target.z + 2):
+		for y in range(_current_target.y - 1, _current_target.y + 2):
+			for x in range(_current_target.x - 1, _current_target.x + 2):
+				focus_keys.append(Vector3i(x, y, z))
+	if not _world.update_foreground_priority_lease(
+		9002, _viewer_revision, 1, focus_keys
+	):
+		_fail("interaction focus lease rejected at %s" % position)
+		return false
 	if _phase in ["cold_outbound_editing", "cached_return"]:
 		_target_activations.append({
 			"phase": _phase,
@@ -401,6 +413,42 @@ func _snapshot_metrics() -> Dictionary:
 	var status: Dictionary = _world.get_gpu_resident_render_status()
 	var effect: Dictionary = status.get("effect_status", {})
 	return {"runtime": runtime, "gpu": effect, "resident": status}
+
+
+func _settle_failure_summary() -> Dictionary:
+	var snapshot := _snapshot_metrics()
+	var runtime: Dictionary = snapshot.runtime
+	var resident: Dictionary = snapshot.resident
+	var effect: Dictionary = snapshot.gpu
+	var wait: Dictionary = resident.get("last_activation_cohort_wait", {})
+	return {
+		"scheduler": int(runtime.get("scheduler_queued_jobs", 0)),
+		"storage": [int(runtime.get("storage_queued_requests", 0)), int(runtime.get("storage_active_requests", 0))],
+		"mesh": [int(runtime.get("mesh_worker_queued_jobs", 0)), int(runtime.get("mesh_worker_active_jobs", 0))],
+		"pending_replacements": int(runtime.get("pending_chunk_replacements", 0)),
+		"pending_retirements": int(runtime.get("pending_chunk_retirements", 0)),
+		"collision_not_ready": int(runtime.get("collision_required_not_ready_chunk_records", 0)),
+		"gpu": {
+			"queued": int(effect.get("queued_request_count", 0)),
+			"inflight": int(effect.get("inflight_extraction_count", 0)),
+			"resident": int(effect.get("resident_entry_count", 0)),
+		},
+		"controller": {
+			"tracked": int(resident.get("tracked_chunks", 0)),
+			"active": int(resident.get("active_chunks", 0)),
+			"prepared_inactive": int(resident.get("prepared_inactive_chunks", 0)),
+			"incomplete": int(resident.get("incomplete_chunks", 0)),
+		},
+		"activation_wait": {
+			"status": str(wait.get("status", "")),
+			"error": str(wait.get("error", "")),
+			"replacements": int(wait.get("replacement_count", 0)),
+			"retirements": int(wait.get("retirement_count", 0)),
+			"waiting_member": wait.get("waiting_member", {}),
+			"record_present": bool(wait.get("waiting_member_record_present", false)),
+			"route_present": bool(wait.get("waiting_member_group_present", false)),
+		},
+	}
 
 
 func _percentile(values: Array[int], fraction: float) -> int:
