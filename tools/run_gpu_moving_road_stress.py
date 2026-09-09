@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -20,13 +21,14 @@ DEFAULT_GODOT = pathlib.Path(
 MARKER = "GPU_MOVING_ROAD_STRESS_COMPLETE"
 
 
-def run(driver: str, godot: pathlib.Path, project: pathlib.Path) -> int:
+def run(driver: str, godot: pathlib.Path, project: pathlib.Path, trace: bool) -> int:
     capture = project / ".godot" / "world_transvoxel_captures" / "gpu_moving_road_stress"
     capture.mkdir(parents=True, exist_ok=True)
     result_path = capture / "result.json"
-    retained_path = capture / f"{driver}.json"
-    usage_path = capture / f"{driver}_usage.json"
-    log_path = capture / f"{driver}.log"
+    suffix = "_trace" if trace else ""
+    retained_path = capture / f"{driver}{suffix}.json"
+    usage_path = capture / f"{driver}{suffix}_usage.json"
+    log_path = capture / f"{driver}{suffix}.log"
     result_path.unlink(missing_ok=True)
     command = [
         str(godot), "--rendering-driver", driver, "--path", str(project),
@@ -39,7 +41,9 @@ def run(driver: str, godot: pathlib.Path, project: pathlib.Path) -> int:
     started = time.monotonic()
     samples: list[dict[str, float | int]] = []
     try:
-        child = subprocess.Popen(command, cwd=project)
+        environment = os.environ.copy()
+        environment["WT_GPU_MOVING_ROAD_TRACE"] = "1" if trace else "0"
+        child = subprocess.Popen(command, cwd=project, env=environment)
         process = psutil.Process(child.pid)
         process.cpu_percent(None)
         while child.poll() is None:
@@ -67,6 +71,7 @@ def run(driver: str, godot: pathlib.Path, project: pathlib.Path) -> int:
     usage = {
         "schema": "world_transvoxel.gpu_moving_road_usage.v1",
         "driver": driver,
+        "causal_trace_enabled": trace,
         "wall_seconds": time.monotonic() - started,
         "rss_bytes_maximum": max((int(x["rss_bytes"]) for x in samples), default=0),
         "cpu_percent_maximum": max((float(x["cpu_percent"]) for x in samples), default=0.0),
@@ -97,10 +102,11 @@ def main() -> int:
     parser.add_argument("--godot", type=pathlib.Path, default=DEFAULT_GODOT)
     parser.add_argument("--project", type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
     parser.add_argument("--driver", choices=("vulkan", "d3d12", "both"), default="both")
+    parser.add_argument("--trace", action="store_true", help="capture the high-overhead native causal trace")
     args = parser.parse_args()
     drivers = ("vulkan", "d3d12") if args.driver == "both" else (args.driver,)
     for driver in drivers:
-        if run(driver, args.godot.resolve(), args.project.resolve()) != 0:
+        if run(driver, args.godot.resolve(), args.project.resolve(), args.trace) != 0:
             return 1
     return 0
 

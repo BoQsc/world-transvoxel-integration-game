@@ -22,6 +22,7 @@ var _maximums := {}
 var _reference_scene: Node
 var _material_applicator: Node
 var _target_activations: Array[Dictionary] = []
+var _causal_trace_enabled := false
 
 
 func _setup_viewport() -> void:
@@ -50,6 +51,7 @@ func _setup_viewport() -> void:
 
 
 func _run() -> void:
+	_causal_trace_enabled = OS.get_environment("WT_GPU_MOVING_ROAD_TRACE") == "1"
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
@@ -110,6 +112,9 @@ func _run() -> void:
 			_settle_failure_summary()
 		))
 		return
+	if _causal_trace_enabled and not _world.begin_cpu_causal_trace():
+		_fail("native causal trace did not start")
+		return
 	var metrics_before := _snapshot_metrics()
 	_phase = "cold_outbound_editing"
 	for index in range(road.size()):
@@ -127,6 +132,10 @@ func _run() -> void:
 	var outbound_settle_started := Time.get_ticks_usec()
 	var outbound_settle_frames := await _settle_count(300)
 	var outbound_settle_us := Time.get_ticks_usec() - outbound_settle_started
+	var causal_trace: Dictionary = {}
+	if _causal_trace_enabled:
+		_world.end_cpu_causal_trace()
+		causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	var outbound_metrics := _snapshot_metrics()
 	_phase = "cached_return"
 	for reverse_index in range(road.size() - 1, -1, -1):
@@ -214,6 +223,8 @@ func _run() -> void:
 			"unresolved_collision_targets": unresolved_collision_targets,
 		},
 		"maximums": _maximums,
+		"causal_trace_enabled": _causal_trace_enabled,
+		"causal_trace": causal_trace,
 		"metrics_before": metrics_before,
 		"metrics_outbound": outbound_metrics,
 		"metrics_final": final_metrics,
