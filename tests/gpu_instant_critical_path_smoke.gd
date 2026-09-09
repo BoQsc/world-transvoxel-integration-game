@@ -392,6 +392,15 @@ func _measurement_snapshot() -> Dictionary:
 		"edit_queried_chunks": int(runtime.get("edit_queried_chunks", 0)),
 		"edit_replaced_chunks": int(runtime.get("edit_replaced_chunks", 0)),
 		"mesh_prepare_time_ns_total": int(runtime.get("mesh_prepare_time_ns_total", 0)),
+		"page_edited_cache_hits": int(runtime.get("page_edited_cache_hits", 0)),
+		"page_edited_cache_updates": int(runtime.get("page_edited_cache_updates", 0)),
+		"page_edited_cache_misses": int(runtime.get("page_edited_cache_misses", 0)),
+		"page_edited_cache_evictions": int(runtime.get("page_edited_cache_evictions", 0)),
+		"page_edited_cache_entries": int(runtime.get("page_edited_cache_entries", 0)),
+		"page_edited_cache_capacity": int(runtime.get("page_edited_cache_capacity", 0)),
+		"page_edited_cache_resident_bytes": int(runtime.get(
+			"page_edited_cache_resident_bytes", 0
+		)),
 		"native_packed_bytes_total": int(effect.get("native_packed_bytes_total", 0)),
 		"arena_uploaded_bytes": int(arena.get("uploaded_bytes", 0)),
 		"arena_counter_readback_bytes": int(effect.get("arena_counter_readback_bytes", 0)),

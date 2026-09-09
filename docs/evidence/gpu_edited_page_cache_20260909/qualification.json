@@ -1,0 +1,41 @@
+{
+  "schema": "world_transvoxel.gpu_edited_page_cache_qualification.v1",
+  "native_commit": "ad5ee686657ed2421b5067684032783fab875545",
+  "runtime_artifact_sha256": "f52703e9e4a7486698b160dc360a74491201a59199572860e11118f32cb94b8c",
+  "drivers": {
+    "vulkan": {
+      "baseline_prepare_ms": 4.8733,
+      "current_prepare_ms": 0.8729,
+      "reduction_percent": 82.1,
+      "submission_max_us": 416,
+      "first_draw_max_us": 3980,
+      "cold_ready_us": 66839,
+      "edited_cache": {
+        "hits": 0,
+        "updates": 5,
+        "misses": 1,
+        "evictions": 0
+      },
+      "cache_entries": 1,
+      "cache_capacity": 96,
+      "cache_resident_bytes": 82428
+    },
+    "d3d12": {
+      "baseline_prepare_ms": 4.8392,
+      "current_prepare_ms": 0.867,
+      "reduction_percent": 82.1,
+      "submission_max_us": 416,
+      "first_draw_max_us": 7504,
+      "cold_ready_us": 67060,
+      "edited_cache": {
+        "hits": 0,
+        "updates": 5,
+        "misses": 1,
+        "evictions": 0
+      },
+      "cache_entries": 1,
+      "cache_capacity": 96,
+      "cache_resident_bytes": 82428
+    }
+  }
+}

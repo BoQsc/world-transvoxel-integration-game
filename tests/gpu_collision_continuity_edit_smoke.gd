@@ -75,13 +75,6 @@ func _run() -> void:
 	if not committed or not replacement_ready:
 		_fail("edited collision generation did not become authoritative")
 		return
-	var edited_after := _vertical_hit(EDIT_XZ)
-	if not edited_after.is_empty() and \
-			float(edited_after.position.y) > float(edit_hit.position.y) - 0.25:
-		_fail("mined collision surface did not open: before=%.3f after=%.3f" % [
-			float(edit_hit.position.y), float(edited_after.position.y),
-		])
-		return
 	# The runtime record becomes query-visible inside the sink call. Poll the
 	# still-open trace until the frontend has recorded completion of that call.
 	var trace: Dictionary = {}
@@ -97,6 +90,24 @@ func _run() -> void:
 		if sink_recorded:
 			break
 		await process_frame
+	var edited_after := _vertical_hit(EDIT_XZ)
+	var opened := edited_after.is_empty() or \
+		float(edited_after.position.y) <= float(edit_hit.position.y) - 0.25
+	for settle_frame in range(30):
+		if opened:
+			break
+		await physics_frame
+		if _vertical_hit(SUPPORT_XZ).is_empty():
+			_fail("unmodified player support disappeared while collision settled at frame %d" % settle_frame)
+			return
+		edited_after = _vertical_hit(EDIT_XZ)
+		opened = edited_after.is_empty() or \
+			float(edited_after.position.y) <= float(edit_hit.position.y) - 0.25
+	if not opened:
+		_fail("mined collision surface did not open: before=%.3f after=%.3f" % [
+			float(edit_hit.position.y), float(edited_after.position.y),
+		])
+		return
 	_world.end_cpu_causal_trace()
 	var dirty_block_mask := 0
 	var collision_sink_us := -1

@@ -1,0 +1,5 @@
+Godot Engine v4.7.2.stable.steam.ed1daf0bf - https://godotengine.org
+D3D12 12_0 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce GTX 1060 with Max-Q Design
+
+GPU_RESIDENT_FIRST_EDIT_TIMELINE {"activation_queued":{"elapsed_us":32967,"frame":1},"committed":{"elapsed_us":16244,"frame":0},"extracting":{"elapsed_us":49669,"frame":2},"visible":{"elapsed_us":49662,"frame":2}}
+GPU_RESIDENT_FIRST_EDIT_SMOKE_PASS commit=0 visual_after_commit=2 first_lod=2 refined=1 prepare_until_feedback_us=1733
