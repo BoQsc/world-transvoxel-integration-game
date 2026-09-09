@@ -1453,15 +1453,18 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 	)).get("terrain", {})).get("identity", {})
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	var cohort: Dictionary
-	if _stage_timing_enabled:
+	var measure_native_timing := _stage_timing_enabled \
+			and _activation_cohort_retry_attempts % 30 == 1
+	if measure_native_timing:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity, true)
 	else:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("activation_native_query", phase_start)
-		var native_timing: Dictionary = cohort.get("query_timing_usec", {})
-		for stage in native_timing:
-			_accumulate_stage_time("native_query_" + str(stage), int(native_timing[stage]))
+		if measure_native_timing:
+			var native_timing: Dictionary = cohort.get("query_timing_usec", {})
+			for stage in native_timing:
+				_accumulate_stage_time("native_query_" + str(stage), int(native_timing[stage]))
 	var cohort_status := str(cohort.get("status", ""))
 	# Native STALE_APPLICATION rejects the seed before any region selection.
 	# Retire it without spending the expensive-query budget on obsolete work.
@@ -1736,11 +1739,37 @@ func _mark_groups_retiring(group_keys: Array[String]) -> void:
 
 
 func _record_activation_cohort_wait(wait: Dictionary) -> void:
-	_last_activation_cohort_wait = wait.duplicate(true)
+	# Cohort replies contain large selected-member arrays. Copy only the bounded
+	# blocker summary needed by runtime diagnostics; deep-copying the full reply
+	# on every retry made instrumentation itself a multi-millisecond frame cost.
+	_last_activation_cohort_wait = {}
+	for key in [
+		"status", "error", "regional", "open_viewer_plan_publications",
+		"pending_replacement_count", "ready_staged_replacement_count",
+		"pending_retirement_count", "pending_visual_retirement_count",
+		"replacement_count", "retirement_count", "boundary_mask_wait_count",
+		"cohort_candidate_count", "cohort_overlap_members",
+		"cohort_same_lod_face_members", "cohort_coarse_face_members",
+		"cohort_fine_face_members", "priority_requested_member_count",
+		"same_layout_edit", "same_layout_edit_rejection_reason",
+		"authoritative_coverage_complete",
+	]:
+		if wait.has(key):
+			_last_activation_cohort_wait[key] = wait[key]
+	_last_activation_cohort_wait["query_timing_usec"] = Dictionary(
+		wait.get("query_timing_usec", {})
+	).duplicate()
+	_last_activation_cohort_wait["cohort_selected_sample"] = Array(
+		wait.get("cohort_selected_sample", [])
+	).slice(0, 8).duplicate(true)
+	_last_activation_cohort_wait["cohort_retirement_sample"] = Array(
+		wait.get("cohort_retirement_sample", [])
+	).slice(0, 8).duplicate(true)
 	_last_activation_cohort_wait_frame = _process_frame
 	var member := Dictionary(wait.get("waiting_member", {}))
 	if member.is_empty():
 		return
+	_last_activation_cohort_wait["waiting_member"] = member.duplicate(true)
 	var route_key := _activation_chunk_key(member)
 	var group_key := str(_prepared_group_routes.get(route_key, ""))
 	_last_activation_cohort_wait["waiting_member_route_key"] = route_key

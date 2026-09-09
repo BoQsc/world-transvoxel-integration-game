@@ -299,6 +299,17 @@ func _move_viewers(position: Vector3) -> bool:
 		for y in range(_current_target.y - 1, _current_target.y + 2):
 			for x in range(_current_target.x - 1, _current_target.x + 2):
 				focus_keys.append(Vector3i(x, y, z))
+	var predictive_target := Vector3i(
+		floori(predictive_position.x / 16.0),
+		0,
+		floori(predictive_position.z / 16.0)
+	)
+	for z in range(predictive_target.z - 1, predictive_target.z + 2):
+		for y in range(predictive_target.y - 1, predictive_target.y + 2):
+			for x in range(predictive_target.x - 1, predictive_target.x + 2):
+				var key := Vector3i(x, y, z)
+				if not focus_keys.has(key):
+					focus_keys.append(key)
 	if not _world.update_foreground_priority_lease(
 		9002, _viewer_revision, 1, focus_keys
 	):

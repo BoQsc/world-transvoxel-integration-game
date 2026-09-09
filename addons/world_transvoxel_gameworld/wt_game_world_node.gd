@@ -1880,9 +1880,15 @@ func _update_player_foreground_priority_leases(force: bool) -> bool:
 	if not _player.has_method("get_foreground_priority_targets"):
 		return _fail("player does not expose foreground priority targets")
 	var targets: Dictionary = _player.call("get_foreground_priority_targets")
+	var support_points: Array = Array(targets.get("support_points", [])).duplicate()
+	# The predictive LOD0 viewer is part of the interaction working set. Admit
+	# its shell to the reserved foreground lane while it is still ahead of the
+	# player, so coarse-to-fine cohorts can finish before physical arrival.
+	if player_predictive_viewer_enabled \
+			and not is_inf(_last_predictive_viewer_position.x):
+		support_points.append(_last_predictive_viewer_position)
 	var support_keys := _foreground_chunk_keys(
-		Array(targets.get("support_points", [])),
-		FOREGROUND_PRIORITY_SHELL_RADIUS
+		support_points, FOREGROUND_PRIORITY_SHELL_RADIUS
 	)
 	var focus_keys: Array = []
 	if bool(targets.get("focus_valid", false)):
