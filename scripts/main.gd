@@ -1180,6 +1180,10 @@ func _profile_settings(profile_id: StringName) -> Dictionary:
 			"runtime_demand_capacity_per_viewer": 10000,
 			"runtime_render_entry_capacity": 4096,
 			"runtime_collision_entry_capacity": 4096,
+			# Startup can hold the current visual set and its replacement frontier
+			# concurrently. The controller must not fall back to its 64-chunk default,
+			# which rejects the cohort members needed to release prepared entries.
+			"runtime_gpu_resident_chunk_capacity": 1024,
 			"runtime_lod_refinement_radius_chunks": 1,
 			"runtime_render_apply_budget": 8,
 			"runtime_collision_apply_budget": 8,
