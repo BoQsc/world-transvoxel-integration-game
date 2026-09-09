@@ -128,6 +128,9 @@ func _run() -> void:
 	var hot_regional_publications := int(hot_metrics_after.get(
 		"regional_visibility_publications", 0
 	)) - int(metrics_before.get("regional_visibility_publications", 0))
+	var hot_physics_collision_items := int(hot_metrics_after.get(
+		"physics_boundary_collision_apply_items", 0
+	)) - int(metrics_before.get("physics_boundary_collision_apply_items", 0))
 	var hot_same_callback_precommits := int(hot_metrics_after.get(
 		"same_callback_edit_precommits", 0
 	)) - int(metrics_before.get("same_callback_edit_precommits", 0))
@@ -246,6 +249,7 @@ func _run() -> void:
 		"hot_same_callback_precommits": hot_same_callback_precommits,
 		"hot_completed_split_replacements_detached": hot_detached,
 		"hot_regional_visibility_publications": hot_regional_publications,
+		"hot_physics_boundary_collision_apply_items": hot_physics_collision_items,
 		"hot_empty_collision_generations": hot_empty_collision_generations,
 		"cold_approach_ready_us": cold_ready_us,
 		"cold_approach_ready_frames": cold_ready_frames,
@@ -284,6 +288,12 @@ func _run() -> void:
 	result["native_event_counts"] = required_native
 	result["gpu_event_counts"] = required_gpu
 	_write_result(result)
+	if hot_physics_collision_items < HOT_EDIT_COUNT:
+		_fail("interactive collisions missed the physics-boundary lane: %d/%d" % [
+			hot_physics_collision_items,
+			HOT_EDIT_COUNT,
+		])
+		return
 	if not visual_deadline_miss.is_empty():
 		_fail("hot edit %d missed two-frame visual publication: %d us" % [
 			int(visual_deadline_miss["index"]),
@@ -385,6 +395,18 @@ func _measurement_snapshot() -> Dictionary:
 		)),
 		"pending_chunk_replacements": int(runtime.get(
 			"pending_chunk_replacements", 0
+		)),
+		"physics_boundary_collision_apply_calls": int(runtime.get(
+			"physics_boundary_collision_apply_calls", 0
+		)),
+		"physics_boundary_collision_apply_items": int(runtime.get(
+			"physics_boundary_collision_apply_items", 0
+		)),
+		"physics_boundary_collision_apply_time_ns_total": int(runtime.get(
+			"physics_boundary_collision_apply_time_ns_total", 0
+		)),
+		"physics_boundary_collision_apply_time_ns_maximum": int(runtime.get(
+			"physics_boundary_collision_apply_time_ns_maximum", 0
 		)),
 		"gpu_active_chunks": int(gpu.get("active_chunks", 0)),
 		"gpu_incomplete_chunks": int(gpu.get("incomplete_chunks", 0)),
