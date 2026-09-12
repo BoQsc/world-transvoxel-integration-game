@@ -63,6 +63,12 @@ func _run() -> void:
 		_fail("collision continuity causal trace did not start")
 		return
 	var trace_started_ticks_usec := Time.get_ticks_usec()
+	var initial_chunk_state: RefCounted = _world.query_chunk_state(Vector3i(0, 0, 0), 0)
+	var initial_collision_identity := {
+		"generation": int(initial_chunk_state.call("get_generation")) if initial_chunk_state != null else 0,
+		"collision_generation": int(initial_chunk_state.call("get_collision_generation")) if initial_chunk_state != null else 0,
+		"collision_ready": bool(initial_chunk_state.call("is_collision_ready")) if initial_chunk_state != null else false,
+	}
 	var operation := EditOperation.new()
 	operation.mode = EditOperation.Mode.CARVE
 	operation.brush_shape = EditOperation.BrushShape.SPHERE
@@ -200,10 +206,11 @@ func _run() -> void:
 		if str(event.get("kind", "")) in [
 			"collision_payload_prepared", "collision_sink_applied"
 		]:
-			collision_events.append("%s:cause=%d:key=%d,%d,%d,L%d:status=%d" % [
+			collision_events.append("%s:cause=%d:key=%d,%d,%d,L%d:generation=%d:status=%d" % [
 				str(event.get("kind", "")), int(event.get("cause_id", 0)),
 				int(event.get("chunk_x", -1)), int(event.get("chunk_y", -1)),
 				int(event.get("chunk_z", -1)), int(event.get("chunk_lod", -1)),
+				int(event.get("generation", 0)),
 				int(event.get("status", 0)),
 			])
 		if int(event.get("cause_id", 0)) != 1 \
@@ -226,8 +233,19 @@ func _run() -> void:
 			mesh_finished_us = trace_started_ticks_usec \
 				+ int(event.get("elapsed_ns", 0)) / 1000 - submitted_ticks_usec
 	if dirty_block_mask <= 0 or dirty_block_mask >= 255:
-		_fail("edit did not exercise a partial collision patch: mask=%d events=%s" % [
-			dirty_block_mask, str(collision_events),
+		var runtime_metrics: Dictionary = _world.get_runtime_metrics()
+		var collision_diagnostics := {
+			"cache_entries": runtime_metrics.get("resource_cache_collision_entries", -1),
+			"cache_capacity": runtime_metrics.get("resource_cache_collision_entry_capacity", -1),
+			"desired_chunks": runtime_metrics.get("desired_collision_chunks", -1),
+			"collision_resources": runtime_metrics.get("collision_resources", -1),
+			"pending_replacements": runtime_metrics.get("pending_chunk_replacements", -1),
+			"queued_collision": runtime_metrics.get("queued_collision", -1),
+			"deferred_collision": runtime_metrics.get("deferred_collision", -1),
+		}
+		_fail("edit did not exercise a partial collision patch: mask=%d initial=%s events=%s diagnostics=%s" % [
+			dirty_block_mask, str(initial_collision_identity), str(collision_events),
+			str(collision_diagnostics),
 		])
 		return
 	if collision_sink_us < 0:
