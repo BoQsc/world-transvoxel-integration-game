@@ -111,6 +111,35 @@ def collision_failure_report_path(project: pathlib.Path) -> pathlib.Path:
     )
 
 
+def collision_incident_report_path(project: pathlib.Path) -> pathlib.Path:
+    return (
+        project / ".godot" / "world_transvoxel_captures"
+        / "collision_incident" / "latest.json"
+    )
+
+
+def print_collision_incident_report(project: pathlib.Path) -> None:
+    path = collision_incident_report_path(project)
+    payload = load_json(path) if path.is_file() else None
+    if not payload:
+        return
+    status = payload.get("collision_status", {})
+    readiness = status.get("readiness", {})
+    runtime = payload.get("runtime_metrics", {})
+    print(
+        "WT_COLLISION_INCIDENT_REPORT "
+        f"wait_seconds={status.get('wait_seconds', 0)} "
+        f"reason={readiness.get('reason', 'unknown')} "
+        f"pending={len(readiness.get('not_ready_chunks', []))} "
+        f"unsafe={len(readiness.get('movement_unsafe_chunks', []))} "
+        f"queued_collision={runtime.get('queued_collision', 0)} "
+        f"deferred_collision={runtime.get('deferred_collision', 0)} "
+        f"replacements={runtime.get('pending_chunk_replacements', 0)} "
+        f"report={path}",
+        flush=True,
+    )
+
+
 def latest_human_marker(project: pathlib.Path) -> pathlib.Path:
     root = marker_root(project)
     candidates = sorted(root.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -366,6 +395,7 @@ def run_waterfall_session(
     failure_path = failure_report_path(project)
     failure_path.unlink(missing_ok=True)
     collision_failure_report_path(project).unlink(missing_ok=True)
+    collision_incident_report_path(project).unlink(missing_ok=True)
 
     launcher = psutil.Process()
     available_affinity = launcher.cpu_affinity()
@@ -652,6 +682,7 @@ def main(argv: list[str]) -> int:
     exit_code = subprocess.call(command, cwd=project)
     print_failure_self_report(project)
     print_collision_failure_report(project)
+    print_collision_incident_report(project)
     return exit_code
 
 

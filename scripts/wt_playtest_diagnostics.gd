@@ -617,6 +617,11 @@ func set_debug_options(collision: bool, chunks: bool, pipeline: bool, hud: bool)
 	_set_performance_hud(hud)
 
 
+func toggle_all_debug_options() -> void:
+	var enabled := not _any_debug_enabled()
+	set_debug_options(enabled, enabled, enabled, enabled)
+
+
 func _refresh_pipeline_visuals() -> void:
 	if not _terrain_world.has_method("get_debug_gpu_processing_states"):
 		return

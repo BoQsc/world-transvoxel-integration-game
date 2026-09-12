@@ -278,7 +278,7 @@ func _ready() -> void:
 		_set_human_material_mode_by_name(HUMAN_MATERIAL_MODE_PRODUCTION)
 	human_launch_command_line = _human_launch_command_text(args)
 	human_test_context_line = _human_test_context_text()
-	human_controls_hint_line = "controls: ESC menu | LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+R priority diagnostic | Tilde+T visual material"
+	human_controls_hint_line = "controls: ESC diagnostics menu | Tilde+D terrain debug | LMB dig/remove selected water | RMB place selected | MMB paint selected | 1-9 select material (9 water) | WASD move | Space jump/up | Tilde+F fly | Tilde+M mark | Tilde+P path | Tilde+L lights | Tilde+R priority diagnostic | Tilde+T visual material"
 	_record_human_activity()
 	_update_frame_rate_policy(true)
 	if autonomous:
@@ -2243,6 +2243,11 @@ func handle_human_command(command: StringName) -> bool:
 			return true
 		&"toggle_terrain_waterfall":
 			_toggle_terrain_waterfall()
+			return true
+		&"toggle_terrain_diagnostics":
+			if playtest_diagnostics == null:
+				return false
+			playtest_diagnostics.call("toggle_all_debug_options")
 			return true
 		&"toggle_foreground_priority":
 			if game_world == null or not game_world.has_method(

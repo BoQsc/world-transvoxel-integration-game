@@ -556,6 +556,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			human_command_armed = false
 			_forward_human_command(&"toggle_terrain_waterfall")
 			return
+		if human_command_armed and (event.keycode == KEY_D or event.physical_keycode == KEY_D):
+			human_command_armed = false
+			_forward_human_command(&"toggle_terrain_diagnostics")
+			return
 		if human_command_armed and (event.keycode == KEY_R or event.physical_keycode == KEY_R):
 			human_command_armed = false
 			_forward_human_command(&"toggle_foreground_priority")
