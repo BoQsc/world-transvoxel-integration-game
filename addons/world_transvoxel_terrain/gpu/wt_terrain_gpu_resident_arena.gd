@@ -28,6 +28,8 @@ var _commit_shader := RID()
 var _commit_pipeline := RID()
 var _completion_shader := RID()
 var _completion_pipeline := RID()
+var _compact_shader := RID()
+var _compact_pipeline := RID()
 var _status_buffer := RID()
 var _summary_buffer := RID()
 var _activation_buffer := RID()
@@ -37,6 +39,9 @@ var _completion_buffer := RID()
 var _completion_uniform_set := RID()
 var _vertex_format := -1
 var _maximum_slots := 0
+var _next_compact_slot := 0
+var _free_compact_slots: Array[int] = []
+var _compact_slot_count := 0
 var _pages: Array[Dictionary] = []
 var _pending_readbacks: Dictionary = {}
 var _completed_readbacks: Array[Dictionary] = []
@@ -90,13 +95,16 @@ func initialize(
 	commit_pipeline: RID,
 	completion_shader: RID,
 	completion_pipeline: RID,
+	compact_shader: RID,
+	compact_pipeline: RID,
 	vertex_format: int,
 	maximum_slots: int
 ) -> bool:
 	if rendering_device == null or not compute_shader.is_valid() \
 			or not compute_pipeline.is_valid() or not commit_shader.is_valid() \
 			or not commit_pipeline.is_valid() or not completion_shader.is_valid() \
-			or not completion_pipeline.is_valid() or vertex_format < 0 \
+			or not completion_pipeline.is_valid() or not compact_shader.is_valid() \
+			or not compact_pipeline.is_valid() or vertex_format < 0 \
 			or maximum_slots <= 0:
 		_last_error = "resident arena initialization parameters are invalid"
 		return false
@@ -107,16 +115,18 @@ func initialize(
 	_commit_pipeline = commit_pipeline
 	_completion_shader = completion_shader
 	_completion_pipeline = completion_pipeline
+	_compact_shader = compact_shader
+	_compact_pipeline = compact_pipeline
 	_vertex_format = vertex_format
 	_maximum_slots = maximum_slots
 	_status_buffer = _rendering_device.storage_buffer_create(
-		maximum_slots * STATUS_SLOT_STRIDE, PackedByteArray()
+		maximum_slots * 2 * STATUS_SLOT_STRIDE, PackedByteArray()
 	)
 	_summary_buffer = _rendering_device.storage_buffer_create(
-		maximum_slots * SUMMARY_STRIDE, PackedByteArray()
+		maximum_slots * 2 * SUMMARY_STRIDE, PackedByteArray()
 	)
 	_activation_buffer = _rendering_device.storage_buffer_create(
-		maximum_slots * 4, PackedByteArray()
+		maximum_slots * 2 * 4, PackedByteArray()
 	)
 	_completion_buffer = _rendering_device.storage_buffer_create(
 		maximum_slots * COMPLETION_STRIDE, PackedByteArray()
@@ -154,6 +164,9 @@ func initialize(
 		_last_error = "resident arena GPU publication uniform set is invalid"
 		return false
 	_closed = false
+	_next_compact_slot = 0
+	_free_compact_slots.clear()
+	_compact_slot_count = 0
 	_last_error = ""
 	return true
 
@@ -594,6 +607,15 @@ func release(entry: Dictionary) -> bool:
 	if resident_kind == "empty":
 		_active_slot_count = maxi(0, _active_slot_count - 1)
 		return true
+	if resident_kind == "compact_meshlets":
+		_free_rids(Array(entry.get("resident_rids", [])))
+		_resident_allocated_bytes = maxi(
+			0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
+		)
+		_release_compact_slot(int(entry.get("gpu_slot", -1)))
+		_compacted_resident_entries = maxi(0, _compacted_resident_entries - 1)
+		_active_slot_count = maxi(0, _active_slot_count - 1)
+		return true
 	if resident_kind != "provisional":
 		return false
 	_free_rids(Array(entry.get("resident_view_rids", [])))
@@ -631,6 +653,9 @@ func close() -> void:
 	_active_slot_count = 0
 	_scratch_allocated_bytes = 0
 	_resident_allocated_bytes = 0
+	_next_compact_slot = 0
+	_free_compact_slots.clear()
+	_compact_slot_count = 0
 	_commit_uniform_set = RID()
 	_commit_descriptor_buffer = RID()
 	_activation_buffer = RID()
@@ -642,11 +667,12 @@ func close() -> void:
 
 func get_status() -> Dictionary:
 	return {
-		"schema": "world_transvoxel.terrain.gpu_resident_arena.v4",
-		"architecture": "bounded_gpu_validated_provisional_residency",
+		"schema": "world_transvoxel.terrain.gpu_resident_arena.v5",
+		"architecture": "bounded_gpu_validated_exact_meshlet_residency",
 		"position_encoding": "float32_world_space",
 		"page_slot_capacity": PAGE_SLOT_COUNT,
 		"maximum_slots": _maximum_slots,
+		"compact_visibility_slots": _compact_slot_count,
 		"allocated_slots": _allocated_slot_count,
 		"scratch_in_flight": _scratch_in_flight_count,
 		"peak_scratch_in_flight": _peak_scratch_in_flight_count,
@@ -660,9 +686,9 @@ func get_status() -> Dictionary:
 		"slot_releases": _slot_releases,
 		"binding_buffer_count_per_page": BINDING_COUNT,
 		"resident_buffer_count_per_entry": 1,
-		"compacted_surface_vertices": false,
-		"compacted_surface_indices": false,
-		"compacted_surface_indirect_commands": false,
+		"compacted_surface_vertices": true,
+		"compacted_surface_indices": true,
+		"compacted_surface_indirect_commands": true,
 		"gpu_cohort_validation": true,
 		"cpu_readback_blocks_publication": false,
 		"indirect_commands_per_surface": MAXIMUM_MESHLETS_PER_SLOT,
@@ -719,19 +745,50 @@ func _on_dispatch_completion(data: PackedByteArray, ticket: int) -> void:
 	_readback_mutex.unlock()
 
 
-func _create_compact_resident(
-	page: Dictionary, slot_index: int, vertex_count: int, index_count: int
-) -> Dictionary:
-	var buffers: Array = page.get("buffers", [])
-	var strides: Array = page.get("strides", [])
-	if slot_index < 0 or buffers.size() != BINDING_COUNT \
-			or strides.size() != BINDING_COUNT:
-		_last_error = "resident arena compact source is invalid"
-		return {}
+func compact_resident_meshlets(entry: Dictionary) -> Dictionary:
+	if _closed or str(entry.get("resident_kind", "")) != "provisional" \
+			or bool(entry.get("counts_pending", true)):
+		return entry
+	if bool(entry.get("empty", false)):
+		if not commit_visibility([], [entry]):
+			return entry
+		_free_rids(Array(entry.get("resident_view_rids", [])))
+		_resident_allocated_bytes = maxi(
+			0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
+		)
+		_release_scratch_slot(
+			int(entry.get("arena_page_index", -1)),
+			int(entry.get("arena_slot_index", -1)),
+			int(entry.get("arena_generation", -1))
+		)
+		var empty_entry := entry.duplicate()
+		empty_entry["resident_kind"] = "empty"
+		for field in [
+			"vertex_array", "index_array", "position_buffer", "normal_buffer",
+			"meta_buffer", "index_buffer", "indirect_buffer", "indirect_offset",
+			"indirect_draw_count", "gpu_slot", "arena_page_index",
+			"arena_slot_index", "arena_generation", "resident_view_rids",
+			"resident_allocated_bytes", "meshlet_buffer_sizes", "input_buffers",
+			"input_offsets", "input_sizes", "meshlet_index_source_buffer",
+			"meshlet_index_source_offset", "arena_ticket",
+		]:
+			empty_entry.erase(field)
+		_last_error = ""
+		return empty_entry
+
+	var vertex_count := int(entry.get("vertex_count", 0))
+	var index_count := int(entry.get("index_count", 0))
+	var draw_count := int(entry.get("indirect_draw_count", 0))
+	if vertex_count <= 0 or index_count <= 0 or draw_count <= 0:
+		return entry
+	var compact_slot := _allocate_compact_slot()
+	if compact_slot < 0:
+		return entry
 	var position_bytes := vertex_count * PACKED_POSITION_STRIDE
 	var normal_bytes := vertex_count * PACKED_NORMAL_STRIDE
 	var meta_bytes := vertex_count * PACKED_META_STRIDE
 	var index_bytes := index_count * 4
+	var indirect_bytes := draw_count * DRAW_COMMAND_STRIDE
 	var position_buffer := _rendering_device.vertex_buffer_create(
 		position_bytes, PackedByteArray(), RenderingDevice.BUFFER_CREATION_AS_STORAGE_BIT
 	)
@@ -744,72 +801,144 @@ func _create_compact_resident(
 	var index_buffer := _rendering_device.index_buffer_create(
 		index_count, RenderingDevice.INDEX_BUFFER_FORMAT_UINT32
 	)
-	var draw_command := PackedInt32Array([index_count, 1, 0, 0, 0]).to_byte_array()
+	var compact_index_storage := _rendering_device.storage_buffer_create(
+		index_bytes, PackedByteArray()
+	)
 	var indirect_buffer := _rendering_device.storage_buffer_create(
-		DRAW_COMMAND_STRIDE,
-		draw_command,
+		indirect_bytes, PackedByteArray(),
 		RenderingDevice.STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT
 	)
-	var resource_rids: Array = [
-		position_buffer, normal_buffer, meta_buffer, index_buffer, indirect_buffer,
+	var buffers: Array = [
+		position_buffer, normal_buffer, meta_buffer, index_buffer,
+		compact_index_storage, indirect_buffer,
 	]
-	for rid in resource_rids:
+	for rid in buffers:
 		if not rid is RID or not rid.is_valid():
-			_free_rids(resource_rids)
-			_last_error = "resident arena exact buffer allocation failed"
-			return {}
-	var copies := [
-		[13, position_buffer, position_bytes],
-		[14, normal_buffer, normal_bytes],
-		[15, meta_buffer, meta_bytes],
-		[17, index_buffer, index_bytes],
+			_free_rids(buffers)
+			_release_compact_slot(compact_slot)
+			_last_error = "resident arena exact meshlet allocation failed"
+			return entry
+	var source_buffers := [
+		entry.get("position_buffer", RID()), entry.get("normal_buffer", RID()),
+		entry.get("meta_buffer", RID()),
+		entry.get("meshlet_index_source_buffer", RID()),
+		entry.get("indirect_buffer", RID()), _status_buffer,
 	]
-	for copy in copies:
-		var binding := int(copy[0])
-		var copy_error := _rendering_device.buffer_copy(
-			buffers[binding], copy[1],
-			slot_index * int(strides[binding]), 0, int(copy[2])
-		)
-		if copy_error != OK:
-			_free_rids(resource_rids)
-			_last_error = "resident arena exact buffer copy failed: %s" % [
-				error_string(copy_error),
-			]
-			return {}
+	for source in source_buffers:
+		if not source is RID or not source.is_valid():
+			_free_rids(buffers)
+			_release_compact_slot(compact_slot)
+			_last_error = "resident arena exact meshlet source is invalid"
+			return entry
+	var uniforms: Array[RDUniform] = []
+	var destination_buffers := [
+		position_buffer, normal_buffer, meta_buffer,
+		compact_index_storage, indirect_buffer,
+	]
+	var uniform_buffers := source_buffers + destination_buffers
+	for binding in range(uniform_buffers.size()):
+		var uniform := RDUniform.new()
+		uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+		uniform.binding = binding
+		uniform.add_id(uniform_buffers[binding])
+		uniforms.append(uniform)
+	var uniform_set := _rendering_device.uniform_set_create(
+		uniforms, _compact_shader, 0
+	)
+	if not uniform_set.is_valid():
+		_free_rids(buffers)
+		_release_compact_slot(compact_slot)
+		_last_error = "resident arena exact meshlet uniform set creation failed"
+		return entry
 	var vertex_array := _rendering_device.vertex_array_create(
 		vertex_count, _vertex_format, [position_buffer, normal_buffer, meta_buffer]
 	)
-	var index_array := _rendering_device.index_array_create(
-		index_buffer, 0, index_count
-	)
+	var index_array := _rendering_device.index_array_create(index_buffer, 0, index_count)
 	if not vertex_array.is_valid() or not index_array.is_valid():
-		_free_rids([vertex_array, index_array])
-		_free_rids(resource_rids)
-		_last_error = "resident arena exact vertex or index view creation failed"
-		return {}
+		_free_rids([uniform_set, vertex_array, index_array])
+		_free_rids(buffers)
+		_release_compact_slot(compact_slot)
+		_last_error = "resident arena exact meshlet view creation failed"
+		return entry
+	var old_slot := int(entry.get("gpu_slot", -1))
+	var push_values := PackedInt32Array([
+		int(entry.get("position_offset", 0)) / 4,
+		int(entry.get("normal_offset", 0)) / 4,
+		int(entry.get("meta_offset", 0)) / 4,
+		int(entry.get("meshlet_index_source_offset", 0)) / 4,
+		int(entry.get("indirect_offset", 0)) / DRAW_COMMAND_STRIDE,
+		old_slot * int(STATUS_SLOT_STRIDE / 4),
+		draw_count,
+		0,
+		compact_slot * int(STATUS_SLOT_STRIDE / 4),
+		0, 0, 0,
+	]).to_byte_array()
+	var compute_list := _rendering_device.compute_list_begin()
+	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _compact_pipeline)
+	_rendering_device.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
+	_rendering_device.compute_list_set_push_constant(
+		compute_list, push_values, push_values.size()
+	)
+	_rendering_device.compute_list_dispatch(compute_list, 1, 1, 1)
+	_rendering_device.compute_list_end()
+	var index_copy_error := _rendering_device.buffer_copy(
+		compact_index_storage, index_buffer, 0, 0, index_bytes
+	)
+	if index_copy_error != OK:
+		_free_rids([uniform_set, vertex_array, index_array])
+		_free_rids(buffers)
+		_release_compact_slot(compact_slot)
+		_last_error = "resident arena exact index publication copy failed"
+		return entry
+	var compact := entry.duplicate()
+	compact["resident_kind"] = "compact_meshlets"
+	compact["vertex_array"] = vertex_array
+	compact["index_array"] = index_array
+	compact["position_buffer"] = position_buffer
+	compact["normal_buffer"] = normal_buffer
+	compact["meta_buffer"] = meta_buffer
+	compact["position_offset"] = 0
+	compact["normal_offset"] = 0
+	compact["meta_offset"] = 0
+	compact["index_buffer"] = index_buffer
+	compact["indirect_buffer"] = indirect_buffer
+	compact["indirect_offset"] = 0
+	compact["gpu_slot"] = compact_slot
+	compact["resident_rids"] = [
+		uniform_set, vertex_array, index_array,
+		position_buffer, normal_buffer, meta_buffer, index_buffer,
+		compact_index_storage, indirect_buffer,
+	]
 	var allocated_bytes := position_bytes + normal_bytes + meta_bytes \
-		+ index_bytes + DRAW_COMMAND_STRIDE
+			+ index_bytes * 2 + indirect_bytes
+	compact["resident_allocated_bytes"] = allocated_bytes
+	for field in [
+		"arena_page_index", "arena_slot_index", "arena_generation",
+		"resident_view_rids", "meshlet_buffer_sizes", "input_buffers",
+		"input_offsets", "input_sizes", "meshlet_index_source_buffer",
+		"meshlet_index_source_offset", "arena_ticket",
+	]:
+		compact.erase(field)
+	if not commit_visibility([compact], [entry]):
+		_free_rids(Array(compact.get("resident_rids", [])))
+		_release_compact_slot(compact_slot)
+		return entry
+	_free_rids(Array(entry.get("resident_view_rids", [])))
+	_resident_allocated_bytes = maxi(
+		0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
+	)
+	_release_scratch_slot(
+		int(entry.get("arena_page_index", -1)),
+		int(entry.get("arena_slot_index", -1)),
+		int(entry.get("arena_generation", -1))
+	)
 	_resident_allocated_bytes += allocated_bytes
 	_peak_resident_allocated_bytes = maxi(
 		_peak_resident_allocated_bytes, _resident_allocated_bytes
 	)
-	return {
-		"resident_kind": "compact",
-		"vertex_array": vertex_array,
-		"index_array": index_array,
-		"position_buffer": position_buffer,
-		"index_buffer": index_buffer,
-		"indirect_buffer": indirect_buffer,
-		"indirect_offset": 0,
-		"indirect_draw_count": 1,
-		"resident_rids": [
-			vertex_array, index_array,
-			position_buffer, normal_buffer, meta_buffer,
-			index_buffer, indirect_buffer,
-		],
-		"resident_allocated_bytes": allocated_bytes,
-	}
-
+	_compacted_resident_entries += 1
+	_last_error = ""
+	return compact
 
 func _create_provisional_resident(
 	page: Dictionary,
@@ -872,6 +1001,8 @@ func _create_provisional_resident(
 		"normal_offset": slot_index * int(strides[14]),
 		"meta_offset": slot_index * int(strides[15]),
 		"index_buffer": index_buffer,
+		"meshlet_index_source_buffer": buffers[17],
+		"meshlet_index_source_offset": slot_index * int(strides[17]),
 		"indirect_buffer": buffers[20],
 		"indirect_offset": slot_index * int(strides[20]),
 		"indirect_draw_count": 8 + int(maxi(
@@ -906,9 +1037,10 @@ func debug_ray_intersection(
 	var index_buffer: RID = entry.get("index_buffer", RID())
 	var indirect_buffer: RID = entry.get("indirect_buffer", RID())
 	var indirect_offset := int(entry.get("indirect_offset", 0))
+	var indirect_draw_count := int(entry.get("indirect_draw_count", 1))
 	if _rendering_device == null or vertex_count <= 0 or index_count <= 0 \
 			or not position_buffer.is_valid() or not index_buffer.is_valid() \
-			or not indirect_buffer.is_valid():
+			or not indirect_buffer.is_valid() or indirect_draw_count <= 0:
 		return {"valid": false, "error": "resident geometry is unavailable"}
 	var unit_direction := direction.normalized()
 	if not origin.is_finite() or not unit_direction.is_finite() \
@@ -917,11 +1049,11 @@ func debug_ray_intersection(
 	var position_bytes := _rendering_device.buffer_get_data(position_buffer)
 	var index_bytes := _rendering_device.buffer_get_data(index_buffer)
 	var indirect_bytes := _rendering_device.buffer_get_data(
-		indirect_buffer, indirect_offset, DRAW_COMMAND_STRIDE
+		indirect_buffer, indirect_offset, indirect_draw_count * DRAW_COMMAND_STRIDE
 	)
 	if position_bytes.size() != vertex_count * PACKED_POSITION_STRIDE \
 			or index_bytes.size() != index_count * 4 \
-			or indirect_bytes.size() != DRAW_COMMAND_STRIDE:
+			or indirect_bytes.size() != indirect_draw_count * DRAW_COMMAND_STRIDE:
 		return {
 			"valid": false,
 			"error": "resident geometry readback size is invalid",
@@ -929,11 +1061,16 @@ func debug_ray_intersection(
 			"index_bytes": index_bytes.size(),
 			"indirect_bytes": indirect_bytes.size(),
 		}
-	var draw_index_count := int(indirect_bytes.decode_u32(0))
-	var draw_instance_count := int(indirect_bytes.decode_u32(4))
-	var draw_first_index := int(indirect_bytes.decode_u32(8))
-	var draw_vertex_offset := int(indirect_bytes.decode_s32(12))
-	var draw_first_instance := int(indirect_bytes.decode_u32(16))
+	var draw_index_count := 0
+	var draw_instance_count := 0
+	var command_ranges: Array[Vector2i] = []
+	for command in range(indirect_draw_count):
+		var command_offset := command * DRAW_COMMAND_STRIDE
+		var command_indices := int(indirect_bytes.decode_u32(command_offset))
+		var command_first := int(indirect_bytes.decode_u32(command_offset + 8))
+		draw_index_count += command_indices
+		draw_instance_count += int(indirect_bytes.decode_u32(command_offset + 4))
+		command_ranges.append(Vector2i(command_first, command_indices))
 	var nearest_distance := INF
 	var nearest_triangle := -1
 	var nearest_indices: Array[int] = []
@@ -960,6 +1097,14 @@ func debug_ray_intersection(
 			nearest_indices = [index_a, index_b, index_c]
 			nearest_vertices = [a, b, c]
 			nearest_normal = (b - a).cross(c - a).normalized()
+	var indirect_covers_hit := nearest_triangle < 0
+	if nearest_triangle >= 0:
+		var hit_index := nearest_triangle * 3
+		for command_range in command_ranges:
+			if hit_index >= command_range.x \
+					and hit_index + 3 <= command_range.x + command_range.y:
+				indirect_covers_hit = true
+				break
 	var result := {
 		"valid": true,
 		"hit": nearest_triangle >= 0,
@@ -973,15 +1118,10 @@ func debug_ray_intersection(
 		"indirect_command": {
 			"index_count": draw_index_count,
 			"instance_count": draw_instance_count,
-			"first_index": draw_first_index,
-			"vertex_offset": draw_vertex_offset,
-			"first_instance": draw_first_instance,
+			"draw_count": indirect_draw_count,
 		},
 		"indirect_matches_entry": draw_index_count == index_count,
-		"indirect_covers_hit_triangle": nearest_triangle < 0 or (
-			draw_first_index <= nearest_triangle * 3 \
-			and draw_first_index + draw_index_count >= (nearest_triangle + 1) * 3
-		),
+		"indirect_covers_hit_triangle": indirect_covers_hit,
 		"tested_triangles": int(index_count / 3),
 		"invalid_indices": invalid_indices,
 		"degenerate_triangles": degenerate_triangles,
@@ -1031,6 +1171,32 @@ static func _ray_triangle_distance(
 		return -1.0
 	var distance := edge_ac.dot(q) * inverse
 	return distance if distance >= 0.0 else -1.0
+
+
+func _allocate_compact_slot() -> int:
+	var local_slot := -1
+	if not _free_compact_slots.is_empty():
+		local_slot = _free_compact_slots.pop_back()
+	elif _next_compact_slot < _maximum_slots:
+		local_slot = _next_compact_slot
+		_next_compact_slot += 1
+	if local_slot < 0:
+		_last_error = "resident arena compact visibility capacity is full"
+		return -1
+	_compact_slot_count += 1
+	return _maximum_slots + local_slot
+
+
+func _release_compact_slot(global_slot: int) -> bool:
+	var local_slot := global_slot - _maximum_slots
+	if local_slot < 0 or local_slot >= _next_compact_slot \
+			or _free_compact_slots.has(local_slot):
+		return false
+	var inactive := PackedInt32Array([0]).to_byte_array()
+	_rendering_device.buffer_update(_activation_buffer, global_slot * 4, 4, inactive)
+	_free_compact_slots.append(local_slot)
+	_compact_slot_count = maxi(0, _compact_slot_count - 1)
+	return true
 
 
 func _release_scratch(scratch: Dictionary) -> void:

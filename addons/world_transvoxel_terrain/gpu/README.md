@@ -46,6 +46,15 @@ requests provide 13 prepacked buffers and never export the diagnostic
 qualify exact activation, retirement, relocation reuse, CPU visual recovery,
 and unchanged CPU collision authority.
 
+Published LOD1+ meshlets are compacted only after 120 render callbacks with no
+queued or in-flight terrain dispatch. A 256-lane compute pass packs live
+positions, normals, material metadata, and indices into exact resident buffers,
+rewrites the 32 indirect commands, and copies validated meshlet status to a
+stable visibility slot. The following cohort commit activates the exact buffers
+and retires the extraction slot atomically. LOD0 remains in its page-backed
+working set for incremental edits. Compaction never performs geometry readback
+and yields whenever interactive or streaming work exists.
+
 The v4 request is captured from immutable page-backed field inputs before CPU
 Transvoxel topology. It has no CPU-topology input dependency, but the current
 candidate still performs CPU field sampling and the unchanged CPU reference

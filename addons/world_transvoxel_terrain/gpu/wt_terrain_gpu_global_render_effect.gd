@@ -17,6 +17,9 @@ const COMMIT_SHADER_FILE := preload(
 const COMPLETION_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_completion.glsl"
 )
+const COMPACT_SHADER_FILE := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_compact.glsl"
+)
 const RASTER_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_global_render.glsl"
 )
@@ -36,6 +39,7 @@ const BACKGROUND_DISPATCH_CAPACITY := 4
 const INTERACTION_DISPATCH_CAPACITY := 8
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
+const COMPACTION_IDLE_CALLBACKS := 120
 const DRAW_COMMAND_STRIDE := 20
 const DRAW_BIN_EXTENT := 128.0
 const REQUIRED_IDENTITY_FIELDS := [
@@ -52,6 +56,8 @@ var _pending_interaction: Array[Dictionary] = []
 var _inflight_extractions: Dictionary = {}
 var _dispatch_pending_tickets: Dictionary = {}
 var _cancelled_inflight_tickets: Dictionary = {}
+var _pending_compactions: Array[String] = []
+var _compaction_idle_callbacks := 0
 var _lifecycle_commands: Array[Dictionary] = []
 var _priority_events: Dictionary = {}
 var _events: Dictionary = {}
@@ -74,6 +80,8 @@ var _commit_shader := RID()
 var _commit_pipeline := RID()
 var _completion_shader := RID()
 var _completion_pipeline := RID()
+var _compact_shader := RID()
+var _compact_pipeline := RID()
 var _raster_shader := RID()
 var _raster_pipeline := RID()
 var _raster_pipeline_format := -1
@@ -114,7 +122,7 @@ var _status := {
 	"render_thread_owned": true,
 	"same_global_device_compute_raster": true,
 	"compositor_callback": "pre_transparent",
-	"resource_architecture": "bounded_gpu_validated_provisional_residency",
+	"resource_architecture": "bounded_gpu_validated_exact_meshlet_residency",
 	"resident_buffer_count_per_entry": 1,
 	"arena_binding_buffer_count_per_page": 21,
 	"arena_page_slot_capacity": 4,
@@ -137,7 +145,7 @@ var _status := {
 	"native_packed_requests": 0,
 	"native_packed_bytes_total": 0,
 	"gpu_written_indirect_commands": true,
-	"compacted_surface_indirect_commands": false,
+	"compacted_surface_indirect_commands": true,
 	"indirect_commands_per_surface": 32,
 	"meshlet_cells_per_axis": 8,
 	"asynchronous_summary_bytes": 20,
@@ -212,6 +220,10 @@ var _status := {
 	"peak_interaction_dispatch_pending_count": 0,
 	"background_dispatch_deferrals": 0,
 	"interaction_dispatch_deferrals": 0,
+	"pending_compaction_count": 0,
+	"compactions_completed": 0,
+	"compaction_interaction_deferrals": 0,
+	"compaction_idle_callbacks": 0,
 	"invalid_dispatch_completions": 0,
 	"dispatch_completion_requests": 0,
 	"dispatch_completion_completions": 0,
@@ -676,6 +688,9 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_drain_pending_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("dispatch", phase_start)
+	_drain_one_compaction_on_render_thread()
+	if _stage_timing_enabled:
+		phase_start = _record_stage_time("compaction", phase_start)
 	# Failure probes are requested from the main thread after it reads the last
 	# completed frame. Inspect the still-published entries before applying the
 	# next lifecycle batch so the geometry result describes that captured frame.
@@ -706,7 +721,7 @@ func _record_stage_time(stage: String, start_us: int) -> int:
 
 func _ensure_shaders() -> bool:
 	if _compute_pipeline.is_valid() and _commit_pipeline.is_valid() \
-			and _completion_pipeline.is_valid() \
+			and _completion_pipeline.is_valid() and _compact_pipeline.is_valid() \
 			and _raster_shader.is_valid() \
 			and _production_raster_shader.is_valid() \
 			and _production_water_shader.is_valid() \
@@ -722,11 +737,13 @@ func _ensure_shaders() -> bool:
 	var compute_file := COMPUTE_SHADER_FILE as RDShaderFile
 	var commit_file := COMMIT_SHADER_FILE as RDShaderFile
 	var completion_file := COMPLETION_SHADER_FILE as RDShaderFile
+	var compact_file := COMPACT_SHADER_FILE as RDShaderFile
 	var raster_file := RASTER_SHADER_FILE as RDShaderFile
 	var production_raster_file := PRODUCTION_RASTER_SHADER_FILE as RDShaderFile
 	var production_water_file := PRODUCTION_WATER_SHADER_FILE as RDShaderFile
 	var scene_color_copy_file := SCENE_COLOR_COPY_SHADER_FILE as RDShaderFile
 	if compute_file == null or commit_file == null or completion_file == null \
+			or compact_file == null \
 			or raster_file == null \
 			or production_raster_file == null \
 			or production_water_file == null \
@@ -734,15 +751,17 @@ func _ensure_shaders() -> bool:
 			or not compute_file.get_base_error().is_empty() \
 			or not commit_file.get_base_error().is_empty() \
 			or not completion_file.get_base_error().is_empty() \
+			or not compact_file.get_base_error().is_empty() \
 			or not raster_file.get_base_error().is_empty() \
 			or not production_raster_file.get_base_error().is_empty() \
 			or not production_water_file.get_base_error().is_empty() \
 			or not scene_color_copy_file.get_base_error().is_empty():
-		_record_render_error("global render shader import is invalid: %s %s %s %s %s %s %s" % [
+		_record_render_error("global render shader import is invalid: %s %s %s %s %s %s %s %s" % [
 			compute_file.get_base_error() if compute_file != null else "compute missing",
 			commit_file.get_base_error() if commit_file != null else "commit missing",
 			completion_file.get_base_error() \
 				if completion_file != null else "completion missing",
+			compact_file.get_base_error() if compact_file != null else "compact missing",
 			raster_file.get_base_error() if raster_file != null else "raster missing",
 			production_raster_file.get_base_error() \
 				if production_raster_file != null else "production raster missing",
@@ -762,6 +781,10 @@ func _ensure_shaders() -> bool:
 	if shader_compile_error.is_empty():
 		shader_compile_error = _shader_file_compile_error(
 			completion_file, RenderingDevice.SHADER_STAGE_COMPUTE
+		)
+	if shader_compile_error.is_empty():
+		shader_compile_error = _shader_file_compile_error(
+			compact_file, RenderingDevice.SHADER_STAGE_COMPUTE
 		)
 	if shader_compile_error.is_empty():
 		shader_compile_error = _shader_file_compile_error(
@@ -811,6 +834,12 @@ func _ensure_shaders() -> bool:
 		return false
 	_completion_pipeline = _rendering_device.compute_pipeline_create(_completion_shader)
 	if not _completion_pipeline.is_valid():
+		return false
+	_compact_shader = _rendering_device.shader_create_from_spirv(compact_file.get_spirv())
+	if not _compact_shader.is_valid():
+		return false
+	_compact_pipeline = _rendering_device.compute_pipeline_create(_compact_shader)
+	if not _compact_pipeline.is_valid():
 		return false
 	_raster_shader = _rendering_device.shader_create_from_spirv(
 		raster_file.get_spirv()
@@ -865,6 +894,8 @@ func _ensure_shaders() -> bool:
 			_commit_pipeline,
 			_completion_shader,
 			_completion_pipeline,
+			_compact_shader,
+			_compact_pipeline,
 			_vertex_format,
 			_resident_allocation_capacity()
 		):
@@ -1108,6 +1139,13 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			entry["failure_cell_count"] = int(telemetry.get("failure_cell_count", 0))
 			_finalize_gpu_candidate_on_render_thread(entry)
 			_entries[token] = entry
+			var identity := Dictionary(entry.get("identity", {}))
+			if int(identity.get("lod", 0)) > 0 \
+					and not bool(entry.get("incremental_edit", false)) \
+					and str(entry.get("resident_kind", "")) == "provisional" \
+					and not _pending_compactions.has(token) \
+					and _pending_compactions.size() < _resident_capacity * 2:
+				_pending_compactions.append(token)
 			_active_lod_inventory_dirty = true
 			_mutex.lock()
 			_status["resident_entry_count"] = _entries.size()
@@ -1120,6 +1158,58 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 	_status["inflight_extraction_count"] = _inflight_extractions.size()
 	_mutex.unlock()
 	_sync_dispatch_lane_status_on_render_thread()
+
+
+func _drain_one_compaction_on_render_thread() -> void:
+	if _arena == null:
+		return
+	if not _dispatch_pending_tickets.is_empty() or not _pending.is_empty() \
+			or not _pending_interaction.is_empty():
+		_compaction_idle_callbacks = 0
+		_mutex.lock()
+		_status["pending_compaction_count"] = _pending_compactions.size()
+		_status["compaction_idle_callbacks"] = 0
+		_status["compaction_interaction_deferrals"] = int(
+			_status.get("compaction_interaction_deferrals", 0)
+		) + 1
+		_mutex.unlock()
+		return
+	_compaction_idle_callbacks += 1
+	if _pending_compactions.is_empty() \
+			or _compaction_idle_callbacks < COMPACTION_IDLE_CALLBACKS:
+		_mutex.lock()
+		_status["pending_compaction_count"] = _pending_compactions.size()
+		_status["compaction_idle_callbacks"] = _compaction_idle_callbacks
+		_mutex.unlock()
+		return
+	while not _pending_compactions.is_empty():
+		var token := _pending_compactions.pop_front()
+		if not _entries.has(token):
+			continue
+		var entry: Dictionary = _entries[token]
+		var identity := Dictionary(entry.get("identity", {}))
+		var key := _identity_key(identity)
+		if int(_active_sequence_by_key.get(key, 0)) != int(
+			entry.get("publication_sequence", 0)
+		):
+			continue
+		var compact: Dictionary = _arena.compact_resident_meshlets(entry)
+		if str(compact.get("resident_kind", "")) != str(
+			entry.get("resident_kind", "")
+		):
+			_entries[token] = compact
+			_active_lod_inventory_dirty = true
+			_mutex.lock()
+			_status["compactions_completed"] = int(
+				_status.get("compactions_completed", 0)
+			) + 1
+			_mutex.unlock()
+		_sync_arena_status_on_render_thread()
+		break
+	_mutex.lock()
+	_status["pending_compaction_count"] = _pending_compactions.size()
+	_status["compaction_idle_callbacks"] = _compaction_idle_callbacks
+	_mutex.unlock()
 
 
 func _drain_pending_on_render_thread() -> void:
@@ -2415,6 +2505,8 @@ func _close_on_render_thread() -> void:
 	_inflight_extractions.clear()
 	_dispatch_pending_tickets.clear()
 	_cancelled_inflight_tickets.clear()
+	_pending_compactions.clear()
+	_compaction_idle_callbacks = 0
 	_active_sequence_by_key.clear()
 	if _arena != null:
 		_arena.close()
@@ -2433,6 +2525,7 @@ func _close_on_render_thread() -> void:
 		_scene_color_copy_shader, _scene_color_sampler,
 		_raster_pipeline, _raster_shader,
 		_completion_pipeline, _completion_shader,
+		_compact_pipeline, _compact_shader,
 		_commit_pipeline, _commit_shader, _compute_pipeline, _compute_shader,
 	])
 	_production_material_set = RID()
@@ -2453,6 +2546,8 @@ func _close_on_render_thread() -> void:
 	_commit_shader = RID()
 	_completion_pipeline = RID()
 	_completion_shader = RID()
+	_compact_pipeline = RID()
+	_compact_shader = RID()
 	_compute_pipeline = RID()
 	_compute_shader = RID()
 	_mutex.lock()
@@ -2462,6 +2557,8 @@ func _close_on_render_thread() -> void:
 	_status["dispatch_pending_count"] = 0
 	_status["background_dispatch_pending_count"] = 0
 	_status["interaction_dispatch_pending_count"] = 0
+	_status["pending_compaction_count"] = 0
+	_status["compaction_idle_callbacks"] = 0
 	_close_completed = true
 	_mutex.unlock()
 
