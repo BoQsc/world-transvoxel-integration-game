@@ -70,7 +70,7 @@ func _run() -> void:
 	runtime.collision_entry_capacity = 128
 	runtime.decoded_page_entry_capacity = 256
 	runtime.procedural_generation_worker_count = 2
-	runtime.meshing_worker_count = 2
+	runtime.meshing_worker_count = 4
 	_world.runtime_profile = runtime
 	var generation := _generation_profile()
 	generation.profile_id = &"gpu_moving_road_stress"
@@ -320,10 +320,24 @@ func _move_viewers(position: Vector3) -> bool:
 		_fail("viewer update rejected at %s" % position)
 		return false
 	var focus_keys: Array = []
+	var support_keys: Array = []
 	for z in range(_current_target.z - 1, _current_target.z + 2):
 		for y in range(_current_target.y - 1, _current_target.y + 2):
 			for x in range(_current_target.x - 1, _current_target.x + 2):
-				focus_keys.append(Vector3i(x, y, z))
+				var key := Vector3i(x, y, z)
+				focus_keys.append(key)
+				support_keys.append(key)
+	var collision_predictive_target := Vector3i(
+		floori(collision_predictive_position.x / 16.0),
+		0,
+		floori(collision_predictive_position.z / 16.0)
+	)
+	for z in range(collision_predictive_target.z - 1, collision_predictive_target.z + 2):
+		for y in range(collision_predictive_target.y - 1, collision_predictive_target.y + 2):
+			for x in range(collision_predictive_target.x - 1, collision_predictive_target.x + 2):
+				var key := Vector3i(x, y, z)
+				if not support_keys.has(key):
+					support_keys.append(key)
 	var predictive_target := Vector3i(
 		floori(predictive_position.x / 16.0),
 		0,
@@ -336,7 +350,9 @@ func _move_viewers(position: Vector3) -> bool:
 				if not focus_keys.has(key):
 					focus_keys.append(key)
 	if not _world.update_foreground_priority_lease(
-		9002, _viewer_revision, 1, focus_keys
+		9002, _viewer_revision, 0, support_keys
+	) or not _world.update_foreground_priority_lease(
+		9003, _viewer_revision, 1, focus_keys
 	):
 		_fail("interaction focus lease rejected at %s" % position)
 		return false

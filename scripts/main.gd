@@ -395,10 +395,10 @@ func _start_profile() -> void:
 			settings["expected_max_resources"] = 1024
 			settings["runtime_lod_refinement_radius_chunks"] = 0
 	if gpu_resident_render_candidate_requested:
-		# Two workers enable the native runtime's dedicated interactive lane:
-		# one worker remains reserved for edit collision patches while one drains
-		# background field captures and LOD work.
-		settings["runtime_meshing_worker_count"] = 2
+		# One worker remains reserved for edit collision patches. Three bounded
+		# general workers prepare immutable GPU fields concurrently so cold LOD
+		# cohorts do not serialize behind a single page scan.
+		settings["runtime_meshing_worker_count"] = 4
 		# GPU visuals use the independent collision invoker instead of broad
 		# visual-viewer collision. Startup has no general collision demand to
 		# satisfy; player support is demanded and verified by the targeted body

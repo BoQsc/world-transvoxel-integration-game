@@ -3,16 +3,16 @@
   "status": "ACTIVE",
   "authority": {
     "repository": "world-transvoxel",
-    "commit": "0d0fa5349a8ab59a22d2d1df03cd4f66c4c2ef91",
-    "addon_tree": "09e1acf515e723cda75d719729616d66056a6216",
-    "native_source_tree": "709cb0b022b16f5bc6b9b13d670a565c3fab7432",
+    "commit": "ca62760b37c2cb7a4a9cd1febf01d9e8f1f8d8c7",
+    "addon_tree": "c68c0a726f8ab15c2dab5e76b280fb5603d72a8f",
+    "native_source_tree": "5c241808f72286b9ebc792fa6bc98c7dc28094cd",
     "fallback": false
   },
   "runtime_artifact": {
     "layout": "binary_consumer_v1",
     "native_source_included": false,
-    "binary_build_commit": "0d0fa5349a8ab59a22d2d1df03cd4f66c4c2ef91",
-    "digest_sha256": "9736cc06abc1f8845f524527ec1d6885236d1d76ccbefbab043dbe4c09ccae6f",
+    "binary_build_commit": "ca62760b37c2cb7a4a9cd1febf01d9e8f1f8d8c7",
+    "digest_sha256": "4307aac59c424f6dcaca940909baf52c625721889073e84e84199ca81cc71ca7",
     "files": [
       "LICENSE_SCOPE.md",
       "OPERATING_LIMITS.md",
@@ -28,13 +28,13 @@
     "binaries": [
       {
         "path": "bin/world_transvoxel.windows.template_debug.x86_64.dll",
-        "bytes": 2787328,
-        "sha256": "426318b2b8f143bec290068bf4566de102c1ccc85443eefa6bec6ecbc5d0a7d2"
+        "bytes": 2872832,
+        "sha256": "24db35bf30e396ea988b73a0e5f041f3b5b6ecdfaddc8e33f9286f2ced9e02b1"
       },
       {
         "path": "bin/world_transvoxel.windows.template_release.x86_64.dll",
-        "bytes": 2677248,
-        "sha256": "878bcaa052786f6804891ed21ad5790dff10a1509f790fa6c7c38831bffdea6f"
+        "bytes": 2752512,
+        "sha256": "a1bbdb303523d277f554d9c617e5a9c5d909441b2b6f907717ed58dceb5bcafc"
       }
     ]
   }
