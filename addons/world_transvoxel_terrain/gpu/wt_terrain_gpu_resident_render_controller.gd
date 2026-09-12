@@ -1487,6 +1487,12 @@ func _queue_selected_activation_cohort(
 			"status": cohort_status,
 		})
 		_record_activation_cohort_wait(cohort)
+		if _groups.has(group_key):
+			var waiting_group := Dictionary(_groups[group_key])
+			waiting_group["next_activation_retry_frame"] = _process_frame + (
+				1 if bool(waiting_group.get("collision_activation_priority", false)) else 2
+			)
+			_groups[group_key] = waiting_group
 		_queue_activation_cohort_retry(group_key)
 		return
 	if cohort_status.begins_with("STALE"):
@@ -1839,10 +1845,17 @@ func _drain_activation_cohort_retries() -> void:
 		inspected += 1
 		if not _activation_retry_membership.has(group_key):
 			continue
-		_activation_retry_membership.erase(group_key)
 		if not _groups.has(group_key):
+			_activation_retry_membership.erase(group_key)
 			continue
 		var group := Dictionary(_groups[group_key])
+		if _process_frame < int(group.get("next_activation_retry_frame", 0)):
+			if use_collision_lane:
+				_activation_collision_retry_queue.append(group_key)
+			else:
+				_activation_retry_queue.append(group_key)
+			continue
+		_activation_retry_membership.erase(group_key)
 		if bool(group.get("retiring", false)) \
 				or bool(group.get("active", false)) \
 				or bool(group.get("activation_queued", false)) \
