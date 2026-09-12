@@ -5298,6 +5298,20 @@ func _submit_tunnel_operations_for_playtest(terrain_world: Node, operations: Arr
 			return false
 		for _frame in range(2):
 			await get_tree().process_frame
+
+	# The former transient route teleported through the tunnel and only inspected
+	# render topology. A stale pre-edit physics surface could therefore seal an
+	# entrance while the test still passed. Probe a player-sized capsule along
+	# both carved centerlines at the first physics boundary after the burst.
+	await get_tree().physics_frame
+	var collision_passage := _probe_tunnel_collision_passages(terrain_world)
+	last_tunnel_summary["collision_passage"] = collision_passage
+	if not bool(collision_passage.get("ok", false)):
+		last_tunnel_summary["error"] = "collision_passage_blocked"
+		_fail("tunnel transient crawl collision passage blocked: %s" % JSON.stringify(
+			collision_passage
+		))
+		return false
 	return true
 
 
@@ -6582,6 +6596,7 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 		"start_settle_notes": start_notes,
 		"transient_probe_frames": _tunnel_transient_probe_frames(),
 		"transient_probe_summaries": transient_probe_summaries,
+		"collision_passage": collision_passage,
 		"sample_count": int(last_edit_persistence_summary.get("sample_count", 0)),
 		"air_sample_count": int(baseline_snapshot.get("air_sample_count", 0)),
 		"density_mismatches": int(last_edit_persistence_summary.get("density_mismatches", -1)),
@@ -7116,6 +7131,83 @@ func _exercise_tunnel_transient_crawl_step(
 
 func _tunnel_transient_probe_frames() -> Array:
 	return [0, 1, 3, 8, 16, 32]
+
+
+func _probe_tunnel_collision_passages(terrain_world: Node) -> Dictionary:
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.42
+	shape.height = 1.80
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.collision_mask = 1
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	if player != null:
+		query.exclude = [player.get_rid()]
+	var center := _tunnel_gate_center()
+	var direction := _tunnel_gate_direction()
+	var main_spacing: float = 1.25 if selected_profile == FLAT_PROFILE else 1.45
+	var main_half_length := float(42 - 1) * main_spacing * 0.5
+	var descending_start := _tunnel_descending_start()
+	var descending_direction := _tunnel_descending_direction()
+	var descending_length := float(_tunnel_descending_step_count() - 1) * \
+		_tunnel_descending_spacing()
+	var segments := [
+		{
+			"label": "main",
+			"start": center - direction * main_half_length,
+			"end": center + direction * main_half_length,
+		},
+		{
+			"label": "descending",
+			"start": descending_start,
+			"end": descending_start + descending_direction * descending_length,
+		},
+	]
+	var blocked: Array = []
+	var sample_count := 0
+	var space := get_world_3d().direct_space_state
+	for segment_value in segments:
+		var segment: Dictionary = segment_value
+		var start: Vector3 = segment.start
+		var end: Vector3 = segment.end
+		var length := start.distance_to(end)
+		var steps := maxi(1, ceili(length / 0.75))
+		for index in range(steps + 1):
+			var position := start.lerp(end, float(index) / float(steps))
+			query.transform = Transform3D(Basis.IDENTITY, position)
+			var hits := space.intersect_shape(query, 8)
+			sample_count += 1
+			if hits.is_empty():
+				continue
+			var collider_names: Array[String] = []
+			for hit_value in hits:
+				var hit: Dictionary = hit_value
+				var collider: Object = hit.get("collider")
+				if collider != null:
+					collider_names.append(str(collider.get("name")))
+			var readiness := game_world.call(
+				"get_player_collision_readiness_at", position, false,
+				0.42, 0.90, 0.10
+			) if game_world != null else {}
+			blocked.append({
+				"segment": str(segment.label),
+				"sample_index": index,
+				"position": position,
+				"colliders": collider_names,
+				"readiness": readiness,
+				"world_revision": int(terrain_world.call("get_backend_world_revision")),
+			})
+			if blocked.size() >= 8:
+				break
+		if blocked.size() >= 8:
+			break
+	return {
+		"ok": blocked.is_empty(),
+		"sample_count": sample_count,
+		"blocked_sample_count": blocked.size(),
+		"blocked_samples": blocked,
+	}
 
 
 func _save_tunnel_step_capture(label: String) -> bool:

@@ -27,6 +27,8 @@ var _legend_label: Label
 var _collision_lines: MeshInstance3D
 var _chunk_lines: MeshInstance3D
 var _pipeline_lines: MeshInstance3D
+var _collision_blocker_fills: MeshInstance3D
+var _pipeline_fills: MeshInstance3D
 var _collision_wireframes: Dictionary = {}
 var _gpu_states: Array = []
 var _history: Array = []
@@ -35,6 +37,9 @@ var _last_draw_us := 0
 var _saved_label: Label
 var _refresh_elapsed := 0.0
 var _last_snapshot := {}
+var _last_collision_incident_us := 0
+var _last_collision_incident_signature := ""
+var _collision_incident_path := ""
 
 
 func build_ui(canvas: CanvasLayer, crosshair: Control = null) -> void:
@@ -44,12 +49,18 @@ func build_ui(canvas: CanvasLayer, crosshair: Control = null) -> void:
 	_collision_lines = _make_line_instance("CollisionResidencyLines")
 	_chunk_lines = _make_line_instance("ChunkBoundaryLines")
 	_pipeline_lines = _make_line_instance("GpuPublicationLines")
+	_collision_blocker_fills = _make_fill_instance("CollisionBlockerFills")
+	_pipeline_fills = _make_fill_instance("GpuPublicationFills")
 	add_child(_collision_lines)
 	add_child(_chunk_lines)
 	add_child(_pipeline_lines)
+	add_child(_collision_blocker_fills)
+	add_child(_pipeline_fills)
 	_collision_lines.visible = false
 	_chunk_lines.visible = false
 	_pipeline_lines.visible = false
+	_collision_blocker_fills.visible = false
+	_pipeline_fills.visible = false
 
 
 func attach_runtime(game_world: Node, player: CharacterBody3D) -> void:
@@ -250,6 +261,8 @@ func _build_diagnostic_labels(canvas: CanvasLayer) -> void:
 func _set_collision_visualization(enabled: bool) -> void:
 	if _collision_lines != null:
 		_collision_lines.visible = enabled
+	if _collision_blocker_fills != null:
+		_collision_blocker_fills.visible = enabled
 	if not enabled:
 		_clear_collision_wireframes()
 	_refresh_elapsed = VISUAL_REFRESH_SECONDS
@@ -283,8 +296,10 @@ func _set_performance_hud(enabled: bool) -> void:
 
 func _set_pipeline_visualization(enabled: bool) -> void:
 	_pipeline_lines.visible = enabled
+	_pipeline_fills.visible = enabled
 	if not enabled:
 		_pipeline_lines.mesh = null
+		_pipeline_fills.mesh = null
 		_last_snapshot["visualized_gpu_records"] = 0
 	_refresh_elapsed = VISUAL_REFRESH_SECONDS
 	_update_legend()
@@ -330,11 +345,64 @@ func _update_collision_wait_feedback() -> void:
 	var movement_note := "MOVEMENT AVAILABLE" if bool(
 		status.get("movement_permitted", false)
 	) else "MOVEMENT CONSTRAINED"
-	_collision_wait_label.text = "TERRAIN COLLISION UPDATING  %.2f s  |  %d chunks  |  %s" % [
+	var unsafe: Array = readiness.get("movement_unsafe_chunks", [])
+	var chunks: Array = readiness.get("not_ready_chunks", [])
+	var details: Array[String] = []
+	for value in chunks.slice(0, mini(3, chunks.size())):
+		var chunk: Dictionary = value
+		details.append("%s L%s active=%s staged=%s coverage=L%s" % [
+			str(chunk.get("coordinate", Vector3i.ZERO)),
+			"0", str(chunk.get("collision_generation", 0)),
+			str(chunk.get("staged_collision_generation", 0)),
+			str(chunk.get("physical_coverage_lod", -1)),
+		])
+	_collision_wait_label.text = "TERRAIN COLLISION UPDATING  %.2f s  |  %d pending / %d unsafe  |  %s\n%s" % [
 		float(status.get("wait_seconds", 0.0)),
-		Array(readiness.get("not_ready_chunks", [])).size(),
+		chunks.size(), unsafe.size(),
 		movement_note,
+		"  |  ".join(details),
 	]
+	if float(status.get("wait_seconds", 0.0)) >= 0.5:
+		_record_collision_incident(status)
+	if not _collision_incident_path.is_empty():
+		_collision_wait_label.text += "\nAUTO REPORT  %s" % _collision_incident_path
+
+
+func _record_collision_incident(status: Dictionary) -> void:
+	var readiness: Dictionary = status.get("readiness", {})
+	var signature := JSON.stringify({
+		"reason": readiness.get("reason", "unknown"),
+		"not_ready": readiness.get("not_ready_chunks", []),
+		"unsafe": readiness.get("movement_unsafe_chunks", []),
+	})
+	var now := Time.get_ticks_usec()
+	if signature == _last_collision_incident_signature and \
+			now - _last_collision_incident_us < 5000000:
+		return
+	_last_collision_incident_signature = signature
+	_last_collision_incident_us = now
+	var directory := ProjectSettings.globalize_path(
+		"res://.godot/world_transvoxel_captures/collision_incident"
+	)
+	if DirAccess.make_dir_recursive_absolute(directory) != OK:
+		return
+	_collision_incident_path = directory.path_join("latest.json")
+	var report := {
+		"schema": "world_transvoxel.collision_incident.v1",
+		"captured_ticks_usec": now,
+		"player_position": _player.global_position if _player != null else Vector3.ZERO,
+		"collision_status": status.duplicate(true),
+		"runtime_metrics": _terrain_world.call("get_runtime_metrics") \
+			if _terrain_world != null and _terrain_world.has_method("get_runtime_metrics") else {},
+		"gpu_status": _terrain_world.call("get_gpu_resident_render_status") \
+			if _terrain_world != null and _terrain_world.has_method("get_gpu_resident_render_status") else {},
+	}
+	var file := FileAccess.open(_collision_incident_path, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify(Pipeline.json_value(report), "\t"))
+	file.close()
+	print("WT_COLLISION_INCIDENT ", _collision_incident_path, " ", signature)
 
 
 func _refresh_performance_hud() -> void:
@@ -453,13 +521,27 @@ func _refresh_world_visuals() -> void:
 	var states: Array = _terrain_world.call("query_active_chunk_states")
 	var chunk_mesh := ImmediateMesh.new()
 	var collision_mesh := ImmediateMesh.new()
+	var blocker_mesh := ImmediateMesh.new()
 	var chunk_count := 0
 	var collision_count := 0
+	var blocker_count := 0
 	var collision_counts := {}
+	var blocked_coordinates := {}
+	var unsafe_coordinates := {}
+	if _player.has_method("get_streaming_collision_status"):
+		var status: Dictionary = _player.call("get_streaming_collision_status")
+		var readiness: Dictionary = status.get("readiness", {})
+		for value in Array(readiness.get("not_ready_chunks", [])):
+			var item: Dictionary = value
+			blocked_coordinates[item.get("coordinate", Vector3i.ZERO)] = true
+		for value in Array(readiness.get("movement_unsafe_chunks", [])):
+			var item: Dictionary = value
+			unsafe_coordinates[item.get("coordinate", Vector3i.ZERO)] = true
 	if _chunk_toggle != null and _chunk_toggle.button_pressed:
 		chunk_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _line_material())
 	if _collision_toggle != null and _collision_toggle.button_pressed:
 		collision_mesh.surface_begin(Mesh.PRIMITIVE_LINES, _line_material())
+		blocker_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _fill_material())
 	for value in states:
 		if chunk_count + collision_count >= MAX_VISUALIZED_RECORDS:
 			break
@@ -483,8 +565,17 @@ func _refresh_world_visuals() -> void:
 				_bounds_near_player(minimum, maximum, COLLISION_VISUAL_RADIUS):
 			var stage := Pipeline.collision_stage(state)
 			collision_counts[stage] = int(collision_counts.get(stage, 0)) + 1
+			var collision_color: Color = Pipeline.collision_color(stage)
+			if blocked_coordinates.has(coordinate):
+				collision_color = Color(1.0, 0.12, 0.08, 1.0) \
+					if unsafe_coordinates.has(coordinate) else Color(1.0, 0.78, 0.08, 1.0)
+				var fill_color := collision_color
+				fill_color.a = 0.22
+				_add_box_faces(blocker_mesh, minimum + Vector3.ONE * 0.10,
+					maximum - Vector3.ONE * 0.10, fill_color)
+				blocker_count += 1
 			_add_box_lines(collision_mesh, minimum + Vector3.ONE * 0.08,
-				maximum - Vector3.ONE * 0.08, Pipeline.collision_color(stage))
+				maximum - Vector3.ONE * 0.08, collision_color)
 			collision_count += 1
 	if _chunk_toggle != null and _chunk_toggle.button_pressed:
 		if chunk_count > 0:
@@ -493,12 +584,15 @@ func _refresh_world_visuals() -> void:
 	if _collision_toggle != null and _collision_toggle.button_pressed:
 		if collision_count > 0:
 			collision_mesh.surface_end()
+		blocker_mesh.surface_end()
 		_collision_lines.mesh = collision_mesh if collision_count > 0 else null
+		_collision_blocker_fills.mesh = blocker_mesh if blocker_count > 0 else null
 		_refresh_collision_wireframes()
 	if _pipeline_toggle != null and _pipeline_toggle.button_pressed:
 		_refresh_pipeline_visuals()
 	_last_snapshot["visualized_chunk_records"] = chunk_count
 	_last_snapshot["visualized_collision_records"] = collision_count
+	_last_snapshot["visualized_collision_blockers"] = blocker_count
 	_last_snapshot["collision_stages"] = collision_counts
 
 
@@ -528,7 +622,9 @@ func _refresh_pipeline_visuals() -> void:
 		return
 	_gpu_states = _terrain_world.call("get_debug_gpu_processing_states")
 	var mesh := ImmediateMesh.new()
+	var fill_mesh := ImmediateMesh.new()
 	var count := 0
+	var fill_count := 0
 	for state in _gpu_states:
 		var minimum: Vector3 = state.get("bounds_min", Vector3.ZERO)
 		var maximum: Vector3 = state.get("bounds_max", Vector3.ZERO)
@@ -538,13 +634,27 @@ func _refresh_pipeline_visuals() -> void:
 			break
 		if count == 0:
 			mesh.surface_begin(Mesh.PRIMITIVE_LINES, _line_material())
+		var stage := str(state.get("stage", "unknown"))
+		var stage_color: Color = Pipeline.STAGE_COLORS.get(stage, Color.WHITE)
 		_add_box_lines(mesh, minimum + Vector3.ONE * 0.04,
-			maximum - Vector3.ONE * 0.04, Pipeline.STAGE_COLORS.get(state.stage, Color.WHITE))
+			maximum - Vector3.ONE * 0.04, stage_color)
+		if stage != "visible":
+			if fill_count == 0:
+				fill_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _fill_material())
+			var fill_color := stage_color
+			fill_color.a = 0.13
+			_add_box_faces(fill_mesh, minimum + Vector3.ONE * 0.06,
+				maximum - Vector3.ONE * 0.06, fill_color)
+			fill_count += 1
 		count += 1
 	if count > 0:
 		mesh.surface_end()
+	if fill_count > 0:
+		fill_mesh.surface_end()
 	_pipeline_lines.mesh = mesh if count > 0 else null
+	_pipeline_fills.mesh = fill_mesh if fill_count > 0 else null
 	_last_snapshot["visualized_gpu_records"] = count
+	_last_snapshot["visualized_gpu_pending_fills"] = fill_count
 
 
 func _refresh_collision_wireframes() -> void:
@@ -599,6 +709,8 @@ func _clear_collision_wireframes() -> void:
 	_last_snapshot["collision_stages"] = {}
 	if _collision_lines != null:
 		_collision_lines.mesh = null
+	if _collision_blocker_fills != null:
+		_collision_blocker_fills.mesh = null
 
 
 func _save_snapshot() -> void:
@@ -679,12 +791,26 @@ func _make_line_instance(node_name: String) -> MeshInstance3D:
 	return instance
 
 
+func _make_fill_instance(node_name: String) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return instance
+
+
 func _line_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.vertex_color_use_as_albedo = true
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.no_depth_test = true
+	return material
+
+
+func _fill_material() -> StandardMaterial3D:
+	var material := _line_material()
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.render_priority = 100
 	return material
 
 
@@ -708,6 +834,32 @@ func _add_box_lines(
 	for edge in BOX_EDGES:
 		mesh.surface_add_vertex(corners[edge[0]])
 		mesh.surface_add_vertex(corners[edge[1]])
+
+
+func _add_box_faces(
+	mesh: ImmediateMesh,
+	minimum: Vector3,
+	maximum: Vector3,
+	color: Color
+) -> void:
+	var corners := [
+		Vector3(minimum.x, minimum.y, minimum.z),
+		Vector3(maximum.x, minimum.y, minimum.z),
+		Vector3(maximum.x, maximum.y, minimum.z),
+		Vector3(minimum.x, maximum.y, minimum.z),
+		Vector3(minimum.x, minimum.y, maximum.z),
+		Vector3(maximum.x, minimum.y, maximum.z),
+		Vector3(maximum.x, maximum.y, maximum.z),
+		Vector3(minimum.x, maximum.y, maximum.z),
+	]
+	const TRIANGLES := [
+		0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7,
+		0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2,
+		0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5,
+	]
+	mesh.surface_set_color(color)
+	for index in TRIANGLES:
+		mesh.surface_add_vertex(corners[index])
 
 
 func _quit_playtest() -> void:

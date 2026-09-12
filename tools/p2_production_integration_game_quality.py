@@ -1270,6 +1270,19 @@ def validate_tunnel_transient_crawl_summary(
             f"got {tunnel.get('transient_probe_frames')!r}: {tunnel!r}"
         )
     validate_edited_exact_region(tunnel.get("edited_exact_region"), "tunnel transient crawl")
+    collision_passage = tunnel.get("collision_passage")
+    if not isinstance(collision_passage, dict) or collision_passage.get("ok") is not True:
+        raise RuntimeError(
+            f"tunnel transient crawl collision passage failed: {collision_passage!r}"
+        )
+    if int(collision_passage.get("sample_count", 0)) < 80:
+        raise RuntimeError(
+            f"tunnel transient crawl collision passage sampled too little: {collision_passage!r}"
+        )
+    if int(collision_passage.get("blocked_sample_count", -1)) != 0:
+        raise RuntimeError(
+            f"tunnel transient crawl retained stale collision: {collision_passage!r}"
+        )
     transient_summaries = tunnel.get("transient_probe_summaries")
     if not isinstance(transient_summaries, list) or len(transient_summaries) < 16:
         raise RuntimeError(f"tunnel transient crawl probe summaries missing: {tunnel!r}")
