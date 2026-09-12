@@ -68,6 +68,7 @@ var _event_tail := 0
 var _debug_geometry_requests: Array[Dictionary] = []
 var _debug_geometry_results: Dictionary = {}
 var _latest_sequence_by_key: Dictionary = {}
+var _protected_activation_tokens: Dictionary = {}
 var _entries: Dictionary = {}
 var _active_sequence_by_key: Dictionary = {}
 var _framebuffers: Dictionary = {}
@@ -190,6 +191,8 @@ var _status := {
 	"cancelled_inflight_requests": 0,
 	"discarded_cancelled_readbacks": 0,
 	"superseded_entries": 0,
+	"protected_activation_entries": 0,
+	"protected_stale_activations": 0,
 	"prepared_entries": 0,
 	"activated_entries": 0,
 	"retired_entries": 0,
@@ -561,6 +564,13 @@ func _queue_activation_group_command(
 		"entries": retained_entries,
 		"retirements": retained_retirements,
 	})
+	for entry in retained_entries:
+		var identity := Dictionary(entry.get("identity", {}))
+		var token := _entry_token(
+			_identity_key(identity), int(entry.get("publication_sequence", 0))
+		)
+		_protected_activation_tokens[token] = true
+	_status["protected_activation_entries"] = _protected_activation_tokens.size()
 	_mutex.unlock()
 	if dispatch_immediately:
 		RenderingServer.call_on_render_thread(
@@ -1478,6 +1488,37 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 		_record_stage_time("lifecycle_all_callbacks", phase_start)
 
 
+func _activation_entry_available(key: String, sequence: int, token: String) -> bool:
+	_mutex.lock()
+	var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
+	var protected := _protected_activation_tokens.has(token)
+	if protected and sequence != latest_sequence:
+		_status["protected_stale_activations"] = int(
+			_status.get("protected_stale_activations", 0)
+		) + 1
+	_mutex.unlock()
+	return _entries.has(token) and (sequence == latest_sequence or protected)
+
+
+func _release_activation_protection(entries: Array) -> void:
+	_mutex.lock()
+	for entry_value in entries:
+		var entry := Dictionary(entry_value)
+		var identity := Dictionary(entry.get("identity", {}))
+		_protected_activation_tokens.erase(_entry_token(
+			_identity_key(identity), int(entry.get("publication_sequence", 0))
+		))
+	_status["protected_activation_entries"] = _protected_activation_tokens.size()
+	_mutex.unlock()
+
+
+func _activation_token_is_protected(token: String) -> bool:
+	_mutex.lock()
+	var protected := _protected_activation_tokens.has(token)
+	_mutex.unlock()
+	return protected
+
+
 func _stage_activation_group_on_render_thread(command: Dictionary) -> void:
 	for source_value in Array(command.get("entries", [])):
 		var source := Dictionary(source_value)
@@ -1485,14 +1526,12 @@ func _stage_activation_group_on_render_thread(command: Dictionary) -> void:
 		var key := _identity_key(identity)
 		var sequence := int(source.get("publication_sequence", 0))
 		var token := _entry_token(key, sequence)
-		_mutex.lock()
-		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
-		_mutex.unlock()
-		if not _entries.has(token) or sequence != latest_sequence:
+		if not _activation_entry_available(key, sequence, token):
 			_push_event_on_render_thread(
 				"REJECTED", source,
 				"prepared activation set became stale before staging"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return
 		var entry: Dictionary = _entries[token]
 		if Dictionary(entry.get("identity", {})) != identity:
@@ -1500,6 +1539,7 @@ func _stage_activation_group_on_render_thread(command: Dictionary) -> void:
 				"REJECTED", source,
 				"staged activation identity differs from prepared entry"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return
 	for source_value in Array(command.get("entries", [])):
 		_push_event_on_render_thread(
@@ -1515,14 +1555,12 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 		var key := _identity_key(identity)
 		var sequence := int(source.get("publication_sequence", 0))
 		var token := _entry_token(key, sequence)
-		_mutex.lock()
-		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
-		_mutex.unlock()
-		if not _entries.has(token) or sequence != latest_sequence:
+		if not _activation_entry_available(key, sequence, token):
 			_push_event_on_render_thread(
 				"REJECTED", source,
 				"prepared activation set became stale before activation"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return
 		var entry: Dictionary = _entries[token]
 		if Dictionary(entry.get("identity", {})) != identity:
@@ -1530,6 +1568,7 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 				"REJECTED", source,
 				"activation set identity differs from prepared entry"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return
 		validated.append({
 			"source": source,
@@ -1550,6 +1589,7 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 			_push_event_on_render_thread(
 				"REJECTED", Dictionary(item.get("source", {})), _arena.get_last_error()
 			)
+		_release_activation_protection(Array(command.get("entries", [])))
 		return
 	for item in validated:
 		var token := str(item.get("token", ""))
@@ -1559,6 +1599,7 @@ func _activate_group_on_render_thread(command: Dictionary) -> void:
 		_activate_entry_on_render_thread(
 			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
 		)
+	_release_activation_protection(Array(command.get("entries", [])))
 
 
 func _replace_group_on_render_thread(command: Dictionary) -> void:
@@ -1581,6 +1622,7 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 				"REJECTED", source,
 				"retained entry became stale before atomic replacement"
 			)
+			_release_activation_protection(activation_sources)
 			return
 		var entry: Dictionary = _entries[token]
 		if Dictionary(entry.get("identity", {})) != identity:
@@ -1588,6 +1630,7 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 				"REJECTED", source,
 				"retirement identity differs before atomic replacement"
 			)
+			_release_activation_protection(activation_sources)
 			return
 		retirements.append({"source": source, "key": key, "token": token})
 	var candidate_entries: Array = []
@@ -1601,6 +1644,7 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 			_push_event_on_render_thread(
 				"REJECTED", Dictionary(item.get("source", {})), _arena.get_last_error()
 			)
+		_release_activation_protection(activation_sources)
 		return
 	if activations.is_empty():
 		for item in retirements:
@@ -1618,6 +1662,7 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 		_activate_entry_on_render_thread(
 			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
 		)
+	_release_activation_protection(activation_sources)
 	# GPU validation owns retirement. The old entries remain submitted until the
 	# asynchronous summary confirms that the entire cohort committed.
 
@@ -1632,14 +1677,12 @@ func _validated_activation_group_on_render_thread(
 		var key := _identity_key(identity)
 		var sequence := int(source.get("publication_sequence", 0))
 		var token := _entry_token(key, sequence)
-		_mutex.lock()
-		var latest_sequence := int(_latest_sequence_by_key.get(key, 0))
-		_mutex.unlock()
-		if not _entries.has(token) or sequence != latest_sequence:
+		if not _activation_entry_available(key, sequence, token):
 			_push_event_on_render_thread(
 				"REJECTED", source,
 				"prepared activation set became stale before activation"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return []
 		var entry: Dictionary = _entries[token]
 		if Dictionary(entry.get("identity", {})) != identity:
@@ -1647,6 +1690,7 @@ func _validated_activation_group_on_render_thread(
 				"REJECTED", source,
 				"activation set identity differs from prepared entry"
 			)
+			_release_activation_protection(Array(command.get("entries", [])))
 			return []
 		validated.append({"source": source, "key": key, "token": token})
 	return validated
@@ -1732,6 +1776,8 @@ func _finalize_gpu_candidate_on_render_thread(entry: Dictionary) -> void:
 		if int(_active_sequence_by_key.get(previous_key, 0)) == int(
 			previous_entry.get("publication_sequence", 0)
 		):
+			break
+		if _activation_token_is_protected(previous_token):
 			break
 		var next_previous_token := str(previous_entry.get(
 			"retained_previous_token", ""
@@ -2507,6 +2553,7 @@ func _close_on_render_thread() -> void:
 	_cancelled_inflight_tickets.clear()
 	_pending_compactions.clear()
 	_compaction_idle_callbacks = 0
+	_protected_activation_tokens.clear()
 	_active_sequence_by_key.clear()
 	if _arena != null:
 		_arena.close()
@@ -2559,11 +2606,21 @@ func _close_on_render_thread() -> void:
 	_status["interaction_dispatch_pending_count"] = 0
 	_status["pending_compaction_count"] = 0
 	_status["compaction_idle_callbacks"] = 0
+	_status["protected_activation_entries"] = 0
 	_close_completed = true
 	_mutex.unlock()
 
 
 func _free_entry_on_render_thread(entry: Dictionary) -> void:
+	var identity := Dictionary(entry.get("identity", {}))
+	var sequence := int(entry.get("publication_sequence", 0))
+	if not identity.is_empty() and sequence > 0:
+		_mutex.lock()
+		_protected_activation_tokens.erase(_entry_token(
+			_identity_key(identity), sequence
+		))
+		_status["protected_activation_entries"] = _protected_activation_tokens.size()
+		_mutex.unlock()
 	if _arena != null:
 		_arena.release(entry)
 		_sync_arena_status_on_render_thread()

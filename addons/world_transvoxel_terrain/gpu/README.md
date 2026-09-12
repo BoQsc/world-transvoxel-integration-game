@@ -55,6 +55,13 @@ and retires the extraction slot atomically. LOD0 remains in its page-backed
 working set for incremental edits. Compaction never performs geometry readback
 and yields whenever interactive or streaming work exists.
 
+Once native code commits an activation cohort, each exact key, sequence, and
+identity token is protected until the render callback activates or rejects the
+whole cohort. A newer request may advance the key while that callback is
+pending, but it cannot invalidate or reclaim the committed candidate. The
+protection is bounded by resident capacity and is released on every activation,
+rejection, retirement, free, and shutdown path.
+
 The v4 request is captured from immutable page-backed field inputs before CPU
 Transvoxel topology. It has no CPU-topology input dependency, but the current
 candidate still performs CPU field sampling and the unchanged CPU reference
