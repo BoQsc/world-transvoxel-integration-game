@@ -23,6 +23,8 @@ var _reference_scene: Node
 var _material_applicator: Node
 var _target_activations: Array[Dictionary] = []
 var _causal_trace_enabled := false
+var _causal_trace_started_ticks_usec := 0
+var _editing_enabled := true
 
 
 func _setup_viewport() -> void:
@@ -52,6 +54,7 @@ func _setup_viewport() -> void:
 
 func _run() -> void:
 	_causal_trace_enabled = OS.get_environment("WT_GPU_MOVING_ROAD_TRACE") == "1"
+	_editing_enabled = OS.get_environment("WT_GPU_MOVING_ROAD_EDITING") != "0"
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
@@ -115,15 +118,17 @@ func _run() -> void:
 	if _causal_trace_enabled and not _world.begin_cpu_causal_trace():
 		_fail("native causal trace did not start")
 		return
+	if _causal_trace_enabled:
+		_causal_trace_started_ticks_usec = Time.get_ticks_usec()
 	var metrics_before := _snapshot_metrics()
 	_phase = "cold_outbound_editing"
 	for index in range(road.size()):
 		if not await _move_viewers(road[index]):
 			return
 		for local_frame in range(FRAMES_PER_WAYPOINT):
-			if local_frame == 0 and index > 0:
+			if _editing_enabled and local_frame == 0 and index > 0:
 				_submit_moving_edit(road[index], index)
-			if index == 6 and local_frame == 1:
+			if _editing_enabled and index == 6 and local_frame == 1:
 				_submit_burst_edit(road[index])
 			await process_frame
 			_observe_frame()
@@ -132,10 +137,6 @@ func _run() -> void:
 	var outbound_settle_started := Time.get_ticks_usec()
 	var outbound_settle_frames := await _settle_count(300)
 	var outbound_settle_us := Time.get_ticks_usec() - outbound_settle_started
-	var causal_trace: Dictionary = {}
-	if _causal_trace_enabled:
-		_world.end_cpu_causal_trace()
-		causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	var outbound_metrics := _snapshot_metrics()
 	_phase = "cached_return"
 	for reverse_index in range(road.size() - 1, -1, -1):
@@ -149,13 +150,18 @@ func _run() -> void:
 	var return_settle_started := Time.get_ticks_usec()
 	var return_settle_frames := await _settle_count(1200)
 	var return_settle_us := Time.get_ticks_usec() - return_settle_started
+	var causal_trace: Dictionary = {}
+	if _causal_trace_enabled:
+		_world.end_cpu_causal_trace()
+		causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	var final_metrics := _snapshot_metrics()
 	var frame_times: Array[int] = []
 	var outbound_frames: Array[int] = []
 	var return_frames: Array[int] = []
 	var coverage_gap_frames := 0
 	var collision_pending_frames := 0
-	var visual_activation_frames: Array[int] = []
+	var coverage_activation_frames: Array[int] = []
+	var lod0_activation_frames: Array[int] = []
 	var collision_activation_frames: Array[int] = []
 	for sample in _samples:
 		var frame_us := int(sample.frame_us)
@@ -166,13 +172,18 @@ func _run() -> void:
 		if sample.phase in ["cold_outbound_editing", "cached_return"]:
 			coverage_gap_frames += 0 if bool(sample.visual_coverage) else 1
 			collision_pending_frames += 0 if bool(sample.collision_ready) else 1
-	var unresolved_visual_targets := 0
+	var unresolved_coverage_targets := 0
+	var unresolved_lod0_targets := 0
 	var unresolved_collision_targets := 0
 	for activation in _target_activations:
-		if activation.visual_ready_frame == null:
-			unresolved_visual_targets += 1
+		if activation.coverage_ready_frame == null:
+			unresolved_coverage_targets += 1
 		else:
-			visual_activation_frames.append(int(activation.visual_ready_frame))
+			coverage_activation_frames.append(int(activation.coverage_ready_frame))
+		if activation.lod0_ready_frame == null:
+			unresolved_lod0_targets += 1
+		else:
+			lod0_activation_frames.append(int(activation.lod0_ready_frame))
 		if activation.collision_ready_frame == null:
 			unresolved_collision_targets += 1
 		else:
@@ -180,7 +191,7 @@ func _run() -> void:
 	var edit_commits := int(final_metrics.runtime.get("edit_commits", 0)) - int(metrics_before.runtime.get("edit_commits", 0))
 	var edit_rejections := int(final_metrics.runtime.get("edit_rejections", 0)) - int(metrics_before.runtime.get("edit_rejections", 0))
 	var result := {
-		"schema": "world_transvoxel.gpu_moving_road_stress.v1",
+		"schema": "world_transvoxel.gpu_moving_road_stress.v2",
 		"driver": RenderingServer.get_current_rendering_driver_name().to_lower(),
 		"route": {
 			"waypoints": road.size(),
@@ -190,6 +201,7 @@ func _run() -> void:
 			"cached_return": true,
 		},
 		"editing": {
+			"enabled": _editing_enabled,
 			"attempts": _edit_attempts,
 			"submission_failures": _edit_submission_failures,
 			"commits": edit_commits,
@@ -217,13 +229,19 @@ func _run() -> void:
 		},
 		"target_activation": {
 			"records": _target_activations,
-			"visual_p99_frames": _percentile(visual_activation_frames, 0.99),
+			# Compatibility aliases retain the former hierarchical-coverage meaning.
+			"visual_p99_frames": _percentile(coverage_activation_frames, 0.99),
+			"coverage_p99_frames": _percentile(coverage_activation_frames, 0.99),
+			"lod0_p99_frames": _percentile(lod0_activation_frames, 0.99),
 			"collision_p99_frames": _percentile(collision_activation_frames, 0.99),
-			"unresolved_visual_targets": unresolved_visual_targets,
+			"unresolved_visual_targets": unresolved_coverage_targets,
+			"unresolved_coverage_targets": unresolved_coverage_targets,
+			"unresolved_lod0_targets": unresolved_lod0_targets,
 			"unresolved_collision_targets": unresolved_collision_targets,
 		},
 		"maximums": _maximums,
 		"causal_trace_enabled": _causal_trace_enabled,
+		"causal_trace_started_ticks_usec": _causal_trace_started_ticks_usec,
 		"causal_trace": causal_trace,
 		"metrics_before": metrics_before,
 		"metrics_outbound": outbound_metrics,
@@ -236,9 +254,12 @@ func _run() -> void:
 			"no_runtime_edit_rejections": edit_rejections == 0,
 			"no_visual_coverage_gaps": coverage_gap_frames == 0,
 			"no_collision_pending_frames": collision_pending_frames == 0,
-			"all_targets_visually_resolved": unresolved_visual_targets == 0,
+			"all_targets_visually_resolved": unresolved_coverage_targets == 0,
+			"all_targets_have_lod0": unresolved_lod0_targets == 0,
 			"all_targets_collision_resolved": unresolved_collision_targets == 0,
-			"visual_activation_within_2_frames": unresolved_visual_targets == 0 and _percentile(visual_activation_frames, 0.99) <= 2,
+			"visual_activation_within_2_frames": unresolved_coverage_targets == 0 and _percentile(coverage_activation_frames, 0.99) <= 2,
+			"coverage_activation_within_2_frames": unresolved_coverage_targets == 0 and _percentile(coverage_activation_frames, 0.99) <= 2,
+			"lod0_activation_within_2_frames": unresolved_lod0_targets == 0 and _percentile(lod0_activation_frames, 0.99) <= 2,
 			"collision_activation_before_next_frame": unresolved_collision_targets == 0 and _percentile(collision_activation_frames, 0.99) <= 1,
 			"no_geometry_readback": int(final_metrics.gpu.get("geometry_readback_bytes", -1)) == 0,
 			"production_material_parity": bool(final_metrics.gpu.get("production_terrain_material_parity", false)),
@@ -252,9 +273,11 @@ func _run() -> void:
 	if _samples.is_empty() or int(final_metrics.gpu.get("geometry_readback_bytes", -1)) != 0:
 		_fail("measurement integrity failed")
 		return
-	print("GPU_MOVING_ROAD_STRESS_COMPLETE driver=%s edits=%d/%d rejected=%d coverage_gaps=%d collision_pending=%d frame_p95_us=%d frame_p99_us=%d outbound_settle_us=%d return_settle_us=%d" % [
+	print("GPU_MOVING_ROAD_STRESS_COMPLETE driver=%s edits=%d/%d rejected=%d coverage_gaps=%d collision_pending=%d coverage_p99_frames=%d lod0_p99_frames=%d frame_p95_us=%d frame_p99_us=%d outbound_settle_us=%d return_settle_us=%d" % [
 		result.driver, edit_commits, _edit_attempts, edit_rejections,
 		coverage_gap_frames, collision_pending_frames,
+		int(result.target_activation.coverage_p99_frames),
+		int(result.target_activation.lod0_p99_frames),
 		int(result.frames.p95_us), int(result.frames.p99_us),
 		outbound_settle_us, return_settle_us,
 	])
@@ -321,6 +344,11 @@ func _move_viewers(position: Vector3) -> bool:
 			"target": _current_target,
 			"requested_ticks_usec": Time.get_ticks_usec(),
 			"requested_sample_index": _samples.size(),
+			"coverage_ready_frame": null,
+			"coverage_ready_us": null,
+			"lod0_ready_frame": null,
+			"lod0_ready_us": null,
+			# Compatibility alias for the former hierarchical-coverage field.
 			"visual_ready_frame": null,
 			"visual_ready_us": null,
 			"collision_ready_frame": null,
@@ -375,6 +403,7 @@ func _observe_frame() -> void:
 		"frame_us": now - _last_ticks_usec,
 		"target": _current_target,
 		"visual_coverage": _has_visual_coverage(_current_target),
+		"lod0_visual_ready": _has_exact_lod0_visual(_current_target),
 		"collision_ready": collision_ready,
 		"scheduler_queued": int(runtime.get("scheduler_queued_jobs", 0)),
 		"storage_queued": int(runtime.get("storage_queued_requests", 0)),
@@ -401,9 +430,14 @@ func _update_target_activations(now: int) -> void:
 	for activation in _target_activations:
 		var key: Vector3i = activation.target
 		var frame_latency := _samples.size() - int(activation.requested_sample_index)
-		if activation.visual_ready_frame == null and _has_visual_coverage(key):
+		if activation.coverage_ready_frame == null and _has_visual_coverage(key):
+			activation.coverage_ready_frame = frame_latency
+			activation.coverage_ready_us = now - int(activation.requested_ticks_usec)
 			activation.visual_ready_frame = frame_latency
 			activation.visual_ready_us = now - int(activation.requested_ticks_usec)
+		if activation.lod0_ready_frame == null and _has_exact_lod0_visual(key):
+			activation.lod0_ready_frame = frame_latency
+			activation.lod0_ready_us = now - int(activation.requested_ticks_usec)
 		if activation.collision_ready_frame == null:
 			var state: RefCounted = _world.query_chunk_state(key, 0)
 			if state != null and bool(state.call("is_collision_ready")):
@@ -426,6 +460,16 @@ func _has_visual_coverage(key: Vector3i) -> bool:
 		):
 			return true
 	return false
+
+
+func _has_exact_lod0_visual(key: Vector3i) -> bool:
+	var state: RefCounted = _world.query_chunk_state(key, 0)
+	if state == null or not bool(state.call("is_visual_ready")):
+		return false
+	var generation := int(state.call("get_generation"))
+	return generation > 0 and \
+		int(state.call("get_render_generation")) == generation and \
+		int(state.call("get_staged_render_generation")) == 0
 
 
 func _settle(limit: int) -> bool:
