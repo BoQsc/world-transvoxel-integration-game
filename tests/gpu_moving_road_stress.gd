@@ -109,8 +109,12 @@ func _run() -> void:
 	if not bool(material_summary.get("native_render_material_override", false)) or not bool(material_summary.get("production_texture_active", false)):
 		_fail("production terrain material did not initialize: %s" % material_summary)
 		return
-	_world.set_debug_gpu_resident_lifecycle_history_enabled(true)
-	_world.set_debug_gpu_stage_timing_enabled(true)
+	_world.set_debug_gpu_resident_lifecycle_history_enabled(
+		OS.get_environment("WT_GPU_MOVING_ROAD_LIFECYCLE_HISTORY") == "1"
+	)
+	_world.set_debug_gpu_stage_timing_enabled(
+		OS.get_environment("WT_GPU_MOVING_ROAD_STAGE_TIMING") == "1"
+	)
 	_last_ticks_usec = Time.get_ticks_usec()
 	var road := _road_waypoints()
 	if not await _move_viewers(road[0]):

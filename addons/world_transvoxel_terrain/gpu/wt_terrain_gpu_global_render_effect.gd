@@ -646,6 +646,9 @@ func close() -> void:
 	_mutex.unlock()
 	RenderingServer.call_on_render_thread(Callable(self, "_close_on_render_thread"))
 
+func set_debug_stage_timing_enabled(enabled: bool) -> void:
+	_stage_timing_enabled = enabled or OS.get_cmdline_user_args().has("--gpu-stage-timing")
+
 
 func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	if callback_type != EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT:

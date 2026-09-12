@@ -279,6 +279,8 @@ func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
 
 func set_debug_stage_timing_enabled(enabled: bool) -> void:
 	_stage_timing_enabled = enabled or OS.get_cmdline_user_args().has("--gpu-stage-timing")
+	if _effect != null:
+		_effect.set_debug_stage_timing_enabled(_stage_timing_enabled)
 
 
 func get_debug_processing_states() -> Array:

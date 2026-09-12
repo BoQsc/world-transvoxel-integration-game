@@ -22,12 +22,22 @@ MARKER = "GPU_MOVING_ROAD_STRESS_COMPLETE"
 
 
 def run(
-    driver: str, godot: pathlib.Path, project: pathlib.Path, trace: bool, editing: bool
+    driver: str,
+    godot: pathlib.Path,
+    project: pathlib.Path,
+    trace: bool,
+    editing: bool,
+    cpu_count: int,
+    stage_timing: bool,
 ) -> int:
     capture = project / ".godot" / "world_transvoxel_captures" / "gpu_moving_road_stress"
     capture.mkdir(parents=True, exist_ok=True)
     result_path = capture / "result.json"
     suffix = ("_trace" if trace else "") + ("_no_edits" if not editing else "")
+    if cpu_count > 0:
+        suffix += f"_{cpu_count}cpu"
+    if stage_timing:
+        suffix += "_stage_timing"
     retained_path = capture / f"{driver}{suffix}.json"
     usage_path = capture / f"{driver}{suffix}_usage.json"
     log_path = capture / f"{driver}{suffix}.log"
@@ -39,13 +49,16 @@ def run(
     ]
     host = psutil.Process()
     affinity = host.cpu_affinity()
-    host.cpu_affinity(affinity[:3])
+    if cpu_count > 0:
+        host.cpu_affinity(affinity[: min(cpu_count, len(affinity))])
     started = time.monotonic()
     samples: list[dict[str, float | int]] = []
     try:
         environment = os.environ.copy()
         environment["WT_GPU_MOVING_ROAD_TRACE"] = "1" if trace else "0"
         environment["WT_GPU_MOVING_ROAD_EDITING"] = "1" if editing else "0"
+        environment["WT_GPU_MOVING_ROAD_STAGE_TIMING"] = "1" if stage_timing else "0"
+        environment["WT_GPU_MOVING_ROAD_LIFECYCLE_HISTORY"] = "1" if trace else "0"
         child = subprocess.Popen(command, cwd=project, env=environment)
         process = psutil.Process(child.pid)
         process.cpu_percent(None)
@@ -76,6 +89,8 @@ def run(
         "driver": driver,
         "causal_trace_enabled": trace,
         "editing_enabled": editing,
+        "cpu_count_limit": cpu_count,
+        "stage_timing_enabled": stage_timing,
         "wall_seconds": time.monotonic() - started,
         "rss_bytes_maximum": max((int(x["rss_bytes"]) for x in samples), default=0),
         "cpu_percent_maximum": max((float(x["cpu_percent"]) for x in samples), default=0.0),
@@ -108,12 +123,20 @@ def main() -> int:
     parser.add_argument("--driver", choices=("vulkan", "d3d12", "both"), default="both")
     parser.add_argument("--trace", action="store_true", help="capture the high-overhead native causal trace")
     parser.add_argument("--no-edits", action="store_true", help="isolate streaming and LOD activation")
+    parser.add_argument(
+        "--cpu-count", type=int, default=0,
+        help="Explicitly constrain the run to this many logical CPUs; zero uses all available CPUs.",
+    )
+    parser.add_argument(
+        "--stage-timing", action="store_true",
+        help="Enable high-overhead per-stage GPU diagnostics.",
+    )
     args = parser.parse_args()
     drivers = ("vulkan", "d3d12") if args.driver == "both" else (args.driver,)
     for driver in drivers:
         if run(
             driver, args.godot.resolve(), args.project.resolve(), args.trace,
-            not args.no_edits,
+            not args.no_edits, args.cpu_count, args.stage_timing,
         ) != 0:
             return 1
     return 0
