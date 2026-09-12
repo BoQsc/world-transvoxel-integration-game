@@ -201,6 +201,10 @@ var _status := {
 	"queued_request_count": 0,
 	"queued_interaction_request_count": 0,
 	"inflight_extraction_count": 0,
+	"telemetry_pending_count": 0,
+	"peak_telemetry_pending_count": 0,
+	"inflight_upload_bytes_retained": 0,
+	"released_upload_bytes_after_dispatch": 0,
 	"dispatch_pending_count": 0,
 	"background_dispatch_pending_count": 0,
 	"interaction_dispatch_pending_count": 0,
@@ -433,6 +437,10 @@ func _queue_packed_request(
 	var request_id := _next_request_id
 	_next_request_id += 1
 	_latest_sequence_by_key[key] = publication_sequence
+	var input_byte_count := 0
+	for buffer_value in input_buffers:
+		if buffer_value is PackedByteArray:
+			input_byte_count += PackedByteArray(buffer_value).size()
 	var request := {
 		"request_id": request_id,
 		"key": key,
@@ -443,6 +451,7 @@ func _queue_packed_request(
 		"bounds_min": bounds_min,
 		"bounds_max": bounds_max,
 		"proven_empty": proven_empty,
+		"input_byte_count": input_byte_count,
 		"input_buffers": input_buffers.duplicate(),
 	}
 	if interaction:
@@ -1210,9 +1219,20 @@ func _drain_pending_on_render_thread() -> void:
 			continue
 		if _critical_path_timeline_enabled:
 			request["gpu_dispatch_ticks_usec"] = Time.get_ticks_usec()
-		_inflight_extractions[ticket] = request
+		# RenderingDevice has synchronously copied these bytes into the arena before
+		# lease_and_dispatch returns.  Keep only the small publication record while
+		# completion and telemetry readbacks run; retaining all 13 upload arrays here
+		# multiplied transient CPU memory by every published pending ticket.
+		var inflight_request := request.duplicate()
+		inflight_request.erase("input_buffers")
+		_inflight_extractions[ticket] = inflight_request
 		_dispatch_pending_tickets[ticket] = interaction
 		_finish_entry_on_render_thread(request, extraction)
+		_mutex.lock()
+		_status["released_upload_bytes_after_dispatch"] = int(
+			_status["released_upload_bytes_after_dispatch"]
+		) + int(request.get("input_byte_count", 0))
+		_mutex.unlock()
 	if not deferred.is_empty() or not deferred_interaction.is_empty():
 		_mutex.lock()
 		_pending_interaction.append_array(deferred_interaction)
@@ -1237,8 +1257,16 @@ func _dispatch_lane_count(interaction: bool) -> int:
 func _sync_dispatch_lane_status_on_render_thread() -> void:
 	var interaction_count := _dispatch_lane_count(true)
 	var background_count := _dispatch_lane_count(false)
+	var telemetry_pending := maxi(
+		0, _inflight_extractions.size() - interaction_count - background_count
+	)
 	_mutex.lock()
 	_status["dispatch_pending_count"] = interaction_count + background_count
+	_status["telemetry_pending_count"] = telemetry_pending
+	_status["peak_telemetry_pending_count"] = maxi(
+		int(_status["peak_telemetry_pending_count"]), telemetry_pending
+	)
+	_status["inflight_upload_bytes_retained"] = 0
 	_status["interaction_dispatch_pending_count"] = interaction_count
 	_status["background_dispatch_pending_count"] = background_count
 	_status["peak_interaction_dispatch_pending_count"] = maxi(

@@ -25,6 +25,7 @@ var _target_activations: Array[Dictionary] = []
 var _causal_trace_enabled := false
 var _causal_trace_started_ticks_usec := 0
 var _editing_enabled := true
+var _largest_publication_inspection: Dictionary = {}
 
 
 func _setup_viewport() -> void:
@@ -243,6 +244,7 @@ func _run() -> void:
 		"causal_trace_enabled": _causal_trace_enabled,
 		"causal_trace_started_ticks_usec": _causal_trace_started_ticks_usec,
 		"causal_trace": causal_trace,
+		"largest_publication_inspection": _largest_publication_inspection,
 		"metrics_before": metrics_before,
 		"metrics_outbound": outbound_metrics,
 		"metrics_final": final_metrics,
@@ -422,8 +424,28 @@ func _observe_frame() -> void:
 	_last_ticks_usec = now
 	_samples.append(sample)
 	_update_target_activations(now)
+	if not bool(sample.lod0_visual_ready) and _samples.size() % 8 == 0:
+		_capture_largest_publication_inspection()
 	for key in ["scheduler_queued", "storage_queued", "storage_active", "mesh_queued", "mesh_active", "pending_replacements", "gpu_queued", "gpu_inflight", "gpu_resident_entries", "gpu_uploaded_bytes", "decoded_bytes", "render_bytes", "collision_bytes"]:
 		_maximums[key] = maxi(int(_maximums.get(key, 0)), int(sample[key]))
+
+
+func _capture_largest_publication_inspection() -> void:
+	var backend: Node = _world.get_backend_terrain()
+	if backend == null or not backend.has_method("inspect_gpu_resident_publication"):
+		return
+	var inspection: Dictionary = backend.call("inspect_gpu_resident_publication",
+		_current_target, 0
+	)
+	var selected_count := Array(inspection.get("selected", [])).size()
+	var largest_count := Array(
+		_largest_publication_inspection.get("selected", [])
+	).size()
+	if selected_count > largest_count:
+		inspection["phase"] = _phase
+		inspection["target"] = _current_target
+		inspection["sample_index"] = _samples.size()
+		_largest_publication_inspection = inspection
 
 
 func _update_target_activations(now: int) -> void:
