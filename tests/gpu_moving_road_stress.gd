@@ -26,6 +26,7 @@ var _causal_trace_enabled := false
 var _causal_trace_started_ticks_usec := 0
 var _editing_enabled := true
 var _largest_publication_inspection: Dictionary = {}
+var _visual_lookahead_chunks := 3
 
 
 func _setup_viewport() -> void:
@@ -56,6 +57,9 @@ func _setup_viewport() -> void:
 func _run() -> void:
 	_causal_trace_enabled = OS.get_environment("WT_GPU_MOVING_ROAD_TRACE") == "1"
 	_editing_enabled = OS.get_environment("WT_GPU_MOVING_ROAD_EDITING") != "0"
+	_visual_lookahead_chunks = clampi(int(OS.get_environment(
+		"WT_GPU_MOVING_ROAD_VISUAL_LOOKAHEAD_CHUNKS"
+	)) if OS.has_environment("WT_GPU_MOVING_ROAD_VISUAL_LOOKAHEAD_CHUNKS") else 3, 0, 8)
 	_setup_viewport()
 	_world = TerrainWorld.new()
 	_world.terrain_profile = _terrain_profile()
@@ -300,7 +304,7 @@ func _move_viewers(position: Vector3) -> bool:
 	_current_target = Vector3i(floori(position.x / 16.0), 0, floori(position.z / 16.0))
 	var prediction_direction := -1.0 if _phase == "cached_return" else 1.0
 	var predictive_position := position + Vector3(
-		48.0 * prediction_direction, 0.0, 0.0
+		16.0 * float(_visual_lookahead_chunks) * prediction_direction, 0.0, 0.0
 	)
 	var collision_predictive_position := position + Vector3(
 		32.0 * prediction_direction, 0.0, 0.0
