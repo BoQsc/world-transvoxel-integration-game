@@ -317,15 +317,27 @@ func _move_viewers(position: Vector3) -> bool:
 	if camera != null:
 		camera.position = position + Vector3(0, 28, 34)
 		camera.look_at(position, Vector3.UP)
-	if not _world.update_viewer(1, _viewer_revision, position, 2, 2) \
-			or not _world.update_viewer(
-				64, _viewer_revision, predictive_position, 1, 0
-			) \
-			or not _world.update_collision_viewer(2, _viewer_revision, position, 1) \
-			or not _world.update_collision_viewer(
-				3, _viewer_revision, collision_predictive_position, 1
-			):
-		_fail("viewer update rejected at %s" % position)
+	var primary_visual_ok: bool = _world.update_viewer(
+		1, _viewer_revision, position, 2, 2
+	)
+	var predictive_visual_ok: bool = _world.update_viewer(
+		64, _viewer_revision, predictive_position, 1, 0
+	)
+	var primary_collision_ok: bool = _world.update_collision_viewer(
+		2, _viewer_revision, position, 1
+	)
+	var predictive_collision_ok: bool = _world.update_collision_viewer(
+		3, _viewer_revision, collision_predictive_position, 1
+	)
+	if not primary_visual_ok or not predictive_visual_ok \
+			or not primary_collision_ok or not predictive_collision_ok:
+		print("GPU_MOVING_ROAD_VIEWER_REJECTION_METRICS %s" % JSON.stringify(
+			_world.get_runtime_metrics()
+		))
+		_fail("viewer update rejected at %s: visual=%s predictive_visual=%s collision=%s predictive_collision=%s" % [
+			position, primary_visual_ok, predictive_visual_ok,
+			primary_collision_ok, predictive_collision_ok,
+		])
 		return false
 	var focus_keys: Array = []
 	var support_keys: Array = []

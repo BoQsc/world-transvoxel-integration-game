@@ -82,7 +82,12 @@ def run(
         host.cpu_affinity(affinity)
     output = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
     for line in output.splitlines():
-        if MARKER in line or "GPU_MOVING_ROAD_STRESS_FAIL" in line or line.startswith(("ERROR:", "SCRIPT ERROR:")):
+        if (
+            MARKER in line
+            or "GPU_MOVING_ROAD_STRESS_FAIL" in line
+            or "GPU_MOVING_ROAD_VIEWER_REJECTION_METRICS" in line
+            or line.startswith(("ERROR:", "SCRIPT ERROR:"))
+        ):
             print(f"[{driver}] {line}")
     usage = {
         "schema": "world_transvoxel.gpu_moving_road_usage.v1",
