@@ -433,6 +433,16 @@ func _measurement_snapshot() -> Dictionary:
 		)),
 		"edit_queried_chunks": int(runtime.get("edit_queried_chunks", 0)),
 		"edit_replaced_chunks": int(runtime.get("edit_replaced_chunks", 0)),
+		"edit_exact_delta_chunks": int(runtime.get("edit_exact_delta_chunks", 0)),
+		"edit_exact_delta_dirty_blocks": int(runtime.get(
+			"edit_exact_delta_dirty_blocks", 0
+		)),
+		"edit_maximum_dirty_blocks_per_chunk": int(runtime.get(
+			"edit_maximum_dirty_blocks_per_chunk", 0
+		)),
+		"cumulative_dirty_mask_avoided": int(runtime.get(
+			"cumulative_dirty_mask_avoided", 0
+		)),
 		"mesh_prepare_time_ns_total": int(runtime.get("mesh_prepare_time_ns_total", 0)),
 		"page_edited_cache_hits": int(runtime.get("page_edited_cache_hits", 0)),
 		"page_edited_cache_updates": int(runtime.get("page_edited_cache_updates", 0)),

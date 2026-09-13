@@ -455,6 +455,14 @@ func _refresh_performance_hud() -> void:
 		int(metrics.get("pending_chunk_retirements", 0)),
 		int(metrics.get("total_collision_backlog", 0)),
 	]
+	_performance_label.text += (
+		"\nEdit delta chunks %d  Blocks %d (max %d)  Historical expansions avoided %d"
+	) % [
+		int(metrics.get("edit_exact_delta_chunks", 0)),
+		int(metrics.get("edit_exact_delta_dirty_blocks", 0)),
+		int(metrics.get("edit_maximum_dirty_blocks_per_chunk", 0)),
+		int(metrics.get("cumulative_dirty_mask_avoided", 0)),
+	]
 	var intervals := _draw_intervals.duplicate()
 	intervals.sort()
 	var p95: float = intervals[mini(intervals.size() - 1, ceili(intervals.size() * 0.95) - 1)] \
@@ -662,6 +670,7 @@ func _refresh_pipeline_visuals() -> void:
 	var fill_mesh := ImmediateMesh.new()
 	var count := 0
 	var fill_count := 0
+	var dirty_brick_count := 0
 	for state in _gpu_states:
 		var minimum: Vector3 = state.get("bounds_min", Vector3.ZERO)
 		var maximum: Vector3 = state.get("bounds_max", Vector3.ZERO)
@@ -675,6 +684,21 @@ func _refresh_pipeline_visuals() -> void:
 		var stage_color: Color = Pipeline.STAGE_COLORS.get(stage, Color.WHITE)
 		_add_box_lines(mesh, minimum + Vector3.ONE * 0.04,
 			maximum - Vector3.ONE * 0.04, stage_color)
+		var identity: Dictionary = state.get("identity", {})
+		var dirty_mask := int(identity.get("dirty_regular_brick_mask", 0xff))
+		if bool(identity.get("incremental_edit", false)) and dirty_mask != 0:
+			var half := (maximum - minimum) * 0.5
+			for brick in range(8):
+				if (dirty_mask & (1 << brick)) == 0:
+					continue
+				var brick_offset := Vector3(
+					float(brick & 1), float((brick >> 1) & 1),
+					float((brick >> 2) & 1)
+				) * half
+				_add_box_lines(mesh, minimum + brick_offset + Vector3.ONE * 0.12,
+					minimum + brick_offset + half - Vector3.ONE * 0.12,
+					stage_color.lightened(0.3))
+				dirty_brick_count += 1
 		if stage != "visible":
 			if fill_count == 0:
 				fill_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _fill_material())
@@ -692,6 +716,7 @@ func _refresh_pipeline_visuals() -> void:
 	_pipeline_fills.mesh = fill_mesh if fill_count > 0 else null
 	_last_snapshot["visualized_gpu_records"] = count
 	_last_snapshot["visualized_gpu_pending_fills"] = fill_count
+	_last_snapshot["visualized_gpu_dirty_bricks"] = dirty_brick_count
 
 
 func _refresh_collision_wireframes() -> void:
@@ -711,25 +736,26 @@ func _refresh_collision_wireframes() -> void:
 		return a.global_position.distance_squared_to(_player.global_position) \
 			< b.global_position.distance_squared_to(_player.global_position))
 	for body in bodies.slice(0, mini(96, bodies.size())):
-		var shape_node := body.get_node_or_null("Shape") as CollisionShape3D
-		if shape_node == null or shape_node.disabled or shape_node.shape == null:
-			continue
-		var key: int = body.get_instance_id()
-		seen[key] = true
-		var entry: Dictionary = _collision_wireframes.get(key, {})
-		if entry.is_empty():
-			var instance := _make_line_instance("LiveCollisionWire")
-			var material := _line_material()
-			material.vertex_color_use_as_albedo = false
-			material.albedo_color = Color(0.2, 1.0, 0.4, 0.65)
-			instance.material_override = material
-			add_child(instance)
-			entry = {"instance": instance, "shape_id": 0}
-		if int(entry.shape_id) != shape_node.shape.get_instance_id():
-			entry.instance.mesh = shape_node.shape.get_debug_mesh()
-			entry.shape_id = shape_node.shape.get_instance_id()
-		entry.instance.global_transform = shape_node.global_transform
-		_collision_wireframes[key] = entry
+		for child in body.get_children():
+			var shape_node := child as CollisionShape3D
+			if shape_node == null or shape_node.disabled or shape_node.shape == null:
+				continue
+			var key: int = shape_node.get_instance_id()
+			seen[key] = true
+			var entry: Dictionary = _collision_wireframes.get(key, {})
+			if entry.is_empty():
+				var instance := _make_line_instance("LiveCollisionWire")
+				var material := _line_material()
+				material.vertex_color_use_as_albedo = false
+				material.albedo_color = Color(0.2, 1.0, 0.4, 0.65)
+				instance.material_override = material
+				add_child(instance)
+				entry = {"instance": instance, "shape_id": 0}
+			if int(entry.shape_id) != shape_node.shape.get_instance_id():
+				entry.instance.mesh = shape_node.shape.get_debug_mesh()
+				entry.shape_id = shape_node.shape.get_instance_id()
+			entry.instance.global_transform = shape_node.global_transform
+			_collision_wireframes[key] = entry
 	for key in _collision_wireframes.keys():
 		if not seen.has(key):
 			_collision_wireframes[key].instance.queue_free()
