@@ -463,6 +463,16 @@ func _refresh_performance_hud() -> void:
 		int(metrics.get("edit_maximum_dirty_blocks_per_chunk", 0)),
 		int(metrics.get("cumulative_dirty_mask_avoided", 0)),
 	]
+	_performance_label.text += (
+		"\nEdited pages hit/miss %d/%d  Resident %d/%d  %.1f / %.1f MiB"
+	) % [
+		int(metrics.get("page_edited_cache_hits", 0)),
+		int(metrics.get("page_edited_cache_misses", 0)),
+		int(metrics.get("page_edited_cache_entries", 0)),
+		int(metrics.get("page_edited_cache_capacity", 0)),
+		float(metrics.get("page_edited_cache_resident_bytes", 0)) / 1048576.0,
+		float(metrics.get("page_edited_cache_byte_capacity", 0)) / 1048576.0,
+	]
 	var intervals := _draw_intervals.duplicate()
 	intervals.sort()
 	var p95: float = intervals[mini(intervals.size() - 1, ceili(intervals.size() * 0.95) - 1)] \

@@ -450,6 +450,9 @@ func _measurement_snapshot() -> Dictionary:
 		"page_edited_cache_evictions": int(runtime.get("page_edited_cache_evictions", 0)),
 		"page_edited_cache_entries": int(runtime.get("page_edited_cache_entries", 0)),
 		"page_edited_cache_capacity": int(runtime.get("page_edited_cache_capacity", 0)),
+		"page_edited_cache_byte_capacity": int(runtime.get(
+			"page_edited_cache_byte_capacity", 0
+		)),
 		"page_edited_cache_resident_bytes": int(runtime.get(
 			"page_edited_cache_resident_bytes", 0
 		)),
