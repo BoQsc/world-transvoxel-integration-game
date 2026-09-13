@@ -410,9 +410,27 @@ func _measurement_snapshot() -> Dictionary:
 		)),
 		"gpu_active_chunks": int(gpu.get("active_chunks", 0)),
 		"gpu_incomplete_chunks": int(gpu.get("incomplete_chunks", 0)),
+		"interaction_native_requests_admitted": int(gpu.get(
+			"interaction_native_requests_admitted", 0
+		)),
+		"pending_interaction_activation_retries": int(gpu.get(
+			"pending_interaction_activation_retry_groups", 0
+		)),
 		"effect_event_budget_stops": int(gpu.get("effect_event_budget_stops", 0)),
 		"effect_event_count": int(effect.get("event_count", 0)),
 		"priority_event_count": int(effect.get("priority_event_count", 0)),
+		"queued_interaction_requests": int(effect.get(
+			"queued_interaction_request_count", 0
+		)),
+		"interaction_dispatch_pending": int(effect.get(
+			"interaction_dispatch_pending_count", 0
+		)),
+		"background_dispatch_pending": int(effect.get(
+			"background_dispatch_pending_count", 0
+		)),
+		"background_scratch_reservation_deferrals": int(arena.get(
+			"background_scratch_reservation_deferrals", 0
+		)),
 		"edit_queried_chunks": int(runtime.get("edit_queried_chunks", 0)),
 		"edit_replaced_chunks": int(runtime.get("edit_replaced_chunks", 0)),
 		"mesh_prepare_time_ns_total": int(runtime.get("mesh_prepare_time_ns_total", 0)),

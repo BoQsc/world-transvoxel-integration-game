@@ -111,6 +111,7 @@ var _recent_incremental_activations: Array[Dictionary] = []
 var _recent_incremental_first_draws: Array[Dictionary] = []
 var _interaction_application_deferrals := 0
 var _last_interaction_application_deferral := {}
+var _interaction_native_requests_admitted := 0
 var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
@@ -267,6 +268,27 @@ func is_chunk_generation_active(position: Vector3i, lod: int, generation: int) -
 	return false
 
 
+func get_active_chunk_identity(position: Vector3i, lod: int) -> Dictionary:
+	var selected := {}
+	for group_value in _groups.values():
+		var group := Dictionary(group_value)
+		if not bool(group.get("active", false)):
+			continue
+		var request := Dictionary(Dictionary(group.get("requests", {})).get("terrain", {}))
+		var identity := Dictionary(request.get("identity", {}))
+		if int(identity.get("lod", -1)) != lod \
+				or int(identity.get("page_x", 0)) != position.x \
+				or int(identity.get("page_y", 0)) != position.y \
+				or int(identity.get("page_z", 0)) != position.z:
+			continue
+		if selected.is_empty() or (not bool(group.get("retiring", false)) \
+				and bool(selected.get("retiring", false))) \
+				or int(identity.get("generation", 0)) > int(selected.get("generation", 0)):
+			selected = identity.duplicate(true)
+			selected["retiring"] = bool(group.get("retiring", false))
+	return selected
+
+
 func set_debug_lifecycle_history_enabled(enabled: bool) -> void:
 	_lifecycle_history_enabled = enabled
 	if _effect != null:
@@ -309,6 +331,8 @@ func get_debug_processing_states() -> Array:
 			"age_frames": _process_frame - int(group.get("created_frame", _process_frame)),
 			"activation_retry_queued": _activation_retry_membership.has(group_key),
 			"native_active": bool(group.get("native_active", false)),
+			"lane": "interaction" if bool(group.get("interaction_activation_priority",
+				group.get("collision_activation_priority", false))) else "background",
 		})
 	return states
 
@@ -393,6 +417,7 @@ func get_status() -> Dictionary:
 		"recent_incremental_first_draws": _recent_incremental_first_draws.duplicate(true),
 		"deferred_interaction_requests": _deferred_interaction_requests.size(),
 		"interaction_application_deferrals": _interaction_application_deferrals,
+		"interaction_native_requests_admitted": _interaction_native_requests_admitted,
 		"last_interaction_application_deferral": (
 			_last_interaction_application_deferral.duplicate(true)
 		),
@@ -402,6 +427,9 @@ func get_status() -> Dictionary:
 		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
 		"activation_stale_seed_skips": _activation_stale_seed_skips,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
+		"pending_interaction_activation_retry_groups": (
+			_activation_collision_retry_queue.size()
+		),
 		"pending_collision_activation_retry_groups": (
 			_activation_collision_retry_queue.size()
 		),
@@ -847,11 +875,17 @@ func _submit_native_captures() -> void:
 			and submitted_this_frame < NATIVE_SUBMISSIONS_PER_FRAME:
 		var retry_deferred := deferred_attempts_remaining > 0
 		var request := _deferred_interaction_requests.pop_front() \
-				if retry_deferred \
-				else Dictionary(_backend_terrain.call("pop_gpu_resident_render_request"))
+				if retry_deferred else Dictionary(_backend_terrain.call(
+					"pop_gpu_resident_render_request", true
+				))
 		if retry_deferred:
 			deferred_attempts_remaining -= 1
 		var request_status := str(request.get("status", ""))
+		if not retry_deferred and request_status in ["EMPTY", "DISABLED"]:
+			request = Dictionary(_backend_terrain.call(
+				"pop_gpu_resident_render_request", false
+			))
+			request_status = str(request.get("status", ""))
 		if request_status in ["EMPTY", "DISABLED"]:
 			return
 		var request_error := _validate_native_request(request)
@@ -859,6 +893,14 @@ func _submit_native_captures() -> void:
 			_reject_native_request(request, request_error)
 			continue
 		var identity: Dictionary = request.get("identity", {})
+		var interaction_request := bool(identity.get("incremental_edit", false)) \
+				or bool(identity.get("interaction_priority", false))
+		if interaction_request:
+			_interaction_native_requests_admitted += 1
+		# Same-callback edit precommit requires current application identity before
+		# dispatch. A focus refresh can extract concurrently with CPU application
+		# and is generation-validated at preparation/publication; gating it here
+		# serializes cold approach behind CPU work.
 		if bool(identity.get("incremental_edit", false)):
 			var readiness := Dictionary(_backend_terrain.call(
 				"get_gpu_resident_render_chunk_readiness", identity
@@ -1360,12 +1402,20 @@ func _try_validate_group(group_key: String) -> void:
 		)))
 		return
 	group["native_prepared"] = true
-	group["collision_activation_priority"] = bool(readiness.get(
-		"collision_required", false
-	))
+	var prepared_identity := Dictionary(terrain_request.get("identity", {}))
+	group["interaction_activation_priority"] = (
+		bool(readiness.get("collision_required", false))
+		or bool(prepared_identity.get("incremental_edit", false))
+		or bool(prepared_identity.get("interaction_priority", false))
+	)
+	# Retain the old field while smoke fixtures and persisted diagnostic captures
+	# transition to the lane's correct interaction-wide meaning.
+	group["collision_activation_priority"] = bool(
+		group["interaction_activation_priority"]
+	)
 	_groups[group_key] = group
 	_record_lifecycle_event("NATIVE_PREPARED", group_key, {
-		"collision_priority": bool(group.get("collision_activation_priority", false)),
+			"interaction_priority": bool(group.get("interaction_activation_priority", false)),
 	})
 	_prepared_group_routes[_activation_chunk_key(Dictionary(
 		terrain_request.get("identity", {})
@@ -1490,7 +1540,8 @@ func _queue_selected_activation_cohort(
 		if _groups.has(group_key):
 			var waiting_group := Dictionary(_groups[group_key])
 			waiting_group["next_activation_retry_frame"] = _process_frame + (
-				1 if bool(waiting_group.get("collision_activation_priority", false)) else 2
+				1 if bool(waiting_group.get("interaction_activation_priority",
+					waiting_group.get("collision_activation_priority", false))) else 2
 			)
 			_groups[group_key] = waiting_group
 		_queue_activation_cohort_retry(group_key)
@@ -1809,7 +1860,8 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 		return
 	_activation_retry_membership[group_key] = true
 	var group: Dictionary = _groups.get(group_key, {})
-	if bool(group.get("collision_activation_priority", false)):
+	if bool(group.get("interaction_activation_priority",
+			group.get("collision_activation_priority", false))):
 		_activation_collision_retry_queue.append(group_key)
 	else:
 		_activation_retry_queue.append(group_key)

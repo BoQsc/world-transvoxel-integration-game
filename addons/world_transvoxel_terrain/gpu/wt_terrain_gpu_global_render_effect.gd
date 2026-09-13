@@ -40,6 +40,9 @@ const INTERACTION_DISPATCH_CAPACITY := 8
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
 const COMPACTION_IDLE_CALLBACKS := 120
+const DISPATCH_COMPLETION_CAPACITY_PER_CALLBACK := 16
+const TELEMETRY_COMPLETION_CAPACITY_PER_CALLBACK := 8
+const LIFECYCLE_COMMAND_CAPACITY_PER_CALLBACK := 16
 const DRAW_COMMAND_STRIDE := 20
 const DRAW_BIN_EXTENT := 128.0
 const REQUIRED_IDENTITY_FIELDS := [
@@ -59,6 +62,7 @@ var _cancelled_inflight_tickets: Dictionary = {}
 var _pending_compactions: Array[String] = []
 var _compaction_idle_callbacks := 0
 var _lifecycle_commands: Array[Dictionary] = []
+var _interaction_lifecycle_commands: Array[Dictionary] = []
 var _priority_events: Dictionary = {}
 var _events: Dictionary = {}
 var _priority_event_head := 0
@@ -181,7 +185,8 @@ var _status := {
 	"interaction_dispatch_capacity": INTERACTION_DISPATCH_CAPACITY,
 	"resident_capacity": DEFAULT_RESIDENT_CAPACITY,
 	"resident_allocation_capacity": (
-		DEFAULT_RESIDENT_CAPACITY * MAXIMUM_SURFACES_PER_CHUNK + REQUEST_CAPACITY
+		DEFAULT_RESIDENT_CAPACITY * MAXIMUM_SURFACES_PER_CHUNK
+		+ REQUEST_CAPACITY + INTERACTION_REQUEST_CAPACITY
 	),
 	"requested": 0,
 	"applied": 0,
@@ -231,6 +236,14 @@ var _status := {
 	"dispatch_completion_requests": 0,
 	"dispatch_completion_completions": 0,
 	"dispatch_completion_bytes": 0,
+	"dispatch_completion_budget_deferrals": 0,
+	"telemetry_completion_budget_deferrals": 0,
+	"lifecycle_command_budget_deferrals": 0,
+	"dispatch_completion_capacity_per_callback": DISPATCH_COMPLETION_CAPACITY_PER_CALLBACK,
+	"telemetry_completion_capacity_per_callback": TELEMETRY_COMPLETION_CAPACITY_PER_CALLBACK,
+	"lifecycle_command_capacity_per_callback": LIFECYCLE_COMMAND_CAPACITY_PER_CALLBACK,
+	"pending_dispatch_completion_count": 0,
+	"pending_telemetry_completion_count": 0,
 	"counter_readback_bytes": 0,
 	"geometry_readback_bytes": 0,
 	"render_target_readback_bytes": 0,
@@ -449,6 +462,31 @@ func _queue_packed_request(
 		_status["last_error"] = "global render request is stale, closed, or saturated"
 		_mutex.unlock()
 		return 0
+	# Supersession is a queue operation, not a completion operation. Release the
+	# packed page arrays for older unpublished generations immediately so rapid
+	# movement and editing cannot accumulate a cold upload tail behind the newest
+	# request for the same chunk.
+	var retained_interaction: Array[Dictionary] = []
+	var retained_background: Array[Dictionary] = []
+	var superseded_queued := 0
+	for queued_value in _pending_interaction:
+		var queued := Dictionary(queued_value)
+		if str(queued.get("key", "")) == key:
+			superseded_queued += 1
+		else:
+			retained_interaction.append(queued)
+	for queued_value in _pending:
+		var queued := Dictionary(queued_value)
+		if str(queued.get("key", "")) == key:
+			superseded_queued += 1
+		else:
+			retained_background.append(queued)
+	if superseded_queued > 0:
+		_pending_interaction = retained_interaction
+		_pending = retained_background
+		_status["cancelled_queued_requests"] = int(
+			_status["cancelled_queued_requests"]
+		) + superseded_queued
 	var request_id := _next_request_id
 	_next_request_id += 1
 	_latest_sequence_by_key[key] = publication_sequence
@@ -523,7 +561,7 @@ func replace_entries(entries: Array, retirements: Array) -> bool:
 
 func _queue_activation_group_command(
 	action: String, entries: Array, retirements: Array = [],
-	dispatch_immediately: bool = true
+	_dispatch_immediately: bool = true
 ) -> bool:
 	if entries.is_empty() and (action != "REPLACE_GROUP" or retirements.is_empty()):
 		_record_rejection("global render activation group is empty")
@@ -559,11 +597,15 @@ func _queue_activation_group_command(
 		_status["last_error"] = "global render publication is closed"
 		_mutex.unlock()
 		return false
-	_lifecycle_commands.append({
+	var command := {
 		"action": action,
 		"entries": retained_entries,
 		"retirements": retained_retirements,
-	})
+	}
+	if _lifecycle_command_is_interaction(command):
+		_interaction_lifecycle_commands.append(command)
+	else:
+		_lifecycle_commands.append(command)
 	for entry in retained_entries:
 		var identity := Dictionary(entry.get("identity", {}))
 		var token := _entry_token(
@@ -572,10 +614,6 @@ func _queue_activation_group_command(
 		_protected_activation_tokens[token] = true
 	_status["protected_activation_entries"] = _protected_activation_tokens.size()
 	_mutex.unlock()
-	if dispatch_immediately:
-		RenderingServer.call_on_render_thread(
-			Callable(self, "_drain_lifecycle_commands_on_render_thread")
-		)
 	return true
 
 
@@ -647,7 +685,10 @@ func get_status() -> Dictionary:
 	var result := _status.duplicate(true)
 	result["close_requested"] = _close_requested
 	result["close_completed"] = _close_completed
-	result["pending_lifecycle_command_count"] = _lifecycle_commands.size()
+	result["pending_lifecycle_command_count"] = \
+		_lifecycle_commands.size() + _interaction_lifecycle_commands.size()
+	result["pending_interaction_lifecycle_command_count"] = \
+		_interaction_lifecycle_commands.size()
 	_mutex.unlock()
 	return result
 
@@ -663,6 +704,7 @@ func close() -> void:
 	_pending.clear()
 	_pending_interaction.clear()
 	_lifecycle_commands.clear()
+	_interaction_lifecycle_commands.clear()
 	_status["queued_request_count"] = 0
 	_status["queued_interaction_request_count"] = 0
 	_mutex.unlock()
@@ -1065,7 +1107,9 @@ func _apply_pending_production_water_on_render_thread() -> void:
 func _drain_dispatch_completions_on_render_thread() -> void:
 	if _arena == null:
 		return
-	for completion in _arena.pop_completed_dispatches():
+	for completion in _arena.pop_completed_dispatches(
+		DISPATCH_COMPLETION_CAPACITY_PER_CALLBACK
+	):
 		var ticket := int(completion.get("ticket", 0))
 		_dispatch_pending_tickets.erase(ticket)
 		if bool(completion.get("valid", false)):
@@ -1085,13 +1129,22 @@ func _drain_dispatch_completions_on_render_thread() -> void:
 		) + 1
 		_mutex.unlock()
 	_sync_arena_status_on_render_thread()
+	var arena_status: Dictionary = _arena.get_status()
+	if int(arena_status.get("completed_dispatch_queue_count", 0)) > 0:
+		_mutex.lock()
+		_status["dispatch_completion_budget_deferrals"] = int(
+			_status["dispatch_completion_budget_deferrals"]
+		) + 1
+		_mutex.unlock()
 	_sync_dispatch_lane_status_on_render_thread()
 
 
 func _drain_arena_readbacks_on_render_thread() -> void:
 	if _arena == null:
 		return
-	for completion in _arena.pop_completed_readbacks():
+	for completion in _arena.pop_completed_readbacks(
+		TELEMETRY_COMPLETION_CAPACITY_PER_CALLBACK
+	):
 		var ticket := int(completion.get("ticket", 0))
 		var completion_data: PackedByteArray = completion.get("data", PackedByteArray())
 		_dispatch_pending_tickets.erase(ticket)
@@ -1162,6 +1215,13 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			_status["active_entry_count"] = _active_sequence_by_key.size()
 			_mutex.unlock()
 	_sync_arena_status_on_render_thread()
+	var arena_status: Dictionary = _arena.get_status()
+	if int(arena_status.get("completed_readback_queue_count", 0)) > 0:
+		_mutex.lock()
+		_status["telemetry_completion_budget_deferrals"] = int(
+			_status["telemetry_completion_budget_deferrals"]
+		) + 1
+		_mutex.unlock()
 	_mutex.lock()
 	_status["resident_entry_count"] = _entries.size()
 	_status["active_entry_count"] = _active_sequence_by_key.size()
@@ -1305,12 +1365,16 @@ func _drain_pending_on_render_thread() -> void:
 			),
 			Dictionary(request.get("identity", {})).get(
 				"dirty_bounds_max", Vector3i.ZERO
-			)
+			),
+			interaction
 		)
 		_sync_arena_status_on_render_thread()
 		if extraction.is_empty():
 			if _arena.get_last_error() == "resident arena scratch capacity is busy":
-				deferred.append(request)
+				if interaction:
+					deferred_interaction.append(request)
+				else:
+					deferred.append(request)
 				continue
 			_reject_request_on_render_thread(request, _arena.get_last_error())
 			continue
@@ -1446,8 +1510,24 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	var commands: Array[Dictionary] = []
 	_mutex.lock()
-	commands.assign(_lifecycle_commands)
-	_lifecycle_commands.clear()
+	var interaction_count := mini(
+		LIFECYCLE_COMMAND_CAPACITY_PER_CALLBACK,
+		_interaction_lifecycle_commands.size()
+	)
+	if interaction_count > 0:
+		commands.assign(_interaction_lifecycle_commands.slice(0, interaction_count))
+		_interaction_lifecycle_commands = _interaction_lifecycle_commands.slice(
+			interaction_count
+		)
+	var background_capacity := LIFECYCLE_COMMAND_CAPACITY_PER_CALLBACK - commands.size()
+	var background_count := mini(background_capacity, _lifecycle_commands.size())
+	if background_count > 0:
+		commands.append_array(_lifecycle_commands.slice(0, background_count))
+		_lifecycle_commands = _lifecycle_commands.slice(background_count)
+	if not _interaction_lifecycle_commands.is_empty() or not _lifecycle_commands.is_empty():
+		_status["lifecycle_command_budget_deferrals"] = int(
+			_status["lifecycle_command_budget_deferrals"]
+		) + 1
 	_mutex.unlock()
 	for command in commands:
 		var action := str(command.get("action", ""))
@@ -1486,6 +1566,18 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 	_sync_active_lod_inventory_on_render_thread()
 	if _stage_timing_enabled:
 		_record_stage_time("lifecycle_all_callbacks", phase_start)
+
+
+func _lifecycle_command_is_interaction(command: Dictionary) -> bool:
+	var sources: Array = Array(command.get("entries", []))
+	if sources.is_empty() and command.has("identity"):
+		sources = [{"identity": command.get("identity", {})}]
+	for source_value in sources:
+		var identity := Dictionary(Dictionary(source_value).get("identity", {}))
+		if bool(identity.get("incremental_edit", false)) \
+				or bool(identity.get("interaction_priority", false)):
+			return true
+	return false
 
 
 func _activation_entry_available(key: String, sequence: int, token: String) -> bool:
@@ -2668,6 +2760,12 @@ func _sync_arena_status_on_render_thread() -> void:
 	_status["dispatch_completion_bytes"] = int(
 		arena_status.get("dispatch_completion_bytes", 0)
 	)
+	_status["pending_dispatch_completion_count"] = int(
+		arena_status.get("completed_dispatch_queue_count", 0)
+	)
+	_status["pending_telemetry_completion_count"] = int(
+		arena_status.get("completed_readback_queue_count", 0)
+	)
 	_mutex.unlock()
 
 
@@ -2702,15 +2800,16 @@ func _queue_lifecycle_command(
 		_status["last_error"] = "global render publication is closed"
 		_mutex.unlock()
 		return false
-	_lifecycle_commands.append({
+	var command := {
 		"action": action,
 		"identity": identity.duplicate(true),
 		"publication_sequence": publication_sequence,
-	})
+	}
+	if _lifecycle_command_is_interaction(command):
+		_interaction_lifecycle_commands.append(command)
+	else:
+		_lifecycle_commands.append(command)
 	_mutex.unlock()
-	RenderingServer.call_on_render_thread(
-		Callable(self, "_drain_lifecycle_commands_on_render_thread")
-	)
 	return true
 
 
@@ -2907,7 +3006,11 @@ static func _entry_token(key: String, publication_sequence: int) -> String:
 
 
 func _resident_allocation_capacity() -> int:
-	return _resident_capacity * MAXIMUM_SURFACES_PER_CHUNK + REQUEST_CAPACITY
+	# Active double-buffered surfaces and both bounded request lanes can coexist.
+	# Omitting the interaction lane here made its reserved queue compete for arena
+	# descriptor slots with background candidates at peak residency.
+	return (_resident_capacity * MAXIMUM_SURFACES_PER_CHUNK
+		+ REQUEST_CAPACITY + INTERACTION_REQUEST_CAPACITY)
 
 
 static func _validate_identity(identity: Dictionary, publication_sequence: int) -> String:

@@ -116,7 +116,7 @@ func _run() -> void:
 			or bool(service_status.get("frame_thread_compute_sync", true)) \
 			or int(service_status.get("resident_submission_count", 0)) != 1 \
 			or int(service_status.get("resident_completion_count", 0)) != 1 \
-			or int(resources.get("buffer_count", 0)) != 21 \
+			or int(resources.get("buffer_count", 0)) != 22 \
 			or int(resources.get("render_consumable_vertex_buffers", 0)) != 3 \
 			or int(resources.get("render_consumable_index_buffers", 0)) != 1 \
 			or not bool(resources.get("gpu_written_indirect_buffer", false)) \

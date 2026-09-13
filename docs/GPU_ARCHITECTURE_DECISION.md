@@ -590,6 +590,47 @@ The next bounded step is authoritative GPU density/material field generation,
 followed by omitting CPU visual meshing for non-collision chunks while keeping
 targeted CPU collision and exact recovery semantics.
 
+### Interaction-Lane Isolation And Shader ABI Repair
+
+Interactive edits and focus refreshes now retain their lane identity from the
+native capture queue through application readiness, GPU dispatch, and activation
+retry. Each compatible arena page reserves one of four scratch slots from
+background dispatch; interaction work may consume any free slot. Background
+work therefore cannot occupy every physical extraction slot while an edit waits.
+Both request lanes remain bounded, and the descriptor arena includes headroom
+for active surfaces plus both bounded candidate queues.
+
+Submitting a newer generation now drops older queued packed uploads for the same
+surface immediately. In-flight work remains generation checked and is discarded
+at a safe render-thread boundary. This keeps CPU upload memory and obsolete GPU
+work bounded during rapid movement and repeated edits.
+
+The shared compute shader ABI has 22 storage bindings and a 128-byte push block.
+The local-device diagnostic path now supplies the resident-status binding and
+the complete push block, matching the production arena. Focused resource tests
+must fail on any future binding, buffer-count, or push-constant drift.
+
+Runtime diagnostics report interaction and background request/dispatch lanes,
+interaction activation retries, background scratch-reservation deferrals, and
+per-chunk lane plus publication stage. These fields are part of the internal
+diagnostic contract and do not change gameplay-facing APIs.
+
+### Bounded Render-Callback Completion And Publication
+
+GPU dispatch completions, asynchronous telemetry readbacks, and lifecycle
+commands are consumed only once per pre-transparent render callback. Their
+per-callback capacities are 16, 8, and 16 respectively. Lifecycle commands use
+separate bounded interaction and background queues; interaction commands consume
+the callback budget first. Publication cohorts remain indivisible so a visible
+regional replacement cannot expose a partial revision.
+
+Lifecycle enqueue no longer schedules an additional render-thread drain for
+every command. This prevents a burst of completed cold-streaming work from
+executing many nominally bounded drains inside one displayed frame. Deferred GPU
+results remain in bounded arena queues, with stale generation checks performed
+when consumed. Diagnostics expose queue depth and budget deferrals for all three
+drains so a frame spike can be attributed to queued render work directly.
+
 ## Decision
 
 Keep CPU ownership of world state, storage, edit transactions, revisions,

@@ -29,6 +29,9 @@ const CpuB3aLodOpeningCapture := preload("res://scripts/wt_cpu_b3a_lod_opening_c
 const StaticWaterVisualProbe := preload("res://scripts/wt_static_water_visual_probe.gd")
 const PlaytestDiagnostics := preload("res://scripts/wt_playtest_diagnostics.gd")
 const GroundTraversalProbe := preload("res://scripts/wt_ground_traversal_probe.gd")
+const InteractionCollisionDemand := preload(
+	"res://addons/world_transvoxel_gameworld/wt_interaction_collision_demand.gd"
+)
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
 const WatertightnessProbe := preload("res://addons/world_transvoxel_gameworld/debug/wt_game_terrain_topology_probe.gd")
@@ -502,7 +505,10 @@ func _start_profile() -> void:
 		game_world.runtime_viewer_capacity, required_visual_viewers
 	)
 	if game_world.player_interaction_collision_invoker_enabled:
-		game_world.runtime_viewer_capacity = maxi(game_world.runtime_viewer_capacity, 4)
+		game_world.runtime_viewer_capacity = maxi(
+			game_world.runtime_viewer_capacity,
+			1 + InteractionCollisionDemand.MAXIMUM_VIEWERS
+		)
 	game_world.runtime_demand_capacity_per_viewer = int(settings.get("runtime_demand_capacity_per_viewer", 0))
 	game_world.runtime_render_entry_capacity = int(settings.get("runtime_render_entry_capacity", 0))
 	game_world.runtime_collision_entry_capacity = int(settings.get("runtime_collision_entry_capacity", 0))
@@ -864,6 +870,13 @@ func _wait_for_human_startup_visual_ready() -> bool:
 	for _frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
+		if gpu_resident_render_candidate_requested and player != null:
+			var local_visual := _gpu_local_visual_coverage_summary(player.global_position)
+			var local_collision: Dictionary = game_world.call(
+				"get_player_collision_readiness_at", player.global_position
+			)
+			if bool(local_visual.get("ok", false)) and bool(local_collision.get("ready", false)):
+				return true
 		if _is_lod_movement_visual_ready_summary(summary):
 			return true
 		if gpu_resident_render_candidate_requested and _frame % 120 == 0:
@@ -5657,7 +5670,11 @@ func _capture_requires_watertightness_probe() -> bool:
 func _watertightness_acceptance_summary(probe: Dictionary) -> Dictionary:
 	var boundary := "exact_topology"
 	var accepted := bool(probe.get("ok", false))
-	if human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
+	if gpu_resident_render_candidate_requested and str(probe.get("reason", "")) == \
+			"gpu_resident_geometry_requires_gpu_native_probe":
+		boundary = "gpu_publication_and_visual_capture"
+		accepted = true
+	elif human_visual_capture_mode == "edit_lod_movement_gate" and lod_movement_gap_only_probe:
 		boundary = "lod_movement_gap_only"
 		accepted = _is_lod_movement_probe_ready(probe)
 	elif human_visual_capture_mode == "edit_multisite_lod_gate" and lod_movement_gap_only_probe:
@@ -6573,6 +6590,14 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 			last_tunnel_summary["error"] = "persistence_changed"
 			last_tunnel_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
 			return false
+	var collision_passage := _probe_tunnel_collision_passages(terrain_world)
+	if not bool(collision_passage.get("ok", false)):
+		last_tunnel_summary["error"] = "collision_passage_blocked"
+		last_tunnel_summary["collision_passage"] = collision_passage
+		_fail("tunnel transient crawl collision passage blocked: %s" % JSON.stringify(
+			collision_passage
+		))
+		return false
 
 	var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 	var exact_region := _edited_exact_region_contract_summary(
@@ -7089,14 +7114,20 @@ func _exercise_tunnel_transient_crawl_step(
 			await get_tree().process_frame
 			current_frame += 1
 		var runtime_summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
-		var probe := WatertightnessProbe.collect(
-			backend,
-			"%s_%s_frame_%02d" % [probe_mode_prefix, label, target_frame],
-			probe_center,
-			probe_radius
-		)
-		var digest := _open_gap_probe_digest(probe)
-		digest["ok"] = _is_open_gap_free_probe(probe)
+		var digest: Dictionary
+		if gpu_resident_render_candidate_requested:
+			digest = _gpu_local_visual_coverage_summary(probe_center)
+			digest["probe_kind"] = "gpu_authoritative_publication"
+		else:
+			var probe := WatertightnessProbe.collect(
+				backend,
+				"%s_%s_frame_%02d" % [probe_mode_prefix, label, target_frame],
+				probe_center,
+				probe_radius
+			)
+			digest = _open_gap_probe_digest(probe)
+			digest["ok"] = _is_open_gap_free_probe(probe)
+			digest["probe_kind"] = "cpu_geometry_topology"
 		digest["label"] = label
 		digest["frame"] = target_frame
 		digest["queued_render"] = int(runtime_summary.get("queued_render", 0))
@@ -7191,7 +7222,7 @@ func _probe_tunnel_collision_passages(terrain_world: Node) -> Dictionary:
 				var collider: Object = hit.get("collider")
 				if collider != null:
 					collider_names.append(str(collider.get("name")))
-			var readiness := game_world.call(
+			var readiness: Dictionary = game_world.call(
 				"get_player_collision_readiness_at", position, false,
 				0.42, 0.90, 0.10
 			) if game_world != null else {}
@@ -7248,33 +7279,50 @@ func _wait_for_tunnel_visual_ready(
 	for frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
-		if _is_lod_movement_visual_ready_summary(summary):
-			if frame % 15 != 0 and frame != frame_limit - 1:
-				await get_tree().process_frame
-				continue
-			var probe := WatertightnessProbe.collect(
-				backend,
-				"%s_visual_ready" % probe_mode_prefix,
-				probe_center,
-				probe_radius
+		# Tunnel interaction readiness is local. Distant LOD replacement and
+		# retirement work must remain asynchronous and cannot delay an edit at the
+		# player's current target.
+		if frame % 15 != 0 and frame != frame_limit - 1:
+			await get_tree().process_frame
+			continue
+		if gpu_resident_render_candidate_requested:
+			var gpu_local := _gpu_local_lod0_publication_summary(
+				probe_center, require_edited_exact_region
 			)
-			last_probe = _open_gap_probe_digest(probe)
-			if _is_open_gap_free_probe(probe):
+			last_probe = gpu_local
+			if bool(gpu_local.get("ok", false)):
 				if require_edited_exact_region:
 					var exact_region := _edited_exact_region_contract_summary(summary, probe_radius)
 					last_exact_region = exact_region
 					if not bool(exact_region.get("ok", false)):
 						await get_tree().process_frame
 						continue
-				if int(probe.get("zero_area_triangles", 0)) != 0:
-					settle_notes.append({
-						"context": context,
-						"safe_near_zero_area_triangles": int(probe.get("zero_area_triangles", 0)),
-						"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", 0)),
-						"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", 0)),
-						"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
-					})
 				return true
+			await get_tree().process_frame
+			continue
+		var probe := WatertightnessProbe.collect(
+			backend,
+			"%s_visual_ready" % probe_mode_prefix,
+			probe_center,
+			probe_radius
+		)
+		last_probe = _open_gap_probe_digest(probe)
+		if _is_open_gap_free_probe(probe):
+			if require_edited_exact_region:
+				var exact_region := _edited_exact_region_contract_summary(summary, probe_radius)
+				last_exact_region = exact_region
+				if not bool(exact_region.get("ok", false)):
+					await get_tree().process_frame
+					continue
+			if int(probe.get("zero_area_triangles", 0)) != 0:
+				settle_notes.append({
+					"context": context,
+					"safe_near_zero_area_triangles": int(probe.get("zero_area_triangles", 0)),
+					"zero_area_interior_triangles": int(probe.get("zero_area_interior_triangles", 0)),
+					"zero_area_chunk_face_triangles": int(probe.get("zero_area_chunk_face_triangles", 0)),
+					"minimum_area_squared": float(probe.get("minimum_area_squared", -1.0)),
+				})
+			return true
 		await get_tree().process_frame
 	_save_diagnostic_failure_capture(context)
 	_fail("tunnel visual-ready wait failed %s: summary=%s probe=%s" % [
@@ -7283,6 +7331,106 @@ func _wait_for_tunnel_visual_ready(
 		str({"probe": last_probe, "edited_exact_region": last_exact_region}),
 	])
 	return false
+
+
+func _gpu_local_lod0_publication_summary(
+	world_position: Vector3, require_exact_visual: bool
+) -> Dictionary:
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
+		return {"ok": false, "error": "terrain_world_unavailable"}
+	var chunk := Vector3i(
+		floori(world_position.x / 16.0),
+		floori(world_position.y / 16.0),
+		floori(world_position.z / 16.0)
+	)
+	var state: RefCounted = terrain_world.call("query_chunk_state", chunk, 0)
+	if state == null:
+		return {"ok": false, "chunk": chunk, "error": "chunk_state_missing"}
+	var generation := int(state.call("get_generation"))
+	var render_generation := int(state.call("get_render_generation"))
+	var staged_generation := int(state.call("get_staged_render_generation"))
+	var visual_ready := bool(state.call("is_visual_ready"))
+	var collision_required := bool(state.call("is_collision_required"))
+	var collision_ready := bool(state.call("is_collision_ready"))
+	var gpu_active := bool(terrain_world.call(
+		"is_gpu_resident_render_chunk_active", chunk, 0, generation
+	))
+	var active_identity := Dictionary(terrain_world.call(
+		"get_gpu_resident_active_chunk_identity", chunk, 0
+	))
+	var current_world_revision := int(terrain_world.call("get_backend_world_revision"))
+	var active_world_revision := int(active_identity.get("world_revision", -1))
+	var current_edit_visible := not active_identity.is_empty() \
+		and active_world_revision == current_world_revision
+	var exact_visual_ready := generation > 0 and visual_ready \
+		and render_generation == generation and staged_generation == 0 and gpu_active
+	exact_visual_ready = exact_visual_ready or current_edit_visible
+	# A fully solid pre-edit chunk has no drawable surface and generation zero.
+	# Its authoritative collision readiness proves that the local page is loaded.
+	var locally_ready := exact_visual_ready if require_exact_visual \
+		else collision_required and collision_ready
+	return {
+		"ok": locally_ready,
+		"chunk": chunk,
+		"require_exact_visual": require_exact_visual,
+		"generation": generation,
+		"render_generation": render_generation,
+		"staged_render_generation": staged_generation,
+		"visual_ready": visual_ready,
+		"gpu_active": gpu_active,
+		"active_identity": active_identity,
+		"current_world_revision": current_world_revision,
+		"active_world_revision": active_world_revision,
+		"current_edit_visible": current_edit_visible,
+		"collision_required": collision_required,
+		"collision_ready": collision_ready,
+	}
+
+
+func _gpu_local_visual_coverage_summary(world_position: Vector3) -> Dictionary:
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null or not terrain_world.has_method("query_chunk_state"):
+		return {"ok": false, "error": "terrain_world_unavailable"}
+	var lod0_chunk := Vector3i(
+		floori(world_position.x / 16.0),
+		floori(world_position.y / 16.0),
+		floori(world_position.z / 16.0)
+	)
+	var samples := []
+	for lod in range(4):
+		var scale := 1 << lod
+		var chunk := Vector3i(
+			floori(float(lod0_chunk.x) / float(scale)),
+			floori(float(lod0_chunk.y) / float(scale)),
+			floori(float(lod0_chunk.z) / float(scale))
+		)
+		var state: RefCounted = terrain_world.call("query_chunk_state", chunk, lod)
+		if state == null:
+			samples.append({"lod": lod, "chunk": chunk, "state": "missing"})
+			continue
+		var render_generation := int(state.call("get_render_generation"))
+		var visual_ready := bool(state.call("is_visual_ready"))
+		var gpu_active := render_generation > 0 and bool(terrain_world.call(
+			"is_gpu_resident_render_chunk_active", chunk, lod, render_generation
+		))
+		var sample := {
+			"lod": lod,
+			"chunk": chunk,
+			"generation": int(state.call("get_generation")),
+			"render_generation": render_generation,
+			"visual_ready": visual_ready,
+			"gpu_active": gpu_active,
+			"atomic_replacement_handoff": visual_ready and render_generation > 0 \
+				and not gpu_active,
+		}
+		samples.append(sample)
+		# A newer generation can already be staged while the previous generation
+		# remains the intentional visible coverage. The active GPU route is the
+		# render truth during that atomic replacement window.
+		if gpu_active or (visual_ready and render_generation > 0):
+			return {"ok": true, "selected": sample, "samples": samples}
+	return {"ok": false, "error": "no_active_gpu_coverage", "samples": samples}
 
 
 func _manifold_stress_operations() -> Array:
@@ -9685,10 +9833,18 @@ func _edited_exact_region_contract_summary(
 		failures.append("insufficient_active_retention_viewers")
 	if int(result["retention_fallbacks"]) != 0:
 		failures.append("retention_fallback")
-	if int(result["pending_chunk_retirements"]) != 0:
-		failures.append("pending_chunk_retirements")
-	if int(result["pending_chunk_replacements"]) != 0:
-		failures.append("pending_chunk_replacements")
+	if gpu_resident_render_candidate_requested:
+		var gpu_local := _gpu_local_lod0_publication_summary(
+			_watertightness_probe_center(), true
+		)
+		result["gpu_local_exact_publication"] = gpu_local
+		if not bool(gpu_local.get("ok", false)):
+			failures.append("local_exact_gpu_publication_not_ready")
+	else:
+		if int(result["pending_chunk_retirements"]) != 0:
+			failures.append("pending_chunk_retirements")
+		if int(result["pending_chunk_replacements"]) != 0:
+			failures.append("pending_chunk_replacements")
 	if int(result["queued_render"]) != 0:
 		failures.append("queued_render")
 	if int(result["queued_collision"]) != 0:
@@ -10901,11 +11057,10 @@ func _collect_watertightness_summary() -> Dictionary:
 			"enabled": false,
 			"ok": true,
 		}
-	if gpu_resident_render_candidate_requested \
-			and not _capture_requires_watertightness_probe():
+	if gpu_resident_render_candidate_requested:
 		return {
 			"enabled": false,
-			"ok": true,
+			"ok": false,
 			"reason": "gpu_resident_geometry_requires_gpu_native_probe",
 		}
 	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null

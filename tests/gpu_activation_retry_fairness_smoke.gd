@@ -44,7 +44,7 @@ class RetiringAdmissionBackend:
 	var pending: Array[Dictionary] = []
 	var rejections: Array[Dictionary] = []
 
-	func pop_gpu_resident_render_request() -> Dictionary:
+	func pop_gpu_resident_render_request(_interaction_only: bool = false) -> Dictionary:
 		if pending.is_empty():
 			return {"status": "EMPTY"}
 		return pending.pop_front()
@@ -201,6 +201,9 @@ func _initialize() -> void:
 	if not _test_effect_event_priority():
 		quit(1)
 		return
+	if not _test_effect_queue_supersession():
+		quit(1)
+		return
 	if not _test_retry_time_budget():
 		quit(1)
 		return
@@ -310,6 +313,33 @@ func _test_effect_event_priority() -> bool:
 	return ok
 
 
+func _test_effect_queue_supersession() -> bool:
+	var effect := Controller.GlobalRenderEffect.new()
+	var background := {
+		"page_x": 4, "page_y": 2, "page_z": 8, "lod": 0,
+		"generation": 1, "surface": "terrain",
+	}
+	var interaction := background.duplicate()
+	interaction["generation"] = 2
+	interaction["interaction_priority"] = true
+	var first := effect._queue_packed_request(
+		[], 1, background, 10, false, Vector3.ZERO, Vector3.ONE
+	)
+	var second := effect._queue_packed_request(
+		[], 1, interaction, 11, false, Vector3.ZERO, Vector3.ONE
+	)
+	var status := effect.get_status()
+	var ok := first > 0 and second > first \
+		and effect._pending.is_empty() \
+		and effect._pending_interaction.size() == 1 \
+		and int(status.get("cancelled_queued_requests", 0)) == 1 \
+		and int(status.get("queued_request_count", 0)) == 1 \
+		and int(status.get("queued_interaction_request_count", 0)) == 1
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: queued supersession retained stale upload data")
+	return ok
+
+
 func _test_collision_activation_lane() -> bool:
 	var probe := RetryProbe.new()
 	for index in range(4):
@@ -380,13 +410,14 @@ func _test_stale_seed_budget() -> bool:
 		and controller._activation_stale_seed_skips == stale_count \
 		and controller._activation_retry_membership.size() == 1 \
 		and controller._activation_retry_membership.has(str(live_generation))
+	controller._process_frame += 2
 	controller._drain_activation_cohort_retries()
 	ok = ok and backend.queries.size() == stale_count + 2 \
 		and effect.retired.size() == stale_count
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: stale seed cleanup consumed live selection budget or exceeded bound queries=%s retired=%s skips=%d membership=%s normal_queue=%s interaction_queue=%s" % [str(backend.queries), str(effect.retired), controller._activation_stale_seed_skips, str(controller._activation_retry_membership), str(controller._activation_retry_queue), str(controller._activation_collision_retry_queue)])
 	controller.free()
 	backend.free()
-	if not ok:
-		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: stale seed cleanup consumed live selection budget or exceeded bound")
 	return ok
 
 
@@ -718,11 +749,19 @@ func _test_batched_inventory() -> bool:
 		var command := Dictionary(entry).duplicate()
 		command["action"] = "RETIRE"
 		effect._lifecycle_commands.append(command)
-	effect._drain_lifecycle_commands_on_render_thread()
+	var retired_per_callback: Array[int] = []
+	for drain_index in range(4):
+		var active_before := int(effect.get_status().get("active_entry_count", -1))
+		effect._drain_lifecycle_commands_on_render_thread()
+		var active_after := int(effect.get_status().get("active_entry_count", -1))
+		retired_per_callback.append(active_before - active_after)
 	status = effect.get_status()
-	ok = ok and int(status.get("active_inventory_rebuilds", 0)) == 2 \
+	ok = ok and retired_per_callback == [16, 16, 16, 16] \
+		and int(status.get("active_inventory_rebuilds", 0)) == 5 \
 		and int(status.get("active_entry_count", -1)) == 0 \
-		and int(status.get("active_empty_entry_count", -1)) == 0
+		and int(status.get("active_empty_entry_count", -1)) == 0 \
+		and int(status.get("pending_lifecycle_command_count", -1)) == 0 \
+		and int(status.get("lifecycle_command_budget_deferrals", 0)) == 3
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: batched inventory accounting")
 	return ok

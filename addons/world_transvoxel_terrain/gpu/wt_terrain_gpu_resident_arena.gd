@@ -7,6 +7,7 @@ const INPUT_BINDING_COUNT := 13
 const TABLE_BINDING_BEGIN := 7
 const TABLE_BINDING_END := 13
 const PAGE_SLOT_COUNT := 4
+const INTERACTION_SCRATCH_RESERVE_PER_PAGE := 1
 const LOCAL_SIZE := 64
 const MAXIMUM_VERTICES_PER_CELL := 12
 const MAXIMUM_INDICES_PER_CELL := 36
@@ -82,6 +83,7 @@ var _compacted_resident_entries := 0
 var _empty_resident_entries := 0
 var _proven_empty_resident_entries := 0
 var _failed_extractions := 0
+var _background_scratch_reservation_deferrals := 0
 var _failed_cell_count_total := 0
 var _last_failure_cell_count := 0
 var _last_error := ""
@@ -180,7 +182,8 @@ func lease_and_dispatch(
 	dirty_regular_brick_mask: int = 0xff,
 	cached_transition_mask: int = 0,
 	dirty_bounds_min: Vector3i = Vector3i.ZERO,
-	dirty_bounds_max: Vector3i = Vector3i.ZERO
+	dirty_bounds_max: Vector3i = Vector3i.ZERO,
+	interaction: bool = false
 ) -> Dictionary:
 	var uploaded_before := _uploaded_bytes
 	var validation_error := _validate_request(input_buffers, cell_count)
@@ -193,14 +196,19 @@ func lease_and_dispatch(
 		_last_error = "resident arena bounds are invalid"
 		return {}
 	var previous_page_index := int(previous_entry.get("arena_page_index", -1))
-	var page_index := _find_page(input_buffers, cell_count, previous_page_index)
+	var page_index := _find_page(
+		input_buffers, cell_count, previous_page_index, interaction
+	)
 	if page_index < 0:
 		page_index = _create_page(input_buffers, cell_count)
 	if page_index < 0:
 		return {}
 	var page: Dictionary = _pages[page_index]
 	var free_slots: Array = page.get("free_slots", [])
-	if free_slots.is_empty():
+	if free_slots.is_empty() or (not interaction and
+			free_slots.size() <= INTERACTION_SCRATCH_RESERVE_PER_PAGE):
+		if not interaction and not free_slots.is_empty():
+			_background_scratch_reservation_deferrals += 1
 		_last_error = "resident arena scratch capacity is busy"
 		return {}
 	var slot_index := int(free_slots.pop_front())
@@ -407,20 +415,26 @@ func lease_and_dispatch(
 	return entry
 
 
-func pop_completed_readbacks() -> Array[Dictionary]:
+func pop_completed_readbacks(maximum_count: int = 0) -> Array[Dictionary]:
 	_readback_mutex.lock()
 	var completed: Array[Dictionary] = []
-	completed.assign(_completed_readbacks)
-	_completed_readbacks.clear()
+	var count := _completed_readbacks.size() if maximum_count <= 0 else mini(
+		maximum_count, _completed_readbacks.size()
+	)
+	completed.assign(_completed_readbacks.slice(0, count))
+	_completed_readbacks = _completed_readbacks.slice(count)
 	_readback_mutex.unlock()
 	return completed
 
 
-func pop_completed_dispatches() -> Array[Dictionary]:
+func pop_completed_dispatches(maximum_count: int = 0) -> Array[Dictionary]:
 	_readback_mutex.lock()
 	var completed: Array[Dictionary] = []
-	completed.assign(_completed_dispatch_completions)
-	_completed_dispatch_completions.clear()
+	var count := _completed_dispatch_completions.size() if maximum_count <= 0 else mini(
+		maximum_count, _completed_dispatch_completions.size()
+	)
+	completed.assign(_completed_dispatch_completions.slice(0, count))
+	_completed_dispatch_completions = _completed_dispatch_completions.slice(count)
 	_readback_mutex.unlock()
 	var results: Array[Dictionary] = []
 	for completion in completed:
@@ -671,6 +685,8 @@ func get_status() -> Dictionary:
 		"architecture": "bounded_gpu_validated_exact_meshlet_residency",
 		"position_encoding": "float32_world_space",
 		"page_slot_capacity": PAGE_SLOT_COUNT,
+		"interaction_scratch_reserve_per_page": INTERACTION_SCRATCH_RESERVE_PER_PAGE,
+		"background_scratch_reservation_deferrals": _background_scratch_reservation_deferrals,
 		"maximum_slots": _maximum_slots,
 		"compact_visibility_slots": _compact_slot_count,
 		"allocated_slots": _allocated_slot_count,
@@ -698,6 +714,8 @@ func get_status() -> Dictionary:
 		"dispatch_completion_requests": _dispatch_completion_requests,
 		"dispatch_completion_completions": _dispatch_completion_completions,
 		"dispatch_completion_bytes": _dispatch_completion_bytes,
+		"completed_dispatch_queue_count": _completed_dispatch_completions.size(),
+		"completed_readback_queue_count": _completed_readbacks.size(),
 		"allocated_bytes": _scratch_allocated_bytes + _resident_allocated_bytes,
 		"scratch_allocated_bytes": _scratch_allocated_bytes,
 		"resident_allocated_bytes": _resident_allocated_bytes,
@@ -1234,13 +1252,17 @@ func _release_scratch_slot(
 
 
 func _find_page(
-	input_buffers: Array, cell_count: int, excluded_page_index: int = -1
+	input_buffers: Array,
+	cell_count: int,
+	excluded_page_index: int = -1,
+	interaction: bool = false
 ) -> int:
 	for page_index in range(_pages.size()):
 		if page_index == excluded_page_index:
 			continue
 		var page: Dictionary = _pages[page_index]
-		if not Array(page.get("free_slots", [])).is_empty() \
+		var free_slot_count := Array(page.get("free_slots", [])).size()
+		if free_slot_count > (0 if interaction else INTERACTION_SCRATCH_RESERVE_PER_PAGE) \
 				and _request_fits(page, input_buffers, cell_count):
 			return page_index
 	return -1

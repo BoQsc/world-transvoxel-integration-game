@@ -43,7 +43,7 @@ func consume(
 	view_extent: float,
 	target_size: Vector2i
 ) -> Dictionary:
-	if rendering_device == null or buffers.size() != 21:
+	if rendering_device == null or buffers.size() < 21:
 		return _failure("resident render buffer inventory is invalid")
 	if cell_count <= 0 or not view_center.is_finite() or view_extent <= 0.0:
 		return _failure("resident raster request is invalid")

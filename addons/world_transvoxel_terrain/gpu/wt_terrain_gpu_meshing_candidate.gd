@@ -19,6 +19,7 @@ const MAXIMUM_CELL_COUNT := 8192
 const MAXIMUM_SAMPLE_COUNT := 1048576
 const MAXIMUM_VERTICES_PER_CELL := 12
 const MAXIMUM_INDICES_PER_CELL := 36
+const RESIDENT_STATUS_BYTES := 32 * 16
 const STATUS_NAMES := ["Empty", "Ok", "TopologyFailure"]
 
 var _rendering_device: RenderingDevice
@@ -415,6 +416,7 @@ func _output_buffer_sizes(cell_count: int) -> Array[int]:
 		cell_count * 16,
 		48,
 		cell_count * 20,
+		RESIDENT_STATUS_BYTES,
 	]
 
 
@@ -425,7 +427,9 @@ func _dispatch_compute(cell_count: int) -> void:
 		compute_list, _persistent_uniform_set, 0
 	)
 	var zero_offsets := PackedInt32Array()
-	zero_offsets.resize(28)
+	# Keep the local-device diagnostic path ABI-compatible with the production
+	# arena push block. The final ivec4 carries resident meshlet status offsets.
+	zero_offsets.resize(32)
 	var push_bytes := zero_offsets.to_byte_array()
 	_rendering_device.compute_list_set_push_constant(
 		compute_list, push_bytes, push_bytes.size()
@@ -701,7 +705,7 @@ func _prepare_persistent_resources(
 	input_buffers: Array,
 	output_sizes: Array[int]
 ) -> Dictionary:
-	if input_buffers.size() != 13 or output_sizes.size() != 8:
+	if input_buffers.size() != 13 or output_sizes.size() != 9:
 		return {"status": "FAIL", "error": "GPU buffer inventory changed"}
 	var required_sizes: Array[int] = []
 	for bytes in input_buffers:

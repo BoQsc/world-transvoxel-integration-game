@@ -393,6 +393,11 @@ func is_gpu_resident_render_chunk_active(
 		_gpu_resident_render_controller.is_chunk_generation_active(position, lod, generation)
 
 
+func get_gpu_resident_active_chunk_identity(position: Vector3i, lod: int) -> Dictionary:
+	return _gpu_resident_render_controller.get_active_chunk_identity(position, lod) \
+		if _gpu_resident_render_controller != null else {}
+
+
 func set_debug_gpu_resident_lifecycle_history_enabled(enabled: bool) -> void:
 	if _gpu_resident_render_controller != null:
 		_gpu_resident_render_controller.set_debug_lifecycle_history_enabled(enabled)

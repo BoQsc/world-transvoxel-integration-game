@@ -477,21 +477,52 @@ func _refresh_performance_hud() -> void:
 				"stale_seed_skips": gpu.get("activation_stale_seed_skips", 0),
 				"native_queued": native.get("queued_requests", 0),
 				"native_in_flight": native.get("in_flight_requests", 0),
+				"interaction_activation_retries": gpu.get(
+					"pending_interaction_activation_retry_groups", 0
+				),
+				"interaction_requests": effect.get("queued_interaction_request_count", 0),
+				"interaction_dispatches": effect.get("interaction_dispatch_pending_count", 0),
+				"background_dispatches": effect.get("background_dispatch_pending_count", 0),
+				"pending_lifecycle": effect.get("pending_lifecycle_command_count", 0),
+				"pending_interaction_lifecycle": effect.get(
+					"pending_interaction_lifecycle_command_count", 0
+				),
+				"pending_dispatch_completions": effect.get(
+					"pending_dispatch_completion_count", 0
+				),
+				"pending_telemetry_completions": effect.get(
+					"pending_telemetry_completion_count", 0
+				),
 				"stage_timing_usec": gpu.get("stage_timing_usec", {}),
 				"arena": arena.duplicate(true),
 			}
 			_performance_label.text += (
 				"\nGPU extracting %d  Prepare wait %d\nCohort wait %d  Activating %d\n" +
 				"Active (incl. empty) %d  Retiring %d  Native queue %d\n" +
-				"Activation retries %d  Stale seeds removed %d\n" +
+				"Activation retries %d (interaction %d)  Stale seeds removed %d\n" +
+				"GPU lanes request I:%d  dispatch I:%d / B:%d\n" +
+				"Render queues lifecycle %d (I:%d)  complete %d  telemetry %d\n" +
+				"Render budget waits lifecycle %d  complete %d  telemetry %d\n" +
 				"Meshlets incremental %d / dispatch %d  Copy fallback %d\n" +
 				"Last regenerated %d cells  Upload %d B  Device copy %d B\n" +
-				"Arena pages %d  Active slots %d  Extraction failures %d\n" +
+				"Arena pages %d  Active slots %d  Extraction failures %d  BG reserve waits %d\n" +
 				"Last wait (%d frames ago): %s\nArena: %s"
 			) % [counts.get("extracting", 0), counts.get("native_prepare_wait", 0),
 				counts.get("cohort_wait", 0), counts.get("activation_queued", 0),
 				counts.get("visible", 0), counts.get("retiring", 0), native.get("queued_requests", 0),
-				gpu.get("pending_activation_retry_groups", 0), gpu.get("activation_stale_seed_skips", 0),
+				gpu.get("pending_activation_retry_groups", 0),
+				gpu.get("pending_interaction_activation_retry_groups", 0),
+				gpu.get("activation_stale_seed_skips", 0),
+				effect.get("queued_interaction_request_count", 0),
+				effect.get("interaction_dispatch_pending_count", 0),
+				effect.get("background_dispatch_pending_count", 0),
+				effect.get("pending_lifecycle_command_count", 0),
+				effect.get("pending_interaction_lifecycle_command_count", 0),
+				effect.get("pending_dispatch_completion_count", 0),
+				effect.get("pending_telemetry_completion_count", 0),
+				effect.get("lifecycle_command_budget_deferrals", 0),
+				effect.get("dispatch_completion_budget_deferrals", 0),
+				effect.get("telemetry_completion_budget_deferrals", 0),
 				arena.get("incremental_dispatch_count", 0), arena.get("dispatch_count", 0),
 				arena.get("incremental_copy_fallback_count", 0),
 				arena.get("last_regenerated_cell_count", 0),
@@ -499,6 +530,7 @@ func _refresh_performance_hud() -> void:
 				arena.get("last_incremental_meshlet_copy_bytes", 0),
 				arena.get("page_count", 0), arena.get("active_slots", 0),
 				arena.get("failed_extractions", 0),
+				arena.get("background_scratch_reservation_deferrals", 0),
 				gpu.get("last_activation_wait_age_frames", -1), wait.get("status", "none"),
 				arena.get("last_error", "ok") if not str(arena.get("last_error", "")).is_empty() else "ok"]
 	var history_sample := {

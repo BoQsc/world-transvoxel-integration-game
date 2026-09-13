@@ -1475,6 +1475,21 @@ func _submit_player_collision_invokers(
 			return false
 		_last_collision_viewer_position = player_position
 		_accepted_collision_viewer_updates += 1
+	# The radius-two player shell already provides 32 world units of movement
+	# lead. While the tool ray is active, reserve the remaining bounded collision
+	# viewer slots for exact interaction coverage instead of duplicating the
+	# player shell at a predictive point.
+	if player_interaction_collision_invoker_enabled:
+		if not is_inf(_last_predictive_collision_viewer_position.x):
+			_viewer_revision += 1
+			if not bool(_reference_scene.call(
+				"remove_runtime_collision_viewer",
+				_player_predictive_collision_viewer_id,
+				_viewer_revision
+			)):
+				return _fail("predictive collision viewer removal failed")
+			_last_predictive_collision_viewer_position = Vector3(INF, INF, INF)
+		return true
 	var predictive_chunk := _collision_invoker_chunk(predictive_position)
 	if force or predictive_chunk != _collision_invoker_chunk(
 		_last_predictive_collision_viewer_position

@@ -36,7 +36,7 @@ func _run() -> void:
 		for direction in [Vector3.DOWN, Vector3.RIGHT, Vector3(1, 1, 1).normalized(), Vector3(-1, -2, 3).normalized()]:
 			var positions := Demand.centers(origin, direction, 96.0)
 			if positions.size() != Demand.MAXIMUM_VIEWERS:
-				return _fail("96-unit ray was not bounded to two local viewers")
+				return _fail("96-unit ray did not use the bounded local viewer count")
 			for index in range(385):
 				var key := _chunk(origin + direction * (float(index) * 0.25))
 				var covered := false
@@ -75,7 +75,8 @@ func _run() -> void:
 			not world.call("_update_player_interaction_collision_invoker", false) or scene.updates != 0:
 		return _fail("optional ray demand changed default collision behavior")
 	world.player_interaction_collision_invoker_enabled = true
-	if not world.call("_update_player_interaction_collision_invoker", false) or scene.live.size() != 2:
+	if not world.call("_update_player_interaction_collision_invoker", false) or \
+			scene.live.size() != Demand.MAXIMUM_VIEWERS:
 		return _fail("ray viewers were not submitted")
 	var updates := scene.updates
 	if not world.call("_update_player_interaction_collision_invoker", false) or scene.updates != updates:
@@ -104,7 +105,9 @@ func _run() -> void:
 	world.queue_free()
 	scene.queue_free()
 	await process_frame
-	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=2 coalesced=1 retired=1 priority_ray=7 priority_shell=64 gpu_cpu_visual_scan=0" % checks)
+	print("INTERACTION_COLLISION_DEMAND_PASS samples=%d bounded=%d radius=%d coalesced=1 retired=1 priority_ray=7 priority_shell=64 gpu_cpu_visual_scan=0" % [
+		checks, Demand.MAXIMUM_VIEWERS, Demand.RADIUS_CHUNKS,
+	])
 	quit(0)
 
 func _fail(message: String) -> void:
