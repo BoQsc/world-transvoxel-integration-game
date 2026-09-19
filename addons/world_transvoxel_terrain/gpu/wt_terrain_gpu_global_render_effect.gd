@@ -594,6 +594,7 @@ func _queue_activation_group_command(
 		retained_retirements.append({
 			"identity": identity.duplicate(true),
 			"publication_sequence": publication_sequence,
+			"deactivate": bool(entry.get("deactivate", false)),
 		})
 	_mutex.lock()
 	if _close_requested:
@@ -622,6 +623,10 @@ func _queue_activation_group_command(
 
 func retire_entry(identity: Dictionary, publication_sequence: int) -> bool:
 	return _queue_lifecycle_command("RETIRE", identity, publication_sequence)
+
+
+func deactivate_entry(identity: Dictionary, publication_sequence: int) -> bool:
+	return _queue_lifecycle_command("DEACTIVATE", identity, publication_sequence)
 
 
 func pop_event() -> Dictionary:
@@ -1583,6 +1588,8 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 				)
 		elif action == "RETIRE":
 			_retire_entry_on_render_thread(key, token, command)
+		elif action == "DEACTIVATE":
+			_deactivate_entry_on_render_thread(key, token, command)
 	_sync_active_lod_inventory_on_render_thread()
 	if _stage_timing_enabled:
 		_record_stage_time("lifecycle_all_callbacks", phase_start)
@@ -1760,16 +1767,31 @@ func _replace_group_on_render_thread(command: Dictionary) -> void:
 		return
 	if activations.is_empty():
 		for item in retirements:
-			_retire_entry_on_render_thread(
-				str(item.get("key", "")), str(item.get("token", "")),
-				Dictionary(item.get("source", {}))
-			)
+			var source := Dictionary(item.get("source", {}))
+			if bool(source.get("deactivate", false)):
+				_deactivate_entry_on_render_thread(
+					str(item.get("key", "")), str(item.get("token", "")), source, true
+				)
+			else:
+				_retire_entry_on_render_thread(
+					str(item.get("key", "")), str(item.get("token", "")), source
+				)
 		return
+	var deferred_retirements: Array = []
+	for item in retirements:
+		var retirement_source := Dictionary(item.get("source", {}))
+		if bool(retirement_source.get("deactivate", false)):
+			_deactivate_entry_on_render_thread(
+				str(item.get("key", "")), str(item.get("token", "")),
+				retirement_source, true
+			)
+		else:
+			deferred_retirements.append(item)
 	for item in activations:
 		var token := str(item.get("token", ""))
 		var entry: Dictionary = _entries[token]
 		entry["active"] = true
-		entry["retained_retirements"] = retirements.duplicate(true)
+		entry["retained_retirements"] = deferred_retirements.duplicate(true)
 		_entries[token] = entry
 		_activate_entry_on_render_thread(
 			str(item.get("key", "")), token, Dictionary(item.get("source", {}))
@@ -1877,6 +1899,37 @@ func _retire_entry_on_render_thread(
 	_push_event_on_render_thread("RETIRED", source)
 
 
+func _deactivate_entry_on_render_thread(
+	key: String, token: String, source: Dictionary,
+	visibility_already_committed: bool = false
+) -> void:
+	if not _entries.has(token):
+		_push_event_on_render_thread(
+			"REJECTED", source, "resident entry disappeared before deactivation"
+		)
+		return
+	var entry: Dictionary = _entries[token]
+	if Dictionary(entry.get("identity", {})) != Dictionary(source.get("identity", {})):
+		_push_event_on_render_thread(
+			"REJECTED", source, "deactivation identity differs from resident entry"
+		)
+		return
+	if bool(entry.get("active", false)) and not visibility_already_committed:
+		if not _arena.commit_visibility([], [entry]):
+			_push_event_on_render_thread("REJECTED", source, _arena.get_last_error())
+			return
+	entry["active"] = false
+	_entries[token] = entry
+	if int(_active_sequence_by_key.get(key, 0)) \
+			== int(source.get("publication_sequence", 0)):
+		_active_sequence_by_key.erase(key)
+	_mutex.lock()
+	_status["active_entry_count"] = _active_sequence_by_key.size()
+	_active_lod_inventory_dirty = true
+	_mutex.unlock()
+	_push_event_on_render_thread("DEACTIVATED", source)
+
+
 func _finalize_gpu_candidate_on_render_thread(entry: Dictionary) -> void:
 	var previous_token := str(entry.get("retained_previous_token", ""))
 	var traversed := 0
@@ -1902,10 +1955,15 @@ func _finalize_gpu_candidate_on_render_thread(entry: Dictionary) -> void:
 		var retirement := Dictionary(retirement_value)
 		var retirement_token := str(retirement.get("token", ""))
 		if _entries.has(retirement_token):
-			_retire_entry_on_render_thread(
-				str(retirement.get("key", "")), retirement_token,
-				Dictionary(retirement.get("source", {}))
-			)
+			var source := Dictionary(retirement.get("source", {}))
+			if bool(source.get("deactivate", false)):
+				_deactivate_entry_on_render_thread(
+					str(retirement.get("key", "")), retirement_token, source, true
+				)
+			else:
+				_retire_entry_on_render_thread(
+					str(retirement.get("key", "")), retirement_token, source
+				)
 	entry.erase("retained_previous_token")
 	entry.erase("retained_retirements")
 

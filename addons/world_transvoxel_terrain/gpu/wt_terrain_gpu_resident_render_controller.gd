@@ -66,6 +66,8 @@ const COLLISION_ACTIVATION_RETRY_BURST := 3
 const LIFECYCLE_HISTORY_CAPACITY := 4096
 const MATERIAL_SYNC_INTERVAL_FRAMES := 30
 const IDLE_RECONCILIATION_INTERVAL_FRAMES := 8
+const DORMANT_GROUP_CAPACITY := 64
+const DORMANT_APPLICATION_RETRY_FRAMES := 8
 
 var _backend_terrain: Node
 var _world_environment: WorldEnvironment
@@ -142,6 +144,11 @@ var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing"
 var _stage_timing_usec: Dictionary = {}
 var _next_material_sync_frame := 0
 var _next_reconciliation_frame := 0
+var _dormant_group_lru: Array[String] = []
+var _dormant_group_peak := 0
+var _dormant_group_insertions := 0
+var _dormant_group_reactivations := 0
+var _dormant_group_evictions := 0
 
 
 func _ready() -> void:
@@ -395,6 +402,12 @@ func get_status() -> Dictionary:
 		"prepared_inactive_chunks": prepared_inactive_groups,
 		"activation_queued_chunks": activation_queued_groups,
 		"retiring_chunks": retiring_groups,
+		"dormant_chunks": _dormant_group_lru.size(),
+		"dormant_chunk_capacity": DORMANT_GROUP_CAPACITY,
+		"dormant_chunk_peak": _dormant_group_peak,
+		"dormant_chunk_insertions": _dormant_group_insertions,
+		"dormant_chunk_reactivations": _dormant_group_reactivations,
+		"dormant_chunk_evictions": _dormant_group_evictions,
 		"oldest_inactive_age_frames": oldest_inactive_age_frames,
 		"inactive_chunk_examples": _inactive_group_examples(8),
 		"retiring_chunk_examples": _retiring_group_examples(8),
@@ -1288,6 +1301,17 @@ func _drain_effect_events() -> void:
 					"error", "GPU entry rejected"
 				))
 				if bool(Dictionary(_groups.get(group_key, {})).get(
+					"dormant_retirement", false
+				)):
+					var failed_deactivation := Dictionary(_groups[group_key])
+					failed_deactivation["retiring"] = false
+					failed_deactivation["dormant_retirement"] = false
+					_groups[group_key] = failed_deactivation
+					_begin_group_retirement(
+						group_key, "dormant_deactivation_failed", true
+					)
+					continue
+				if bool(Dictionary(_groups.get(group_key, {})).get(
 					"activation_queued", false
 				)):
 					var rejected_group := Dictionary(_groups[group_key])
@@ -1311,6 +1335,9 @@ func _drain_effect_events() -> void:
 					_reject_group(group_key, rejection_error)
 			"RETIRED", "SUPERSEDED":
 				_mark_surface(group_key, "retired", str(route.get("surface", "")))
+				_try_finish_retirement(group_key)
+			"DEACTIVATED":
+				_mark_surface(group_key, "deactivated", str(route.get("surface", "")))
 				_try_finish_retirement(group_key)
 	_effect_event_max_processed_per_frame = maxi(
 		_effect_event_max_processed_per_frame, processed
@@ -1371,18 +1398,36 @@ func _try_validate_group(group_key: String) -> void:
 		"get_gpu_resident_render_chunk_readiness",
 		Dictionary(terrain_request.get("identity", {}))
 	))
-	if str(readiness.get("status", "")) == "WAITING_APPLICATION":
+	var readiness_status := str(readiness.get("status", ""))
+	if bool(group.get("dormant", false)) \
+			and not bool(group.get("dormant_saw_application_absent", false)):
+		if readiness_status == "WAITING_APPLICATION":
+			group["dormant_saw_application_absent"] = true
+		elif readiness_status == "READY" and bool(readiness.get(
+			"external_activation_required", false
+		)):
+			group["dormant_saw_application_absent"] = true
+		elif readiness_status == "READY":
+			group["next_validation_frame"] = (
+				_process_frame + DORMANT_APPLICATION_RETRY_FRAMES
+			)
+			_groups[group_key] = group
+			return
+	if readiness_status == "WAITING_APPLICATION":
 		var wait_started := int(group.get(
 			"application_wait_started_frame", -1
 		))
 		if wait_started < 0:
 			wait_started = _process_frame
 		group["application_wait_started_frame"] = wait_started
-		group["next_validation_frame"] = (
-			_process_frame + APPLICATION_WAIT_RETRY_FRAMES
+		group["next_validation_frame"] = _process_frame + (
+			DORMANT_APPLICATION_RETRY_FRAMES
+			if bool(group.get("dormant", false))
+			else APPLICATION_WAIT_RETRY_FRAMES
 		)
 		_groups[group_key] = group
-		if _process_frame - wait_started >= APPLICATION_WAIT_FRAME_LIMIT:
+		if not bool(group.get("dormant", false)) \
+				and _process_frame - wait_started >= APPLICATION_WAIT_FRAME_LIMIT:
 			_application_wait_expirations += 1
 			_reject_group(
 				group_key,
@@ -1612,6 +1657,7 @@ func _queue_selected_activation_cohort(
 	var cohort_member_group_keys: Array[String] = []
 	var activation_entries: Array[Dictionary] = []
 	var retirement_group_keys: Array[String] = []
+	var dormant_retirement_group_keys: Array[String] = []
 	var retirement_entries: Array[Dictionary] = []
 	var inventories: Array = []
 	for member_value in Array(cohort.get("chunks", [])):
@@ -1661,6 +1707,11 @@ func _queue_selected_activation_cohort(
 		phase_start = _record_stage_time("activation_member_routes", phase_start)
 	var retirements := Array(cohort.get("retirements", []))
 	var active_routes := _active_group_routes_by_chunk() if not retirements.is_empty() else {}
+	var replacement_locations := {}
+	for activation_entry in activation_entries:
+		replacement_locations[_chunk_location_key(Dictionary(
+			Dictionary(activation_entry).get("identity", {})
+		))] = true
 	for retirement_value in retirements:
 		var retirement := Dictionary(retirement_value)
 		var retirement_key := _chunk_location_key(retirement)
@@ -1680,6 +1731,9 @@ func _queue_selected_activation_cohort(
 			_fail_closed("authoritative GPU retirement repeats a chunk")
 			return
 		retirement_group_keys.append(retirement_group_key)
+		var retain_dormant := not replacement_locations.has(retirement_key)
+		if retain_dormant:
+			dormant_retirement_group_keys.append(retirement_group_key)
 		var retirement_requests := Dictionary(retirement_group.get("requests", {}))
 		var retirement_sequences := Dictionary(retirement_group.get("sequences", {}))
 		for surface in _required_surfaces(retirement_group):
@@ -1687,6 +1741,7 @@ func _queue_selected_activation_cohort(
 			retirement_entries.append({
 				"identity": Dictionary(retirement_request.get("identity", {})),
 				"publication_sequence": int(retirement_sequences.get(surface, 0)),
+				"deactivate": retain_dormant,
 			})
 	if _stage_timing_enabled:
 		_record_stage_time("activation_retirement_routes", phase_start)
@@ -1731,7 +1786,9 @@ func _queue_selected_activation_cohort(
 				)))
 				return
 		if not retirement_entries.is_empty():
-			_mark_groups_retiring(retirement_group_keys)
+			_mark_groups_retiring(
+				retirement_group_keys, dormant_retirement_group_keys
+			)
 			if not _effect.replace_entries([], retirement_entries):
 				_fail_closed("global renderer rejected committed retirement-only cohort")
 				return
@@ -1746,6 +1803,7 @@ func _queue_selected_activation_cohort(
 		"inventories": inventories.duplicate(true),
 		"activation_entries": activation_entries.duplicate(true),
 		"retirement_group_keys": retirement_group_keys.duplicate(),
+		"dormant_retirement_group_keys": dormant_retirement_group_keys.duplicate(),
 		"retirement_entries": retirement_entries.duplicate(true),
 		"selected_chunks": Array(cohort.get("chunks", [])).duplicate(true),
 		"native_committed": native_precommitted,
@@ -1767,7 +1825,9 @@ func _queue_selected_activation_cohort(
 		})
 	_activation_cohorts_queued += 1
 	if native_precommitted:
-		_mark_groups_retiring(retirement_group_keys)
+		_mark_groups_retiring(
+			retirement_group_keys, dormant_retirement_group_keys
+		)
 		var render_swap_queued: bool = _effect.replace_entries(
 			activation_entries, retirement_entries
 		) if not retirement_entries.is_empty() else _effect.activate_entries(
@@ -1838,12 +1898,17 @@ func _active_group_routes_by_chunk() -> Dictionary:
 	return routes
 
 
-func _mark_groups_retiring(group_keys: Array[String]) -> void:
+func _mark_groups_retiring(
+	group_keys: Array[String], dormant_group_keys: Array[String] = []
+) -> void:
 	for group_key in group_keys:
 		if not _groups.has(group_key):
 			continue
 		var group := Dictionary(_groups[group_key])
 		group["retiring"] = true
+		group["dormant_retirement"] = dormant_group_keys.has(group_key)
+		group["retired"] = {}
+		group["deactivated"] = {}
 		group["retirement_candidate_frame"] = -1
 		_groups[group_key] = group
 		_record_lifecycle_event("ATOMIC_RETIRE", group_key)
@@ -2116,10 +2181,16 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 	for member_group_key_value in group_keys:
 		var member_group_key := str(member_group_key_value)
 		var member_group := Dictionary(_groups[member_group_key])
+		var was_dormant := bool(member_group.get("dormant", false))
 		member_group["active"] = true
+		member_group["dormant"] = false
+		member_group["dormant_saw_application_absent"] = false
 		member_group["activation_queued"] = false
 		member_group["activation_cohort_id"] = 0
 		_groups[member_group_key] = member_group
+		if was_dormant:
+			_dormant_group_lru.erase(member_group_key)
+			_dormant_group_reactivations += 1
 		if bool(member_group.get("retire_after_activation", false)):
 			retire_after_activation.append(member_group_key)
 		_record_lifecycle_event("ACTIVE", member_group_key)
@@ -2175,7 +2246,9 @@ func _reconcile_active_chunks() -> int:
 				_retirement_candidate_cancellations += 1
 			continue
 		if candidate_frame >= 0 and candidate_frame < _process_frame:
-			_begin_group_retirement(group_key, "native_reconciliation")
+			_begin_group_retirement(
+				group_key, "native_reconciliation", false, true
+			)
 			continue
 		group["retirement_candidate_frame"] = _process_frame
 		_groups[group_key] = group
@@ -2331,7 +2404,7 @@ func _reject_group(group_key: String, error: String, readiness: Dictionary = {})
 			var request_value = Dictionary(group.get("requests", {}))[surface]
 			var request := Dictionary(request_value)
 			_reject_native_request(request, error)
-	_begin_group_retirement(group_key, "rejected")
+	_begin_group_retirement(group_key, "rejected", true)
 
 
 static func _is_stale_render_event(error: String) -> bool:
@@ -2356,7 +2429,7 @@ func _supersede_group(group_key: String) -> void:
 			int(request.get("request_id", 0)),
 			Dictionary(request.get("identity", {}))
 		)
-	_begin_group_retirement(group_key, "superseded")
+	_begin_group_retirement(group_key, "superseded", true)
 
 
 func _reject_activation_cohort(group_key: String, error: String) -> void:
@@ -2404,7 +2477,10 @@ func _supersede_activation_cohort(group_key: String) -> void:
 
 
 func _begin_group_retirement(
-	group_key: String, reason: String = "unspecified"
+	group_key: String,
+	reason: String = "unspecified",
+	force_release: bool = false,
+	prefer_dormant: bool = false
 ) -> void:
 	if not _groups.has(group_key):
 		return
@@ -2424,14 +2500,27 @@ func _begin_group_retirement(
 		return
 	if bool(group.get("retiring", false)):
 		return
+	var dormant_retirement := not force_release and (
+		prefer_dormant or _can_retain_dormant_group(group)
+	)
 	group["retiring"] = true
+	group["dormant_retirement"] = dormant_retirement
+	group["retired"] = {}
+	group["deactivated"] = {}
 	_groups[group_key] = group
-	_record_lifecycle_event("RETIRE", group_key, {"reason": reason})
+	_record_lifecycle_event(
+		"DEACTIVATE" if dormant_retirement else "RETIRE",
+		group_key,
+		{"reason": reason}
+	)
 	var requests: Dictionary = group.get("requests", {})
 	var sequences: Dictionary = group.get("sequences", {})
 	for surface in requests:
 		var identity: Dictionary = Dictionary(requests[surface]).get("identity", {})
-		_effect.retire_entry(identity, int(sequences.get(surface, 0)))
+		if dormant_retirement:
+			_effect.deactivate_entry(identity, int(sequences.get(surface, 0)))
+		else:
+			_effect.retire_entry(identity, int(sequences.get(surface, 0)))
 	if requests.is_empty():
 		_try_finish_retirement(group_key)
 
@@ -2440,7 +2529,9 @@ func _try_finish_retirement(group_key: String) -> void:
 	if not _groups.has(group_key):
 		return
 	var group: Dictionary = _groups[group_key]
-	if not _surface_set_complete(group, "retired", false):
+	var dormant_retirement := bool(group.get("dormant_retirement", false))
+	var completion_field := "deactivated" if dormant_retirement else "retired"
+	if not _surface_set_complete(group, completion_field, false):
 		return
 	if bool(group.get("native_active", false)):
 		_backend_terrain.call(
@@ -2448,7 +2539,54 @@ func _try_finish_retirement(group_key: String) -> void:
 		)
 		group["native_active"] = false
 		_retired_chunks += 1
+	if dormant_retirement:
+		group["active"] = false
+		group["dormant"] = true
+		group["dormant_saw_application_absent"] = false
+		group["retiring"] = false
+		group["dormant_retirement"] = false
+		group["validated"] = false
+		group["native_prepared"] = false
+		group["activation_queued"] = false
+		group["activation_cohort_id"] = 0
+		group["activation_staged"] = {}
+		group["activated"] = {}
+		group["application_wait_started_frame"] = -1
+		group["next_validation_frame"] = _process_frame
+		group["retirement_candidate_frame"] = -1
+		_groups[group_key] = group
+		_retain_dormant_group(group_key)
+		return
 	_cleanup_group(group_key)
+
+
+func _can_retain_dormant_group(group: Dictionary) -> bool:
+	if not bool(group.get("active", false)) \
+			or not bool(group.get("native_active", false)):
+		return false
+	var terrain_request := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {}))
+	if terrain_request.is_empty():
+		return false
+	var readiness := Dictionary(_backend_terrain.call(
+		"get_gpu_resident_render_chunk_readiness",
+		Dictionary(terrain_request.get("identity", {}))
+	))
+	return str(readiness.get("status", "")) == "WAITING_APPLICATION"
+
+
+func _retain_dormant_group(group_key: String) -> void:
+	_dormant_group_lru.erase(group_key)
+	_dormant_group_lru.append(group_key)
+	_dormant_group_insertions += 1
+	_dormant_group_peak = maxi(_dormant_group_peak, _dormant_group_lru.size())
+	while _dormant_group_lru.size() > DORMANT_GROUP_CAPACITY:
+		var evicted_group_key := _dormant_group_lru.pop_front()
+		if not _groups.has(evicted_group_key):
+			continue
+		_dormant_group_evictions += 1
+		_begin_group_retirement(evicted_group_key, "dormant_capacity", true)
 
 
 func _record_lifecycle_event(
@@ -2529,6 +2667,7 @@ func _cleanup_group(group_key: String) -> void:
 		_groups[group_key] = pending_group
 		return
 	_activation_retry_membership.erase(group_key)
+	_dormant_group_lru.erase(group_key)
 	var group: Dictionary = _groups[group_key]
 	var terrain_request := Dictionary(Dictionary(group.get(
 		"requests", {}
@@ -2677,6 +2816,7 @@ func _new_group(identity: Dictionary) -> Dictionary:
 		"activation_staged": {},
 		"activated": {},
 		"retired": {},
+		"deactivated": {},
 		"native_validated": {},
 		"surface_details": {},
 		"validated": false,
@@ -2686,6 +2826,9 @@ func _new_group(identity: Dictionary) -> Dictionary:
 		"activation_queued": false,
 		"activation_cohort_id": 0,
 		"retiring": false,
+		"dormant": false,
+		"dormant_saw_application_absent": false,
+		"dormant_retirement": false,
 		"retirement_candidate_frame": -1,
 		"application_wait_started_frame": -1,
 		"next_validation_frame": 0,
