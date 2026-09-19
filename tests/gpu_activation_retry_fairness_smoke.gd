@@ -163,6 +163,23 @@ class StaleSeedBackend:
 		return {"status": "WAITING_COHORT" if generation == 100 else "STALE_APPLICATION"}
 
 
+class SharedWaitBackend:
+	extends Node
+	var queries := 0
+
+	func get_gpu_resident_render_activation_cohort(_identity: Dictionary) -> Dictionary:
+		queries += 1
+		return {
+			"status": "WAITING_COHORT",
+			"error": "shared boundary dependency",
+			"boundary_mask_wait_count": 1,
+			"waiting_member": {
+				"page_x": 7, "page_y": 0, "page_z": 3,
+				"lod": 1, "generation": 91, "transition_mask": 4,
+			},
+		}
+
+
 class RetireEffect:
 	extends RefCounted
 	var retired: Array[int] = []
@@ -216,6 +233,9 @@ func _initialize() -> void:
 	if not _test_stale_seed_budget():
 		quit(1)
 		return
+	if not _test_shared_wait_coalescing():
+		quit(1)
+		return
 	if not _test_empty_admission_budget():
 		quit(1)
 		return
@@ -246,7 +266,7 @@ func _initialize() -> void:
 	if not _test_drain_gate():
 		quit(1)
 		return
-	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 empty_admission_budget=1 candidate_headroom=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1 committed_cohort_supersession=1")
+	print("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_PASS fair=1 bounded=1 effect_event_budget=1 collision_lane=1 normal_lane_not_starved=1 initial_budget=1 stale_seed_budget=1 shared_wait_coalesced=1 empty_admission_budget=1 candidate_headroom=1 deduplicated=1 cancelled=1 inflight_excluded=1 strict_drain=1 spatial_retirement=1 batched_inventory=1 activation_ack=1 optional_history=1 retiring_diagnostics=1 retiring_admission_rejected=1 committed_cohort_supersession=1")
 	quit(0)
 
 
@@ -416,6 +436,28 @@ func _test_stale_seed_budget() -> bool:
 		and effect.retired.size() == stale_count
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: stale seed cleanup consumed live selection budget or exceeded bound queries=%s retired=%s skips=%d membership=%s normal_queue=%s interaction_queue=%s" % [str(backend.queries), str(effect.retired), controller._activation_stale_seed_skips, str(controller._activation_retry_membership), str(controller._activation_retry_queue), str(controller._activation_collision_retry_queue)])
+	controller.free()
+	backend.free()
+	return ok
+
+
+func _test_shared_wait_coalescing() -> bool:
+	var controller := Controller.new()
+	var backend := SharedWaitBackend.new()
+	controller._backend_terrain = backend
+	for generation in range(8):
+		_add_prepared_seed(controller, generation + 1)
+	controller._drain_activation_cohort_retries()
+	controller._process_frame += controller.ACTIVATION_WAIT_BACKGROUND_PROBE_FRAMES
+	controller._drain_activation_cohort_retries()
+	var learned_queries := backend.queries
+	controller._process_frame += controller.ACTIVATION_WAIT_BACKGROUND_PROBE_FRAMES
+	controller._drain_activation_cohort_retries()
+	var ok := learned_queries == 8 and backend.queries == learned_queries + 1 \
+		and controller._activation_cohort_retry_coalesced >= 7 \
+		and controller._activation_retry_membership.size() == 8
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: shared regional blocker was polled once per seed queries=%d learned=%d coalesced=%d membership=%d" % [backend.queries, learned_queries, controller._activation_cohort_retry_coalesced, controller._activation_retry_membership.size()])
 	controller.free()
 	backend.free()
 	return ok

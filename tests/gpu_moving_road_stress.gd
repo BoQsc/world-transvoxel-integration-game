@@ -662,6 +662,8 @@ func _settle_failure_summary() -> Dictionary:
 			"prepared_inactive": int(resident.get("prepared_inactive_chunks", 0)),
 			"incomplete": int(resident.get("incomplete_chunks", 0)),
 		},
+		"inactive_examples": Array(resident.get("inactive_chunk_examples", [])).slice(0, 8),
+		"recent_lifecycle": Array(resident.get("recent_lifecycle_events", [])).slice(-32),
 		"activation_wait": {
 			"status": str(wait.get("status", "")),
 			"error": str(wait.get("error", "")),

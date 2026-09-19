@@ -58,6 +58,8 @@ const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 4
 const ACTIVATION_COHORT_RETRY_BUDGET_USEC := 750
+const ACTIVATION_WAIT_INTERACTION_PROBE_FRAMES := 1
+const ACTIVATION_WAIT_BACKGROUND_PROBE_FRAMES := 2
 const EFFECT_EVENT_CAPACITY_PER_FRAME := 32
 const EFFECT_EVENT_BUDGET_USEC := 2000
 const COLLISION_ACTIVATION_RETRY_BURST := 3
@@ -80,6 +82,10 @@ var _activation_cohorts: Dictionary = {}
 var _activation_collision_retry_queue: Array[String] = []
 var _activation_retry_queue: Array[String] = []
 var _activation_retry_membership: Dictionary = {}
+# Multiple prepared seeds often describe the same atomic regional wait. Gate
+# native polling by the authority-reported blocker while every seed remains in
+# its normal queue. Slow probes ensure a missed event cannot strand the cohort.
+var _activation_wait_probe_frames: Dictionary = {}
 var _activation_collision_retry_streak := 0
 var _running := false
 var _native_request_capacity := 16
@@ -117,6 +123,7 @@ var _cpu_only_regional_retirements := 0
 var _recent_lifecycle_events: Array[Dictionary] = []
 var _lifecycle_history_enabled := OS.get_cmdline_user_args().has("--gpu-lifecycle-history")
 var _activation_cohort_retry_attempts := 0
+var _activation_cohort_retry_coalesced := 0
 var _activation_stale_seed_skips := 0
 var _last_activation_cohort_wait: Dictionary = {}
 var _last_activation_cohort_wait_frame := -1
@@ -197,6 +204,7 @@ func start(
 	_activation_collision_retry_queue.clear()
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
+	_activation_wait_probe_frames.clear()
 	_activation_collision_retry_streak = 0
 	_unrouted_effect_events = 0
 	_unrouted_effect_event_examples.clear()
@@ -231,6 +239,7 @@ func stop() -> void:
 	_activation_collision_retry_queue.clear()
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
+	_activation_wait_probe_frames.clear()
 	_activation_collision_retry_streak = 0
 	_backend_terrain = null
 	_world_environment = null
@@ -429,6 +438,7 @@ func get_status() -> Dictionary:
 		"lifecycle_history_enabled": _lifecycle_history_enabled,
 		"recent_lifecycle_events": _recent_lifecycle_events.duplicate(true),
 		"activation_cohort_retry_attempts": _activation_cohort_retry_attempts,
+		"activation_cohort_retry_coalesced": _activation_cohort_retry_coalesced,
 		"activation_stale_seed_skips": _activation_stale_seed_skips,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
 		"pending_interaction_activation_retry_groups": (
@@ -1504,6 +1514,17 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 			or bool(group.get("activation_queued", false)) \
 			or not bool(group.get("native_prepared", false)):
 		return false
+	var wait_signature := str(group.get("activation_wait_signature", ""))
+	if not wait_signature.is_empty():
+		var shared_probe_frame := int(_activation_wait_probe_frames.get(
+			wait_signature, 0
+		))
+		if _process_frame < shared_probe_frame:
+			_activation_cohort_retry_coalesced += 1
+			group["next_activation_retry_frame"] = shared_probe_frame
+			_groups[group_key] = group
+			_queue_activation_cohort_retry(group_key)
+			return false
 	var terrain_identity := Dictionary(Dictionary(group.get(
 		"requests", {}
 	)).get("terrain", {})).get("identity", {})
@@ -1537,17 +1558,30 @@ func _queue_selected_activation_cohort(
 ) -> void:
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
+		var wait_signature := _activation_cohort_wait_signature(cohort)
 		_record_lifecycle_event("COHORT_WAIT", group_key, {
 			"status": cohort_status,
+			"signature": wait_signature,
 		})
 		_record_activation_cohort_wait(cohort)
 		if _groups.has(group_key):
 			var waiting_group := Dictionary(_groups[group_key])
-			waiting_group["next_activation_retry_frame"] = _process_frame + (
-				1 if bool(waiting_group.get("interaction_activation_priority",
-					waiting_group.get("collision_activation_priority", false))) else 2
-			)
+			var interaction_wait := bool(waiting_group.get(
+				"interaction_activation_priority",
+				waiting_group.get("collision_activation_priority", false)
+			))
+			var probe_delay := ACTIVATION_WAIT_INTERACTION_PROBE_FRAMES \
+				if interaction_wait else ACTIVATION_WAIT_BACKGROUND_PROBE_FRAMES
+			var next_probe_frame := _process_frame + probe_delay
+			waiting_group["next_activation_retry_frame"] = next_probe_frame
+			if not wait_signature.is_empty():
+				waiting_group["activation_wait_signature"] = wait_signature
 			_groups[group_key] = waiting_group
+			if not wait_signature.is_empty():
+				_activation_wait_probe_frames[wait_signature] = maxi(
+					int(_activation_wait_probe_frames.get(wait_signature, 0)),
+					next_probe_frame
+				)
 		_queue_activation_cohort_retry(group_key)
 		return
 	if cohort_status.begins_with("STALE"):
@@ -1801,6 +1835,29 @@ func _mark_groups_retiring(group_keys: Array[String]) -> void:
 		_record_lifecycle_event("ATOMIC_RETIRE", group_key)
 
 
+func _activation_cohort_wait_signature(wait: Dictionary) -> String:
+	var member := Dictionary(wait.get("waiting_member", {}))
+	if not member.is_empty():
+		return "member:%s:%s:%d" % [
+			_activation_chunk_key(member),
+			str(wait.get("error", "")),
+			int(wait.get("boundary_mask_wait_count", 0)),
+		]
+	var replacements: Array = wait.get("selected_replacements", [])
+	var keys: Array[String] = []
+	for replacement_value in replacements:
+		keys.append(_activation_chunk_key(Dictionary(replacement_value)))
+	keys.sort()
+	if not keys.is_empty():
+		return "region:%d:%s:%s" % [
+			hash(keys),
+			str(wait.get("error", "")),
+			str(wait.get("authoritative_coverage_complete", false)),
+		]
+	# No stable authority identity means this wait cannot safely share a gate.
+	return ""
+
+
 func _record_activation_cohort_wait(wait: Dictionary) -> void:
 	# Cohort replies contain large selected-member arrays. Copy only the bounded
 	# blocker summary needed by runtime diagnostics; deep-copying the full reply
@@ -1816,6 +1873,11 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 		"cohort_fine_face_members", "priority_requested_member_count",
 		"same_layout_edit", "same_layout_edit_rejection_reason",
 		"authoritative_coverage_complete",
+		"waiting_member_record_present", "waiting_member_visual_required",
+		"waiting_member_external_activation_required",
+		"waiting_member_external_prepared", "waiting_member_visual_ready",
+		"waiting_member_collision_current", "waiting_member_generation_matches",
+		"waiting_member_sink_can_set", "waiting_member_sink_matches",
 	]:
 		if wait.has(key):
 			_last_activation_cohort_wait[key] = wait[key]
@@ -1872,6 +1934,10 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 
 
 func _drain_activation_cohort_retries() -> void:
+	for signature_value in _activation_wait_probe_frames.keys():
+		var signature := str(signature_value)
+		if int(_activation_wait_probe_frames[signature]) < _process_frame:
+			_activation_wait_probe_frames.erase(signature)
 	var deadline := _activation_retry_clock_usec() + ACTIVATION_COHORT_RETRY_BUDGET_USEC
 	var attempts := 0
 	var inspected := 0
