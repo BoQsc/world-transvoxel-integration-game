@@ -98,6 +98,7 @@ var _superseded_chunks := 0
 var _recovery_count := 0
 var _application_wait_expirations := 0
 var _coverage_retained_reconciliation_deferrals := 0
+var _coverage_protected_reconciliation_chunks := 0
 var _retirement_confirmation_deferrals := 0
 var _retirement_candidate_cancellations := 0
 var _has_retirement_candidates := false
@@ -400,6 +401,9 @@ func get_status() -> Dictionary:
 		"application_wait_expirations": _application_wait_expirations,
 		"coverage_retained_reconciliation_deferrals": (
 			_coverage_retained_reconciliation_deferrals
+		),
+		"coverage_protected_reconciliation_chunks": (
+			_coverage_protected_reconciliation_chunks
 		),
 		"retirement_confirmation_deferrals": _retirement_confirmation_deferrals,
 		"retirement_candidate_cancellations": _retirement_candidate_cancellations,
@@ -2033,10 +2037,6 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 
 
 func _reconcile_active_chunks() -> int:
-	if not _resident_replacement_batch_ready():
-		_coverage_retained_reconciliation_deferrals += 1
-		_clear_retirement_candidates()
-		return 1
 	var terrain_identities: Array = []
 	var group_by_identity: Dictionary = {}
 	for group_key in _groups:
@@ -2056,6 +2056,11 @@ func _reconcile_active_chunks() -> int:
 	if str(reconciliation.get("status", "")) != "PASS":
 		_fail_closed("native resident reconciliation failed")
 		return IDLE_RECONCILIATION_INTERVAL_FRAMES
+	var protected_count := int(reconciliation.get("coverage_protected_count", 0))
+	_coverage_protected_reconciliation_chunks += protected_count
+	if bool(reconciliation.get("coverage_staging_blocked", false)) \
+			and protected_count > 0:
+		_coverage_retained_reconciliation_deferrals += 1
 	var retire_group_keys := {}
 	for identity_value in Array(reconciliation.get("retire", [])):
 		var identity := Dictionary(identity_value)
@@ -2098,25 +2103,6 @@ func _clear_retirement_candidates() -> void:
 		group["retirement_candidate_frame"] = -1
 		_groups[group_key] = group
 		_retirement_candidate_cancellations += 1
-
-
-func _resident_replacement_batch_ready() -> bool:
-	for group_value in _groups.values():
-		var group := Dictionary(group_value)
-		if not bool(group.get("active", false)) \
-				and not bool(group.get("retiring", false)):
-			return false
-	var effect_status := Dictionary(_effect.get_status())
-	if int(effect_status.get("queued_request_count", 0)) != 0 \
-			or int(effect_status.get("inflight_extraction_count", 0)) != 0 \
-			or int(effect_status.get("event_count", 0)) != 0:
-		return false
-	var native_metrics := Dictionary(_backend_terrain.call(
-		"get_gpu_resident_render_metrics"
-	))
-	return not bool(native_metrics.get("coverage_staging_blocked", false)) \
-		and int(native_metrics.get("queued_requests", 0)) == 0 \
-		and int(native_metrics.get("in_flight_requests", 0)) == 0
 
 
 func debug_ray_coverage(
