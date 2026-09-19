@@ -1924,9 +1924,10 @@ func _update_player_foreground_priority_leases(force: bool) -> bool:
 		var focus_points: Array = targets.get("focus_points", [])
 		if focus_points.is_empty():
 			focus_points = [targets.get("focus_point", _player.global_position)]
-		focus_keys = _foreground_chunk_keys(
-			focus_points, FOREGROUND_PRIORITY_SHELL_RADIUS
-		)
+		# Exact ray/tool centers define visual topology. Native storage expands a
+		# separate bounded halo for prewarming; admitting that halo as visual LOD0
+		# would create a large atomic replacement cohort before the first edit.
+		focus_keys = _foreground_chunk_keys(focus_points, 0)
 	if force or support_keys != _last_foreground_support_keys:
 		_foreground_support_revision += 1
 		if not _submit_foreground_priority_lease(
