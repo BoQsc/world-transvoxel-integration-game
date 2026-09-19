@@ -873,13 +873,9 @@ void main() {
 				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
 				return;
 			}
-			// Cached support can contain more faces than the current render
-			// variant. CPU authority appends only active transition buffers.
-			int active_transition_mask = config.values[config_base + 3].y;
-			if ((active_transition_mask & (1 << face)) == 0) {
-				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_EMPTY, 0, 0, 0));
-				return;
-			}
+			// Extract every face represented by cached support. Publication masks
+			// inactive face meshlets through their indirect instance count, so a
+			// later LOD topology change does not require another extraction.
 			cell_type = CELL_TRANSITION;
 			orientation = face;
 			input_sample_count = 9;

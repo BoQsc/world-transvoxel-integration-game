@@ -203,6 +203,8 @@ var _status := {
 	"protected_stale_activations": 0,
 	"prepared_entries": 0,
 	"activated_entries": 0,
+	"transition_remask_commands": 0,
+	"transition_remask_surfaces": 0,
 	"retired_entries": 0,
 	"resident_capacity_rejections": 0,
 	"draw_frames": 0,
@@ -560,6 +562,36 @@ func replace_entries(entries: Array, retirements: Array) -> bool:
 	return _queue_activation_group_command(
 		"REPLACE_GROUP", entries, retirements
 	)
+
+
+func remask_active_entries(entries: Array, controller_group_key: String) -> bool:
+	if entries.is_empty() or controller_group_key.is_empty():
+		_record_rejection("resident transition remask inventory is empty")
+		return false
+	var retained: Array[Dictionary] = []
+	for entry_value in entries:
+		var source := Dictionary(entry_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var sequence := int(source.get("publication_sequence", 0))
+		if _validate_identity(identity, sequence) != "":
+			_record_rejection("resident transition remask identity is invalid")
+			return false
+		retained.append({
+			"identity": identity.duplicate(true),
+			"publication_sequence": sequence,
+			"controller_group_key": controller_group_key,
+		})
+	_mutex.lock()
+	_status["transition_remask_commands"] = int(
+		_status["transition_remask_commands"]
+	) + 1
+	_lifecycle_commands.append({
+		"action": "REMASK_GROUP",
+		"entries": retained,
+		"controller_group_key": controller_group_key,
+	})
+	_mutex.unlock()
+	return true
 
 
 func _queue_activation_group_command(
@@ -1377,6 +1409,9 @@ func _drain_pending_on_render_thread() -> void:
 			int(Dictionary(request.get("identity", {})).get(
 				"cached_transition_mask", 0
 			)),
+			int(Dictionary(request.get("identity", {})).get(
+				"transition_mask", 0
+			)),
 			Dictionary(request.get("identity", {})).get(
 				"dirty_bounds_min", Vector3i.ZERO
 			),
@@ -1565,6 +1600,9 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 		if action == "REPLACE_GROUP":
 			_replace_group_on_render_thread(command)
 			continue
+		if action == "REMASK_GROUP":
+			_remask_group_on_render_thread(command)
+			continue
 		var identity: Dictionary = command.get("identity", {})
 		var key := _identity_key(identity)
 		var sequence := int(command.get("publication_sequence", 0))
@@ -1593,6 +1631,81 @@ func _drain_lifecycle_commands_on_render_thread() -> void:
 	_sync_active_lod_inventory_on_render_thread()
 	if _stage_timing_enabled:
 		_record_stage_time("lifecycle_all_callbacks", phase_start)
+
+
+func _remask_group_on_render_thread(command: Dictionary) -> void:
+	var updates: Array = []
+	for source_value in Array(command.get("entries", [])):
+		var source := Dictionary(source_value)
+		var identity := Dictionary(source.get("identity", {}))
+		var key := _identity_key(identity)
+		var sequence := int(source.get("publication_sequence", 0))
+		var token := _entry_token(key, sequence)
+		if not _entries.has(token):
+			_push_event_on_render_thread(
+				"REJECTED", source, "resident transition remask became stale"
+			)
+			return
+		var entry := Dictionary(_entries[token])
+		if bool(entry.get("active", false)) \
+				and int(_active_sequence_by_key.get(key, 0)) != sequence:
+			_push_event_on_render_thread(
+				"REJECTED", source, "active resident transition remask became stale"
+			)
+			return
+		var previous := Dictionary(entry.get("identity", {}))
+		for field in [
+			"surface", "page_x", "page_y", "page_z", "lod", "generation",
+			"source_revision", "world_revision",
+		]:
+			if previous.get(field) != identity.get(field):
+				_push_event_on_render_thread(
+					"REJECTED", source, "resident transition remask changed geometry identity"
+				)
+				return
+		var cached_mask := int(entry.get(
+			"resident_cached_transition_mask",
+			previous.get("cached_transition_mask", 0)
+		))
+		if (int(identity.get("transition_mask", 0)) & ~cached_mask) != 0:
+			_push_event_on_render_thread(
+				"REJECTED", source, "resident transition remask exceeds cached faces"
+			)
+			return
+		var updated := entry.duplicate(true)
+		updated["identity"] = identity.duplicate(true)
+		updates.append({"token": token, "entry": updated, "source": source})
+	var visibility_entries: Array = []
+	for update in updates:
+		var updated_entry := Dictionary(Dictionary(update).get("entry", {}))
+		# Dormant entries retain their arena allocation with all draws disabled.
+		# Updating their identity must not make transition draws visible before
+		# the complete native/render activation cohort commits.
+		if bool(updated_entry.get("active", false)):
+			visibility_entries.append(updated_entry)
+	if not visibility_entries.is_empty() \
+			and not _arena.set_transition_visibility(visibility_entries):
+		for update in updates:
+			_push_event_on_render_thread(
+				"REJECTED", Dictionary(Dictionary(update).get("source", {})),
+				_arena.get_last_error()
+			)
+		return
+	for update in updates:
+		var item := Dictionary(update)
+		var updated_entry := Dictionary(item.get("entry", {}))
+		_entries[str(item.get("token", ""))] = updated_entry
+		var source := Dictionary(item.get("source", {}))
+		source["entry_empty"] = bool(updated_entry.get("empty", false))
+		source["entry_vertex_count"] = int(updated_entry.get("vertex_count", 0))
+		source["entry_index_count"] = int(updated_entry.get("index_count", 0))
+		_push_event_on_render_thread("REMASKED", source)
+	_mutex.lock()
+	_status["transition_remask_surfaces"] = int(
+		_status["transition_remask_surfaces"]
+	) + updates.size()
+	_mutex.unlock()
+	_active_lod_inventory_dirty = true
 
 
 func _lifecycle_command_is_interaction(command: Dictionary) -> bool:
@@ -2915,6 +3028,7 @@ func _push_event_on_render_thread(
 		) else 0,
 		"request_id": int(source.get("request_id", 0)),
 		"publication_sequence": int(source.get("publication_sequence", 0)),
+		"controller_group_key": str(source.get("controller_group_key", "")),
 		"identity": Dictionary(source.get("identity", {})).duplicate(true),
 		"entry_empty": bool(source.get("entry_empty", false)),
 		"entry_vertex_count": int(source.get("entry_vertex_count", 0)),

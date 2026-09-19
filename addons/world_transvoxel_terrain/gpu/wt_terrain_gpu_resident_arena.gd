@@ -187,6 +187,7 @@ func lease_and_dispatch(
 	previous_entry: Dictionary = {},
 	dirty_regular_brick_mask: int = 0xff,
 	cached_transition_mask: int = 0,
+	active_transition_mask: int = 0,
 	dirty_bounds_min: Vector3i = Vector3i.ZERO,
 	dirty_bounds_max: Vector3i = Vector3i.ZERO,
 	interaction: bool = false
@@ -273,7 +274,9 @@ func lease_and_dispatch(
 	var initial_commands := PackedInt32Array()
 	initial_commands.resize(MAXIMUM_MESHLETS_PER_SLOT * 5)
 	for meshlet in range(MAXIMUM_MESHLETS_PER_SLOT):
-		initial_commands[meshlet * 5 + 1] = 1
+		initial_commands[meshlet * 5 + 1] = 1 if _meshlet_visible(
+			meshlet, active_transition_mask, cached_transition_mask
+		) else 0
 		initial_commands[meshlet * 5 + 2] = _meshlet_index_base(meshlet)
 	var initial_command := initial_commands.to_byte_array()
 	var command_error := _rendering_device.buffer_update(
@@ -375,7 +378,8 @@ func lease_and_dispatch(
 	)
 	_last_error = ""
 	var entry := _create_provisional_resident(
-		page, page_index, slot_index, global_slot, page_field_mode
+		page, page_index, slot_index, global_slot, page_field_mode,
+		active_transition_mask, cached_transition_mask
 	)
 	if entry.is_empty():
 		_pending_readbacks.erase(ticket)
@@ -536,6 +540,42 @@ func commit_visibility(activations: Array, retirements: Array) -> bool:
 	for entry_value in activations:
 		if not request_summary_readback(Dictionary(entry_value)):
 			return false
+	_last_error = ""
+	return true
+
+
+func set_transition_visibility(entries: Array) -> bool:
+	if _closed:
+		_last_error = "resident arena is closed"
+		return false
+	for entry_value in entries:
+		var entry := Dictionary(entry_value)
+		if bool(entry.get("empty", false)):
+			continue
+		var indirect_buffer: RID = entry.get("indirect_buffer", RID())
+		var indirect_offset := int(entry.get("indirect_offset", 0))
+		var active_mask := int(Dictionary(entry.get("identity", {})).get(
+			"transition_mask", 0
+		))
+		var cached_mask := int(entry.get(
+			"resident_cached_transition_mask",
+			entry.get("cached_transition_mask", 0)
+		))
+		if not indirect_buffer.is_valid():
+			_last_error = "resident transition visibility buffer is invalid"
+			return false
+		for meshlet in range(8, int(entry.get("indirect_draw_count", 8))):
+			var instances := PackedInt32Array([
+				1 if _meshlet_visible(meshlet, active_mask, cached_mask) else 0
+			]).to_byte_array()
+			if _rendering_device.buffer_update(
+				indirect_buffer,
+				indirect_offset + meshlet * DRAW_COMMAND_STRIDE + 4,
+				4,
+				instances
+			) != OK:
+				_last_error = "resident transition visibility update failed"
+				return false
 	_last_error = ""
 	return true
 
@@ -1008,7 +1048,9 @@ func _create_provisional_resident(
 	page_index: int,
 	slot_index: int,
 	global_slot: int,
-	page_field_mode: bool
+	page_field_mode: bool,
+	active_transition_mask: int,
+	cached_transition_mask: int
 ) -> Dictionary:
 	var buffers: Array = page.get("buffers", [])
 	var strides: Array = page.get("strides", [])
@@ -1071,6 +1113,9 @@ func _create_provisional_resident(
 		"indirect_draw_count": 8 + int(maxi(
 			0, int(page.get("cell_capacity", 4096)) - 4096
 		) / 64) if page_field_mode else 1,
+		"active_transition_mask": active_transition_mask,
+		"cached_transition_mask": cached_transition_mask,
+		"resident_cached_transition_mask": cached_transition_mask,
 		"gpu_slot": global_slot,
 		"arena_page_index": page_index,
 		"arena_slot_index": slot_index,
@@ -1085,6 +1130,23 @@ func _create_provisional_resident(
 		"input_offsets": _slot_input_offsets(strides, slot_index),
 		"input_sizes": _input_sizes(strides),
 	}
+
+
+static func _meshlet_visible(
+	meshlet: int, active_transition_mask: int, cached_transition_mask: int
+) -> bool:
+	if meshlet < 8:
+		return true
+	var wanted_ordinal := int((meshlet - 8) / 4)
+	var ordinal := 0
+	for face in range(6):
+		var bit := 1 << face
+		if (cached_transition_mask & bit) == 0:
+			continue
+		if ordinal == wanted_ordinal:
+			return (active_transition_mask & bit) != 0
+		ordinal += 1
+	return false
 
 
 func debug_ray_intersection(

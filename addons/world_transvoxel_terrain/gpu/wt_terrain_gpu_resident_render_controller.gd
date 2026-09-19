@@ -454,6 +454,7 @@ func get_status() -> Dictionary:
 		"activation_cohort_retry_coalesced": _activation_cohort_retry_coalesced,
 		"activation_stale_seed_skips": _activation_stale_seed_skips,
 		"pending_activation_retry_groups": _activation_retry_membership.size(),
+		"pending_background_activation_retry_queue": _activation_retry_queue.size(),
 		"pending_interaction_activation_retry_groups": (
 			_activation_collision_retry_queue.size()
 		),
@@ -948,10 +949,36 @@ func _submit_native_captures() -> void:
 					"error", "interactive GPU request became stale before admission"
 				)))
 				continue
+		if _try_admit_active_transition_remask(request):
+			submitted_this_frame += 1
+			continue
 		var group_key := _group_key(identity)
 		if _groups.has(group_key) and bool(Dictionary(_groups[group_key]).get(
 			"retiring", false
 		)):
+			var retiring_group := Dictionary(_groups[group_key])
+			if bool(retiring_group.get("dormant_retirement", false)):
+				# Demand can return before the render thread acknowledges the
+				# deactivation already in flight. Retain the new native token and
+				# bind it to the cached buffers as soon as that callback arrives.
+				var pending_requests: Dictionary = retiring_group.get(
+					"pending_dormant_requests", {}
+				)
+				var pending_surface := str(identity.get("surface", ""))
+				if pending_requests.has(pending_surface):
+					_reject_native_request(
+						Dictionary(pending_requests[pending_surface]),
+						"newer dormant return request superseded it"
+					)
+				pending_requests[pending_surface] = request.duplicate(true)
+				retiring_group["pending_dormant_requests"] = pending_requests
+				_groups[group_key] = retiring_group
+				_record_lifecycle_event("DORMANT_RETURN_HELD", group_key, {
+					"surface": pending_surface,
+					"request_id": int(request.get("request_id", 0)),
+				})
+				submitted_this_frame += 1
+				continue
 			_reject_native_request(request, "resident chunk group is retiring")
 			continue
 		if not _groups.has(group_key) \
@@ -961,6 +988,42 @@ func _submit_native_captures() -> void:
 		var surface := str(identity.get("surface", ""))
 		var group: Dictionary = _groups.get(group_key, _new_group(identity))
 		if Dictionary(group.get("requests", {})).has(surface):
+			if bool(group.get("dormant", false)):
+				# Dormant residency deliberately keeps the validated GPU buffers and
+				# publication sequence. Runtime demand reactivation republishes the
+				# same immutable generation with a fresh native request token. Rebind
+				# that token to the retained entry instead of dispatching extraction a
+				# second time or rejecting it as a duplicate.
+				var dormant_requests: Dictionary = group.get("requests", {})
+				dormant_requests[surface] = {
+					"request_id": int(request.get("request_id", 0)),
+					"identity": identity.duplicate(true),
+					"bounds_min": request.get("bounds_min", Vector3.ZERO),
+					"bounds_max": request.get("bounds_max", Vector3.ZERO),
+				}
+				var dormant_native_validated: Dictionary = group.get(
+					"native_validated", {}
+				)
+				dormant_native_validated.erase(surface)
+				group["requests"] = dormant_requests
+				group["native_validated"] = dormant_native_validated
+				group["validated"] = false
+				group["native_prepared"] = false
+				group["interaction_activation_priority"] = (
+					bool(identity.get("incremental_edit", false))
+					or bool(identity.get("interaction_priority", false))
+				)
+				group["collision_activation_priority"] = bool(
+					group["interaction_activation_priority"]
+				)
+				group["next_validation_frame"] = _process_frame
+				_groups[group_key] = group
+				_record_lifecycle_event("DORMANT_REBOUND", group_key, {
+					"surface": surface,
+					"request_id": int(request.get("request_id", 0)),
+				})
+				submitted_this_frame += 1
+				continue
 			_reject_native_request(request, "duplicate resident chunk surface")
 			continue
 		var sequence := _next_publication_sequence
@@ -1001,7 +1064,92 @@ func _submit_native_captures() -> void:
 		_entry_routes[_entry_token(identity, sequence)] = route
 		_submitted_surfaces += 1
 		submitted_this_frame += 1
-		_try_precommit_same_layout_edit(group_key)
+
+
+func _try_admit_active_transition_remask(request: Dictionary) -> bool:
+	var identity := Dictionary(request.get("identity", {}))
+	var desired_mask := int(identity.get("transition_mask", 0))
+	var surface := str(identity.get("surface", ""))
+	var source_group_key := ""
+	for candidate_key_value in _groups.keys():
+		var candidate_key := str(candidate_key_value)
+		var candidate := Dictionary(_groups[candidate_key])
+		if not bool(candidate.get("active", false)) \
+				or bool(candidate.get("retiring", false)) \
+				or bool(candidate.get("remask_pending", false)):
+			continue
+		var existing_request := Dictionary(Dictionary(candidate.get(
+			"requests", {}
+		)).get(surface, {}))
+		var existing := Dictionary(existing_request.get("identity", {}))
+		if existing.is_empty():
+			continue
+		var geometry_matches := true
+		for field in [
+			"page_x", "page_y", "page_z", "lod", "generation",
+			"source_revision", "world_revision",
+		]:
+			if existing.get(field) != identity.get(field):
+				geometry_matches = false
+				break
+		if not geometry_matches \
+				or int(existing.get("transition_mask", 0)) == desired_mask:
+			continue
+		if (desired_mask & ~int(existing.get("cached_transition_mask", 0))) != 0:
+			continue
+		source_group_key = candidate_key
+		break
+	if source_group_key.is_empty():
+		return false
+	var validation := Dictionary(_backend_terrain.call(
+		"validate_gpu_resident_render_request",
+		int(request.get("request_id", 0)),
+		identity
+	))
+	var validation_status := str(validation.get("status", ""))
+	if validation_status == "WAITING_APPLICATION":
+		_deferred_interaction_requests.append(request)
+		_interaction_application_deferrals += 1
+		return true
+	if validation_status != "READY" \
+			or not bool(validation.get("request_accepted", false)):
+		_reject_native_request(request, str(validation.get(
+			"error", "resident transition remask request became stale"
+		)))
+		return true
+	var group := Dictionary(_groups[source_group_key])
+	var pending := Dictionary(group.get("pending_remask_requests", {}))
+	pending[surface] = request.duplicate(true)
+	group["pending_remask_requests"] = pending
+	_groups[source_group_key] = group
+	for required_surface in _required_surfaces(group):
+		if not pending.has(required_surface):
+			return true
+	var remask_entries: Array = []
+	var requests := Dictionary(group.get("requests", {}))
+	var sequences := Dictionary(group.get("sequences", {}))
+	for required_surface in _required_surfaces(group):
+		var desired_request := Dictionary(pending[required_surface])
+		var desired_identity := Dictionary(desired_request.get("identity", {}))
+		if int(desired_identity.get("transition_mask", -1)) != desired_mask:
+			_reject_group(source_group_key, "resident remask surfaces disagree on transition mask")
+			return true
+		remask_entries.append({
+			"identity": desired_identity.duplicate(true),
+			"publication_sequence": int(sequences.get(required_surface, 0)),
+		})
+	group["remask_pending"] = true
+	group["remask_transition_mask"] = desired_mask
+	group["remasked"] = {}
+	_groups[source_group_key] = group
+	if not _effect.remask_active_entries(remask_entries, source_group_key):
+		group["remask_pending"] = false
+		group.erase("pending_remask_requests")
+		_groups[source_group_key] = group
+		_last_error = str(_effect.get_status().get(
+			"last_error", "resident transition remask submission failed"
+		))
+	return true
 
 
 func _tracked_group_capacity() -> int:
@@ -1273,6 +1421,11 @@ func _drain_effect_events() -> void:
 					"retiring", false
 				)):
 					_try_commit_activation_cohort(group_key)
+			"REMASKED":
+				_mark_surface(group_key, "remasked", str(route.get("surface", "")))
+				var remask_group := Dictionary(_groups.get(group_key, {}))
+				if _surface_set_complete(remask_group, "remasked"):
+					_finish_transition_remask(group_key)
 			"FIRST_DRAW":
 				var first_draw_group := Dictionary(_groups.get(group_key, {}))
 				var first_draw_request := Dictionary(Dictionary(first_draw_group.get(
@@ -1378,6 +1531,8 @@ func _try_validate_group(group_key: String) -> void:
 			stale_validated[surface] = true
 			group["native_validated"] = stale_validated
 			_groups[group_key] = group
+			if _park_dormant_group(group_key):
+				return
 			_supersede_group(group_key)
 			return
 		if bool(validation.get("request_accepted", false)):
@@ -1438,6 +1593,8 @@ func _try_validate_group(group_key: String) -> void:
 	if str(readiness.get("status", "")) != "READY" \
 			or not bool(readiness.get("ready", false)):
 		if str(readiness.get("status", "")).begins_with("STALE"):
+			if _park_dormant_group(group_key):
+				return
 			_supersede_group(group_key)
 			return
 		_reject_group(group_key, str(readiness.get(
@@ -1451,6 +1608,8 @@ func _try_validate_group(group_key: String) -> void:
 	var preparation_status := str(preparation.get("status", ""))
 	if preparation_status.begins_with("STALE"):
 		_groups[group_key] = group
+		if _park_dormant_group(group_key):
+			return
 		_supersede_group(group_key)
 		return
 	if preparation_status != "PREPARED" \
@@ -1555,7 +1714,6 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 		return false
 	var group: Dictionary = _groups[group_key]
 	if bool(group.get("retiring", false)) \
-			or bool(group.get("active", false)) \
 			or bool(group.get("activation_queued", false)) \
 			or not bool(group.get("native_prepared", false)):
 		return false
@@ -1592,6 +1750,8 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 	# Retire it without spending the expensive-query budget on obsolete work.
 	if cohort_status == "STALE_APPLICATION":
 		_activation_stale_seed_skips += 1
+		if _park_dormant_group(group_key):
+			return false
 		_supersede_group(group_key)
 		return false
 	_queue_selected_activation_cohort(group_key, terrain_identity, cohort, phase_start)
@@ -1630,6 +1790,8 @@ func _queue_selected_activation_cohort(
 		_queue_activation_cohort_retry(group_key)
 		return
 	if cohort_status.begins_with("STALE"):
+		if _park_dormant_group(group_key):
+			return
 		_supersede_group(group_key)
 		return
 	if cohort_status != "READY" or not bool(cohort.get("ready", false)):
@@ -1675,8 +1837,10 @@ func _queue_selected_activation_cohort(
 			_queue_activation_cohort_retry(group_key)
 			return
 		if activation_required:
-			if bool(member_group.get("active", false)) \
-					or bool(member_group.get("activation_queued", false)) \
+			# A retained GPU entry may remain visible while a newly admitted native
+			# application record requires activation confirmation. Recommitting its
+			# existing slot is idempotent and restores the authority handshake.
+			if bool(member_group.get("activation_queued", false)) \
 					or not bool(member_group.get("native_prepared", false)):
 				_queue_activation_cohort_retry(group_key)
 				return
@@ -1905,6 +2069,10 @@ func _mark_groups_retiring(
 		if not _groups.has(group_key):
 			continue
 		var group := Dictionary(_groups[group_key])
+		# The native regional cohort commit already removed this route from the
+		# authoritative render sink. The asynchronous RenderingDevice callback only
+		# confirms buffer visibility and must not retire a later demand incarnation.
+		group["native_active"] = false
 		group["retiring"] = true
 		group["dormant_retirement"] = dormant_group_keys.has(group_key)
 		group["retired"] = {}
@@ -1990,6 +2158,8 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 	_last_activation_cohort_wait["waiting_member"] = member.duplicate(true)
 	var route_key := _activation_chunk_key(member)
 	var group_key := str(_prepared_group_routes.get(route_key, ""))
+	if group_key.is_empty():
+		group_key = _try_remask_dormant_waiting_member(member)
 	_last_activation_cohort_wait["waiting_member_route_key"] = route_key
 	_last_activation_cohort_wait["waiting_member_group_key"] = group_key
 	_last_activation_cohort_wait["waiting_member_group_present"] = (
@@ -2012,6 +2182,206 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 		).keys(),
 		"identities": _group_identities(group),
 	}
+	if bool(wait.get("waiting_member_external_activation_required", false)) \
+			and bool(group.get("active", false)) \
+			and bool(group.get("native_prepared", false)) \
+			and not bool(group.get("activation_queued", false)):
+		var desired_mask := int(member.get("transition_mask", 0))
+		var identities := _group_identities(group)
+		var current_mask := int(Dictionary(identities.front()).get(
+			"transition_mask", 0
+		)) if not identities.is_empty() else -1
+		if desired_mask != current_mask:
+			if bool(group.get("remask_pending", false)):
+				return
+			var remask_entries: Array = []
+			var requests := Dictionary(group.get("requests", {}))
+			for surface_value in requests.keys():
+				var request := Dictionary(requests[surface_value])
+				var identity := Dictionary(request.get("identity", {})).duplicate(true)
+				identity["transition_mask"] = desired_mask
+				remask_entries.append({
+					"identity": identity,
+					"publication_sequence": int(request.get("publication_sequence", 0)),
+				})
+			group["remask_pending"] = true
+			group["remask_transition_mask"] = desired_mask
+			group["remasked"] = {}
+			_groups[group_key] = group
+			if not _effect.remask_active_entries(remask_entries, group_key):
+				group["remask_pending"] = false
+				_groups[group_key] = group
+				_queue_activation_cohort_retry(group_key)
+			return
+		# Geometry and visibility already match. Only the freshly admitted native
+		# application record needs to regain authority.
+		var preparation := Dictionary(_backend_terrain.call(
+			"prepare_gpu_resident_render_chunk", identities
+		))
+		if str(preparation.get("status", "")) != "PREPARED" \
+				or not bool(preparation.get("prepared", false)):
+			_queue_activation_cohort_retry(group_key)
+			return
+		group["native_prepared"] = true
+		_groups[group_key] = group
+		var rebound := Dictionary(_backend_terrain.call(
+			"set_gpu_resident_render_chunk_active",
+			_group_identities(group),
+			true
+		))
+		if str(rebound.get("status", "")) == "ACTIVE" \
+				and bool(rebound.get("active", false)):
+			group["native_active"] = true
+			_groups[group_key] = group
+		else:
+			_queue_activation_cohort_retry(group_key)
+
+
+func _try_remask_dormant_waiting_member(member: Dictionary) -> String:
+	var desired_mask := int(member.get("transition_mask", 0))
+	for candidate_key_value in _groups.keys():
+		var candidate_key := str(candidate_key_value)
+		var group := Dictionary(_groups[candidate_key])
+		if not bool(group.get("dormant", false)) \
+				or bool(group.get("active", false)) \
+				or bool(group.get("native_active", false)) \
+				or bool(group.get("retiring", false)) \
+				or bool(group.get("remask_pending", false)) \
+				or not _surface_set_complete(group, "prepared"):
+			continue
+		var requests := Dictionary(group.get("requests", {}))
+		var terrain_request := Dictionary(requests.get("terrain", {}))
+		var terrain_identity := Dictionary(terrain_request.get("identity", {}))
+		var geometry_matches := true
+		for field in ["page_x", "page_y", "page_z", "lod", "generation"]:
+			if terrain_identity.get(field) != member.get(field):
+				geometry_matches = false
+				break
+		if not geometry_matches \
+				or int(terrain_identity.get("transition_mask", 0)) == desired_mask:
+			continue
+		var remask_entries: Array = []
+		var sequences := Dictionary(group.get("sequences", {}))
+		for surface in _required_surfaces(group):
+			var request := Dictionary(requests.get(surface, {}))
+			var identity := Dictionary(request.get("identity", {})).duplicate(true)
+			if (desired_mask & ~int(identity.get(
+					"cached_transition_mask", 0
+			))) != 0:
+				geometry_matches = false
+				break
+			identity["transition_mask"] = desired_mask
+			remask_entries.append({
+				"identity": identity,
+				"publication_sequence": int(sequences.get(surface, 0)),
+			})
+		if not geometry_matches:
+			continue
+		var desired_terrain_identity := terrain_identity.duplicate(true)
+		desired_terrain_identity["transition_mask"] = desired_mask
+		var readiness := Dictionary(_backend_terrain.call(
+			"get_gpu_resident_render_chunk_readiness", desired_terrain_identity
+		))
+		if str(readiness.get("status", "")) != "READY" \
+				or not bool(readiness.get("ready", false)) \
+				or not bool(readiness.get("external_activation_required", false)):
+			continue
+		group["remask_pending"] = true
+		group["remask_transition_mask"] = desired_mask
+		group["remask_reactivate_dormant"] = true
+		group["remasked"] = {}
+		_groups[candidate_key] = group
+		if not _effect.remask_active_entries(remask_entries, candidate_key):
+			group["remask_pending"] = false
+			group.erase("remask_transition_mask")
+			group.erase("remask_reactivate_dormant")
+			_groups[candidate_key] = group
+			continue
+		_record_lifecycle_event("DORMANT_REMASK_SUBMITTED", candidate_key, {
+			"previous_transition_mask": int(terrain_identity.get(
+				"transition_mask", 0
+			)),
+			"transition_mask": desired_mask,
+		})
+		return candidate_key
+	return ""
+
+
+func _finish_transition_remask(group_key: String) -> void:
+	if not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	var desired_mask := int(group.get("remask_transition_mask", -1))
+	if desired_mask < 0:
+		return
+	var requests := Dictionary(group.get("requests", {}))
+	var sequences := Dictionary(group.get("sequences", {}))
+	var reactivate_dormant := bool(group.get("remask_reactivate_dormant", false))
+	var updated_requests := {}
+	var terrain_identity := {}
+	var previous_terrain_identity := {}
+	for surface_value in requests.keys():
+		var surface := str(surface_value)
+		var request := Dictionary(requests[surface])
+		var previous_identity := Dictionary(request.get("identity", {}))
+		var sequence := int(sequences.get(surface, 0))
+		_entry_routes.erase(_entry_token(previous_identity, sequence))
+		var identity := previous_identity.duplicate(true)
+		identity["transition_mask"] = desired_mask
+		request["identity"] = identity
+		updated_requests[surface] = request
+		if surface == "terrain":
+			previous_terrain_identity = previous_identity
+			terrain_identity = identity
+	group["requests"] = updated_requests
+	group["native_prepared"] = false
+	group["native_active"] = false
+	group["remask_pending"] = false
+	group.erase("remask_transition_mask")
+	group.erase("remask_reactivate_dormant")
+	group.erase("pending_remask_requests")
+	group["remasked"] = {}
+	if terrain_identity.is_empty():
+		_fail_closed("resident transition remask lost its terrain identity")
+		return
+	var new_group_key := _group_key(terrain_identity)
+	_groups.erase(group_key)
+	_groups[new_group_key] = group
+	if _dormant_group_lru.has(group_key):
+		var dormant_index := _dormant_group_lru.find(group_key)
+		_dormant_group_lru[dormant_index] = new_group_key
+	for surface_value in updated_requests.keys():
+		var request := Dictionary(updated_requests[surface_value])
+		_entry_routes[_entry_token(
+			Dictionary(request.get("identity", {})),
+			int(sequences.get(str(surface_value), 0))
+		)] = {"group_key": new_group_key, "surface": str(surface_value)}
+	_prepared_group_routes.erase(_activation_chunk_key(previous_terrain_identity))
+	_prepared_group_routes[_activation_chunk_key(terrain_identity)] = new_group_key
+	_activation_retry_membership.erase(group_key)
+	var identities := _group_identities(group)
+	var preparation := Dictionary(_backend_terrain.call(
+		"prepare_gpu_resident_render_chunk", identities
+	))
+	if str(preparation.get("status", "")) != "PREPARED" \
+			or not bool(preparation.get("prepared", false)):
+		_queue_activation_cohort_retry(new_group_key)
+		return
+	group["native_prepared"] = true
+	_groups[new_group_key] = group
+	if reactivate_dormant:
+		_record_lifecycle_event("DORMANT_REMASK_PREPARED", new_group_key)
+		_queue_activation_cohort_retry(new_group_key)
+		return
+	var rebound := Dictionary(_backend_terrain.call(
+		"set_gpu_resident_render_chunk_active", identities, true
+	))
+	if str(rebound.get("status", "")) == "ACTIVE" \
+			and bool(rebound.get("active", false)):
+		group["native_active"] = true
+		_groups[new_group_key] = group
+	else:
+		_queue_activation_cohort_retry(new_group_key)
 
 
 func _queue_activation_cohort_retry(group_key: String) -> void:
@@ -2072,7 +2442,6 @@ func _drain_activation_cohort_retries() -> void:
 			continue
 		_activation_retry_membership.erase(group_key)
 		if bool(group.get("retiring", false)) \
-				or bool(group.get("active", false)) \
 				or bool(group.get("activation_queued", false)) \
 				or not bool(group.get("native_prepared", false)):
 			continue
@@ -2554,6 +2923,35 @@ func _try_finish_retirement(group_key: String) -> void:
 		group["application_wait_started_frame"] = -1
 		group["next_validation_frame"] = _process_frame
 		group["retirement_candidate_frame"] = -1
+		var pending_dormant_requests: Dictionary = group.get(
+			"pending_dormant_requests", {}
+		)
+		if not pending_dormant_requests.is_empty():
+			var rebound_requests: Dictionary = group.get("requests", {})
+			var rebound_native_validated: Dictionary = group.get(
+				"native_validated", {}
+			)
+			for surface_value in pending_dormant_requests:
+				var surface := str(surface_value)
+				var rebound_request := Dictionary(
+					pending_dormant_requests[surface_value]
+				)
+				rebound_requests[surface] = {
+					"request_id": int(rebound_request.get("request_id", 0)),
+					"identity": Dictionary(rebound_request.get(
+						"identity", {}
+					)).duplicate(true),
+					"bounds_min": rebound_request.get("bounds_min", Vector3.ZERO),
+					"bounds_max": rebound_request.get("bounds_max", Vector3.ZERO),
+				}
+				rebound_native_validated.erase(surface)
+				_record_lifecycle_event("DORMANT_REBOUND", group_key, {
+					"surface": surface,
+					"request_id": int(rebound_request.get("request_id", 0)),
+				})
+			group["requests"] = rebound_requests
+			group["native_validated"] = rebound_native_validated
+			group["pending_dormant_requests"] = {}
 		_groups[group_key] = group
 		_retain_dormant_group(group_key)
 		return
@@ -2576,17 +2974,80 @@ func _can_retain_dormant_group(group: Dictionary) -> bool:
 	return str(readiness.get("status", "")) == "WAITING_APPLICATION"
 
 
+func _park_dormant_group(group_key: String) -> bool:
+	if not _groups.has(group_key):
+		return false
+	var group := Dictionary(_groups[group_key])
+	if not bool(group.get("dormant", false)) \
+			or bool(group.get("active", false)) \
+			or bool(group.get("native_active", false)):
+		return false
+	_activation_retry_membership.erase(group_key)
+	var terrain_request := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {}))
+	if not terrain_request.is_empty():
+		var activation_key := _activation_chunk_key(Dictionary(
+			terrain_request.get("identity", {})
+		))
+		if str(_prepared_group_routes.get(activation_key, "")) == group_key:
+			_prepared_group_routes.erase(activation_key)
+	group["validated"] = false
+	group["native_prepared"] = false
+	group["activation_queued"] = false
+	group["activation_cohort_id"] = 0
+	group["application_wait_started_frame"] = -1
+	group["next_validation_frame"] = (
+		_process_frame + DORMANT_APPLICATION_RETRY_FRAMES
+	)
+	_groups[group_key] = group
+	_retain_dormant_group(group_key)
+	_record_lifecycle_event("DORMANT_PARKED", group_key)
+	return true
+
+
 func _retain_dormant_group(group_key: String) -> void:
+	var newly_dormant := not _dormant_group_lru.has(group_key)
 	_dormant_group_lru.erase(group_key)
 	_dormant_group_lru.append(group_key)
-	_dormant_group_insertions += 1
+	if newly_dormant:
+		_dormant_group_insertions += 1
 	_dormant_group_peak = maxi(_dormant_group_peak, _dormant_group_lru.size())
 	while _dormant_group_lru.size() > DORMANT_GROUP_CAPACITY:
-		var evicted_group_key := _dormant_group_lru.pop_front()
+		var evicted_group_key := _select_dormant_eviction_group()
+		_dormant_group_lru.erase(evicted_group_key)
 		if not _groups.has(evicted_group_key):
 			continue
 		_dormant_group_evictions += 1
 		_begin_group_retirement(evicted_group_key, "dormant_capacity", true)
+
+
+func _select_dormant_eviction_group() -> String:
+	var selected := ""
+	var selected_priority := 4
+	var selected_lod := -1
+	for group_key_value in _dormant_group_lru:
+		var group_key := str(group_key_value)
+		if not _groups.has(group_key):
+			return group_key
+		var group := Dictionary(_groups[group_key])
+		var terrain_request := Dictionary(Dictionary(group.get(
+			"requests", {}
+		)).get("terrain", {}))
+		var identity := Dictionary(terrain_request.get("identity", {}))
+		var lod := int(identity.get("lod", 0))
+		var interaction := bool(identity.get("interaction_priority", false))
+		# Preserve exact interaction LOD0 residency ahead of predictive support and
+		# coarse background entries. Oldest wins only within the same class.
+		var priority := 2 if interaction and lod == 0 else (
+			1 if interaction or lod == 0 else 0
+		)
+		if selected.is_empty() or priority < selected_priority \
+				or priority == selected_priority and lod > selected_lod:
+			selected = group_key
+			selected_priority = priority
+			selected_lod = lod
+	return selected
 
 
 func _record_lifecycle_event(
@@ -2693,6 +3154,12 @@ func _cleanup_group(group_key: String) -> void:
 
 
 func _route_for_event(event: Dictionary) -> Dictionary:
+	var controller_group_key := str(event.get("controller_group_key", ""))
+	if not controller_group_key.is_empty():
+		return {
+			"group_key": controller_group_key,
+			"surface": str(Dictionary(event.get("identity", {})).get("surface", "")),
+		}
 	var request_id := int(event.get("request_id", 0))
 	if request_id > 0 and _render_request_routes.has(request_id):
 		var route: Dictionary = _render_request_routes[request_id]
@@ -2761,6 +3228,7 @@ func _inactive_group_examples(limit: int) -> Array:
 			"activation_queued": bool(group.get("activation_queued", false)),
 			"activation_cohort_id": int(group.get("activation_cohort_id", 0)),
 			"activation_retry_queued": _activation_retry_membership.has(group_key),
+			"next_activation_retry_frame": int(group.get("next_activation_retry_frame", 0)),
 			"activation_staged_surfaces": Dictionary(
 				group.get("activation_staged", {})
 			).keys(),
@@ -2829,6 +3297,7 @@ func _new_group(identity: Dictionary) -> Dictionary:
 		"dormant": false,
 		"dormant_saw_application_absent": false,
 		"dormant_retirement": false,
+		"pending_dormant_requests": {},
 		"retirement_candidate_frame": -1,
 		"application_wait_started_frame": -1,
 		"next_validation_frame": 0,

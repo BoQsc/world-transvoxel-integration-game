@@ -154,6 +154,7 @@ func _run() -> void:
 				_world.end_cpu_causal_trace()
 				causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	await _capture("cold_outbound")
+	_last_ticks_usec = Time.get_ticks_usec()
 	_phase = "cold_outbound_settle"
 	var outbound_settle_started := Time.get_ticks_usec()
 	var outbound_settle_frames := await _settle_count(300)
@@ -167,6 +168,7 @@ func _run() -> void:
 			await process_frame
 			_observe_frame()
 	await _capture("cached_return")
+	_last_ticks_usec = Time.get_ticks_usec()
 	_phase = "cached_return_settle"
 	var return_settle_started := Time.get_ticks_usec()
 	var return_settle_frames := await _settle_count(1200)
@@ -670,6 +672,12 @@ func _settle_failure_summary() -> Dictionary:
 		"mesh": [int(runtime.get("mesh_worker_queued_jobs", 0)), int(runtime.get("mesh_worker_active_jobs", 0))],
 		"pending_replacements": int(runtime.get("pending_chunk_replacements", 0)),
 		"pending_retirements": int(runtime.get("pending_chunk_retirements", 0)),
+		"priority": {
+			"requests": int(runtime.get("visibility_coverage_priority_requests", 0)),
+			"stale": int(runtime.get("visibility_coverage_priority_stale", 0)),
+			"pending": int(runtime.get("pending_priority_publication_events", 0)),
+			"forced_remeshes": int(runtime.get("forced_transition_remeshes", 0)),
+		},
 		"collision_not_ready": int(runtime.get("collision_required_not_ready_chunk_records", 0)),
 		"gpu": {
 			"queued": int(effect.get("queued_request_count", 0)),
@@ -681,8 +689,19 @@ func _settle_failure_summary() -> Dictionary:
 			"active": int(resident.get("active_chunks", 0)),
 			"prepared_inactive": int(resident.get("prepared_inactive_chunks", 0)),
 			"incomplete": int(resident.get("incomplete_chunks", 0)),
+			"retry_members": int(resident.get("pending_activation_retry_groups", 0)),
+			"interaction_retry_queue": int(resident.get("pending_interaction_activation_retry_groups", 0)),
+			"background_retry_queue": int(resident.get("pending_background_activation_retry_queue", 0)),
+			"retry_attempts": int(resident.get("activation_cohort_retry_attempts", 0)),
+			"retry_coalesced": int(resident.get("activation_cohort_retry_coalesced", 0)),
+			"superseded": int(resident.get("superseded_chunks", 0)),
+			"rejected": int(resident.get("rejected_chunks", 0)),
+			"unrouted_events": int(resident.get("unrouted_effect_events", 0)),
+			"last_error": str(resident.get("last_error", "")),
+			"effect_last_error": str(effect.get("last_error", "")),
 		},
 		"inactive_examples": Array(resident.get("inactive_chunk_examples", [])).slice(0, 8),
+		"rejection_examples": Array(resident.get("rejection_examples", [])).slice(-4),
 		"recent_lifecycle": Array(resident.get("recent_lifecycle_events", [])).slice(-32),
 		"activation_wait": {
 			"status": str(wait.get("status", "")),
