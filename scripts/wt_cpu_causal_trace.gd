@@ -16,6 +16,8 @@ const PIPELINE_METRICS := [
 	"mesh_completions", "transition_mesh_completions", "edit_commits",
 	"edit_rejections", "edit_replacements",
 	"edit_active_visual_cohort_chunks", "edit_deferred_inactive_visual_chunks",
+	"interaction_local_plan_refreshes", "interaction_local_plan_added_chunks",
+	"interaction_local_plan_rejections", "interaction_local_plan_ns_maximum",
 	"published_events",
 	"rejected_events", "scheduler_requested_records",
 	"scheduler_sampling_records", "scheduler_meshing_records",

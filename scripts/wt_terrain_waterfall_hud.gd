@@ -126,6 +126,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		"PAGES load %d  sample %d  mesh %d  ready %d\n" +
 		"APPLY render %d  collision %d  deferred %d  backlog %d\n" +
 		"PRIOR support %d  focus %d  matched %d  missing %d  changes %d\n" +
+		"LOCAL plans %d  added %d  reject %d  worst %.3f ms\n" +
 		"WARM  request %d  admit %d  join %d  hit %d  done %d  reject %d\n" +
 		"VIS   replace %d  blocked %d  ready %d  retire %d  render-retire %d\n" +
 		"FIRST %s"
@@ -158,6 +159,10 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		int(metrics.get("foreground_priority_matched_keys", 0)),
 		int(metrics.get("foreground_priority_missing_keys", 0)),
 		int(metrics.get("foreground_priority_changed_priorities", 0)),
+		int(metrics.get("interaction_local_plan_refreshes", 0)),
+		int(metrics.get("interaction_local_plan_added_chunks", 0)),
+		int(metrics.get("interaction_local_plan_rejections", 0)),
+		float(metrics.get("interaction_local_plan_ns_maximum", 0)) / 1000000.0,
 		int(metrics.get("interaction_warm_requests", 0)),
 		int(metrics.get("interaction_warm_admissions", 0)),
 		int(metrics.get("interaction_warm_coalesced", 0)),
