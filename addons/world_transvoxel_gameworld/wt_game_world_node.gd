@@ -916,6 +916,12 @@ func get_game_world_summary() -> Dictionary:
 			int(metrics.get("page_last_failure_key_lod", 0))
 		),
 		"edit_replacements": int(metrics.get("edit_replacements", 0)),
+		"edit_active_visual_cohort_chunks": int(metrics.get(
+			"edit_active_visual_cohort_chunks", 0
+		)),
+		"edit_deferred_inactive_visual_chunks": int(metrics.get(
+			"edit_deferred_inactive_visual_chunks", 0
+		)),
 		"edit_lod_retention_zones": int(metrics.get("edit_lod_retention_zones", 0)),
 		"edit_lod_retention_active_viewers": int(metrics.get("edit_lod_retention_active_viewers", 0)),
 		"edit_lod_retention_plans": int(metrics.get("edit_lod_retention_plans", 0)),
