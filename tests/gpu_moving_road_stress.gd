@@ -434,7 +434,7 @@ func _observe_frame() -> void:
 	var effect: Dictionary = gpu_status.get("effect_status", {})
 	var arena: Dictionary = effect.get("arena_status", {})
 	var state: RefCounted = _world.query_chunk_state(_current_target, 0)
-	var collision_ready := state != null and bool(state.call("is_collision_ready"))
+	var collision_ready := _has_exact_collision(_current_target)
 	var sample := {
 		"phase": _phase,
 		"ticks_usec": now,
@@ -457,6 +457,8 @@ func _observe_frame() -> void:
 		"render_bytes": int(runtime.get("resource_cache_render_resident_bytes", 0)),
 		"collision_bytes": int(runtime.get("resource_cache_collision_resident_bytes", 0)),
 	}
+	if not bool(sample.visual_coverage) or not bool(sample.collision_ready):
+		sample["target_diagnostic"] = _target_diagnostic(state)
 	_last_ticks_usec = now
 	_samples.append(sample)
 	_update_target_activations(now)
@@ -464,6 +466,28 @@ func _observe_frame() -> void:
 		_capture_largest_publication_inspection()
 	for key in ["scheduler_queued", "storage_queued", "storage_active", "mesh_queued", "mesh_active", "pending_replacements", "gpu_queued", "gpu_inflight", "gpu_resident_entries", "gpu_uploaded_bytes", "decoded_bytes", "render_bytes", "collision_bytes"]:
 		_maximums[key] = maxi(int(_maximums.get(key, 0)), int(sample[key]))
+
+
+func _target_diagnostic(state: RefCounted) -> Dictionary:
+	var result := {"record_present": state != null}
+	if state != null:
+		result.merge({
+			"generation": int(state.call("get_generation")),
+			"visual_required": bool(state.call("is_visual_required")),
+			"visual_ready": bool(state.call("is_visual_ready")),
+			"render_generation": int(state.call("get_render_generation")),
+			"staged_render_generation": int(state.call("get_staged_render_generation")),
+			"collision_required": bool(state.call("is_collision_required")),
+			"collision_ready": bool(state.call("is_collision_ready")),
+			"collision_generation": int(state.call("get_collision_generation")),
+			"staged_collision_generation": int(state.call("get_staged_collision_generation")),
+		})
+	var backend: Node = _world.get_backend_terrain()
+	if backend != null and backend.has_method("inspect_gpu_resident_publication"):
+		result["publication"] = backend.call(
+			"inspect_gpu_resident_publication", _current_target, 0
+		)
+	return result
 
 
 func _capture_largest_publication_inspection() -> void:
@@ -497,8 +521,7 @@ func _update_target_activations(now: int) -> void:
 			activation.lod0_ready_frame = frame_latency
 			activation.lod0_ready_us = now - int(activation.requested_ticks_usec)
 		if activation.collision_ready_frame == null:
-			var state: RefCounted = _world.query_chunk_state(key, 0)
-			if state != null and bool(state.call("is_collision_ready")):
+			if _has_exact_collision(key):
 				activation.collision_ready_frame = frame_latency
 				activation.collision_ready_us = now - int(activation.requested_ticks_usec)
 
@@ -512,12 +535,25 @@ func _has_visual_coverage(key: Vector3i) -> bool:
 			floori(float(key.z) / float(scale))
 		)
 		var state: RefCounted = _world.query_chunk_state(ancestor, lod)
-		if state != null and bool(state.call("is_visual_ready")) and (
-				int(state.call("get_render_generation")) > 0 or
-				int(state.call("get_staged_render_generation")) == 0
-		):
-			return true
+		if state != null:
+			# A superseded draw remains valid spatial coverage until its atomic
+			# replacement publishes. A ready zero-generation record is a proven
+			# empty chunk and also supplies complete coverage.
+			if int(state.call("get_render_generation")) > 0:
+				return true
+			if bool(state.call("is_visual_ready")) and \
+					int(state.call("get_staged_render_generation")) == 0:
+				return true
 	return false
+
+
+func _has_exact_collision(key: Vector3i) -> bool:
+	var state: RefCounted = _world.query_chunk_state(key, 0)
+	if state == null or not bool(state.call("is_collision_ready")):
+		return false
+	var generation := int(state.call("get_generation"))
+	return generation > 0 and \
+		int(state.call("get_collision_generation")) == generation
 
 
 func _has_exact_lod0_visual(key: Vector3i) -> bool:
