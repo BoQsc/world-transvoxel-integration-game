@@ -249,7 +249,7 @@ func _run() -> void:
 			# Compatibility aliases retain the former hierarchical-coverage meaning.
 			"visual_p99_frames": _percentile(coverage_activation_frames, 0.99),
 			"coverage_p99_frames": _percentile(coverage_activation_frames, 0.99),
-			"lod0_p99_frames": _percentile(lod0_activation_frames, 0.99),
+			"lod0_p99_frames": -1 if lod0_activation_frames.is_empty() else _percentile(lod0_activation_frames, 0.99),
 			"collision_p99_frames": _percentile(collision_activation_frames, 0.99),
 			"unresolved_visual_targets": unresolved_coverage_targets,
 			"unresolved_coverage_targets": unresolved_coverage_targets,
@@ -285,11 +285,31 @@ func _run() -> void:
 			"frame_p99_target_us": 25000,
 			"frame_p95_pass": _percentile(frame_times, 0.95) <= 16667,
 			"frame_p99_pass": _percentile(frame_times, 0.99) <= 25000,
+			"outbound_pipeline_drained": outbound_settle_frames >= 0,
+			"cached_return_pipeline_drained": return_settle_frames >= 0,
 		},
 	}
 	_write_result(result)
 	if _samples.is_empty() or int(final_metrics.gpu.get("geometry_readback_bytes", -1)) != 0:
 		_fail("measurement integrity failed")
+		return
+	if unresolved_lod0_targets != 0:
+		_fail("exact LOD0 unresolved for %d/%d interaction targets" % [
+			unresolved_lod0_targets, _target_activations.size()
+		])
+		return
+	if _percentile(lod0_activation_frames, 0.99) > 2:
+		_fail("exact LOD0 p99 exceeded 2 frames: %d" %
+			_percentile(lod0_activation_frames, 0.99))
+		return
+	if _percentile(frame_times, 0.99) > 25000:
+		_fail("terrain route frame p99 exceeded 25 ms: %.3f ms" %
+			(float(_percentile(frame_times, 0.99)) / 1000.0))
+		return
+	if outbound_settle_frames < 0 or return_settle_frames < 0:
+		_fail("terrain pipeline did not drain: outbound=%d cached_return=%d" % [
+			outbound_settle_frames, return_settle_frames
+		])
 		return
 	print("GPU_MOVING_ROAD_STRESS_COMPLETE driver=%s edits=%d/%d rejected=%d coverage_gaps=%d collision_pending=%d coverage_p99_frames=%d lod0_p99_frames=%d frame_p95_us=%d frame_p99_us=%d outbound_settle_us=%d return_settle_us=%d" % [
 		result.driver, edit_commits, _edit_attempts, edit_rejections,
