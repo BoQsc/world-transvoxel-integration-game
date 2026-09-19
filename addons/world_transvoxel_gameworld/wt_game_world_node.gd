@@ -12,6 +12,7 @@ const FOREGROUND_PRIORITY_SUPPORT_SOURCE_ID := 1
 const FOREGROUND_PRIORITY_FOCUS_SOURCE_ID := 2
 const FOREGROUND_PRIORITY_KEY_CAPACITY := 64
 const FOREGROUND_PRIORITY_SHELL_RADIUS := 1
+const FOREGROUND_LOD0_CORRIDOR_KEY_CAPACITY := 16
 const RuntimeScene := preload("res://addons/world_transvoxel_terrain/runtime/wt_terrain_runtime_scene.tscn")
 const EditOperation := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_operation.gd")
 const EditBatch := preload("res://addons/world_transvoxel_terrain/edit/wt_terrain_edit_batch.gd")
@@ -1720,8 +1721,16 @@ func _collision_coverage_for_lod0_chunk(
 	var collision_ready := state != null and bool(
 		state.call("is_collision_ready")
 	)
+	var collision_current := state != null and (
+		bool(state.call("is_collision_current"))
+		if state.has_method("is_collision_current") else collision_ready
+	)
 	var collision_generation := int(
 		state.call("get_collision_generation") if state != null else 0
+	)
+	var collision_world_revision := int(
+		state.call("get_collision_world_revision")
+		if state != null and state.has_method("get_collision_world_revision") else 0
 	)
 	var staged_collision_generation := int(
 		state.call("get_staged_collision_generation") if state != null else 0
@@ -1734,7 +1743,9 @@ func _collision_coverage_for_lod0_chunk(
 		"present": present,
 		"collision_required": collision_required,
 		"collision_ready": collision_ready,
+		"collision_current": collision_current,
 		"collision_generation": collision_generation,
+		"collision_world_revision": collision_world_revision,
 		"staged_collision_generation": staged_collision_generation,
 	}
 	if collision_generation > 0:
@@ -1905,7 +1916,16 @@ func _update_player_foreground_priority_leases(force: bool) -> bool:
 	var support_keys := _foreground_chunk_keys(
 		support_points, FOREGROUND_PRIORITY_SHELL_RADIUS
 	)
-	var focus_keys: Array = []
+	# Keep a contiguous, overlapping LOD0 corridor from the player through the
+	# predictive point. Advancing this set by one chunk retains most of the prior
+	# set, so ready meshlets and balanced transition cohorts are not abandoned at
+	# every viewer update.
+	var focus_keys := _foreground_lod0_corridor_keys(
+		_player.global_position,
+		_last_predictive_viewer_position if player_predictive_viewer_enabled and \
+				not is_inf(_last_predictive_viewer_position.x) \
+			else _player.global_position
+	)
 	if bool(targets.get("focus_valid", false)):
 		var focus_points: Array = targets.get("focus_points", [])
 		if focus_points.is_empty():
@@ -1913,7 +1933,11 @@ func _update_player_foreground_priority_leases(force: bool) -> bool:
 		# Exact ray/tool centers define visual topology. Native storage expands a
 		# separate bounded halo for prewarming; admitting that halo as visual LOD0
 		# would create a large atomic replacement cohort before the first edit.
-		focus_keys = _foreground_chunk_keys(focus_points, 0)
+		for key in _foreground_chunk_keys(focus_points, 0):
+			if not focus_keys.has(key):
+				focus_keys.append(key)
+				if focus_keys.size() >= FOREGROUND_PRIORITY_KEY_CAPACITY:
+					break
 	if force or support_keys != _last_foreground_support_keys:
 		_foreground_support_revision += 1
 		if not _submit_foreground_priority_lease(
@@ -2010,6 +2034,8 @@ func _foreground_chunk_keys(points: Array, shell_radius: int = 0) -> Array:
 		)
 		if not centers.has(key):
 			centers.append(key)
+			if centers.size() >= FOREGROUND_PRIORITY_KEY_CAPACITY:
+				break
 	var keys: Array = centers.duplicate()
 	if shell_radius <= 0:
 		return keys
@@ -2029,6 +2055,21 @@ func _foreground_chunk_keys(points: Array, shell_radius: int = 0) -> Array:
 							if keys.size() >= FOREGROUND_PRIORITY_KEY_CAPACITY:
 								return keys
 	return keys
+
+
+func _foreground_lod0_corridor_keys(start: Vector3, finish: Vector3) -> Array:
+	if not start.is_finite() or not finish.is_finite():
+		return []
+	var distance := start.distance_to(finish)
+	var segment_count := clampi(
+		ceili(distance / COLLISION_INVOKER_CHUNK_EXTENT),
+		1,
+		FOREGROUND_LOD0_CORRIDOR_KEY_CAPACITY - 1
+	)
+	var points: Array = []
+	for index in range(segment_count + 1):
+		points.append(start.lerp(finish, float(index) / float(segment_count)))
+	return _foreground_chunk_keys(points, 0)
 
 
 func _operation_mode(mode_name: StringName) -> int:

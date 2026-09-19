@@ -352,7 +352,7 @@ func _move_viewers(position: Vector3) -> bool:
 	# while native code owns the separate bounded prewarm halo. Expanding all
 	# support cells into InteractionFocus here turns every waypoint into a large
 	# LOD0 publication cohort and does not match the production game path.
-	var focus_keys: Array = [_current_target]
+	var focus_keys := _lod0_corridor_keys(position, predictive_position)
 	var support_keys: Array = []
 	for z in range(_current_target.z - 1, _current_target.z + 2):
 		for y in range(_current_target.y - 1, _current_target.y + 2):
@@ -370,13 +370,6 @@ func _move_viewers(position: Vector3) -> bool:
 				var key := Vector3i(x, y, z)
 				if not support_keys.has(key):
 					support_keys.append(key)
-	var predictive_target := Vector3i(
-		floori(predictive_position.x / 16.0),
-		0,
-		floori(predictive_position.z / 16.0)
-	)
-	if not focus_keys.has(predictive_target):
-		focus_keys.append(predictive_target)
 	if not _world.update_foreground_priority_lease(
 		9002, _viewer_revision, 0, support_keys
 	) or not _world.update_foreground_priority_lease(
@@ -401,6 +394,17 @@ func _move_viewers(position: Vector3) -> bool:
 			"collision_ready_us": null,
 		})
 	return true
+
+
+func _lod0_corridor_keys(start: Vector3, finish: Vector3) -> Array:
+	var segment_count := maxi(1, ceili(start.distance_to(finish) / 16.0))
+	var keys: Array = []
+	for index in range(segment_count + 1):
+		var point := start.lerp(finish, float(index) / float(segment_count))
+		var key := Vector3i(floori(point.x / 16.0), 0, floori(point.z / 16.0))
+		if not keys.has(key):
+			keys.append(key)
+	return keys
 
 
 func _submit_moving_edit(position: Vector3, index: int) -> void:
@@ -465,7 +469,8 @@ func _observe_frame() -> void:
 		"render_bytes": int(runtime.get("resource_cache_render_resident_bytes", 0)),
 		"collision_bytes": int(runtime.get("resource_cache_collision_resident_bytes", 0)),
 	}
-	if not bool(sample.visual_coverage) or not bool(sample.collision_ready):
+	if not bool(sample.visual_coverage) or not bool(sample.lod0_visual_ready) or \
+			not bool(sample.collision_ready):
 		sample["target_diagnostic"] = _target_diagnostic(state)
 	_last_ticks_usec = now
 	_samples.append(sample)
@@ -487,7 +492,12 @@ func _target_diagnostic(state: RefCounted) -> Dictionary:
 			"staged_render_generation": int(state.call("get_staged_render_generation")),
 			"collision_required": bool(state.call("is_collision_required")),
 			"collision_ready": bool(state.call("is_collision_ready")),
+			"collision_current": bool(state.call("is_collision_current")) \
+				if state.has_method("is_collision_current") else false,
 			"collision_generation": int(state.call("get_collision_generation")),
+			"collision_world_revision": int(
+				state.call("get_collision_world_revision")
+			) if state.has_method("get_collision_world_revision") else 0,
 			"staged_collision_generation": int(state.call("get_staged_collision_generation")),
 		})
 	var backend: Node = _world.get_backend_terrain()
@@ -559,9 +569,10 @@ func _has_exact_collision(key: Vector3i) -> bool:
 	var state: RefCounted = _world.query_chunk_state(key, 0)
 	if state == null or not bool(state.call("is_collision_ready")):
 		return false
+	if state.has_method("is_collision_current"):
+		return bool(state.call("is_collision_current"))
 	var generation := int(state.call("get_generation"))
-	return generation > 0 and \
-		int(state.call("get_collision_generation")) == generation
+	return generation > 0 and int(state.call("get_collision_generation")) == generation
 
 
 func _has_exact_lod0_visual(key: Vector3i) -> bool:
