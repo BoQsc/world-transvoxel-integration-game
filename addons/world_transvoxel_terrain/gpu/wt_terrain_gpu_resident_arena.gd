@@ -87,6 +87,8 @@ var _failed_extractions := 0
 var _background_scratch_reservation_deferrals := 0
 var _failed_cell_count_total := 0
 var _last_failure_cell_count := 0
+var _freed_rid_ids: Dictionary = {}
+var _duplicate_rid_release_skips := 0
 var _last_error := ""
 
 
@@ -651,7 +653,10 @@ func release(entry: Dictionary) -> bool:
 		_active_slot_count = maxi(0, _active_slot_count - 1)
 		return true
 	if resident_kind == "compact_meshlets":
-		_free_rids(Array(entry.get("resident_rids", [])))
+		var resident_rids := Array(entry.get("resident_rids", []))
+		if not resident_rids.is_empty():
+			_free_uniform_set(resident_rids.pop_front())
+		_free_rids(resident_rids)
 		_resident_allocated_bytes = maxi(
 			0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
 		)
@@ -769,6 +774,7 @@ func get_status() -> Dictionary:
 		"failed_extractions": _failed_extractions,
 		"failed_cell_count_total": _failed_cell_count_total,
 		"last_failure_cell_count": _last_failure_cell_count,
+		"duplicate_rid_release_skips": _duplicate_rid_release_skips,
 		"last_error": _last_error,
 	}
 
@@ -1432,8 +1438,7 @@ func _free_page_replacement_candidate() -> int:
 
 func _free_page(page: Dictionary) -> void:
 	var uniform_set: RID = page.get("uniform_set", RID())
-	if uniform_set.is_valid():
-		_rendering_device.free_rid(uniform_set)
+	_free_uniform_set(uniform_set)
 	_free_rids(Array(page.get("buffers", [])))
 
 
@@ -1512,7 +1517,29 @@ func _free_rids(rids: Array) -> void:
 		return
 	for rid in rids:
 		if rid is RID and rid.is_valid():
+			var rid_id: int = rid.get_id()
+			if _freed_rid_ids.has(rid_id):
+				_duplicate_rid_release_skips += 1
+				continue
+			_freed_rid_ids[rid_id] = true
 			_rendering_device.free_rid(rid)
+
+
+func _free_uniform_set(value: Variant) -> void:
+	if _rendering_device == null or not value is RID:
+		return
+	var uniform_set: RID = value
+	if not uniform_set.is_valid():
+		return
+	var rid_id: int = uniform_set.get_id()
+	if _freed_rid_ids.has(rid_id):
+		_duplicate_rid_release_skips += 1
+		return
+	_freed_rid_ids[rid_id] = true
+	if _rendering_device.uniform_set_is_valid(uniform_set):
+		_rendering_device.free_rid(uniform_set)
+	else:
+		_duplicate_rid_release_skips += 1
 
 
 static func _output_buffer_sizes(cell_count: int) -> Array[int]:

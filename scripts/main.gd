@@ -8785,7 +8785,7 @@ func _run_streaming_fly_gap_gate(post_edit: bool = false) -> bool:
 		path[0].get("target", _watertightness_probe_center()),
 		16 if post_edit else 120
 	)
-	if not await _wait_for_streaming_fly_visual_ready(
+	if not await _wait_for_streaming_fly_start_coverage_ready(
 		"before streaming fly gap gate",
 		maxi(240, human_visual_capture_wait_frames)
 	):
