@@ -87,6 +87,14 @@ func _run() -> void:
 	if _submit(batch, identity, 2) != 0:
 		_fail("stale publication sequence was accepted")
 		return
+	if not await _wait_for_status(
+		func(compacted_status: Dictionary) -> bool:
+			return int(compacted_status.get("compactions_completed", 0)) >= 1 \
+				and int(compacted_status.get("pending_compaction_count", -1)) == 0,
+		10.0
+	):
+		_fail("exact resident compaction did not finish: %s" % _effect.get_status())
+		return
 	await RenderingServer.frame_post_draw
 	var viewport_image := get_root().get_texture().get_image()
 	if viewport_image == null or viewport_image.is_empty():

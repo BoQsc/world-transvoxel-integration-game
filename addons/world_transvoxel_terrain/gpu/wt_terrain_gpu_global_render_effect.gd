@@ -1237,6 +1237,9 @@ func _queue_compaction_on_render_thread(token: String, entry: Dictionary) -> voi
 	if bool(entry.get("empty", false)):
 		var compact: Dictionary = _arena.compact_resident_meshlets(entry)
 		if str(compact.get("resident_kind", "")) != "provisional":
+			compact["mono_push_bytes"] = _entry_push_bytes(
+				compact, 0, 1, Vector2i.ZERO, false
+			)
 			_entries[token] = compact
 			_active_lod_inventory_dirty = true
 			_mutex.lock()
@@ -1273,6 +1276,9 @@ func _drain_one_compaction_on_render_thread() -> void:
 		if str(compact.get("resident_kind", "")) != str(
 			entry.get("resident_kind", "")
 		):
+			compact["mono_push_bytes"] = _entry_push_bytes(
+				compact, 0, 1, Vector2i.ZERO, false
+			)
 			_entries[token] = compact
 			_active_lod_inventory_dirty = true
 			_mutex.lock()
