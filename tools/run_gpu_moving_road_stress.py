@@ -29,6 +29,8 @@ def run(
     editing: bool,
     cpu_count: int,
     stage_timing: bool,
+    storage_workers: int,
+    mesh_workers: int,
 ) -> int:
     capture = project / ".godot" / "world_transvoxel_captures" / "gpu_moving_road_stress"
     capture.mkdir(parents=True, exist_ok=True)
@@ -38,6 +40,8 @@ def run(
         suffix += f"_{cpu_count}cpu"
     if stage_timing:
         suffix += "_stage_timing"
+    if storage_workers > 0 or mesh_workers > 0:
+        suffix += f"_{storage_workers or 2}s_{mesh_workers or 4}m"
     retained_path = capture / f"{driver}{suffix}.json"
     usage_path = capture / f"{driver}{suffix}_usage.json"
     log_path = capture / f"{driver}{suffix}.log"
@@ -59,6 +63,10 @@ def run(
         environment["WT_GPU_MOVING_ROAD_EDITING"] = "1" if editing else "0"
         environment["WT_GPU_MOVING_ROAD_STAGE_TIMING"] = "1" if stage_timing else "0"
         environment["WT_GPU_MOVING_ROAD_LIFECYCLE_HISTORY"] = "1" if trace else "0"
+        if storage_workers > 0:
+            environment["WT_GPU_MOVING_ROAD_STORAGE_WORKERS"] = str(storage_workers)
+        if mesh_workers > 0:
+            environment["WT_GPU_MOVING_ROAD_MESH_WORKERS"] = str(mesh_workers)
         child = subprocess.Popen(command, cwd=project, env=environment)
         process = psutil.Process(child.pid)
         process.cpu_percent(None)
@@ -136,12 +144,21 @@ def main() -> int:
         "--stage-timing", action="store_true",
         help="Enable high-overhead per-stage GPU diagnostics.",
     )
+    parser.add_argument(
+        "--storage-workers", type=int, default=0,
+        help="Override route storage workers; zero keeps the route default.",
+    )
+    parser.add_argument(
+        "--mesh-workers", type=int, default=0,
+        help="Override route mesh workers; zero keeps the route default.",
+    )
     args = parser.parse_args()
     drivers = ("vulkan", "d3d12") if args.driver == "both" else (args.driver,)
     for driver in drivers:
         if run(
             driver, args.godot.resolve(), args.project.resolve(), args.trace,
             not args.no_edits, args.cpu_count, args.stage_timing,
+            args.storage_workers, args.mesh_workers,
         ) != 0:
             return 1
     return 0

@@ -73,8 +73,12 @@ func _run() -> void:
 	runtime.mesh_entry_capacity = 256
 	runtime.collision_entry_capacity = 128
 	runtime.decoded_page_entry_capacity = 256
-	runtime.procedural_generation_worker_count = 2
-	runtime.meshing_worker_count = 4
+	runtime.procedural_generation_worker_count = clampi(int(OS.get_environment(
+		"WT_GPU_MOVING_ROAD_STORAGE_WORKERS"
+	)) if OS.has_environment("WT_GPU_MOVING_ROAD_STORAGE_WORKERS") else 2, 1, 8)
+	runtime.meshing_worker_count = clampi(int(OS.get_environment(
+		"WT_GPU_MOVING_ROAD_MESH_WORKERS"
+	)) if OS.has_environment("WT_GPU_MOVING_ROAD_MESH_WORKERS") else 4, 1, 8)
 	_world.runtime_profile = runtime
 	var generation := _generation_profile()
 	generation.profile_id = &"gpu_moving_road_stress"
