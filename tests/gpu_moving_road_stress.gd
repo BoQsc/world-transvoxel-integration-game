@@ -128,23 +128,31 @@ func _run() -> void:
 			_settle_failure_summary()
 		))
 		return
-	if _causal_trace_enabled and not _world.begin_cpu_causal_trace():
-		_fail("native causal trace did not start")
-		return
-	if _causal_trace_enabled:
-		_causal_trace_started_ticks_usec = Time.get_ticks_usec()
+	# Keep the native trace to a deterministic two-edit window. A full moving
+	# route legitimately emits more lifecycle events than the bounded native
+	# trace buffer and used to turn this diagnostic mode into a runtime failure.
+	var causal_trace: Dictionary = {}
 	var metrics_before := _snapshot_metrics()
 	_phase = "cold_outbound_editing"
 	for index in range(road.size()):
 		if not await _move_viewers(road[index]):
 			return
 		for local_frame in range(FRAMES_PER_WAYPOINT):
+			if _causal_trace_enabled and index == 1 and local_frame == 0:
+				if not _world.begin_cpu_causal_trace():
+					_fail("native causal trace did not start")
+					return
+				_causal_trace_started_ticks_usec = Time.get_ticks_usec()
 			if _editing_enabled and local_frame == 0 and index > 0:
 				_submit_moving_edit(road[index], index)
 			if _editing_enabled and index == 6 and local_frame == 1:
 				_submit_burst_edit(road[index])
 			await process_frame
 			_observe_frame()
+			if _causal_trace_enabled and index == 2 and \
+					local_frame == FRAMES_PER_WAYPOINT - 1:
+				_world.end_cpu_causal_trace()
+				causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	await _capture("cold_outbound")
 	_phase = "cold_outbound_settle"
 	var outbound_settle_started := Time.get_ticks_usec()
@@ -163,10 +171,6 @@ func _run() -> void:
 	var return_settle_started := Time.get_ticks_usec()
 	var return_settle_frames := await _settle_count(1200)
 	var return_settle_us := Time.get_ticks_usec() - return_settle_started
-	var causal_trace: Dictionary = {}
-	if _causal_trace_enabled:
-		_world.end_cpu_causal_trace()
-		causal_trace = _world.get_cpu_causal_trace_events(0, 65536)
 	var final_metrics := _snapshot_metrics()
 	var frame_times: Array[int] = []
 	var outbound_frames: Array[int] = []
@@ -343,13 +347,17 @@ func _move_viewers(position: Vector3) -> bool:
 			primary_collision_ok, predictive_collision_ok,
 		])
 		return false
-	var focus_keys: Array = []
+	# Only exact tool/ray centers define foreground visual topology. The support
+	# shell below still reserves collision and storage priority around motion,
+	# while native code owns the separate bounded prewarm halo. Expanding all
+	# support cells into InteractionFocus here turns every waypoint into a large
+	# LOD0 publication cohort and does not match the production game path.
+	var focus_keys: Array = [_current_target]
 	var support_keys: Array = []
 	for z in range(_current_target.z - 1, _current_target.z + 2):
 		for y in range(_current_target.y - 1, _current_target.y + 2):
 			for x in range(_current_target.x - 1, _current_target.x + 2):
 				var key := Vector3i(x, y, z)
-				focus_keys.append(key)
 				support_keys.append(key)
 	var collision_predictive_target := Vector3i(
 		floori(collision_predictive_position.x / 16.0),
@@ -367,12 +375,8 @@ func _move_viewers(position: Vector3) -> bool:
 		0,
 		floori(predictive_position.z / 16.0)
 	)
-	for z in range(predictive_target.z - 1, predictive_target.z + 2):
-		for y in range(predictive_target.y - 1, predictive_target.y + 2):
-			for x in range(predictive_target.x - 1, predictive_target.x + 2):
-				var key := Vector3i(x, y, z)
-				if not focus_keys.has(key):
-					focus_keys.append(key)
+	if not focus_keys.has(predictive_target):
+		focus_keys.append(predictive_target)
 	if not _world.update_foreground_priority_lease(
 		9002, _viewer_revision, 0, support_keys
 	) or not _world.update_foreground_priority_lease(
