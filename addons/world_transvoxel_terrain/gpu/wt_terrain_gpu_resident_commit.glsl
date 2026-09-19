@@ -25,6 +25,7 @@ void main() {
 	uint lane = gl_LocalInvocationID.x;
 	uint candidate_count = uint(cohort.values[0]);
 	uint retirement_count = uint(cohort.values[1]);
+	bool publish = cohort.values[2] != 0;
 	if (lane == 0u) cohort_valid = 1u;
 	barrier();
 	for (uint index = lane; index < candidate_count; index += 64u) {
@@ -60,9 +61,9 @@ void main() {
 	for (uint index = lane; index < candidate_count; index += 64u) {
 		int slot = cohort.values[4 + int(index)];
 		resident_summary.values[slot * 5 + 3] = cohort_valid;
-		if (cohort_valid != 0u) activation_flags.values[slot] = 1u;
+		if (publish && cohort_valid != 0u) activation_flags.values[slot] = 1u;
 	}
-	if (cohort_valid == 0u) return;
+	if (!publish || cohort_valid == 0u) return;
 	for (uint index = lane; index < retirement_count; index += 64u) {
 		int slot = cohort.values[4 + int(candidate_count + index)];
 		activation_flags.values[slot] = 0u;

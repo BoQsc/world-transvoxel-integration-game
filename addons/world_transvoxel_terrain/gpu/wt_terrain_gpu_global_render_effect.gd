@@ -39,7 +39,8 @@ const BACKGROUND_DISPATCH_CAPACITY := 4
 const INTERACTION_DISPATCH_CAPACITY := 8
 const DEFAULT_RESIDENT_CAPACITY := 64
 const MAXIMUM_SURFACES_PER_CHUNK := 2
-const COMPACTION_IDLE_CALLBACKS := 120
+const SCRATCH_SLOT_CAPACITY := 64
+const COMPACTION_SETTLE_CALLBACKS := 4
 const DISPATCH_COMPLETION_CAPACITY_PER_CALLBACK := 16
 const TELEMETRY_COMPLETION_CAPACITY_PER_CALLBACK := 8
 const LIFECYCLE_COMMAND_CAPACITY_PER_CALLBACK := 16
@@ -60,7 +61,9 @@ var _inflight_extractions: Dictionary = {}
 var _dispatch_pending_tickets: Dictionary = {}
 var _cancelled_inflight_tickets: Dictionary = {}
 var _pending_compactions: Array[String] = []
+var _compaction_eligible_callback_by_token: Dictionary = {}
 var _compaction_idle_callbacks := 0
+var _render_callback_sequence := 0
 var _lifecycle_commands: Array[Dictionary] = []
 var _interaction_lifecycle_commands: Array[Dictionary] = []
 var _priority_events: Dictionary = {}
@@ -717,6 +720,7 @@ func set_debug_stage_timing_enabled(enabled: bool) -> void:
 func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	if callback_type != EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT:
 		return
+	_render_callback_sequence += 1
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	if _rendering_device == null:
 		_rendering_device = RenderingServer.get_rendering_device()
@@ -949,7 +953,8 @@ func _ensure_shaders() -> bool:
 			_compact_shader,
 			_compact_pipeline,
 			_vertex_format,
-			_resident_allocation_capacity()
+			_resident_allocation_capacity(),
+			mini(SCRATCH_SLOT_CAPACITY, _resident_allocation_capacity())
 		):
 			_record_render_error(_arena.get_last_error())
 			_arena = null
@@ -1181,6 +1186,7 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 				stale_entry["counts_pending"] = false
 				_finalize_gpu_candidate_on_render_thread(stale_entry)
 				_entries[stale_token] = stale_entry
+				_queue_compaction_on_render_thread(stale_token, stale_entry)
 			continue
 		var telemetry: Dictionary = _arena.finalize_readback(
 			ticket, completion_data
@@ -1202,13 +1208,7 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 			entry["failure_cell_count"] = int(telemetry.get("failure_cell_count", 0))
 			_finalize_gpu_candidate_on_render_thread(entry)
 			_entries[token] = entry
-			var identity := Dictionary(entry.get("identity", {}))
-			if int(identity.get("lod", 0)) > 0 \
-					and not bool(entry.get("incremental_edit", false)) \
-					and str(entry.get("resident_kind", "")) == "provisional" \
-					and not _pending_compactions.has(token) \
-					and _pending_compactions.size() < _resident_capacity * 2:
-				_pending_compactions.append(token)
+			_queue_compaction_on_render_thread(token, entry)
 			_active_lod_inventory_dirty = true
 			_mutex.lock()
 			_status["resident_entry_count"] = _entries.size()
@@ -1230,39 +1230,45 @@ func _drain_arena_readbacks_on_render_thread() -> void:
 	_sync_dispatch_lane_status_on_render_thread()
 
 
+func _queue_compaction_on_render_thread(token: String, entry: Dictionary) -> void:
+	if str(entry.get("resident_kind", "")) != "provisional" \
+			or bool(entry.get("counts_pending", true)):
+		return
+	if bool(entry.get("empty", false)):
+		var compact: Dictionary = _arena.compact_resident_meshlets(entry)
+		if str(compact.get("resident_kind", "")) != "provisional":
+			_entries[token] = compact
+			_active_lod_inventory_dirty = true
+			_mutex.lock()
+			_status["compactions_completed"] = int(
+				_status.get("compactions_completed", 0)
+			) + 1
+			_mutex.unlock()
+		return
+	if not _pending_compactions.has(token):
+		_pending_compactions.append(token)
+		_compaction_eligible_callback_by_token[token] = (
+			_render_callback_sequence + COMPACTION_SETTLE_CALLBACKS
+		)
+
+
 func _drain_one_compaction_on_render_thread() -> void:
 	if _arena == null:
 		return
-	if not _dispatch_pending_tickets.is_empty() or not _pending.is_empty() \
-			or not _pending_interaction.is_empty():
-		_compaction_idle_callbacks = 0
-		_mutex.lock()
-		_status["pending_compaction_count"] = _pending_compactions.size()
-		_status["compaction_idle_callbacks"] = 0
-		_status["compaction_interaction_deferrals"] = int(
-			_status.get("compaction_interaction_deferrals", 0)
-		) + 1
-		_mutex.unlock()
-		return
-	_compaction_idle_callbacks += 1
-	if _pending_compactions.is_empty() \
-			or _compaction_idle_callbacks < COMPACTION_IDLE_CALLBACKS:
-		_mutex.lock()
-		_status["pending_compaction_count"] = _pending_compactions.size()
-		_status["compaction_idle_callbacks"] = _compaction_idle_callbacks
-		_mutex.unlock()
-		return
+	# Scratch reclamation is part of steady-state streaming. Waiting for global
+	# idle made continuous movement permanently retain every provisional page.
+	_compaction_idle_callbacks = 0
 	while not _pending_compactions.is_empty():
-		var token := _pending_compactions.pop_front()
+		var token := _pending_compactions.front()
+		if _render_callback_sequence < int(
+			_compaction_eligible_callback_by_token.get(token, 0)
+		):
+			break
+		_pending_compactions.pop_front()
+		_compaction_eligible_callback_by_token.erase(token)
 		if not _entries.has(token):
 			continue
 		var entry: Dictionary = _entries[token]
-		var identity := Dictionary(entry.get("identity", {}))
-		var key := _identity_key(identity)
-		if int(_active_sequence_by_key.get(key, 0)) != int(
-			entry.get("publication_sequence", 0)
-		):
-			continue
 		var compact: Dictionary = _arena.compact_resident_meshlets(entry)
 		if str(compact.get("resident_kind", "")) != str(
 			entry.get("resident_kind", "")
@@ -1278,7 +1284,7 @@ func _drain_one_compaction_on_render_thread() -> void:
 		break
 	_mutex.lock()
 	_status["pending_compaction_count"] = _pending_compactions.size()
-	_status["compaction_idle_callbacks"] = _compaction_idle_callbacks
+	_status["compaction_idle_callbacks"] = 0
 	_mutex.unlock()
 
 
@@ -1468,6 +1474,14 @@ func _finish_entry_on_render_thread(
 	var activate_immediately := bool(request.get("activate_immediately", true))
 	entry["active"] = false
 	_entries[token] = entry
+	# Validation and transient-storage reclamation belong to completed extraction,
+	# not activation. Large atomic cohorts must be able to compact every prepared
+	# member before all members are simultaneously ready to publish.
+	if not _arena.request_summary_readback(entry):
+		_free_entry_on_render_thread(_entries[token])
+		_entries.erase(token)
+		_reject_request_on_render_thread(request, _arena.get_last_error())
+		return
 	if activate_immediately:
 		if not _commit_single_activation_on_render_thread(key, token, request):
 			_free_entry_on_render_thread(_entries[token])
@@ -2644,6 +2658,7 @@ func _close_on_render_thread() -> void:
 	_dispatch_pending_tickets.clear()
 	_cancelled_inflight_tickets.clear()
 	_pending_compactions.clear()
+	_compaction_eligible_callback_by_token.clear()
 	_compaction_idle_callbacks = 0
 	_protected_activation_tokens.clear()
 	_active_sequence_by_key.clear()

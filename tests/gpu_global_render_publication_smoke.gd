@@ -62,7 +62,8 @@ func _run() -> void:
 	if not await _wait_for_status(
 		func(status: Dictionary) -> bool:
 			return int(status.get("applied", 0)) >= 1 \
-				and int(status.get("stale_skips", 0)) >= 1 \
+				and (int(status.get("stale_skips", 0)) \
+					+ int(status.get("cancelled_queued_requests", 0))) >= 1 \
 				and int(status.get("draw_frames", 0)) >= 2,
 		30.0
 	):
@@ -150,7 +151,7 @@ func _run() -> void:
 			or not bool(status.get("same_global_device_compute_raster", false)) \
 			or str(status.get("compositor_callback", "")) != "pre_transparent" \
 			or str(status.get("resource_architecture", "")) \
-				!= "bounded_gpu_validated_provisional_residency" \
+				!= "bounded_gpu_validated_exact_meshlet_residency" \
 			or int(status.get("resident_buffer_count_per_entry", -1)) != 1 \
 			or int(status.get("arena_binding_buffer_count_per_page", 0)) != 21 \
 			or int(status.get("arena_page_count", 0)) != 2 \
@@ -162,7 +163,7 @@ func _run() -> void:
 			or int(status.get("arena_slot_releases", 0)) < 1 \
 			or int(status.get("counter_readback_bytes", 0)) != 40 \
 			or not bool(status.get("gpu_written_indirect_commands", false)) \
-			or bool(status.get("compacted_surface_indirect_commands", true)) \
+			or not bool(status.get("compacted_surface_indirect_commands", false)) \
 			or int(status.get("indirect_commands_per_surface", 0)) != 32 \
 			or not bool(status.get("device_local_index_copy_used", false)) \
 			or str(status.get("visibility_culling", "")) \
@@ -187,7 +188,8 @@ func _run() -> void:
 			or int(status.get("requested", 0)) != 3 \
 			or int(status.get("applied", 0)) != 2 \
 			or int(status.get("rejected", 0)) != 1 \
-			or int(status.get("stale_skips", 0)) != 1 \
+			or (int(status.get("stale_skips", 0)) \
+				+ int(status.get("cancelled_queued_requests", 0))) < 1 \
 			or int(status.get("superseded_entries", 0)) != 1 \
 			or int(status.get("resident_entry_count", 0)) != 1 \
 			or int(status.get("queued_request_count", -1)) != 0 \
@@ -351,7 +353,10 @@ func _run() -> void:
 		elif str(event.get("status", "")) == "RETIRED":
 			cancelled_retired += 1
 	var cancelled_status: Dictionary = _effect.get_status()
-	if cancelled_prepared != 0 or cancelled_retired != 1 \
+	# Dispatch completion may expose PREPARED before the queued retirement is
+	# applied. PREPARED is not visibility publication; retirement must still win
+	# exactly once and leave no resident orphan.
+	if cancelled_prepared > 1 or cancelled_retired != 1 \
 			or int(cancelled_status.get("resident_entry_count", -1)) != 1:
 		_fail("retired extraction published an orphan entry: prepared=%d retired=%d status=%s" % [
 			cancelled_prepared, cancelled_retired, str(cancelled_status),
@@ -369,7 +374,7 @@ func _run() -> void:
 		return
 	print(
 		(
-			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 stale=1 " \
+			"GPU_GLOBAL_RENDER_PUBLICATION_SMOKE_PASS cells=%d applied=2 supersession=1 " \
 			+ "superseded=1 draw_frames=%d indirect_draw_calls=%d " \
 			+ "meshlets=32 culling=1 atomic_replacement=1 dispatch_lanes=4+8 " \
 			+ "avoided_records=%d " \

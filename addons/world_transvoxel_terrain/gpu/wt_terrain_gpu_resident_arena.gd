@@ -40,6 +40,7 @@ var _completion_buffer := RID()
 var _completion_uniform_set := RID()
 var _vertex_format := -1
 var _maximum_slots := 0
+var _maximum_scratch_slots := 0
 var _next_compact_slot := 0
 var _free_compact_slots: Array[int] = []
 var _compact_slot_count := 0
@@ -100,14 +101,16 @@ func initialize(
 	compact_shader: RID,
 	compact_pipeline: RID,
 	vertex_format: int,
-	maximum_slots: int
+	maximum_slots: int,
+	maximum_scratch_slots: int
 ) -> bool:
 	if rendering_device == null or not compute_shader.is_valid() \
 			or not compute_pipeline.is_valid() or not commit_shader.is_valid() \
 			or not commit_pipeline.is_valid() or not completion_shader.is_valid() \
 			or not completion_pipeline.is_valid() or not compact_shader.is_valid() \
 			or not compact_pipeline.is_valid() or vertex_format < 0 \
-			or maximum_slots <= 0:
+			or maximum_slots <= 0 or maximum_scratch_slots <= 0 \
+			or maximum_scratch_slots > maximum_slots:
 		_last_error = "resident arena initialization parameters are invalid"
 		return false
 	_rendering_device = rendering_device
@@ -121,6 +124,7 @@ func initialize(
 	_compact_pipeline = compact_pipeline
 	_vertex_format = vertex_format
 	_maximum_slots = maximum_slots
+	_maximum_scratch_slots = maximum_scratch_slots
 	_status_buffer = _rendering_device.storage_buffer_create(
 		maximum_slots * 2 * STATUS_SLOT_STRIDE, PackedByteArray()
 	)
@@ -508,6 +512,7 @@ func commit_visibility(activations: Array, retirements: Array) -> bool:
 	descriptor.resize(4 + candidate_slots.size() + retirement_slots.size())
 	descriptor[0] = candidate_slots.size()
 	descriptor[1] = retirement_slots.size()
+	descriptor[2] = 1
 	for index in range(candidate_slots.size()):
 		descriptor[4 + index] = candidate_slots[index]
 	for index in range(retirement_slots.size()):
@@ -527,28 +532,52 @@ func commit_visibility(activations: Array, retirements: Array) -> bool:
 	# Publication is already queued. The small summary readback follows it and is
 	# used only for telemetry, validation cleanup, and slot reclamation.
 	for entry_value in activations:
-		var entry := Dictionary(entry_value)
-		var ticket := int(entry.get("arena_ticket", 0))
-		if ticket <= 0 or not _pending_readbacks.has(ticket):
-			continue
-		var pending: Dictionary = _pending_readbacks[ticket]
-		if bool(pending.get("readback_requested", false)):
-			continue
-		var slot := int(entry.get("gpu_slot", -1))
-		var readback_error := _rendering_device.buffer_get_data_async(
-			_summary_buffer,
-			Callable(self, "_on_counter_readback").bind(ticket),
-			slot * SUMMARY_STRIDE,
-			SUMMARY_STRIDE
-		)
-		if readback_error == OK:
-			pending["readback_requested"] = true
-			_pending_readbacks[ticket] = pending
-			_counter_readback_requests += 1
-		else:
-			_last_error = "resident arena asynchronous summary readback failed: %s" % [
-				error_string(readback_error),
-			]
+		if not request_summary_readback(Dictionary(entry_value)):
+			return false
+	_last_error = ""
+	return true
+
+
+func request_summary_readback(entry: Dictionary) -> bool:
+	var ticket := int(entry.get("arena_ticket", 0))
+	if ticket <= 0 or not _pending_readbacks.has(ticket):
+		return true
+	var pending: Dictionary = _pending_readbacks[ticket]
+	if bool(pending.get("readback_requested", false)):
+		return true
+	var slot := int(entry.get("gpu_slot", -1))
+	if slot < 0:
+		_last_error = "resident arena summary request has no GPU slot"
+		return false
+	# Run the same cohort validator without changing visibility. This produces the
+	# immutable 20-byte summary needed to reclaim a prepared member before its
+	# complete regional activation cohort is ready.
+	var descriptor := PackedInt32Array([1, 0, 0, 0, slot]).to_byte_array()
+	var update_error := _rendering_device.buffer_update(
+		_commit_descriptor_buffer, 0, descriptor.size(), descriptor
+	)
+	if update_error != OK:
+		_last_error = "resident arena validation descriptor upload failed"
+		return false
+	var compute_list := _rendering_device.compute_list_begin()
+	_rendering_device.compute_list_bind_compute_pipeline(compute_list, _commit_pipeline)
+	_rendering_device.compute_list_bind_uniform_set(compute_list, _commit_uniform_set, 0)
+	_rendering_device.compute_list_dispatch(compute_list, 1, 1, 1)
+	_rendering_device.compute_list_end()
+	var readback_error := _rendering_device.buffer_get_data_async(
+		_summary_buffer,
+		Callable(self, "_on_counter_readback").bind(ticket),
+		slot * SUMMARY_STRIDE,
+		SUMMARY_STRIDE
+	)
+	if readback_error != OK:
+		_last_error = "resident arena asynchronous summary readback failed: %s" % [
+			error_string(readback_error),
+		]
+		return false
+	pending["readback_requested"] = true
+	_pending_readbacks[ticket] = pending
+	_counter_readback_requests += 1
 	_last_error = ""
 	return true
 
@@ -688,6 +717,7 @@ func get_status() -> Dictionary:
 		"interaction_scratch_reserve_per_page": INTERACTION_SCRATCH_RESERVE_PER_PAGE,
 		"background_scratch_reservation_deferrals": _background_scratch_reservation_deferrals,
 		"maximum_slots": _maximum_slots,
+		"maximum_scratch_slots": _maximum_scratch_slots,
 		"compact_visibility_slots": _compact_slot_count,
 		"allocated_slots": _allocated_slot_count,
 		"scratch_in_flight": _scratch_in_flight_count,
@@ -768,7 +798,7 @@ func compact_resident_meshlets(entry: Dictionary) -> Dictionary:
 			or bool(entry.get("counts_pending", true)):
 		return entry
 	if bool(entry.get("empty", false)):
-		if not commit_visibility([], [entry]):
+		if bool(entry.get("active", false)) and not commit_visibility([], [entry]):
 			return entry
 		_free_rids(Array(entry.get("resident_view_rids", [])))
 		_resident_allocated_bytes = maxi(
@@ -937,10 +967,19 @@ func compact_resident_meshlets(entry: Dictionary) -> Dictionary:
 		"meshlet_index_source_offset", "arena_ticket",
 	]:
 		compact.erase(field)
-	if not commit_visibility([compact], [entry]):
-		_free_rids(Array(compact.get("resident_rids", [])))
-		_release_compact_slot(compact_slot)
-		return entry
+	if bool(entry.get("active", false)):
+		if not commit_visibility([compact], [entry]):
+			_free_rids(Array(compact.get("resident_rids", [])))
+			_release_compact_slot(compact_slot)
+			return entry
+	else:
+		# Prepared cohort members must remain invisible until their atomic lifecycle
+		# command arrives. The compact shader has copied their exact geometry and
+		# status, but publication still belongs to that later cohort commit.
+		_rendering_device.buffer_update(
+			_activation_buffer, compact_slot * 4, 4,
+			PackedInt32Array([0]).to_byte_array()
+		)
 	_free_rids(Array(entry.get("resident_view_rids", [])))
 	_resident_allocated_bytes = maxi(
 		0, _resident_allocated_bytes - int(entry.get("resident_allocated_bytes", 0))
@@ -1285,7 +1324,7 @@ func _request_fits(
 
 
 func _create_page(input_buffers: Array, cell_count: int) -> int:
-	var remaining := _maximum_slots - _allocated_slot_count
+	var remaining := _maximum_scratch_slots - _allocated_slot_count
 	var replacement_index := -1
 	var slot_count := mini(PAGE_SLOT_COUNT, remaining)
 	if remaining <= 0:

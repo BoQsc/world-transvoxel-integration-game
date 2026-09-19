@@ -233,9 +233,13 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 	var before_revision := int(_terrain_world.call("get_backend_world_revision"))
 	var accepted := bool(_player.call("submit_edit_input", mode, center, true))
 	var committed := false
+	var committed_revision := before_revision
 	for _frame in range(300):
 		if int(_terrain_world.call("get_backend_world_revision")) > before_revision:
 			committed = true
+			committed_revision = int(
+				_terrain_world.call("get_backend_world_revision")
+			)
 			break
 		await _capture_wait_frame()
 	var ready := false
@@ -248,17 +252,23 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 		var state: RefCounted = _terrain_world.call(
 			"query_chunk_state", target_chunk, 0
 		)
-		var metrics: Dictionary = _terrain_world.call("get_runtime_metrics")
 		ready = accepted and committed and state != null and \
 				bool(state.call("is_visual_ready")) and \
 				bool(state.call("is_collision_ready")) and \
-				int(metrics.get("pending_chunk_replacements", 0)) == 0 and \
-				int(metrics.get("pending_chunk_retirements", 0)) == 0 and \
-				int(metrics.get("pending_render_retirements", 0)) == 0
+				int(state.call("get_world_revision")) >= committed_revision
 		if ready:
-			ready = gpu_publication_drained(Dictionary(
+			var gpu_status := Dictionary(
 				_terrain_world.call("get_gpu_resident_render_status")
-			))
+			)
+			if bool(gpu_status.get("gpu_resident_render_publication", false)):
+				var active_identity := Dictionary(_terrain_world.call(
+					"get_gpu_resident_active_chunk_identity", target_chunk, 0
+				))
+				ready = not active_identity.is_empty() and \
+						int(active_identity.get("world_revision", -1)) \
+							>= committed_revision and \
+						int(active_identity.get("generation", -1)) \
+							== int(state.call("get_generation"))
 		if ready:
 			ready_frame = frame
 			break
@@ -267,6 +277,7 @@ func _submit_and_wait(mode: StringName, center: Vector3) -> Dictionary:
 		"mode": str(mode),
 		"accepted": accepted,
 		"committed": committed,
+		"committed_revision": committed_revision,
 		"ready": ready,
 		"ready_frame": ready_frame,
 		"center": _vector3_summary(center),
