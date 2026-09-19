@@ -383,6 +383,8 @@ func _move_viewers(position: Vector3) -> bool:
 			"target": _current_target,
 			"requested_ticks_usec": Time.get_ticks_usec(),
 			"requested_sample_index": _samples.size(),
+			"required_edit_commit": -1,
+			"minimum_world_revision": -1,
 			"coverage_ready_frame": null,
 			"coverage_ready_us": null,
 			"lod0_ready_frame": null,
@@ -418,8 +420,29 @@ func _submit_moving_edit(position: Vector3, index: int) -> void:
 	var batch := EditBatch.new()
 	batch.add_operation(operation)
 	_edit_attempts += 1
+	var committed_before := int(_world.get_runtime_metrics().get("edit_commits", 0))
+	var state_before: RefCounted = _world.query_chunk_state(_current_target, 0)
+	var world_revision_before := int(state_before.call("get_world_revision")) \
+		if state_before != null else 0
 	if not _world.submit_edit_batch(batch, 9000 + _edit_attempts):
 		_edit_submission_failures += 1
+	elif not _target_activations.is_empty():
+		# The waypoint activation is created before its edit is submitted. Bind
+		# readiness to the next authoritative journal commit so the predecessor
+		# generation cannot be reported as an instant edited result.
+		var activation: Dictionary = _target_activations.back()
+		activation.required_edit_commit = committed_before + 1
+		activation.minimum_world_revision = world_revision_before + 1
+		activation.requested_ticks_usec = Time.get_ticks_usec()
+		activation.requested_sample_index = _samples.size()
+		activation.coverage_ready_frame = null
+		activation.coverage_ready_us = null
+		activation.lod0_ready_frame = null
+		activation.lod0_ready_us = null
+		activation.visual_ready_frame = null
+		activation.visual_ready_us = null
+		activation.collision_ready_frame = null
+		activation.collision_ready_us = null
 
 
 func _submit_burst_edit(position: Vector3) -> void:
@@ -474,7 +497,7 @@ func _observe_frame() -> void:
 		sample["target_diagnostic"] = _target_diagnostic(state)
 	_last_ticks_usec = now
 	_samples.append(sample)
-	_update_target_activations(now)
+	_update_target_activations(now, int(runtime.get("edit_commits", 0)))
 	if not bool(sample.lod0_visual_ready) and _samples.size() % 8 == 0:
 		_capture_largest_publication_inspection()
 	for key in ["scheduler_queued", "storage_queued", "storage_active", "mesh_queued", "mesh_active", "pending_replacements", "gpu_queued", "gpu_inflight", "gpu_resident_entries", "gpu_uploaded_bytes", "decoded_bytes", "render_bytes", "collision_bytes"]:
@@ -526,8 +549,10 @@ func _capture_largest_publication_inspection() -> void:
 		_largest_publication_inspection = inspection
 
 
-func _update_target_activations(now: int) -> void:
+func _update_target_activations(now: int, edit_commits: int) -> void:
 	for activation in _target_activations:
+		if int(activation.get("required_edit_commit", -1)) > edit_commits:
+			continue
 		var key: Vector3i = activation.target
 		var frame_latency := _samples.size() - int(activation.requested_sample_index)
 		if activation.coverage_ready_frame == null and _has_visual_coverage(key):
@@ -535,6 +560,11 @@ func _update_target_activations(now: int) -> void:
 			activation.coverage_ready_us = now - int(activation.requested_ticks_usec)
 			activation.visual_ready_frame = frame_latency
 			activation.visual_ready_us = now - int(activation.requested_ticks_usec)
+		var state: RefCounted = _world.query_chunk_state(key, 0)
+		if int(activation.get("minimum_world_revision", -1)) > 0 and (
+				state == null or int(state.call("get_world_revision")) <
+				int(activation.minimum_world_revision)):
+			continue
 		if activation.lod0_ready_frame == null and _has_exact_lod0_visual(key):
 			activation.lod0_ready_frame = frame_latency
 			activation.lod0_ready_us = now - int(activation.requested_ticks_usec)
