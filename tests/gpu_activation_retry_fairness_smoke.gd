@@ -862,7 +862,8 @@ func _test_regional_commit_barrier() -> bool:
 	controller._try_queue_activation_cohort("0")
 	var committed := backend.commits == 1 and effect.submitted_entries == 1 \
 		and bool(controller._groups["0"].get("activation_queued", false)) \
-		and bool(controller._groups["0"].get("native_active", false))
+		and bool(controller._groups["0"].get("native_active", false)) \
+		and controller._has_native_committed_activation_in_flight()
 	if not waited or not committed:
 		push_error(
 			"regional commit barrier mismatch: waited=%s committed=%s queries=%d commits=%d submitted=%d group=%s"

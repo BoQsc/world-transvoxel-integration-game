@@ -1595,6 +1595,13 @@ func _queue_selected_activation_cohort(
 	var native_precommitted := false
 	var regional_inventory_pool: Array = []
 	if bool(cohort.get("regional", false)):
+		# Native activation changes authoritative visibility before the render
+		# thread acknowledges the swap. A second regional commit can overlap an
+		# interaction-isolated ancestor and supersede entries still queued in the
+		# first transaction. Serialize this short acknowledgement window.
+		if _has_native_committed_activation_in_flight():
+			_queue_activation_cohort_retry(group_key)
+			return
 		regional_inventory_pool = _prepared_inventory_pool(Array(cohort.get("chunks", [])))
 		if _stage_timing_enabled:
 			phase_start = _record_stage_time("activation_inventory", phase_start)
@@ -1778,6 +1785,13 @@ func _queue_selected_activation_cohort(
 	_try_commit_activation_cohort(group_key)
 
 
+func _has_native_committed_activation_in_flight() -> bool:
+	for cohort_value in _activation_cohorts.values():
+		if bool(Dictionary(cohort_value).get("native_committed", false)):
+			return true
+	return false
+
+
 func _prepared_inventory_pool(members: Array) -> Array:
 	var inventories: Array = []
 	# Supply only the authority-selected cohort. Native commit still recomputes
@@ -1870,9 +1884,13 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 		"replacement_count", "retirement_count", "boundary_mask_wait_count",
 		"cohort_candidate_count", "cohort_overlap_members",
 		"cohort_same_lod_face_members", "cohort_coarse_face_members",
-		"cohort_fine_face_members", "priority_requested_member_count",
+		"cohort_fine_face_members", "cohort_blocker_reason",
+		"cohort_blocker_key", "priority_requested_member_count",
 		"same_layout_edit", "same_layout_edit_rejection_reason",
-		"authoritative_coverage_complete",
+		"authoritative_coverage_complete", "cohort_built",
+		"geometric_coverage_complete", "interaction_region_isolated",
+		"non_authoritative_replacement_count",
+		"non_authoritative_retirement_count",
 		"waiting_member_record_present", "waiting_member_visual_required",
 		"waiting_member_external_activation_required",
 		"waiting_member_external_prepared", "waiting_member_visual_ready",
@@ -1889,6 +1907,12 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 	).slice(0, 8).duplicate(true)
 	_last_activation_cohort_wait["cohort_retirement_sample"] = Array(
 		wait.get("cohort_retirement_sample", [])
+	).slice(0, 8).duplicate(true)
+	_last_activation_cohort_wait["selected_replacement_sample"] = Array(
+		wait.get("selected_replacements", [])
+	).slice(0, 8).duplicate(true)
+	_last_activation_cohort_wait["selected_retirement_sample"] = Array(
+		wait.get("selected_retirements", [])
 	).slice(0, 8).duplicate(true)
 	_last_activation_cohort_wait_frame = _process_frame
 	var member := Dictionary(wait.get("waiting_member", {}))
