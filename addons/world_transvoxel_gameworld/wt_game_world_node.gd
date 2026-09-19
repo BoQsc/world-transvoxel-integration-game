@@ -432,33 +432,19 @@ func wait_for_minimum_resources(render_count: int, collision_count: int) -> bool
 			var active_gpu_entries := int(summary.get(
 				"gpu_resident_active_entries", 0
 			))
-			var tracked_gpu_chunks := int(summary.get(
-				"gpu_resident_tracked_chunks", 0
-			))
+			# Startup is a playable-coverage boundary. Cold streaming and finer LOD
+			# replacement continue asynchronously and must not keep input behind a
+			# black screen. Cumulative transient admission counters are diagnostic;
+			# current rejected chunks and failed cells remain hard failures.
 			render_minimum_ready = bool(summary.get(
 				"gpu_resident_running", false
-			)) and active_gpu_chunks > 0 \
-				and tracked_gpu_chunks == active_gpu_chunks \
+			)) and active_gpu_chunks >= maxi(1, render_count) \
 				and active_gpu_entries >= active_gpu_chunks \
 				and int(summary.get("gpu_resident_resident_entries", 0)) \
 					>= active_gpu_entries \
 				and int(summary.get("gpu_resident_rejected_chunks", 0)) == 0 \
 				and int(summary.get("gpu_resident_failed_cells", 0)) == 0 \
-				and int(summary.get("gpu_resident_native_rejections", 0)) == 0 \
-				and int(summary.get("gpu_resident_effect_queued", 0)) == 0 \
-				and int(summary.get("gpu_resident_effect_in_flight", 0)) == 0 \
-				and int(summary.get("gpu_resident_native_queued", 0)) == 0 \
-				and int(summary.get("gpu_resident_native_in_flight", 0)) == 0 \
-				and int(summary.get("scheduler_queued_jobs", 0)) == 0 \
-				and int(summary.get("scheduler_queued_completions", 0)) == 0 \
-				and int(summary.get("storage_queued_requests", 0)) == 0 \
-				and int(summary.get("storage_queued_completions", 0)) == 0 \
-				and int(summary.get("storage_active_requests", 0)) == 0 \
-				and int(summary.get("storage_in_flight_requests", 0)) == 0 \
-				and int(summary.get("pending_chunk_replacements", 0)) == 0 \
-				and int(summary.get("staged_render_resources", 0)) == 0 \
-				and int(summary.get("non_retiring_visual_ready_chunk_records", 0)) \
-					>= int(summary.get("non_retiring_chunk_records", 1))
+				and int(summary.get("render_resources", 0)) >= render_count
 		if bool(summary.get("world_running", false)) and \
 				int(summary.get("queued_render", 0)) == 0 and \
 				int(summary.get("queued_collision", 0)) == 0 and \

@@ -29,9 +29,27 @@ def main() -> int:
             "--human-material-mode", LATEST_HUMAN_MATERIAL, "--human-windowed",
             "--gpu-resident-render-candidate", "--gpu-standing-mine-regression",
         ]
-        result = subprocess.run(
-            command, cwd=project, text=True, capture_output=True, timeout=180
-        )
+        try:
+            result = subprocess.run(
+                command, cwd=project, text=True, capture_output=True, timeout=180
+            )
+        except subprocess.TimeoutExpired as error:
+            def captured(value: str | bytes | None) -> str:
+                if value is None:
+                    return ""
+                return value.decode(errors="replace") if isinstance(value, bytes) else value
+
+            output = captured(error.stdout) + captured(error.stderr)
+            if output:
+                print(output[-8000:], file=sys.stderr)
+            report = project / ".godot" / "world_transvoxel_captures" / "startup_failure" / "latest.json"
+            freshness = report.stat().st_mtime if report.is_file() else 0.0
+            print(
+                f"[{driver}] GPU_STANDING_MINE_REGRESSION_TIMEOUT seconds=180 "
+                f"startup_report={report} startup_report_mtime={freshness}",
+                file=sys.stderr,
+            )
+            return 124
         output = result.stdout + result.stderr
         lines = [line for line in output.splitlines() if MARKER in line or "GPU_STANDING_MINE_REGRESSION_FAIL" in line]
         for line in lines:

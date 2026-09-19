@@ -322,6 +322,14 @@ GPU field evaluation and regular/transition extraction, and renders compact GPU
 buffers. CPU ownership of world data, storage, edits, and targeted collision
 remains intact. The production default has not been switched to GPU.
 
+Interactive startup is a coverage boundary rather than a global-settle gate.
+The game begins once its configured minimum GPU chunks and collision resources
+are active and current failure counts are clear. Tracked cold pages, pending
+finer LOD replacements, and background storage/meshing continue asynchronously.
+Qualification routes may still wait for a global drain when the measurement
+requires one; that stricter condition must not block player input or display a
+black startup screen.
+
 [Retained evidence](evidence/tqp64_gpu_publication_ordering_20260830/RESULT.md)
 records two downstream ordering fixes: fair bounded activation retries and
 exclusion of render-thread activations still in flight from a new regional
