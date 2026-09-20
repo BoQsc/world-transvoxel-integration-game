@@ -10462,6 +10462,9 @@ func _set_capture_camera_pose_with_wait(position: Vector3, target: Vector3, wait
 			JSON.stringify({
 				"elapsed_msec": float(Time.get_ticks_usec() - viewer_update_started_usec) / 1000.0,
 				"position": _vector3_summary(position),
+				"stage_usec": Dictionary(game_world.call(
+					"get_game_world_summary"
+				)).get("last_player_viewer_stage_usec", {}),
 			})
 		)
 	for _frame in range(maxi(0, wait_frames)):

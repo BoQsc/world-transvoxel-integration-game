@@ -109,6 +109,7 @@ var _foreground_priority_next_update_usec := 0
 var _accepted_foreground_support_updates := 0
 var _accepted_foreground_focus_updates := 0
 var _coalesced_player_viewer_updates := 0
+var _last_player_viewer_stage_usec: Dictionary = {}
 var _last_player_viewer_coalesce_reason := "none"
 var _last_error := ""
 var _last_edit_summary := {}
@@ -253,6 +254,8 @@ func update_player_viewer(force: bool = false) -> bool:
 	if not player_driven_viewer_enabled or _reference_scene == null or _player == null:
 		return false
 	var position: Vector3 = _player.global_position
+	var stage_started_usec := Time.get_ticks_usec()
+	var stage_usec := {}
 	var previous_position := _last_player_viewer_position
 	var visual_update_required := force or _should_update_player_viewer(position)
 	if not visual_update_required:
@@ -283,6 +286,8 @@ func update_player_viewer(force: bool = false) -> bool:
 		"update_runtime_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
+	stage_usec["visual_submit"] = Time.get_ticks_usec() - stage_started_usec
+	stage_started_usec = Time.get_ticks_usec()
 	_last_player_viewer_position = position
 	_accepted_player_viewer_updates += 1
 	_trace_event(&"viewer_submitted", {
@@ -294,14 +299,24 @@ func update_player_viewer(force: bool = false) -> bool:
 	})
 	if not _update_player_collision_invoker(position, force):
 		return false
+	stage_usec["collision_submit"] = Time.get_ticks_usec() - stage_started_usec
+	stage_started_usec = Time.get_ticks_usec()
 	if not _update_player_interaction_collision_invoker(force):
 		return false
+	stage_usec["interaction_collision_submit"] = Time.get_ticks_usec() - stage_started_usec
+	stage_started_usec = Time.get_ticks_usec()
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
+	stage_usec["predictive_visual_submit"] = Time.get_ticks_usec() - stage_started_usec
+	stage_started_usec = Time.get_ticks_usec()
 	if not _update_focus_player_viewer(force):
 		return false
+	stage_usec["focus_visual_submit"] = Time.get_ticks_usec() - stage_started_usec
+	stage_started_usec = Time.get_ticks_usec()
 	if not _update_player_foreground_priority_leases(force):
 		return false
+	stage_usec["foreground_priority_submit"] = Time.get_ticks_usec() - stage_started_usec
+	_last_player_viewer_stage_usec = stage_usec
 	_begin_streaming_burst()
 	return true
 
@@ -598,6 +613,7 @@ func get_game_world_summary() -> Dictionary:
 		"player_viewer_updates": _accepted_player_viewer_updates,
 		"player_viewer_coalesced_updates": _coalesced_player_viewer_updates,
 		"player_viewer_last_coalesce_reason": _last_player_viewer_coalesce_reason,
+		"last_player_viewer_stage_usec": _last_player_viewer_stage_usec.duplicate(),
 		"player_predictive_viewer_enabled": player_predictive_viewer_enabled,
 		"player_predictive_viewer_distance": player_predictive_viewer_distance,
 		"player_predictive_viewer_updates": _accepted_predictive_viewer_updates,
