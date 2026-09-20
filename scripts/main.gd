@@ -6475,6 +6475,12 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 	if player == null or game_world == null:
 		_fail("tunnel transient crawl gate requires player and game world")
 		return false
+	# This route measures visual and collision publication while traversing an
+	# intentionally unsupported carved volume. Keep the player in the same flight
+	# mode used by the human GPU-candidate scenario; gravity would otherwise move
+	# the interaction shell away from the edited tunnel while batches are applied.
+	if player.has_method("set_fly_mode_enabled"):
+		player.call("set_fly_mode_enabled", true)
 	var backend: Node = terrain_world.call("get_backend_terrain")
 	if backend == null:
 		_fail("tunnel transient crawl gate backend unavailable")

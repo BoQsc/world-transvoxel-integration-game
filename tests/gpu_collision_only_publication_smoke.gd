@@ -26,19 +26,22 @@ func _run() -> void:
 	var observed_exclusions := {}
 	var observed_overlap := false
 	var shared_peak := 0
+	var last_snapshot: Dictionary = {}
 	# Inspect real shared staging records during a retained-parent replacement.
 	for _frame in range(600):
 		await process_frame
 		var snapshot: Dictionary = backend.call(
 			"inspect_gpu_resident_publication", Vector3i(1, 1, 1), 0
 		)
+		last_snapshot = snapshot
 		if int(snapshot.get("open_viewer_plan_publications", 1)) != 0:
 			continue
 		if not snapshot.has("visual_candidates"):
 			_fail("native inspection lacks the exact visual candidate inventory")
 			return
 		var visual: Array = snapshot.visual_candidates
-		var shared: Array = Array(snapshot.pending_replacements) + Array(snapshot.ready_replacements)
+		var topology: Array = snapshot.get("completed_visual_topology", [])
+		var shared: Array = snapshot.get("collision_only_records", [])
 		shared_peak = maxi(shared_peak, shared.size())
 		for value in shared:
 			var key: Dictionary = value
@@ -46,24 +49,28 @@ func _run() -> void:
 			var state: RefCounted = _world.query_chunk_state(coordinate, key.lod)
 			if state == null or not state.call("is_present"):
 				continue
-			if not state.call("is_visual_required"):
-				if visual.has(key):
-					_fail("collision-only record admitted to visual coverage: %s" % str(key))
-					return
-				observed_exclusions[str(key)] = true
-				for parent in visual:
-					if int(parent.lod) <= int(key.lod):
-						continue
-					var scale := float(1 << (int(parent.lod) - int(key.lod)))
-					if Vector3i((Vector3(coordinate) / scale).floor()) == \
-							Vector3i(parent.page_x, parent.page_y, parent.page_z):
-						observed_overlap = true
-			elif not visual.has(key):
-				_fail("required visual candidate was filtered out: %s" % str(key))
+			if state.call("is_visual_required"):
+				_fail("collision-only inventory contains a visual record: %s" % str(key))
 				return
+			if visual.has(key):
+				_fail("collision-only record admitted to visual staging: %s" % str(key))
+				return
+			observed_exclusions[str(key)] = true
+			for parent in topology:
+				if int(parent.lod) <= int(key.lod):
+					continue
+				var scale := float(1 << (int(parent.lod) - int(key.lod)))
+				if Vector3i((Vector3(coordinate) / scale).floor()) == \
+						Vector3i(parent.page_x, parent.page_y, parent.page_z):
+					observed_overlap = true
 		if observed_overlap:
 			break
 	if not observed_overlap:
+		print("GPU_COLLISION_ONLY_PUBLICATION_DIAGNOSTIC " + JSON.stringify({
+			"snapshot": last_snapshot,
+			"render_status": _world.get_gpu_resident_render_status(),
+			"runtime_metrics": _world.get_runtime_metrics(),
+		}))
 		_fail("fixture did not exercise overlapping collision-only publication: shared_peak=%d exclusions=%s" \
 			% [shared_peak, str(observed_exclusions)])
 		return
