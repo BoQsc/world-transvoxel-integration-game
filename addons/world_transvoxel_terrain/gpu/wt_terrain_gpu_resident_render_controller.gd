@@ -1730,6 +1730,14 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 	var terrain_identity := Dictionary(Dictionary(group.get(
 		"requests", {}
 	)).get("terrain", {})).get("identity", {})
+	# Priority chooses which interaction candidate starts a retry round. A blocked
+	# maximum-priority shell member must not jump ahead of every lower-priority
+	# member again on each frame, or one repeatedly incomplete boundary can starve
+	# the exact player chunk forever.
+	group["activation_cohort_query_count"] = int(group.get(
+		"activation_cohort_query_count", 0
+	)) + 1
+	_groups[group_key] = group
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	var cohort: Dictionary
 	var measure_native_timing := _stage_timing_enabled \
@@ -1738,6 +1746,17 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity, true)
 	else:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity)
+	group = Dictionary(_groups.get(group_key, group))
+	group["last_activation_cohort_status"] = str(cohort.get("status", ""))
+	group["last_activation_cohort_error"] = str(cohort.get("error", ""))
+	group["last_activation_interaction_region_isolated"] = bool(cohort.get(
+		"interaction_region_isolated", false
+	))
+	group["last_activation_cohort_built"] = bool(cohort.get("cohort_built", false))
+	group["last_activation_cohort_candidate_count"] = int(cohort.get(
+		"cohort_candidate_count", 0
+	))
+	_groups[group_key] = group
 	_record_activation_cohort_query(cohort)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("activation_native_query", phase_start)
@@ -1762,6 +1781,7 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 func _queue_selected_activation_cohort(
 	group_key: String, terrain_identity: Dictionary, cohort: Dictionary, phase_start: int
 ) -> void:
+	_set_activation_frontend_blocker(group_key, "")
 	var cohort_status := str(cohort.get("status", ""))
 	if cohort_status == "WAITING_COHORT":
 		var wait_signature := _activation_cohort_wait_signature(cohort)
@@ -1806,6 +1826,9 @@ func _queue_selected_activation_cohort(
 		# protected on the render thread before this transaction mutates native
 		# coverage, so old draws remain submitted until the final GPU commit.
 		if _has_native_committed_activation_in_flight():
+			_set_activation_frontend_blocker(
+				group_key, "native_committed_transaction_in_flight"
+			)
 			_queue_activation_cohort_retry(group_key)
 			return
 	var group_keys: Array[String] = []
@@ -1821,12 +1844,14 @@ func _queue_selected_activation_cohort(
 			_activation_chunk_key(member), ""
 		))
 		if member_group_key.is_empty() or not _groups.has(member_group_key):
+			_set_activation_frontend_blocker(group_key, "prepared_member_route_missing")
 			_queue_activation_cohort_retry(group_key)
 			return
 		var member_group := Dictionary(_groups[member_group_key])
 		cohort_member_group_keys.append(member_group_key)
 		var activation_required := bool(member.get("activation_required", true))
 		if bool(member_group.get("retiring", false)):
+			_set_activation_frontend_blocker(group_key, "prepared_member_retiring")
 			_queue_activation_cohort_retry(group_key)
 			return
 		if activation_required:
@@ -1835,11 +1860,17 @@ func _queue_selected_activation_cohort(
 			# existing slot is idempotent and restores the authority handshake.
 			if bool(member_group.get("activation_queued", false)) \
 					or not bool(member_group.get("native_prepared", false)):
+				_set_activation_frontend_blocker(
+					group_key, "activation_member_not_stable"
+				)
 				_queue_activation_cohort_retry(group_key)
 				return
 			group_keys.append(member_group_key)
 		elif not bool(member_group.get("active", false)) \
 				or not bool(member_group.get("native_active", false)):
+			_set_activation_frontend_blocker(
+				group_key, "retained_member_not_active"
+			)
 			_queue_activation_cohort_retry(group_key)
 			return
 		var requests: Dictionary = member_group.get("requests", {})
@@ -1903,13 +1934,12 @@ func _queue_selected_activation_cohort(
 	if _stage_timing_enabled:
 		_record_stage_time("activation_retirement_routes", phase_start)
 	if inventories.is_empty():
+		_set_activation_frontend_blocker(group_key, "empty_inventory")
 		_queue_activation_cohort_retry(group_key)
 		return
 	if group_keys.is_empty():
 		var retained_activation := Dictionary(_backend_terrain.call(
 			"activate_gpu_resident_render_cohort", inventories, terrain_identity
-		)) if bool(cohort.get("regional", false)) else Dictionary(_backend_terrain.call(
-			"activate_gpu_resident_render_cohort", inventories
 		))
 		if str(retained_activation.get("status", "")) != "ACTIVE" \
 				or not bool(retained_activation.get("active", false)):
@@ -1955,6 +1985,50 @@ func _queue_selected_activation_cohort(
 			"member_count": group_keys.size(),
 		})
 	_activation_cohorts_queued += 1
+	# A one-member isolated cold publication has no regional retirement to make
+	# atomic. Its PREPARED event already proves that the immutable GPU entry
+	# exists, so committing native authority now and queuing the render activation
+	# removes an otherwise redundant staging callback and acknowledgement round.
+	# The render command still revalidates the protected identity before drawing.
+	if group_keys.size() == 1 and retirement_entries.is_empty() \
+			and not bool(cohort.get("regional", false)):
+		var direct_activation := Dictionary(_backend_terrain.call(
+			"activate_gpu_resident_render_cohort", inventories, terrain_identity
+		))
+		if str(direct_activation.get("status", "")) != "ACTIVE" \
+				or not bool(direct_activation.get("active", false)):
+			var direct_status := str(direct_activation.get("status", ""))
+			if direct_status.begins_with("STALE") \
+					or direct_status == "WAITING_COHORT":
+				_activation_cohorts.erase(cohort_id)
+				var direct_group := Dictionary(_groups[group_keys[0]])
+				direct_group["activation_queued"] = false
+				direct_group["activation_cohort_id"] = 0
+				_groups[group_keys[0]] = direct_group
+				_queue_activation_cohort_retry(str(group_keys[0]))
+				return
+			_fail_closed(str(direct_activation.get(
+				"error", "native isolated activation commit failed"
+			)))
+			return
+		var direct_group := Dictionary(_groups[group_keys[0]])
+		direct_group["native_active"] = true
+		_groups[group_keys[0]] = direct_group
+		var direct_cohort := Dictionary(_activation_cohorts[cohort_id])
+		direct_cohort["native_committed"] = true
+		_activation_cohorts[cohort_id] = direct_cohort
+		_record_lifecycle_event("NATIVE_COMMITTED", str(group_keys[0]), {
+			"cohort_id": cohort_id,
+			"isolated_direct": true,
+		})
+		if not _effect.activate_entries(activation_entries):
+			_fail_closed("global renderer rejected committed isolated activation")
+			return
+		_record_lifecycle_event("ACTIVATION_REQUESTED", str(group_keys[0]), {
+			"cohort_id": cohort_id,
+			"isolated_direct": true,
+		})
+		return
 	# The staging callback validates the complete immutable candidate set on the
 	# render thread without changing visibility. Native authority is committed
 	# only after every cohort surface reports staged.
@@ -2388,10 +2462,14 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 
 func _insert_interaction_activation_retry(group_key: String) -> void:
 	var priority := _activation_group_scheduler_priority(group_key)
+	var query_count := _activation_group_query_count(group_key)
 	var index := _activation_collision_retry_queue.size()
 	for candidate_index in range(_activation_collision_retry_queue.size()):
 		var candidate_key := str(_activation_collision_retry_queue[candidate_index])
-		if priority > _activation_group_scheduler_priority(candidate_key):
+		var candidate_query_count := _activation_group_query_count(candidate_key)
+		if query_count < candidate_query_count \
+				or (query_count == candidate_query_count \
+				and priority > _activation_group_scheduler_priority(candidate_key)):
 			index = candidate_index
 			break
 	_activation_collision_retry_queue.insert(index, group_key)
@@ -2404,6 +2482,20 @@ func _activation_group_scheduler_priority(group_key: String) -> int:
 	)).get("terrain", {}))
 	var identity := Dictionary(terrain_request.get("identity", {}))
 	return int(identity.get("scheduler_priority", 0))
+
+
+func _activation_group_query_count(group_key: String) -> int:
+	return int(Dictionary(_groups.get(group_key, {})).get(
+		"activation_cohort_query_count", 0
+	))
+
+
+func _set_activation_frontend_blocker(group_key: String, blocker: String) -> void:
+	if not _groups.has(group_key):
+		return
+	var group := Dictionary(_groups[group_key])
+	group["last_activation_frontend_blocker"] = blocker
+	_groups[group_key] = group
 
 
 func inspect_chunk_activation(coordinate: Vector3i, lod: int) -> Dictionary:
@@ -2419,11 +2511,17 @@ func inspect_chunk_activation(coordinate: Vector3i, lod: int) -> Dictionary:
 				or int(identity.get("page_z", 0)) != coordinate.z \
 				or int(identity.get("lod", 0)) != lod:
 			continue
+		var cohort_id := int(group.get("activation_cohort_id", 0))
+		var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+		var effect_status: Dictionary = _effect.get_status() if _effect != null else {}
 		return {
 			"found": true,
 			"group_key": group_key,
 			"generation": int(identity.get("generation", 0)),
 			"scheduler_priority": int(identity.get("scheduler_priority", 0)),
+			"activation_cohort_query_count": int(group.get(
+				"activation_cohort_query_count", 0
+			)),
 			"identity_interaction_priority": bool(identity.get("interaction_priority", false)),
 			"interaction_activation_priority": bool(group.get(
 				"interaction_activation_priority", false
@@ -2431,12 +2529,48 @@ func inspect_chunk_activation(coordinate: Vector3i, lod: int) -> Dictionary:
 			"native_prepared": bool(group.get("native_prepared", false)),
 			"native_active": bool(group.get("native_active", false)),
 			"activation_queued": bool(group.get("activation_queued", false)),
+			"activation_cohort_id": cohort_id,
+			"activation_staged_surfaces": Dictionary(
+				group.get("activation_staged", {})
+			).keys(),
+			"activated_surfaces": Dictionary(group.get("activated", {})).keys(),
+			"cohort_present": not cohort.is_empty(),
+			"cohort_member_count": Array(cohort.get("group_keys", [])).size(),
+			"cohort_native_committed": bool(cohort.get("native_committed", false)),
+			"effect_pending_lifecycle_commands": int(effect_status.get(
+				"pending_lifecycle_command_count", 0
+			)),
+			"effect_pending_interaction_lifecycle_commands": int(effect_status.get(
+				"pending_interaction_lifecycle_command_count", 0
+			)),
+			"effect_pending_events": int(effect_status.get("event_count", 0)),
+			"effect_pending_priority_events": int(effect_status.get(
+				"priority_event_count", 0
+			)),
 			"activation_retry_queued": bool(group.get("activation_retry_queued", false)),
 			"retry_membership": _activation_retry_membership.has(group_key),
 			"next_activation_retry_frame": int(group.get("next_activation_retry_frame", 0)),
 			"interaction_queue_index": _activation_collision_retry_queue.find(group_key),
 			"background_queue_index": _activation_retry_queue.find(group_key),
 			"last_incomplete_status": str(group.get("last_incomplete_status", "")),
+			"last_activation_cohort_status": str(group.get(
+				"last_activation_cohort_status", ""
+			)),
+			"last_activation_cohort_error": str(group.get(
+				"last_activation_cohort_error", ""
+			)),
+			"last_activation_interaction_region_isolated": bool(group.get(
+				"last_activation_interaction_region_isolated", false
+			)),
+			"last_activation_cohort_built": bool(group.get(
+				"last_activation_cohort_built", false
+			)),
+			"last_activation_cohort_candidate_count": int(group.get(
+				"last_activation_cohort_candidate_count", 0
+			)),
+			"last_activation_frontend_blocker": str(group.get(
+				"last_activation_frontend_blocker", ""
+			)),
 		}
 	return {"found": false}
 
@@ -2521,10 +2655,11 @@ func _try_commit_activation_cohort(group_key: String) -> void:
 			return
 	var inventories: Array = cohort.get("inventories", [])
 	var authoritative_seed := Dictionary(cohort.get("authoritative_seed", {}))
+	# Commit the exact transaction selected by the query. Dropping the seed for a
+	# one-member cohort changes native selection back to the global frontier and
+	# can turn a READY interaction cohort into an endless WAITING_COHORT loop.
 	var activation := Dictionary(_backend_terrain.call(
 		"activate_gpu_resident_render_cohort", inventories, authoritative_seed
-	)) if bool(cohort.get("regional", false)) else Dictionary(_backend_terrain.call(
-		"activate_gpu_resident_render_cohort", inventories
 	))
 	var activation_status := str(activation.get("status", ""))
 	if activation_status != "ACTIVE" or not bool(activation.get("active", false)):

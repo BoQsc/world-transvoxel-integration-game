@@ -3067,7 +3067,14 @@ func _push_event_on_render_thread(
 		"error": error,
 	}
 	_mutex.lock()
-	if bool(Dictionary(event.get("identity", {})).get("incremental_edit", false)):
+	var event_identity := Dictionary(event.get("identity", {}))
+	# Interaction lifecycle commands run in the render callback's reserved lane.
+	# Their acknowledgements must use the matching reserved event lane as well;
+	# otherwise a cold player-region activation can complete on the GPU and then
+	# wait behind the entire background streaming event backlog before authority
+	# can commit it.
+	if bool(event_identity.get("incremental_edit", false)) \
+			or bool(event_identity.get("interaction_priority", false)):
 		_priority_events[_priority_event_tail] = event
 		_priority_event_tail += 1
 	else:
