@@ -7228,6 +7228,11 @@ func _exercise_tunnel_transient_crawl_step(
 					floori(probe_center.z / 16.0)
 				)
 				var publication_chain: Array = []
+				var activation_chain: Array = []
+				var terrain_world: Node = game_world.get_terrain_world()
+				var controller: Node = terrain_world.get_node_or_null(
+					"WT_GpuResidentRender"
+				) if terrain_world != null else null
 				var ancestor := failed_chunk
 				for lod in range(4):
 					var publication := _gpu_publication_diagnostic_digest(Dictionary(
@@ -7236,12 +7241,19 @@ func _exercise_tunnel_transient_crawl_step(
 					publication["chunk"] = ancestor
 					publication["lod"] = lod
 					publication_chain.append(publication)
+					if controller != null and controller.has_method(
+							"inspect_chunk_activation"
+					):
+						activation_chain.append(Dictionary(controller.call(
+							"inspect_chunk_activation", ancestor, lod
+						)))
 					ancestor = Vector3i(
 						floori(float(ancestor.x) / 2.0),
 						floori(float(ancestor.y) / 2.0),
 						floori(float(ancestor.z) / 2.0)
 					)
 				digest["local_publication_chain"] = publication_chain
+				digest["local_activation_chain"] = activation_chain
 			_save_diagnostic_failure_capture("transient_%s_frame_%02d" % [label, target_frame])
 			digest["error"] = "transient_open_gap_or_orientation_conflict"
 			return {
