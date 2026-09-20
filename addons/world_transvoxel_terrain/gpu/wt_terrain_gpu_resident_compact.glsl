@@ -1,7 +1,7 @@
 #[compute]
 #version 450
 
-// Packs the 32 fixed-capacity extraction meshlets into exact resident buffers.
+// Packs the 44 fixed-capacity extraction meshlets into exact resident buffers.
 // The already validated status records are copied to a stable resident slot so
 // the existing cohort commit can switch visibility atomically after this pass.
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -60,10 +60,10 @@ const uint TRANSITION_VERTEX_CAPACITY = 64u * 12u;
 const uint REGULAR_INDEX_CAPACITY = 512u * 36u;
 const uint TRANSITION_INDEX_CAPACITY = 64u * 36u;
 
-shared uint vertex_counts[32];
-shared uint index_counts[32];
-shared uint vertex_prefixes[32];
-shared uint index_prefixes[32];
+shared uint vertex_counts[44];
+shared uint index_counts[44];
+shared uint vertex_prefixes[44];
+shared uint index_prefixes[44];
 shared uint total_vertices;
 shared uint total_indices;
 
@@ -144,7 +144,7 @@ void main() {
 			index_counts[lane], 1u, index_prefixes[lane], 0, 0u
 		);
 	}
-	if (lane < 32u) {
+	if (lane < 44u) {
 		uint source_status = uint(compact.source_state.y) + lane * 4u;
 		uint destination_status = uint(compact.destination_state.x) + lane * 4u;
 		resident_status.values[destination_status] = resident_status.values[source_status];

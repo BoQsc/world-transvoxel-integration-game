@@ -107,6 +107,8 @@ const float NO_STATIC_WATER_DENSITY = 3.0e38;
 const int STATIC_WATER_MATERIAL = 9;
 const int REGULAR_BRICK_CELLS = 512;
 const int TRANSITION_BRICK_CELLS = 64;
+const int EXTERNAL_TRANSITION_MESHLET_BEGIN = 8;
+const int INTERNAL_TRANSITION_MESHLET_BEGIN = 32;
 
 int meshlet_for_cell(int cell_index) {
 	if (cell_index < 4096) {
@@ -117,18 +119,35 @@ int meshlet_for_cell(int cell_index) {
 	}
 	int remaining = cell_index - 4096;
 	int transition_mask = config.values[arena.input_b.z + 3].w;
-	int face_ordinal = 0;
 	for (int face = 0; face < 6; ++face) {
 		if ((transition_mask & (1 << face)) == 0) continue;
 		if (remaining < 256) {
 			int u = remaining % 16;
 			int v = remaining / 16;
-			return 8 + face_ordinal * 4 + (u / 8) + (v / 8) * 2;
+			return EXTERNAL_TRANSITION_MESHLET_BEGIN + face * 4 +
+				(u / 8) + (v / 8) * 2;
 		}
 		remaining -= 256;
-		++face_ordinal;
 	}
-	return 31;
+	int visibility_mask = config.values[arena.input_b.z + 4].x;
+	int adjacency = 0;
+	for (int axis = 0; axis < 3; ++axis) {
+		int step = 1 << axis;
+		for (int lower = 0; lower < 8; ++lower) {
+			if ((lower & step) != 0) continue;
+			int upper = lower | step;
+			bool lower_visible = (visibility_mask & (1 << lower)) != 0;
+			bool upper_visible = (visibility_mask & (1 << upper)) != 0;
+			if (lower_visible != upper_visible) {
+				if (remaining < TRANSITION_BRICK_CELLS) {
+					return INTERNAL_TRANSITION_MESHLET_BEGIN + adjacency;
+				}
+				remaining -= TRANSITION_BRICK_CELLS;
+			}
+			++adjacency;
+		}
+	}
+	return INTERNAL_TRANSITION_MESHLET_BEGIN + 11;
 }
 
 int meshlet_vertex_base(int meshlet) {
@@ -770,6 +789,34 @@ int transition_face_for_cell(int transition_index, int transition_mask, out int 
 	return -1;
 }
 
+int internal_transition_for_cell(
+	int transition_index,
+	int visibility_mask,
+	out int face_cell,
+	out int retained_brick
+) {
+	int remaining = transition_index;
+	for (int axis = 0; axis < 3; ++axis) {
+		int step = 1 << axis;
+		for (int lower = 0; lower < 8; ++lower) {
+			if ((lower & step) != 0) continue;
+			int upper = lower | step;
+			bool lower_visible = (visibility_mask & (1 << lower)) != 0;
+			bool upper_visible = (visibility_mask & (1 << upper)) != 0;
+			if (lower_visible == upper_visible) continue;
+			if (remaining < TRANSITION_BRICK_CELLS) {
+				face_cell = remaining;
+				retained_brick = lower_visible ? lower : upper;
+				return axis * 2 + (lower_visible ? 1 : 0);
+			}
+			remaining -= TRANSITION_BRICK_CELLS;
+		}
+	}
+	face_cell = 0;
+	retained_brick = 0;
+	return -1;
+}
+
 ivec3 transition_face_origin(int face, ivec3 axis_u, ivec3 axis_v, int extent) {
 	ivec3 origin = ivec3(0);
 	if (face == 1) origin.x = extent;
@@ -846,6 +893,9 @@ void main() {
 	int reference_offset = 0;
 	int input_sample_count = 8;
 	ivec3 chunk_origin = ivec3(0);
+	ivec3 deformation_origin = ivec3(0);
+	int deformation_extent = 0;
+	int deformation_transition_mask = 0;
 	ivec3 page_axis_u = ivec3(0);
 	ivec3 page_axis_v = ivec3(0);
 	if (page_field_mode) {
@@ -853,6 +903,9 @@ void main() {
 		int coarse_spacing = 1 << chunk_identity.w;
 		int extent = 16 * coarse_spacing;
 		chunk_origin = chunk_identity.xyz * extent;
+		deformation_origin = chunk_origin;
+		deformation_extent = extent;
+		deformation_transition_mask = config.values[config_base + 3].y;
 		if (cell_index < 4096) {
 			ivec3 cell_coordinate = ivec3(
 				cell_index % 16,
@@ -866,8 +919,17 @@ void main() {
 		} else {
 			int face_cell = 0;
 			int transition_mask = config.values[config_base + 3].w;
-			int face = transition_face_for_cell(
-				cell_index - 4096, transition_mask, face_cell
+			int outer_cell_count = bitCount(transition_mask & 0x3f) * 256;
+			int transition_index = cell_index - 4096;
+			bool internal_transition = transition_index >= outer_cell_count;
+			int retained_brick = 0;
+			int face = internal_transition ? internal_transition_for_cell(
+				transition_index - outer_cell_count,
+				config.values[config_base + 4].x,
+				face_cell,
+				retained_brick
+			) : transition_face_for_cell(
+				transition_index, transition_mask, face_cell
 			);
 			if (face < 0 || coarse_spacing < 2) {
 				store_cell_meta(compact_surface, cell_meta_index, ivec4(STATUS_FAILURE, 0, 0, 0));
@@ -881,10 +943,22 @@ void main() {
 			input_sample_count = 9;
 			ivec3 axis_w;
 			transition_basis_i(orientation, page_axis_u, page_axis_v, axis_w);
-			ivec3 local_origin = transition_face_origin(
-				face, page_axis_u, page_axis_v, extent
-			) + page_axis_u * ((face_cell % 16) * coarse_spacing) +
-				page_axis_v * ((face_cell / 16) * coarse_spacing);
+			int transition_extent = internal_transition ? 8 * coarse_spacing : extent;
+			ivec3 brick_origin = ivec3(
+				(retained_brick & 1) != 0 ? 8 * coarse_spacing : 0,
+				(retained_brick & 2) != 0 ? 8 * coarse_spacing : 0,
+				(retained_brick & 4) != 0 ? 8 * coarse_spacing : 0
+			);
+			ivec3 local_origin = (internal_transition ? brick_origin : ivec3(0)) +
+				transition_face_origin(
+				face, page_axis_u, page_axis_v, transition_extent
+			) + page_axis_u * ((face_cell % (internal_transition ? 8 : 16)) * coarse_spacing) +
+				page_axis_v * ((face_cell / (internal_transition ? 8 : 16)) * coarse_spacing);
+			if (internal_transition) {
+				deformation_origin = chunk_origin + brick_origin;
+				deformation_extent = transition_extent;
+				deformation_transition_mask = 1 << face;
+			}
 			origin_and_spacing = vec4(
 				vec3(chunk_origin + local_origin),
 				float(coarse_spacing / 2)
@@ -1126,19 +1200,19 @@ void main() {
 		ivec2 surface_material = sample_a.x < isovalue ? material_a : material_b;
 		if (page_field_mode) {
 			float coarse_cell_size = cell_type == CELL_TRANSITION ? spacing * 2.0 : spacing;
-			float extent = float(CHUNK_CELLS) * coarse_cell_size;
+			float extent = float(deformation_extent);
 			float width = coarse_cell_size * 0.25;
-			vec3 local_position = snap_position(position - vec3(chunk_origin));
+			vec3 local_position = snap_position(position - vec3(deformation_origin));
 			local_position = deform_chunk_position(
 				local_position,
 				normal,
-				config.values[config_base + 3].y,
+				deformation_transition_mask,
 				coarse_cell_size,
 				width,
 				extent,
 				cell_type == CELL_TRANSITION ? orientation : -1
 			);
-			position = vec3(chunk_origin) + snap_position(local_position);
+			position = vec3(deformation_origin) + snap_position(local_position);
 		}
 		int output_index = vertex_base + vertex_index;
 		emitted_positions[vertex_index] = position;

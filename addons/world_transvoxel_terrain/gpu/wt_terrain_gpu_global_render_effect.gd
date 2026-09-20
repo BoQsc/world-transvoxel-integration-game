@@ -154,7 +154,7 @@ var _status := {
 	"native_packed_bytes_total": 0,
 	"gpu_written_indirect_commands": true,
 	"compacted_surface_indirect_commands": true,
-	"indirect_commands_per_surface": 32,
+	"indirect_commands_per_surface": 44,
 	"meshlet_cells_per_axis": 8,
 	"asynchronous_summary_bytes": 20,
 	"device_local_index_copy_used": true,

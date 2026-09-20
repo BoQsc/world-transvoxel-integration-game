@@ -13,7 +13,7 @@ const MAXIMUM_VERTICES_PER_CELL := 12
 const MAXIMUM_INDICES_PER_CELL := 36
 const DRAW_COMMAND_STRIDE := 20
 const STATUS_STRIDE := 16
-const MAXIMUM_MESHLETS_PER_SLOT := 32
+const MAXIMUM_MESHLETS_PER_SLOT := 44
 const STATUS_SLOT_STRIDE := STATUS_STRIDE * MAXIMUM_MESHLETS_PER_SLOT
 const SUMMARY_STRIDE := 20
 const COMPLETION_STRIDE := 16
@@ -22,6 +22,7 @@ const PACKED_POSITION_STRIDE := 12
 const PACKED_NORMAL_STRIDE := 4
 const PACKED_META_STRIDE := 4
 const REGULAR_BRICK_MASK := 0xff
+const FIXED_MESHLET_CELL_CAPACITY := 4096 + 24 * 64 + 12 * 64
 
 var _rendering_device: RenderingDevice
 var _compute_shader := RID()
@@ -236,6 +237,9 @@ func lease_and_dispatch(
 	var buffers: Array = page.get("buffers", [])
 	var global_slot := page_index * PAGE_SLOT_COUNT + slot_index
 	var page_field_mode := PackedByteArray(input_buffers[6]).decode_s32(12) == 1
+	var config_bytes := PackedByteArray(input_buffers[6])
+	var regular_visibility_mask := config_bytes.decode_s32(64) \
+		if config_bytes.size() >= 68 else REGULAR_BRICK_MASK
 	var incremental := not previous_entry.is_empty() \
 		and int(previous_entry.get("cell_count", -1)) == cell_count \
 		and int(Dictionary(previous_entry.get("identity", {})).get(
@@ -276,7 +280,8 @@ func lease_and_dispatch(
 	initial_commands.resize(MAXIMUM_MESHLETS_PER_SLOT * 5)
 	for meshlet in range(MAXIMUM_MESHLETS_PER_SLOT):
 		initial_commands[meshlet * 5 + 1] = 1 if _meshlet_visible(
-			meshlet, active_transition_mask, cached_transition_mask
+			meshlet, active_transition_mask, cached_transition_mask,
+			regular_visibility_mask
 		) else 0
 		initial_commands[meshlet * 5 + 2] = _meshlet_index_base(meshlet)
 	var initial_command := initial_commands.to_byte_array()
@@ -380,7 +385,7 @@ func lease_and_dispatch(
 	_last_error = ""
 	var entry := _create_provisional_resident(
 		page, page_index, slot_index, global_slot, page_field_mode,
-		active_transition_mask, cached_transition_mask
+		active_transition_mask, cached_transition_mask, regular_visibility_mask
 	)
 	if entry.is_empty():
 		_pending_readbacks.erase(ticket)
@@ -601,12 +606,17 @@ func set_transition_visibility(entries: Array) -> bool:
 			"resident_cached_transition_mask",
 			entry.get("cached_transition_mask", 0)
 		))
+		var regular_visibility_mask := int(entry.get(
+			"regular_visibility_mask", REGULAR_BRICK_MASK
+		))
 		if not indirect_buffer.is_valid():
 			_last_error = "resident transition visibility buffer is invalid"
 			return false
 		for meshlet in range(8, int(entry.get("indirect_draw_count", 8))):
 			var instances := PackedInt32Array([
-				1 if _meshlet_visible(meshlet, active_mask, cached_mask) else 0
+				1 if _meshlet_visible(
+					meshlet, active_mask, cached_mask, regular_visibility_mask
+				) else 0
 			]).to_byte_array()
 			if _rendering_device.buffer_update(
 				indirect_buffer,
@@ -1092,7 +1102,8 @@ func _create_provisional_resident(
 	global_slot: int,
 	page_field_mode: bool,
 	active_transition_mask: int,
-	cached_transition_mask: int
+	cached_transition_mask: int,
+	regular_visibility_mask: int
 ) -> Dictionary:
 	var buffers: Array = page.get("buffers", [])
 	var strides: Array = page.get("strides", [])
@@ -1152,12 +1163,11 @@ func _create_provisional_resident(
 		"meshlet_index_source_offset": slot_index * int(strides[17]),
 		"indirect_buffer": buffers[20],
 		"indirect_offset": slot_index * int(strides[20]),
-		"indirect_draw_count": 8 + int(maxi(
-			0, int(page.get("cell_capacity", 4096)) - 4096
-		) / 64) if page_field_mode else 1,
+		"indirect_draw_count": MAXIMUM_MESHLETS_PER_SLOT if page_field_mode else 1,
 		"active_transition_mask": active_transition_mask,
 		"cached_transition_mask": cached_transition_mask,
 		"resident_cached_transition_mask": cached_transition_mask,
+		"regular_visibility_mask": regular_visibility_mask,
 		"gpu_slot": global_slot,
 		"arena_page_index": page_index,
 		"arena_slot_index": slot_index,
@@ -1175,19 +1185,30 @@ func _create_provisional_resident(
 
 
 static func _meshlet_visible(
-	meshlet: int, active_transition_mask: int, cached_transition_mask: int
+	meshlet: int,
+	active_transition_mask: int,
+	cached_transition_mask: int,
+	regular_visibility_mask: int = REGULAR_BRICK_MASK
 ) -> bool:
 	if meshlet < 8:
 		return true
-	var wanted_ordinal := int((meshlet - 8) / 4)
-	var ordinal := 0
-	for face in range(6):
+	if meshlet < 32:
+		var face := int((meshlet - 8) / 4)
 		var bit := 1 << face
-		if (cached_transition_mask & bit) == 0:
-			continue
-		if ordinal == wanted_ordinal:
-			return (active_transition_mask & bit) != 0
-		ordinal += 1
+		return (cached_transition_mask & bit) != 0 \
+			and (active_transition_mask & bit) != 0
+	var wanted_adjacency := meshlet - 32
+	var adjacency := 0
+	for axis in range(3):
+		var step := 1 << axis
+		for lower in range(8):
+			if (lower & step) != 0:
+				continue
+			if adjacency == wanted_adjacency:
+				var lower_visible := (regular_visibility_mask & (1 << lower)) != 0
+				var upper_visible := (regular_visibility_mask & (1 << (lower | step))) != 0
+				return lower_visible != upper_visible
+			adjacency += 1
 	return false
 
 
@@ -1446,7 +1467,10 @@ func _create_page(input_buffers: Array, cell_count: int) -> int:
 		if slot_count <= 0:
 			_last_error = "resident arena replacement page is invalid"
 			return -1
-	var output_sizes := _output_buffer_sizes(cell_count)
+	var page_field_mode := PackedByteArray(input_buffers[6]).decode_s32(12) == 1
+	var output_cell_capacity := FIXED_MESHLET_CELL_CAPACITY \
+		if page_field_mode else cell_count
+	var output_sizes := _output_buffer_sizes(output_cell_capacity)
 	var strides: Array[int] = []
 	strides.resize(BINDING_COUNT)
 	for binding in range(INPUT_BINDING_COUNT):
@@ -1498,7 +1522,7 @@ func _create_page(input_buffers: Array, cell_count: int) -> int:
 		lease_counts.append(0)
 	var page := {
 		"generation": _page_allocations + 1,
-		"cell_capacity": cell_count,
+		"cell_capacity": output_cell_capacity,
 		"slot_count": slot_count,
 		"strides": strides,
 		"buffers": buffers,
@@ -1646,13 +1670,13 @@ func _free_uniform_set(value: Variant) -> void:
 		_duplicate_rid_release_skips += 1
 
 
-static func _output_buffer_sizes(cell_count: int) -> Array[int]:
+static func _output_buffer_sizes(cell_capacity: int) -> Array[int]:
 	return [
-		cell_count * MAXIMUM_VERTICES_PER_CELL * PACKED_POSITION_STRIDE,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * PACKED_NORMAL_STRIDE,
-		cell_count * MAXIMUM_VERTICES_PER_CELL * PACKED_META_STRIDE,
+		cell_capacity * MAXIMUM_VERTICES_PER_CELL * PACKED_POSITION_STRIDE,
+		cell_capacity * MAXIMUM_VERTICES_PER_CELL * PACKED_NORMAL_STRIDE,
+		cell_capacity * MAXIMUM_VERTICES_PER_CELL * PACKED_META_STRIDE,
 		16,
-		cell_count * MAXIMUM_INDICES_PER_CELL * 4,
+		cell_capacity * MAXIMUM_INDICES_PER_CELL * 4,
 		16,
 		48,
 		DRAW_COMMAND_STRIDE * MAXIMUM_MESHLETS_PER_SLOT,
@@ -1684,10 +1708,11 @@ func _copy_previous_meshlets(
 	var source_sizes: Array = previous.get("meshlet_buffer_sizes", [])
 	if source_sizes.size() != 4:
 		return false
-	var output_sizes := _output_buffer_sizes(cell_count)
 	var copy_sizes := [
-		int(output_sizes[0]), int(output_sizes[1]),
-		int(output_sizes[2]), int(output_sizes[4]),
+		mini(int(source_sizes[0]), int(strides[13])),
+		mini(int(source_sizes[1]), int(strides[14])),
+		mini(int(source_sizes[2]), int(strides[15])),
+		mini(int(source_sizes[3]), int(strides[17])),
 	]
 	# Pages are capacity classes. A replacement can land in a larger page even
 	# when its logical cell count is unchanged, so copying the destination stride

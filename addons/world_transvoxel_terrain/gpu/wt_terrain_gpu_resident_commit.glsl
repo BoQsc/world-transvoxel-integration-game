@@ -41,8 +41,8 @@ void main() {
 			atomicAnd(cohort_valid, 0u);
 			continue;
 		}
-		for (int meshlet = 0; meshlet < 32; ++meshlet) {
-			int status_base = slot * 128 + meshlet * 4;
+		for (int meshlet = 0; meshlet < 44; ++meshlet) {
+			int status_base = slot * 176 + meshlet * 4;
 			uint index_count = resident_status.values[status_base];
 			uint vertex_count = resident_status.values[status_base + 1];
 			uint failure_count = resident_status.values[status_base + 2];
