@@ -2116,7 +2116,7 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 	var route_key := _activation_chunk_key(member)
 	var group_key := str(_prepared_group_routes.get(route_key, ""))
 	if group_key.is_empty():
-		group_key = _try_remask_dormant_waiting_member(member)
+		group_key = _try_remask_waiting_member(member)
 	_last_activation_cohort_wait["waiting_member_route_key"] = route_key
 	_last_activation_cohort_wait["waiting_member_group_key"] = group_key
 	_last_activation_cohort_wait["waiting_member_group_present"] = (
@@ -2218,15 +2218,20 @@ func _record_activation_cohort_query(query: Dictionary) -> void:
 	).slice(0, 8, 1, true)
 
 
-func _try_remask_dormant_waiting_member(member: Dictionary) -> String:
+func _try_remask_waiting_member(member: Dictionary) -> String:
 	var desired_mask := int(member.get("transition_mask", 0))
 	for candidate_key_value in _groups.keys():
 		var candidate_key := str(candidate_key_value)
 		var group := Dictionary(_groups[candidate_key])
-		if not bool(group.get("dormant", false)) \
-				or bool(group.get("active", false)) \
-				or bool(group.get("native_active", false)) \
+		var dormant_candidate := bool(group.get("dormant", false)) \
+				and not bool(group.get("active", false)) \
+				and not bool(group.get("native_active", false))
+		var active_candidate := not bool(group.get("dormant", false)) \
+				and bool(group.get("active", false)) \
+				and bool(group.get("native_active", false))
+		if (not dormant_candidate and not active_candidate) \
 				or bool(group.get("retiring", false)) \
+				or bool(group.get("activation_queued", false)) \
 				or bool(group.get("remask_pending", false)) \
 				or not _surface_set_complete(group, "prepared"):
 			continue
@@ -2269,7 +2274,7 @@ func _try_remask_dormant_waiting_member(member: Dictionary) -> String:
 			continue
 		group["remask_pending"] = true
 		group["remask_transition_mask"] = desired_mask
-		group["remask_reactivate_dormant"] = true
+		group["remask_reactivate_dormant"] = dormant_candidate
 		group["remasked"] = {}
 		_groups[candidate_key] = group
 		if not _effect.remask_active_entries(remask_entries, candidate_key):
@@ -2278,12 +2283,16 @@ func _try_remask_dormant_waiting_member(member: Dictionary) -> String:
 			group.erase("remask_reactivate_dormant")
 			_groups[candidate_key] = group
 			continue
-		_record_lifecycle_event("DORMANT_REMASK_SUBMITTED", candidate_key, {
+		_record_lifecycle_event(
+			"DORMANT_REMASK_SUBMITTED" if dormant_candidate else "ACTIVE_REMASK_SUBMITTED",
+			candidate_key,
+			{
 			"previous_transition_mask": int(terrain_identity.get(
 				"transition_mask", 0
 			)),
 			"transition_mask": desired_mask,
-		})
+			}
+		)
 		return candidate_key
 	return ""
 
