@@ -33,6 +33,11 @@ class AdmissionBackend:
 class AdmissionEffect:
 	extends RefCounted
 	var submitted_entries := 0
+	var staged_entries := 0
+
+	func stage_activation_entries(entries: Array) -> bool:
+		staged_entries += entries.size()
+		return true
 
 	func activate_entries(entries: Array) -> bool:
 		submitted_entries += entries.size()
@@ -860,14 +865,22 @@ func _test_regional_commit_barrier() -> bool:
 	controller._groups["1"]["active"] = true
 	controller._groups["1"]["activation_queued"] = false
 	controller._try_queue_activation_cohort("0")
-	var committed := backend.commits == 1 and effect.submitted_entries == 1 \
+	var staged := backend.commits == 0 and effect.staged_entries == 1 \
+		and effect.submitted_entries == 0 \
 		and bool(controller._groups["0"].get("activation_queued", false)) \
+		and not bool(controller._groups["0"].get("native_active", false)) \
+		and not controller._has_native_committed_activation_in_flight()
+	controller._try_commit_activation_cohort("0")
+	var held_until_complete := backend.commits == 0 and effect.submitted_entries == 0
+	controller._groups["0"]["activation_staged"] = {"terrain": true}
+	controller._try_commit_activation_cohort("0")
+	var committed := backend.commits == 1 and effect.submitted_entries == 1 \
 		and bool(controller._groups["0"].get("native_active", false)) \
 		and controller._has_native_committed_activation_in_flight()
-	if not waited or not committed:
+	if not waited or not staged or not held_until_complete or not committed:
 		push_error(
-			"regional commit barrier mismatch: waited=%s committed=%s queries=%d commits=%d submitted=%d group=%s"
-			% [waited, committed, backend.queries, backend.commits, effect.submitted_entries, str(controller._groups.get("0", {}))]
+			"regional commit barrier mismatch: waited=%s staged=%s held=%s committed=%s queries=%d commits=%d staged_entries=%d submitted=%d group=%s"
+			% [waited, staged, held_until_complete, committed, backend.queries, backend.commits, effect.staged_entries, effect.submitted_entries, str(controller._groups.get("0", {}))]
 		)
 		controller.free()
 		backend.free()

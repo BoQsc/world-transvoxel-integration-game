@@ -548,6 +548,12 @@ func stage_activation_entries(entries: Array) -> bool:
 	return _queue_activation_group_command("STAGE_ACTIVATION_GROUP", entries)
 
 
+func cancel_staged_activation_entries(entries: Array) -> void:
+	# Staging changes no GPU visibility. Dropping its protection is sufficient to
+	# let normal supersession and retirement reclaim the prepared candidates.
+	_release_activation_protection(entries)
+
+
 func activate_entries(entries: Array) -> bool:
 	return _queue_activation_group_command("ACTIVATE_GROUP", entries)
 

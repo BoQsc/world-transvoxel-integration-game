@@ -1291,14 +1291,6 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 				"publication_sequence": int(candidate_sequences.get(surface, 0)),
 			})
 		validated_by_group[candidate_key] = native_validated
-	var activation := Dictionary(_backend_terrain.call(
-		"activate_gpu_resident_render_cohort", inventories, terrain_identity
-	)) if expected_members > 1 else Dictionary(_backend_terrain.call(
-		"activate_gpu_resident_render_cohort", inventories
-	))
-	if str(activation.get("status", "")) != "ACTIVE" \
-			or not bool(activation.get("active", false)):
-		return false
 	var cohort_id := _next_activation_cohort_id
 	_next_activation_cohort_id += 1
 	for candidate_key in cohort_group_keys:
@@ -1310,7 +1302,7 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 		candidate["native_validated"] = Dictionary(validated_by_group[candidate_key])
 		candidate["validated"] = true
 		candidate["native_prepared"] = true
-		candidate["native_active"] = true
+		candidate["native_active"] = false
 		candidate["activation_queued"] = true
 		candidate["activation_cohort_id"] = cohort_id
 		candidate["collision_activation_priority"] = true
@@ -1329,8 +1321,9 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 		"retirement_group_keys": [],
 		"retirement_entries": [],
 		"selected_chunks": chunks.duplicate(true),
-		"native_committed": true,
+		"native_committed": false,
 		"regional": expected_members > 1,
+		"authoritative_seed": terrain_identity.duplicate(true),
 	}
 	_record_lifecycle_event("COHORT_SELECTED", group_key, {
 		"cohort_id": cohort_id,
@@ -1342,8 +1335,10 @@ func _try_precommit_same_layout_edit(group_key: String) -> bool:
 	_validated_surfaces += newly_validated_surfaces
 	_same_callback_edit_precommits += 1
 	_same_callback_edit_precommit_chunks += expected_members
-	if not _effect.activate_pending_entries(activation_entries):
-		_fail_closed("global renderer rejected precommitted same-layout edit")
+	if not _effect.stage_activation_entries(activation_entries):
+		_reject_activation_cohort(
+			group_key, "global renderer rejected staged same-layout edit"
+		)
 		return false
 	_record_lifecycle_event("ACTIVATION_REQUESTED", group_key, {
 		"cohort_id": cohort_id,
@@ -1799,20 +1794,11 @@ func _queue_selected_activation_cohort(
 			"error", "native activation cohort rejected prepared GPU geometry"
 		)))
 		return
-	var native_precommitted := false
-	var regional_inventory_pool: Array = []
 	if bool(cohort.get("regional", false)):
-		# Native activation changes authoritative visibility before the render
-		# thread acknowledges the swap. A second regional commit can overlap an
-		# interaction-isolated ancestor and supersede entries still queued in the
-		# first transaction. Serialize this short acknowledgement window.
+		# Keep one authority transaction in flight. Every candidate is staged and
+		# protected on the render thread before this transaction mutates native
+		# coverage, so old draws remain submitted until the final GPU commit.
 		if _has_native_committed_activation_in_flight():
-			_queue_activation_cohort_retry(group_key)
-			return
-		regional_inventory_pool = _prepared_inventory_pool(Array(cohort.get("chunks", [])))
-		if _stage_timing_enabled:
-			phase_start = _record_stage_time("activation_inventory", phase_start)
-		if regional_inventory_pool.is_empty():
 			_queue_activation_cohort_retry(group_key)
 			return
 	var group_keys: Array[String] = []
@@ -1912,43 +1898,18 @@ func _queue_selected_activation_cohort(
 	if inventories.is_empty():
 		_queue_activation_cohort_retry(group_key)
 		return
-	# Native regional activation mutates authoritative visibility. Commit only
-	# after every activation and retirement route has passed controller preflight,
-	# so a transient route miss cannot strand a native/effect split state.
-	if bool(cohort.get("regional", false)):
-		var regional_activation := Dictionary(_backend_terrain.call(
-			"activate_gpu_resident_render_cohort",
-			regional_inventory_pool,
-			terrain_identity
+	if group_keys.is_empty():
+		var retained_activation := Dictionary(_backend_terrain.call(
+			"activate_gpu_resident_render_cohort", inventories, terrain_identity
+		)) if bool(cohort.get("regional", false)) else Dictionary(_backend_terrain.call(
+			"activate_gpu_resident_render_cohort", inventories
 		))
-		if _stage_timing_enabled:
-			phase_start = _record_stage_time("activation_native_commit", phase_start)
-		var regional_status := str(regional_activation.get("status", ""))
-		if regional_status == "WAITING_COHORT":
-			_record_activation_cohort_wait(regional_activation)
-			_queue_activation_cohort_retry(group_key)
-			return
-		if regional_status.begins_with("STALE"):
-			_supersede_group(group_key)
-			return
-		if regional_status != "ACTIVE" \
-				or not bool(regional_activation.get("active", false)):
-			_fail_closed(str(regional_activation.get(
-				"error", "native regional activation transaction failed"
+		if str(retained_activation.get("status", "")) != "ACTIVE" \
+				or not bool(retained_activation.get("active", false)):
+			_fail_closed(str(retained_activation.get(
+				"error", "retained GPU activation cohort commit failed"
 			)))
 			return
-		native_precommitted = true
-	if group_keys.is_empty():
-		if not native_precommitted:
-			var retained_activation := Dictionary(_backend_terrain.call(
-				"activate_gpu_resident_render_cohort", inventories
-			))
-			if str(retained_activation.get("status", "")) != "ACTIVE" \
-					or not bool(retained_activation.get("active", false)):
-				_fail_closed(str(retained_activation.get(
-					"error", "retained GPU activation cohort commit failed"
-				)))
-				return
 		if not retirement_entries.is_empty():
 			_mark_groups_retiring(
 				retirement_group_keys, dormant_retirement_group_keys
@@ -1970,8 +1931,9 @@ func _queue_selected_activation_cohort(
 		"dormant_retirement_group_keys": dormant_retirement_group_keys.duplicate(),
 		"retirement_entries": retirement_entries.duplicate(true),
 		"selected_chunks": Array(cohort.get("chunks", [])).duplicate(true),
-		"native_committed": native_precommitted,
+		"native_committed": false,
 		"regional": bool(cohort.get("regional", false)),
+		"authoritative_seed": terrain_identity.duplicate(true),
 	}
 	for member_group_key in cohort_member_group_keys:
 		_activation_retry_membership.erase(member_group_key)
@@ -1979,8 +1941,6 @@ func _queue_selected_activation_cohort(
 		var member_group := Dictionary(_groups[member_group_key])
 		member_group["activation_queued"] = true
 		member_group["activation_cohort_id"] = cohort_id
-		if native_precommitted:
-			member_group["native_active"] = true
 		_groups[member_group_key] = member_group
 		_record_lifecycle_event("COHORT_SELECTED", member_group_key, {
 			"cohort_id": cohort_id,
@@ -1988,25 +1948,13 @@ func _queue_selected_activation_cohort(
 			"member_count": group_keys.size(),
 		})
 	_activation_cohorts_queued += 1
-	if native_precommitted:
-		_mark_groups_retiring(
-			retirement_group_keys, dormant_retirement_group_keys
+	# The staging callback validates the complete immutable candidate set on the
+	# render thread without changing visibility. Native authority is committed
+	# only after every cohort surface reports staged.
+	if not _effect.stage_activation_entries(activation_entries):
+		_reject_activation_cohort(
+			group_key, "global renderer rejected staged activation cohort"
 		)
-		var render_swap_queued: bool = _effect.replace_entries(
-			activation_entries, retirement_entries
-		) if not retirement_entries.is_empty() else _effect.activate_entries(
-			activation_entries
-		)
-		if not render_swap_queued:
-			_fail_closed("global renderer rejected committed regional activation cohort")
-		return
-	# Every entry emitted PREPARED only after its compact resident buffers were
-	# created and validated on the render thread. Revalidating them through a
-	# second render-thread round trip allowed the native publication region to
-	# change between cohort selection and commit, starving moving LOD regions.
-	# Commit the freshly selected authority cohort synchronously, then ask the
-	# render thread to expose exactly those already-prepared entries.
-	_try_commit_activation_cohort(group_key)
 
 
 func _has_native_committed_activation_in_flight() -> bool:
@@ -2470,15 +2418,28 @@ func _try_commit_activation_cohort(group_key: String) -> void:
 		if not _groups.has(member_group_key):
 			_fail_closed("GPU activation cohort lost a prepared chunk")
 			return
+		if not _surface_set_complete(
+				Dictionary(_groups[member_group_key]), "activation_staged"
+			):
+			return
 	var inventories: Array = cohort.get("inventories", [])
+	var authoritative_seed := Dictionary(cohort.get("authoritative_seed", {}))
 	var activation := Dictionary(_backend_terrain.call(
+		"activate_gpu_resident_render_cohort", inventories, authoritative_seed
+	)) if bool(cohort.get("regional", false)) else Dictionary(_backend_terrain.call(
 		"activate_gpu_resident_render_cohort", inventories
 	))
 	var activation_status := str(activation.get("status", ""))
 	if activation_status != "ACTIVE" or not bool(activation.get("active", false)):
-		if activation_status.begins_with("STALE"):
-			_stale_activation_cohorts_retained += 1
-			if _stale_activation_examples.size() < 8:
+		if activation_status.begins_with("STALE") \
+				or activation_status == "WAITING_COHORT":
+			_release_staged_activation_cohort(cohort)
+			if activation_status == "WAITING_COHORT":
+				_record_activation_cohort_wait(activation)
+			else:
+				_stale_activation_cohorts_retained += 1
+			if activation_status.begins_with("STALE") \
+					and _stale_activation_examples.size() < 8:
 				_stale_activation_examples.append({
 					"status": activation_status,
 					"error": str(activation.get("error", "")),
@@ -2516,7 +2477,19 @@ func _try_commit_activation_cohort(group_key: String) -> void:
 		})
 	cohort["native_committed"] = true
 	_activation_cohorts[cohort_id] = cohort
-	if not _effect.activate_entries(Array(cohort.get("activation_entries", []))):
+	var retirement_group_keys: Array = cohort.get("retirement_group_keys", [])
+	var dormant_retirement_group_keys: Array = cohort.get(
+		"dormant_retirement_group_keys", []
+	)
+	_mark_groups_retiring(retirement_group_keys, dormant_retirement_group_keys)
+	var activation_entries: Array = cohort.get("activation_entries", [])
+	var retirement_entries: Array = cohort.get("retirement_entries", [])
+	var render_swap_queued: bool = _effect.replace_entries(
+		activation_entries, retirement_entries
+	) if not retirement_entries.is_empty() else _effect.activate_entries(
+		activation_entries
+	)
+	if not render_swap_queued:
 		_fail_closed("global renderer rejected committed activation cohort")
 		return
 	for member_group_key_value in group_keys:
@@ -2805,6 +2778,7 @@ func _reject_activation_cohort(group_key: String, error: String) -> void:
 	var group := Dictionary(_groups.get(group_key, {}))
 	var cohort_id := int(group.get("activation_cohort_id", 0))
 	var cohort := Dictionary(_activation_cohorts.get(cohort_id, {}))
+	_release_staged_activation_cohort(cohort)
 	_activation_cohorts.erase(cohort_id)
 	for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
 		var member_group_key := str(member_group_key_value)
@@ -2833,6 +2807,7 @@ func _supersede_activation_cohort(group_key: String) -> void:
 			member_group["retire_after_activation"] = true
 			_groups[member_group_key] = member_group
 		return
+	_release_staged_activation_cohort(cohort)
 	_activation_cohorts.erase(cohort_id)
 	for member_group_key_value in Array(cohort.get("group_keys", [group_key])):
 		var member_group_key := str(member_group_key_value)
@@ -2843,6 +2818,13 @@ func _supersede_activation_cohort(group_key: String) -> void:
 		member_group["activation_cohort_id"] = 0
 		_groups[member_group_key] = member_group
 		_supersede_group(member_group_key)
+
+
+func _release_staged_activation_cohort(cohort: Dictionary) -> void:
+	if _effect != null and _effect.has_method("cancel_staged_activation_entries"):
+		_effect.cancel_staged_activation_entries(
+			Array(cohort.get("activation_entries", []))
+		)
 
 
 func _begin_group_retirement(
