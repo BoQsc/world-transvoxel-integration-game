@@ -926,7 +926,8 @@ func _submit_native_captures() -> void:
 			continue
 		var identity: Dictionary = request.get("identity", {})
 		var interaction_request := bool(identity.get("incremental_edit", false)) \
-				or bool(identity.get("interaction_priority", false))
+				or bool(identity.get("interaction_priority", false)) \
+				or bool(identity.get("local_publication_priority", false))
 		if interaction_request:
 			_interaction_native_requests_admitted += 1
 		# Same-callback edit precommit requires current application identity before
@@ -1016,6 +1017,7 @@ func _submit_native_captures() -> void:
 				group["interaction_activation_priority"] = (
 					bool(identity.get("incremental_edit", false))
 					or bool(identity.get("interaction_priority", false))
+					or bool(identity.get("local_publication_priority", false))
 				)
 				group["collision_activation_priority"] = bool(
 					group["interaction_activation_priority"]
@@ -1624,6 +1626,7 @@ func _try_validate_group(group_key: String) -> void:
 		bool(readiness.get("collision_required", false))
 		or bool(prepared_identity.get("incremental_edit", false))
 		or bool(prepared_identity.get("interaction_priority", false))
+		or bool(prepared_identity.get("local_publication_priority", false))
 	)
 	# Retain the old field while smoke fixtures and persisted diagnostic captures
 	# transition to the lane's correct interaction-wide meaning.
@@ -3286,7 +3289,8 @@ func _select_dormant_eviction_group() -> String:
 		)).get("terrain", {}))
 		var identity := Dictionary(terrain_request.get("identity", {}))
 		var lod := int(identity.get("lod", 0))
-		var interaction := bool(identity.get("interaction_priority", false))
+		var interaction := bool(identity.get("interaction_priority", false)) \
+			or bool(identity.get("local_publication_priority", false))
 		# Preserve exact interaction LOD0 residency ahead of predictive support and
 		# coarse background entries. Oldest wins only within the same class.
 		var priority := 2 if interaction and lod == 0 else (
