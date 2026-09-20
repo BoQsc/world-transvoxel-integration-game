@@ -867,6 +867,8 @@ func _wait_for_human_startup_visual_ready() -> bool:
 			int(game_world.get("startup_world_state_timeout_frames"))
 		)
 	var last_summary := {}
+	var last_local_visual := {}
+	var last_local_collision := {}
 	for _frame in range(frame_limit):
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
 		last_summary = summary
@@ -875,6 +877,8 @@ func _wait_for_human_startup_visual_ready() -> bool:
 			var local_collision: Dictionary = game_world.call(
 				"get_player_collision_readiness_at", player.global_position
 			)
+			last_local_visual = local_visual
+			last_local_collision = local_collision
 			if bool(local_visual.get("ok", false)) and bool(local_collision.get("ready", false)):
 				return true
 		if _is_lod_movement_visual_ready_summary(summary):
@@ -884,6 +888,17 @@ func _wait_for_human_startup_visual_ready() -> bool:
 			var resident := Dictionary(terrain_world.call(
 				"get_gpu_resident_render_status"
 			)) if terrain_world != null else {}
+			var local_publication := {}
+			if terrain_world != null and player != null:
+				var backend: Node = terrain_world.call("get_backend_terrain")
+				var local_chunk := Vector3i(
+					floori(player.global_position.x / 16.0),
+					floori(player.global_position.y / 16.0),
+					floori(player.global_position.z / 16.0)
+				)
+				local_publication = _gpu_publication_diagnostic_digest(Dictionary(backend.call(
+					"inspect_gpu_resident_publication", local_chunk, 0
+				)))
 			var native := Dictionary(resident.get("native_metrics", {}))
 			var effect := Dictionary(resident.get("effect_status", {}))
 			if _frame == 120 and OS.get_cmdline_user_args().has("--gpu-publication-probe"):
@@ -895,6 +910,9 @@ func _wait_for_human_startup_visual_ready() -> bool:
 					)))
 			print("WT_GPU_STARTUP_PENDING ", JSON.stringify({
 				"frame": _frame,
+				"local_visual": last_local_visual.duplicate(true),
+				"local_collision": last_local_collision.duplicate(true),
+				"local_publication": local_publication.duplicate(true),
 				"active_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
 				"non_retiring_records": int(summary.get("non_retiring_chunk_records", 0)),
@@ -951,8 +969,50 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"arena_allocated_slots": int(effect.get("arena_allocated_slot_count", 0)),
 			}))
 		await get_tree().process_frame
-	_fail("human-visible startup terrain did not reach strict ready state: %s" % str(last_summary))
+	_fail("human-visible startup terrain did not reach strict ready state: summary=%s local_visual=%s local_collision=%s" % [
+		str(last_summary), str(last_local_visual), str(last_local_collision)
+	])
 	return false
+
+
+func _gpu_publication_diagnostic_digest(publication: Dictionary) -> Dictionary:
+	var boundaries: Array = publication.get("boundaries", [])
+	var first_unprepared := {}
+	var prepared_count := 0
+	for boundary_value in boundaries:
+		var boundary := Dictionary(boundary_value)
+		if bool(boundary.get("compatible_active", false)) \
+				or bool(boundary.get("external_prepared", false)):
+			prepared_count += 1
+		elif first_unprepared.is_empty():
+			first_unprepared = {
+				"chunk": Vector3i(
+					int(boundary.get("page_x", 0)),
+					int(boundary.get("page_y", 0)),
+					int(boundary.get("page_z", 0))
+				),
+				"lod": int(boundary.get("lod", 0)),
+				"generation": int(boundary.get("generation", 0)),
+				"visual_generation": int(boundary.get("visual_generation", 0)),
+				"collision_required": bool(boundary.get("collision_required", false)),
+			}
+	return {
+		"built": bool(publication.get("built", false)),
+		"authoritative_coverage_complete": bool(publication.get(
+			"authoritative_coverage_complete", false
+		)),
+		"same_layout_edit": bool(publication.get("same_layout_edit", false)),
+		"same_layout_edit_rejection_reason": str(publication.get(
+			"same_layout_edit_rejection_reason", ""
+		)),
+		"candidate_count": Array(publication.get("cohort_visual_candidates", [])).size(),
+		"selected_count": Array(publication.get("selected", [])).size(),
+		"retirement_count": Array(publication.get("retirements", [])).size(),
+		"waiting_mask_count": Array(publication.get("waiting_masks", [])).size(),
+		"boundary_count": boundaries.size(),
+		"prepared_or_active_count": prepared_count,
+		"first_unprepared": first_unprepared,
+	}
 
 
 func _build_hud() -> void:
