@@ -95,11 +95,11 @@ func _run() -> void:
 		"same_callback_edit_precommit_chunks", 0
 	))
 	var retired_chunks := int(native_metrics.get("retired_chunks", 0))
-	if same_layout_cohorts <= 0 or same_layout_chunks < 2 \
-			or same_callback_precommits != 12 \
-			or same_callback_precommit_chunks < 24 \
+	if same_layout_cohorts != 12 or same_layout_chunks != 24 \
+			or same_callback_precommits != 0 \
+			or same_callback_precommit_chunks != 0 \
 			or retired_chunks <= 0:
-		_fail("rapid edit did not precommit every two-chunk same-layout cohort: native=%s controller=%s" % [
+		_fail("rapid edit did not atomically publish every two-chunk same-layout cohort: native=%s controller=%s" % [
 			str(native_metrics), str(resident_status),
 		])
 		return
@@ -158,6 +158,11 @@ func _check_edit_pair() -> bool:
 	)
 	var revisions := _visible_pair()
 	if revisions[0] < 0 or revisions[0] != revisions[1]:
+		print("GPU_RESIDENT_RAPID_EDIT_DIAGNOSTIC " + JSON.stringify({
+			"revisions": revisions,
+			"states": _world.get_debug_gpu_processing_states(),
+			"status": _world.get_gpu_resident_render_status(),
+		}))
 		_fail("rapid edit exposed mixed visible revisions: %s frame=%d" % [str(revisions), _checked_frames])
 		return false
 	return true

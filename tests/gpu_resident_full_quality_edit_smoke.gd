@@ -27,10 +27,15 @@ func _run() -> void:
 	var edit_center := Vector3(56, 8, 56)
 	# Warm one region, then relocate to an edge chunk with a different transition
 	# capacity class. This reproduces the human fly-then-edit path.
+	var initial_visible := false
 	for _frame in range(900):
 		await process_frame
-		if bool(_world.get_cold_idle_summary().get("cold_idle", false)):
+		if int(_world.get_gpu_resident_render_status().get("active_chunks", 0)) > 0:
+			initial_visible = true
 			break
+	if not initial_visible:
+		_fail("first edit fixture never published its warm-up coverage")
+		return
 	if not _world.update_viewer(1, 2, edit_center, 1, 2):
 		_fail("relocated first edit viewer rejected")
 		return
@@ -45,6 +50,19 @@ func _run() -> void:
 		if full_resolution_ready:
 			break
 	if not full_resolution_ready:
+		var nearby_states: Array = []
+		for state_value in _world.get_debug_gpu_processing_states():
+			var state := Dictionary(state_value)
+			var identity := Dictionary(state.get("identity", {}))
+			if absi(int(identity.get("page_x", -99)) - 3) <= 1 \
+					and absi(int(identity.get("page_y", -99))) <= 1 \
+					and absi(int(identity.get("page_z", -99)) - 3) <= 1:
+				nearby_states.append(state)
+		print("GPU_RESIDENT_FULL_QUALITY_EDIT_STARTUP_DIAGNOSTIC " + JSON.stringify({
+			"nearby_states": nearby_states,
+			"render_status": _world.get_gpu_resident_render_status(),
+			"runtime_metrics": _world.get_runtime_metrics(),
+		}))
 		_fail("first edit fixture did not provide full-resolution interaction coverage")
 		return
 	var operation := EditOperation.new()

@@ -129,6 +129,7 @@ var _activation_cohort_retry_coalesced := 0
 var _activation_stale_seed_skips := 0
 var _last_activation_cohort_wait: Dictionary = {}
 var _last_activation_cohort_wait_frame := -1
+var _last_activation_cohort_query: Dictionary = {}
 var _stale_activation_cohorts_retained := 0
 var _stale_activation_examples: Array = []
 var _unrouted_effect_events := 0
@@ -212,6 +213,7 @@ func start(
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
 	_activation_wait_probe_frames.clear()
+	_last_activation_cohort_query.clear()
 	_activation_collision_retry_streak = 0
 	_unrouted_effect_events = 0
 	_unrouted_effect_event_examples.clear()
@@ -247,6 +249,7 @@ func stop() -> void:
 	_activation_retry_queue.clear()
 	_activation_retry_membership.clear()
 	_activation_wait_probe_frames.clear()
+	_last_activation_cohort_query.clear()
 	_activation_collision_retry_streak = 0
 	_backend_terrain = null
 	_world_environment = null
@@ -462,6 +465,7 @@ func get_status() -> Dictionary:
 			_activation_collision_retry_queue.size()
 		),
 		"last_activation_cohort_wait": _last_activation_cohort_wait.duplicate(true),
+		"last_activation_cohort_query": _last_activation_cohort_query.duplicate(true),
 		"last_activation_wait_age_frames": _process_frame - _last_activation_cohort_wait_frame \
 			if _last_activation_cohort_wait_frame >= 0 else -1,
 		"stale_activation_cohorts_retained": _stale_activation_cohorts_retained,
@@ -1734,6 +1738,7 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity, true)
 	else:
 		cohort = _backend_terrain.call("get_gpu_resident_render_activation_cohort", terrain_identity)
+	_record_activation_cohort_query(cohort)
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("activation_native_query", phase_start)
 		if measure_native_timing:
@@ -1745,6 +1750,7 @@ func _try_queue_activation_cohort(group_key: String) -> bool:
 	# Retire it without spending the expensive-query budget on obsolete work.
 	if cohort_status == "STALE_APPLICATION":
 		_activation_stale_seed_skips += 1
+		_record_activation_cohort_wait(cohort)
 		if _park_dormant_group(group_key):
 			return false
 		_supersede_group(group_key)
@@ -1785,6 +1791,7 @@ func _queue_selected_activation_cohort(
 		_queue_activation_cohort_retry(group_key)
 		return
 	if cohort_status.begins_with("STALE"):
+		_record_activation_cohort_wait(cohort)
 		if _park_dormant_group(group_key):
 			return
 		_supersede_group(group_key)
@@ -2100,6 +2107,8 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 		wait.get("selected_retirements", [])
 	).slice(0, 8).duplicate(true)
 	_last_activation_cohort_wait_frame = _process_frame
+
+
 	var member := Dictionary(wait.get("waiting_member", {}))
 	if member.is_empty():
 		return
@@ -2183,6 +2192,30 @@ func _record_activation_cohort_wait(wait: Dictionary) -> void:
 			_groups[group_key] = group
 		else:
 			_queue_activation_cohort_retry(group_key)
+
+
+func _record_activation_cohort_query(query: Dictionary) -> void:
+	# Keep self-reporting bounded: regional replies can contain hundreds of
+	# members, and diagnostics must not become terrain frame work.
+	_last_activation_cohort_query = {}
+	for key in [
+		"status", "error", "ready", "regional", "cohort_built",
+		"authoritative_coverage_complete", "same_layout_edit",
+		"same_layout_edit_rejection_reason", "replacement_count",
+		"retirement_count", "activation_required_count",
+		"retained_active_count", "seed_independently_publishable",
+		"seed_atomic_visual_edit_member",
+		"seed_visual_publication_cohort_size",
+		"visible_atomic_revision_members",
+	]:
+		if query.has(key):
+			_last_activation_cohort_query[key] = query[key]
+	_last_activation_cohort_query["chunk_sample"] = Array(
+		query.get("chunks", [])
+	).slice(0, 8, 1, true)
+	_last_activation_cohort_query["retirement_sample"] = Array(
+		query.get("retirements", [])
+	).slice(0, 8, 1, true)
 
 
 func _try_remask_dormant_waiting_member(member: Dictionary) -> String:
@@ -2537,10 +2570,46 @@ func _try_finish_activation_cohort(group_key: String) -> void:
 			retire_after_activation.append(member_group_key)
 		_record_lifecycle_event("ACTIVE", member_group_key)
 		_activated_chunks += 1
+	_mark_replaced_active_groups_retiring(group_keys)
 	_activation_cohorts.erase(cohort_id)
 	_activation_cohorts_committed += 1
 	for member_group_key in retire_after_activation:
 		_begin_group_retirement(member_group_key, "superseded_after_activation")
+
+
+func _mark_replaced_active_groups_retiring(activated_group_keys: Array) -> void:
+	var activated_locations := {}
+	for group_key_value in activated_group_keys:
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups.get(group_key, {}))
+		var identity := Dictionary(Dictionary(group.get("requests", {})).get(
+			"terrain", {}
+		)).get("identity", {})
+		if not identity.is_empty():
+			activated_locations[_chunk_location_key(identity)] = true
+	for candidate_key_value in _groups.keys():
+		var candidate_key := str(candidate_key_value)
+		if activated_group_keys.has(candidate_key):
+			continue
+		var candidate := Dictionary(_groups[candidate_key])
+		if not bool(candidate.get("active", false)) \
+				or bool(candidate.get("retiring", false)):
+			continue
+		var identity := Dictionary(Dictionary(candidate.get("requests", {})).get(
+			"terrain", {}
+		)).get("identity", {})
+		if identity.is_empty() \
+				or not activated_locations.has(_chunk_location_key(identity)):
+			continue
+		# The GPU cohort commit has already disabled this predecessor. Keep its
+		# resources routed until the asynchronous SUPERSEDED callbacks reclaim all
+		# surfaces, but stop reporting it as visible immediately.
+		candidate["retiring"] = true
+		candidate["dormant_retirement"] = false
+		candidate["retired"] = {}
+		candidate["deactivated"] = {}
+		_groups[candidate_key] = candidate
+		_record_lifecycle_event("REPLACED", candidate_key)
 
 
 func _reconcile_active_chunks() -> int:
