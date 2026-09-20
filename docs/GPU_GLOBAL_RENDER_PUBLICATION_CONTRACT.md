@@ -89,3 +89,21 @@ CPU recovery. Its first large-world per-chunk allocation architecture is
 measured and rejected; that result does not weaken this global-device proof.
 
 Evidence: [TQP-64 global render publication proof](evidence/tqp64_gpu_global_render_publication_20260824/RESULT.md).
+
+## Brick Visibility Transaction
+
+The activation word is a device-resident publication state: bit 31 is the slot
+active flag and bits 0 through 7 select the eight regular 8-cubed-cell
+meshlets. Extraction stores its meshlet ordinal in the unused high byte of the
+packed second vertex metadata component. Terrain and water vertex shaders use
+that ordinal to reject only regular meshlets removed from the active cut;
+transition meshlets retain their existing indirect visibility control.
+
+The bounded cohort descriptor carries candidate `(slot, mask)` pairs, whole
+slot retirements, and active `(slot, mask)` updates. One commit workgroup first
+validates all candidate meshlets, then publishes candidate masks, retirements,
+and parent cut-mask updates as one ordered GPU transaction. Mask changes add no
+draw calls, geometry readback, CPU meshing, or unbounded allocation. Vulkan and
+D3D12 publication smoke tests remove all regular meshlets from an active slot,
+observe reduced framebuffer coverage, restore the mask, and observe restored
+coverage.

@@ -26,6 +26,7 @@ layout(set = 3, binding = 0, std430) readonly buffer ActivationFlags {
 
 layout(location = 0) in vec3 vertex_position;
 layout(location = 1) in vec2 vertex_normal;
+layout(location = 2) in uvec2 vertex_meta;
 
 layout(push_constant, std430) uniform Params {
 	ivec4 view;
@@ -37,6 +38,15 @@ layout(push_constant, std430) uniform Params {
 layout(location = 0) out vec3 world_normal;
 layout(location = 1) out vec3 world_view_direction;
 layout(location = 2) out vec3 view_normal;
+
+const uint ACTIVE_BIT = 0x80000000u;
+
+bool resident_vertex_visible(uint state, uvec2 meta) {
+	if ((state & ACTIVE_BIT) == 0u) return false;
+	uint meshlet_tag = meta.y >> 8;
+	return meshlet_tag == 0u || meshlet_tag > 8u ||
+		(state & (1u << (meshlet_tag - 1u))) != 0u;
+}
 
 void main() {
 	mat4 view_matrix = transpose(mat4(
@@ -66,7 +76,9 @@ void main() {
 		transpose(mat3(view_matrix)) * -view_position
 	);
 	gl_Position = projection * vec4(view_position, 1.0);
-	if (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {
+	if (params.view.z >= 0 && !resident_vertex_visible(
+			activation_flags.values[params.view.z], vertex_meta
+	)) {
 		gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 	}
 }

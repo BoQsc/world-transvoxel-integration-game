@@ -21,15 +21,19 @@ layout(set = 0, binding = 3, std430) buffer ResidentSummary {
 
 shared uint cohort_valid;
 
+const uint ACTIVE_BIT = 0x80000000u;
+const uint REGULAR_BRICK_MASK = 0xffu;
+
 void main() {
 	uint lane = gl_LocalInvocationID.x;
 	uint candidate_count = uint(cohort.values[0]);
 	uint retirement_count = uint(cohort.values[1]);
-	bool publish = cohort.values[2] != 0;
+	uint update_count = uint(cohort.values[2]);
+	bool publish = cohort.values[3] != 0;
 	if (lane == 0u) cohort_valid = 1u;
 	barrier();
 	for (uint index = lane; index < candidate_count; index += 64u) {
-		int slot = cohort.values[4 + int(index)];
+		int slot = cohort.values[4 + int(index) * 2];
 		uint index_total = 0u;
 		uint vertex_total = 0u;
 		uint failure_total = 0u;
@@ -59,13 +63,25 @@ void main() {
 	memoryBarrierBuffer();
 	barrier();
 	for (uint index = lane; index < candidate_count; index += 64u) {
-		int slot = cohort.values[4 + int(index)];
+		int record_base = 4 + int(index) * 2;
+		int slot = cohort.values[record_base];
+		uint regular_mask = uint(cohort.values[record_base + 1]) & REGULAR_BRICK_MASK;
 		resident_summary.values[slot * 5 + 3] = cohort_valid;
-		if (publish && cohort_valid != 0u) activation_flags.values[slot] = 1u;
+		if (publish && cohort_valid != 0u) {
+			activation_flags.values[slot] = ACTIVE_BIT | regular_mask;
+		}
 	}
 	if (!publish || cohort_valid == 0u) return;
+	int retirement_base = 4 + int(candidate_count) * 2;
 	for (uint index = lane; index < retirement_count; index += 64u) {
-		int slot = cohort.values[4 + int(candidate_count + index)];
+		int slot = cohort.values[retirement_base + int(index)];
 		activation_flags.values[slot] = 0u;
+	}
+	int update_base = retirement_base + int(retirement_count);
+	for (uint index = lane; index < update_count; index += 64u) {
+		int record_base = update_base + int(index) * 2;
+		int slot = cohort.values[record_base];
+		uint regular_mask = uint(cohort.values[record_base + 1]) & REGULAR_BRICK_MASK;
+		activation_flags.values[slot] = ACTIVE_BIT | regular_mask;
 	}
 }

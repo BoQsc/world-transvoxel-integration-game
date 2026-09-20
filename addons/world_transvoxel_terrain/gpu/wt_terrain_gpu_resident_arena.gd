@@ -21,6 +21,7 @@ const COMPLETION_MARKER := 0x57544350
 const PACKED_POSITION_STRIDE := 12
 const PACKED_NORMAL_STRIDE := 4
 const PACKED_META_STRIDE := 4
+const REGULAR_BRICK_MASK := 0xff
 
 var _rendering_device: RenderingDevice
 var _compute_shader := RID()
@@ -139,9 +140,9 @@ func initialize(
 	_completion_buffer = _rendering_device.storage_buffer_create(
 		maximum_slots * COMPLETION_STRIDE, PackedByteArray()
 	)
-	# Header plus one candidate and one retirement slot per resident allocation.
+	# Header plus bounded candidate/update pairs and retirement slots.
 	_commit_descriptor_buffer = _rendering_device.storage_buffer_create(
-		(4 + maximum_slots * 2) * 4, PackedByteArray()
+		(4 + maximum_slots * 5) * 4, PackedByteArray()
 	)
 	if not _status_buffer.is_valid() or not _summary_buffer.is_valid() \
 			or not _activation_buffer.is_valid() or not _completion_buffer.is_valid() \
@@ -497,32 +498,71 @@ func activation_buffer() -> RID:
 	return _activation_buffer
 
 
-func commit_visibility(activations: Array, retirements: Array) -> bool:
+func commit_visibility(
+	activations: Array, retirements: Array, visibility_updates: Array = []
+) -> bool:
 	if _closed or not _commit_pipeline.is_valid() or not _commit_uniform_set.is_valid():
 		_last_error = "resident arena GPU publication pipeline is unavailable"
 		return false
-	var candidate_slots: Array[int] = []
+	var candidate_records: Array[Vector2i] = []
 	var retirement_slots: Array[int] = []
+	var update_records: Array[Vector2i] = []
 	for entry_value in activations:
-		var slot := int(Dictionary(entry_value).get("gpu_slot", -1))
+		var entry := Dictionary(entry_value)
+		var slot := int(entry.get("gpu_slot", -1))
 		if slot >= 0:
-			candidate_slots.append(slot)
+			candidate_records.append(Vector2i(
+				slot, int(entry.get(
+					"regular_visibility_mask",
+					Dictionary(entry.get("identity", {})).get(
+						"regular_visibility_mask", REGULAR_BRICK_MASK
+					)
+				)) \
+					& REGULAR_BRICK_MASK
+			))
 	for entry_value in retirements:
 		var slot := int(Dictionary(entry_value).get("gpu_slot", -1))
 		if slot >= 0:
 			retirement_slots.append(slot)
-	if candidate_slots.size() > _maximum_slots or retirement_slots.size() > _maximum_slots:
+	for entry_value in visibility_updates:
+		var entry := Dictionary(entry_value)
+		var slot := int(entry.get("gpu_slot", -1))
+		if slot >= 0:
+			update_records.append(Vector2i(
+				slot, int(entry.get(
+					"regular_visibility_mask",
+					Dictionary(entry.get("identity", {})).get(
+						"regular_visibility_mask", REGULAR_BRICK_MASK
+					)
+				)) \
+					& REGULAR_BRICK_MASK
+			))
+	if candidate_records.size() > _maximum_slots \
+			or retirement_slots.size() > _maximum_slots \
+			or update_records.size() > _maximum_slots:
 		_last_error = "resident arena GPU publication cohort exceeds bounded capacity"
 		return false
 	var descriptor := PackedInt32Array()
-	descriptor.resize(4 + candidate_slots.size() + retirement_slots.size())
-	descriptor[0] = candidate_slots.size()
+	descriptor.resize(
+		4 + candidate_records.size() * 2 + retirement_slots.size() \
+			+ update_records.size() * 2
+	)
+	descriptor[0] = candidate_records.size()
 	descriptor[1] = retirement_slots.size()
-	descriptor[2] = 1
-	for index in range(candidate_slots.size()):
-		descriptor[4 + index] = candidate_slots[index]
+	descriptor[2] = update_records.size()
+	descriptor[3] = 1
+	var offset := 4
+	for record in candidate_records:
+		descriptor[offset] = record.x
+		descriptor[offset + 1] = record.y
+		offset += 2
 	for index in range(retirement_slots.size()):
-		descriptor[4 + candidate_slots.size() + index] = retirement_slots[index]
+		descriptor[offset] = retirement_slots[index]
+		offset += 1
+	for record in update_records:
+		descriptor[offset] = record.x
+		descriptor[offset + 1] = record.y
+		offset += 2
 	var bytes := descriptor.to_byte_array()
 	var update_error := _rendering_device.buffer_update(
 		_commit_descriptor_buffer, 0, bytes.size(), bytes
@@ -594,7 +634,9 @@ func request_summary_readback(entry: Dictionary) -> bool:
 	# Run the same cohort validator without changing visibility. This produces the
 	# immutable 20-byte summary needed to reclaim a prepared member before its
 	# complete regional activation cohort is ready.
-	var descriptor := PackedInt32Array([1, 0, 0, 0, slot]).to_byte_array()
+	var descriptor := PackedInt32Array([
+		1, 0, 0, 0, slot, REGULAR_BRICK_MASK
+	]).to_byte_array()
 	var update_error := _rendering_device.buffer_update(
 		_commit_descriptor_buffer, 0, descriptor.size(), descriptor
 	)

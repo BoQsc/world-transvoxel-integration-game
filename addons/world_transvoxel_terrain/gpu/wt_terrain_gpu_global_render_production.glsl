@@ -42,6 +42,15 @@ layout(location = 4) out vec4 authored_material_weights_low;
 layout(location = 5) out vec4 authored_material_weights_high;
 layout(location = 6) out vec3 world_view_direction;
 
+const uint ACTIVE_BIT = 0x80000000u;
+
+bool resident_vertex_visible(uint state, uvec2 meta) {
+	if ((state & ACTIVE_BIT) == 0u) return false;
+	uint meshlet_tag = meta.y >> 8;
+	return meshlet_tag == 0u || meshlet_tag > 8u ||
+		(state & (1u << (meshlet_tag - 1u))) != 0u;
+}
+
 int material_weight_slot(int material) {
 	if (material == 1) return 0;
 	if (material == 2) return 1;
@@ -81,7 +90,9 @@ void main() {
 		transpose(mat3(view_matrix)) * -view_position
 	);
 	gl_Position = projection * vec4(view_position, 1.0);
-	if (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {
+	if (params.view.z >= 0 && !resident_vertex_visible(
+			activation_flags.values[params.view.z], vertex_meta
+	)) {
 		gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 	}
 	generated_material_weights_low = vec4(0.0);
@@ -92,7 +103,7 @@ void main() {
 	if (slot < 0) {
 		return;
 	}
-	if (vertex_meta.y != 0u) {
+	if ((vertex_meta.y & 0xffu) != 0u) {
 		if (slot < 4) authored_material_weights_low[slot] = 1.0;
 		else authored_material_weights_high[slot - 4] = 1.0;
 	} else {

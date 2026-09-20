@@ -36,6 +36,15 @@ layout(push_constant, std430) uniform Params {
 layout(location = 0) out vec3 normal;
 layout(location = 1) flat out int material_id;
 
+const uint ACTIVE_BIT = 0x80000000u;
+
+bool resident_vertex_visible(uint state, uvec2 meta) {
+	if ((state & ACTIVE_BIT) == 0u) return false;
+	uint meshlet_tag = meta.y >> 8;
+	return meshlet_tag == 0u || meshlet_tag > 8u ||
+		(state & (1u << (meshlet_tag - 1u))) != 0u;
+}
+
 void main() {
 	mat4 view_matrix = transpose(mat4(
 		scene_data_block.data.view_matrix[0],
@@ -58,7 +67,9 @@ void main() {
 			sign(decoded_normal.xy);
 	}
 	gl_Position = projection * view_matrix * vec4(world_position, 1.0);
-	if (params.view.z >= 0 && activation_flags.values[params.view.z] == 0u) {
+	if (params.view.z >= 0 && !resident_vertex_visible(
+			activation_flags.values[params.view.z], vertex_meta
+	)) {
 		gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 	}
 	normal = normalize(decoded_normal);

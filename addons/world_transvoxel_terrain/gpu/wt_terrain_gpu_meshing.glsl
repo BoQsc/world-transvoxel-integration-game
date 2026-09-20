@@ -1237,7 +1237,8 @@ void main() {
 			output_vertex_meta.values[
 				arena.compact_output.z + compact_vertex_index
 			] = (uint(material.x) & 0xffffu) |
-				((uint(material.y) & 0xffffu) << 16);
+				((uint(material.y) & 0xffu) << 16) |
+				((uint(meshlet + 1) & 0xffu) << 24);
 		}
 		for (int index = 0; index < output_index_count; ++index) {
 			output_indices.values[

@@ -226,6 +226,7 @@ func _run() -> void:
 	))
 	var replacement_identity := _identity(batch, 304, 0x500000032, 0x600000056)
 	replacement_identity["page_x"] = 1
+	replacement_identity["cached_transition_mask"] = 1 << 5
 	var prepared_before := int(status.get("prepared_entries", 0))
 	var replacement_request := _submit(batch, replacement_identity, 4, false)
 	if replacement_request <= request_three or not await _wait_for_status(
@@ -265,6 +266,43 @@ func _run() -> void:
 			replaced_retired += 1
 	if replacement_activated != 1 or replaced_retired != 1:
 		_fail("atomic replacement did not publish a complete event pair")
+		return
+	await RenderingServer.frame_post_draw
+	var full_brick_image := get_root().get_texture().get_image()
+	full_brick_image.convert(Image.FORMAT_RGBA8)
+	var full_brick_pixels := _foreground_pixel_count(full_brick_image)
+	replacement_identity["regular_visibility_mask"] = 0
+	if not _effect.remask_active_entries([
+		{"identity": replacement_identity, "publication_sequence": 4}
+	], "regular-brick-cut"):
+		_fail("regular brick visibility cut was rejected")
+		return
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var cut_event: Dictionary = _effect.pop_event()
+	if str(cut_event.get("status", "")) == "REJECTED":
+		_fail("regular brick visibility cut failed: %s" % cut_event)
+		return
+	var cut_brick_image := get_root().get_texture().get_image()
+	cut_brick_image.convert(Image.FORMAT_RGBA8)
+	var cut_brick_pixels := _foreground_pixel_count(cut_brick_image)
+	if full_brick_pixels < 64 or cut_brick_pixels >= full_brick_pixels:
+		_fail("regular brick visibility mask did not reduce GPU coverage: full=%d cut=%d status=%s" % [
+			full_brick_pixels, cut_brick_pixels, str(_effect.get_status()),
+		])
+		return
+	replacement_identity["regular_visibility_mask"] = 0xff
+	if not _effect.remask_active_entries([
+		{"identity": replacement_identity, "publication_sequence": 4}
+	], "regular-brick-restore"):
+		_fail("regular brick visibility restore was rejected")
+		return
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var restored_brick_image := get_root().get_texture().get_image()
+	restored_brick_image.convert(Image.FORMAT_RGBA8)
+	if _foreground_pixel_count(restored_brick_image) < full_brick_pixels:
+		_fail("regular brick visibility restore did not restore GPU coverage")
 		return
 	var saturation_identities: Array[Dictionary] = []
 	var prepared_before_saturation := int(

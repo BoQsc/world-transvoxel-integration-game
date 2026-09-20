@@ -1672,8 +1672,17 @@ func _remask_group_on_render_thread(command: Dictionary) -> void:
 				"REJECTED", source, "resident transition remask exceeds cached faces"
 			)
 			return
+		var regular_visibility_mask := int(identity.get(
+			"regular_visibility_mask", entry.get("regular_visibility_mask", 0xff)
+		))
+		if regular_visibility_mask < 0 or regular_visibility_mask > 0xff:
+			_push_event_on_render_thread(
+				"REJECTED", source, "resident regular brick mask is invalid"
+			)
+			return
 		var updated := entry.duplicate(true)
 		updated["identity"] = identity.duplicate(true)
+		updated["regular_visibility_mask"] = regular_visibility_mask
 		updates.append({"token": token, "entry": updated, "source": source})
 	var visibility_entries: Array = []
 	for update in updates:
@@ -1683,6 +1692,14 @@ func _remask_group_on_render_thread(command: Dictionary) -> void:
 		# the complete native/render activation cohort commits.
 		if bool(updated_entry.get("active", false)):
 			visibility_entries.append(updated_entry)
+	if not visibility_entries.is_empty() \
+			and not _arena.commit_visibility([], [], visibility_entries):
+		for update in updates:
+			_push_event_on_render_thread(
+				"REJECTED", Dictionary(Dictionary(update).get("source", {})),
+				_arena.get_last_error()
+			)
+		return
 	if not visibility_entries.is_empty() \
 			and not _arena.set_transition_visibility(visibility_entries):
 		for update in updates:
