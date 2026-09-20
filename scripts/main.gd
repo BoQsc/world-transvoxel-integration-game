@@ -70,6 +70,7 @@ var autonomous := false
 var human_visual_capture_path := ""
 var human_visual_capture_mode := "ground"
 var human_visual_capture_wait_frames := 90
+var tunnel_fast_stage_gate := false
 var human_visual_capture_timeout_frames := -1
 var human_playtest_preset := ""
 var human_artifact_marker_smoke := false
@@ -180,6 +181,7 @@ func _ready() -> void:
 	human_visual_capture_path = _arg_value(args, "--human-visual-capture", "")
 	human_visual_capture_mode = _arg_value(args, "--human-visual-capture-mode", "ground")
 	human_visual_capture_wait_frames = int(_arg_value(args, "--human-visual-capture-wait-frames", "90"))
+	tunnel_fast_stage_gate = args.has("--tunnel-fast-stage-gate")
 	human_visual_capture_timeout_frames = int(_arg_value(
 		args, "--human-visual-capture-timeout-frames", "-1"
 	))
@@ -6630,14 +6632,18 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 		last_tunnel_summary["error"] = "start_visual_not_ready"
 		return false
 
-	var baseline_snapshot := await _collect_edit_persistence_snapshot(terrain_world, "tunnel transient crawl baseline")
-	if not bool(baseline_snapshot.get("ok", false)):
-		last_tunnel_summary["error"] = "baseline_snapshot_failed"
-		return false
-	if int(baseline_snapshot.get("air_sample_count", 0)) <= 0:
-		last_tunnel_summary["error"] = "no_carved_air_samples"
-		_fail("tunnel transient crawl gate did not sample carved air")
-		return false
+	var baseline_snapshot := {}
+	if not tunnel_fast_stage_gate:
+		baseline_snapshot = await _collect_edit_persistence_snapshot(
+			terrain_world, "tunnel transient crawl baseline"
+		)
+		if not bool(baseline_snapshot.get("ok", false)):
+			last_tunnel_summary["error"] = "baseline_snapshot_failed"
+			return false
+		if int(baseline_snapshot.get("air_sample_count", 0)) <= 0:
+			last_tunnel_summary["error"] = "no_carved_air_samples"
+			_fail("tunnel transient crawl gate did not sample carved air")
+			return false
 
 	var transient_probe_summaries := []
 	for step in path:
@@ -6647,22 +6653,29 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 			"edit_tunnel_transient_crawl_gate"
 		)
 		transient_probe_summaries.append(step_summary)
+		print("WT_TUNNEL_FAST_STAGE %s" % JSON.stringify({
+			"label": str(step.get("label", "step")),
+			"ok": bool(step_summary.get("ok", false)),
+			"index": transient_probe_summaries.size(),
+			"count": path.size(),
+		}))
 		if not bool(step_summary.get("ok", false)):
 			last_tunnel_summary["error"] = "transient_probe_failed"
 			last_tunnel_summary["failed_step"] = step_summary
 			_fail("tunnel transient crawl probe failed: %s" % JSON.stringify(step_summary))
 			return false
-		var after_step_snapshot := await _collect_edit_persistence_snapshot(
-			terrain_world,
-			"tunnel transient crawl after %s" % str(step.get("label", "step"))
-		)
-		if not bool(after_step_snapshot.get("ok", false)):
-			last_tunnel_summary["error"] = "after_step_snapshot_failed"
-			return false
-		if not _compare_edit_persistence_snapshots(baseline_snapshot, after_step_snapshot):
-			last_tunnel_summary["error"] = "persistence_changed"
-			last_tunnel_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
-			return false
+		if not tunnel_fast_stage_gate:
+			var after_step_snapshot := await _collect_edit_persistence_snapshot(
+				terrain_world,
+				"tunnel transient crawl after %s" % str(step.get("label", "step"))
+			)
+			if not bool(after_step_snapshot.get("ok", false)):
+				last_tunnel_summary["error"] = "after_step_snapshot_failed"
+				return false
+			if not _compare_edit_persistence_snapshots(baseline_snapshot, after_step_snapshot):
+				last_tunnel_summary["error"] = "persistence_changed"
+				last_tunnel_summary["persistence"] = last_edit_persistence_summary.duplicate(true)
+				return false
 	var collision_passage := _probe_tunnel_collision_passages(terrain_world)
 	if not bool(collision_passage.get("ok", false)):
 		last_tunnel_summary["error"] = "collision_passage_blocked"
@@ -6696,6 +6709,7 @@ func _run_tunnel_transient_crawl_gate(terrain_world: Node) -> bool:
 		"operation_count": operations.size(),
 		"batch_size": batch_size,
 		"gate_mode": "edit_tunnel_transient_crawl_gate",
+		"qualification_scope": "fast_visual_collision" if tunnel_fast_stage_gate else "full_persistence",
 		"start_settle_notes": start_notes,
 		"transient_probe_frames": _tunnel_transient_probe_frames(),
 		"transient_probe_summaries": transient_probe_summaries,

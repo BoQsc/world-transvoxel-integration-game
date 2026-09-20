@@ -57,6 +57,11 @@ def main() -> int:
     parser.add_argument("--wait-frames", type=int, default=600)
     parser.add_argument("--timeout-seconds", type=float, default=360.0)
     parser.add_argument("--memory-limit-gib", type=float, default=6.0)
+    parser.add_argument(
+        "--fast-stage-gate",
+        action="store_true",
+        help="Skip offline persistence snapshots and gate immediate visual/collision behavior.",
+    )
     args = parser.parse_args()
 
     project = pathlib.Path(args.project).resolve()
@@ -77,6 +82,8 @@ def main() -> int:
         "--human-visual-capture-wait-frames", str(args.wait_frames),
         "--gpu-resident-render-candidate",
     ]
+    if args.fast_stage_gate:
+        command.append("--tunnel-fast-stage-gate")
     memory_limit = int(args.memory_limit_gib * 1024**3)
     started = time.monotonic()
     peak_rss = 0
@@ -119,6 +126,7 @@ def main() -> int:
         "log_path": str(log_path),
         "capture_path": str(capture_path),
         "summary": summary,
+        "fast_stage_gate": args.fast_stage_gate,
     }
     summary_path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     tunnel = summary.get("tunnel", {}) if isinstance(summary, dict) else {}
