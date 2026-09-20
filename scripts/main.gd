@@ -889,6 +889,7 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"get_gpu_resident_render_status"
 			)) if terrain_world != null else {}
 			var local_publication := {}
+			var local_activation_group := {}
 			if terrain_world != null and player != null:
 				var backend: Node = terrain_world.call("get_backend_terrain")
 				var local_chunk := Vector3i(
@@ -899,6 +900,11 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				local_publication = _gpu_publication_diagnostic_digest(Dictionary(backend.call(
 					"inspect_gpu_resident_publication", local_chunk, 0
 				)))
+				var controller: Node = terrain_world.get_node_or_null("WT_GpuResidentRender")
+				if controller != null and controller.has_method("inspect_chunk_activation"):
+					local_activation_group = Dictionary(controller.call(
+						"inspect_chunk_activation", local_chunk, 0
+					))
 			var native := Dictionary(resident.get("native_metrics", {}))
 			var effect := Dictionary(resident.get("effect_status", {}))
 			if _frame == 120 and OS.get_cmdline_user_args().has("--gpu-publication-probe"):
@@ -913,6 +919,7 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"local_visual": last_local_visual.duplicate(true),
 				"local_collision": last_local_collision.duplicate(true),
 				"local_publication": local_publication.duplicate(true),
+				"local_activation_group": local_activation_group.duplicate(true),
 				"active_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
 				"non_retiring_records": int(summary.get("non_retiring_chunk_records", 0)),
@@ -7214,6 +7221,27 @@ func _exercise_tunnel_transient_crawl_step(
 					"frame_probes": frame_probes,
 				}
 		if not bool(digest.get("ok", false)):
+			if gpu_resident_render_candidate_requested:
+				var failed_chunk := Vector3i(
+					floori(probe_center.x / 16.0),
+					floori(probe_center.y / 16.0),
+					floori(probe_center.z / 16.0)
+				)
+				var publication_chain: Array = []
+				var ancestor := failed_chunk
+				for lod in range(4):
+					var publication := _gpu_publication_diagnostic_digest(Dictionary(
+						backend.call("inspect_gpu_resident_publication", ancestor, lod)
+					))
+					publication["chunk"] = ancestor
+					publication["lod"] = lod
+					publication_chain.append(publication)
+					ancestor = Vector3i(
+						floori(float(ancestor.x) / 2.0),
+						floori(float(ancestor.y) / 2.0),
+						floori(float(ancestor.z) / 2.0)
+					)
+				digest["local_publication_chain"] = publication_chain
 			_save_diagnostic_failure_capture("transient_%s_frame_%02d" % [label, target_frame])
 			digest["error"] = "transient_open_gap_or_orientation_conflict"
 			return {

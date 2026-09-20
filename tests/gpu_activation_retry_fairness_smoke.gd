@@ -232,6 +232,9 @@ func _initialize() -> void:
 	if not _test_collision_activation_lane():
 		quit(1)
 		return
+	if not _test_interaction_priority_order():
+		quit(1)
+		return
 	if not _test_initial_activation_budget():
 		quit(1)
 		return
@@ -392,6 +395,29 @@ func _test_collision_activation_lane() -> bool:
 	probe.free()
 	if not ok:
 		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: collision activation lane was not weighted-fair")
+	return ok
+
+
+func _test_interaction_priority_order() -> bool:
+	var probe := RetryProbe.new()
+	for item in [
+		{"key": "low", "priority": 10},
+		{"key": "high", "priority": 30},
+		{"key": "middle", "priority": 20},
+	]:
+		var key := str(item.key)
+		probe._groups[key] = {
+			"native_prepared": true,
+			"interaction_activation_priority": true,
+			"requests": {"terrain": {"identity": {
+				"scheduler_priority": int(item.priority),
+			}}},
+		}
+		probe._queue_activation_cohort_retry(key)
+	var ok := probe._activation_collision_retry_queue == ["high", "middle", "low"]
+	probe.free()
+	if not ok:
+		push_error("GPU_ACTIVATION_RETRY_FAIRNESS_SMOKE_FAIL: interaction retries ignored scheduler priority")
 	return ok
 
 

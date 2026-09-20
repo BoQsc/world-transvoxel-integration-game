@@ -2381,9 +2381,64 @@ func _queue_activation_cohort_retry(group_key: String) -> void:
 	var group: Dictionary = _groups.get(group_key, {})
 	if bool(group.get("interaction_activation_priority",
 			group.get("collision_activation_priority", false))):
-		_activation_collision_retry_queue.append(group_key)
+		_insert_interaction_activation_retry(group_key)
 	else:
 		_activation_retry_queue.append(group_key)
+
+
+func _insert_interaction_activation_retry(group_key: String) -> void:
+	var priority := _activation_group_scheduler_priority(group_key)
+	var index := _activation_collision_retry_queue.size()
+	for candidate_index in range(_activation_collision_retry_queue.size()):
+		var candidate_key := str(_activation_collision_retry_queue[candidate_index])
+		if priority > _activation_group_scheduler_priority(candidate_key):
+			index = candidate_index
+			break
+	_activation_collision_retry_queue.insert(index, group_key)
+
+
+func _activation_group_scheduler_priority(group_key: String) -> int:
+	var group := Dictionary(_groups.get(group_key, {}))
+	var terrain_request := Dictionary(Dictionary(group.get(
+		"requests", {}
+	)).get("terrain", {}))
+	var identity := Dictionary(terrain_request.get("identity", {}))
+	return int(identity.get("scheduler_priority", 0))
+
+
+func inspect_chunk_activation(coordinate: Vector3i, lod: int) -> Dictionary:
+	for group_key_value in _groups:
+		var group_key := str(group_key_value)
+		var group := Dictionary(_groups[group_key])
+		var terrain_request := Dictionary(Dictionary(group.get(
+			"requests", {}
+		)).get("terrain", {}))
+		var identity := Dictionary(terrain_request.get("identity", {}))
+		if int(identity.get("page_x", 0)) != coordinate.x \
+				or int(identity.get("page_y", 0)) != coordinate.y \
+				or int(identity.get("page_z", 0)) != coordinate.z \
+				or int(identity.get("lod", 0)) != lod:
+			continue
+		return {
+			"found": true,
+			"group_key": group_key,
+			"generation": int(identity.get("generation", 0)),
+			"scheduler_priority": int(identity.get("scheduler_priority", 0)),
+			"identity_interaction_priority": bool(identity.get("interaction_priority", false)),
+			"interaction_activation_priority": bool(group.get(
+				"interaction_activation_priority", false
+			)),
+			"native_prepared": bool(group.get("native_prepared", false)),
+			"native_active": bool(group.get("native_active", false)),
+			"activation_queued": bool(group.get("activation_queued", false)),
+			"activation_retry_queued": bool(group.get("activation_retry_queued", false)),
+			"retry_membership": _activation_retry_membership.has(group_key),
+			"next_activation_retry_frame": int(group.get("next_activation_retry_frame", 0)),
+			"interaction_queue_index": _activation_collision_retry_queue.find(group_key),
+			"background_queue_index": _activation_retry_queue.find(group_key),
+			"last_incomplete_status": str(group.get("last_incomplete_status", "")),
+		}
+	return {"found": false}
 
 
 func _drain_activation_cohort_retries() -> void:
@@ -2426,7 +2481,7 @@ func _drain_activation_cohort_retries() -> void:
 		var group := Dictionary(_groups[group_key])
 		if _process_frame < int(group.get("next_activation_retry_frame", 0)):
 			if use_collision_lane:
-				_activation_collision_retry_queue.append(group_key)
+				_insert_interaction_activation_retry(group_key)
 			else:
 				_activation_retry_queue.append(group_key)
 			continue
