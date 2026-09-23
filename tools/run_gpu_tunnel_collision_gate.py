@@ -69,6 +69,9 @@ def main() -> int:
         help="Skip offline persistence snapshots and gate immediate visual/collision behavior.",
     )
     args = parser.parse_args()
+    # A fast-stage run is a dependency probe, not a soak. Once its immediate
+    # coverage deadline is missed, additional minutes cannot make it pass.
+    runtime_timeout = min(args.timeout_seconds, 10.0) if args.fast_stage_gate else args.timeout_seconds
 
     project = pathlib.Path(args.project).resolve()
     evidence_dir = project / ".godot" / "world_transvoxel_captures" / "gpu_tunnel_collision_gate"
@@ -122,8 +125,8 @@ def main() -> int:
                 termination_reason = "launch_timeout"
                 terminate_tree(process)
                 break
-            if runtime_started is not None and time.monotonic() - runtime_started >= args.timeout_seconds:
-                termination_reason = "runtime_timeout"
+            if runtime_started is not None and time.monotonic() - runtime_started >= runtime_timeout:
+                termination_reason = "fast_stage_deadline" if args.fast_stage_gate else "runtime_timeout"
                 terminate_tree(process)
                 break
             time.sleep(0.25)
@@ -148,6 +151,7 @@ def main() -> int:
         "capture_path": str(capture_path),
         "summary": summary,
         "fast_stage_gate": args.fast_stage_gate,
+        "runtime_timeout_seconds": runtime_timeout,
     }
     summary_path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     tunnel = summary.get("tunnel", {}) if isinstance(summary, dict) else {}
