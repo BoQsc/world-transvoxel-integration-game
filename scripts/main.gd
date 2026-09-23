@@ -946,6 +946,16 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				])
 			last_local_visual = local_visual
 			last_local_collision = local_collision
+			if human_visual_capture_mode == "base_coverage_edit_probe" and \
+					not game_world.gpu_base_coverage_atlas_path.is_empty():
+				var terrain_world: Node = game_world.get_terrain_world()
+				var resident := Dictionary(terrain_world.call(
+					"get_gpu_resident_render_status"
+				)) if terrain_world != null else {}
+				var effect := Dictionary(resident.get("effect_status", {}))
+				if bool(effect.get("base_coverage_ready", false)) and \
+						bool(local_collision.get("ready", false)):
+					return true
 			if bool(local_visual.get("ok", false)) and bool(local_collision.get("ready", false)):
 				return true
 		if _is_lod_movement_visual_ready_summary(summary):
@@ -5590,6 +5600,9 @@ func _capture_human_visual() -> void:
 			)
 			return
 	else:
+		if human_visual_capture_mode == "base_coverage_edit_probe":
+			if not await _run_base_coverage_edit_probe():
+				return
 		if _capture_requires_interaction_inspection():
 			if not await _apply_interaction_inspection_edits():
 				return
@@ -11595,7 +11608,8 @@ func _apply_capture_camera_mode() -> bool:
 
 func _wait_for_capture_camera_visual_ready() -> bool:
 	var minimum_frames := maxi(human_visual_capture_wait_frames, 0)
-	if human_visual_capture_mode == "base_coverage_topdown":
+	if human_visual_capture_mode == "base_coverage_topdown" or \
+			human_visual_capture_mode == "base_coverage_edit_probe":
 		var base_terrain: Node = game_world.get_terrain_world() if game_world != null else null
 		var base_status := Dictionary(base_terrain.call(
 			"get_gpu_resident_render_status"
@@ -11630,6 +11644,72 @@ func _wait_for_capture_camera_visual_ready() -> bool:
 			await get_tree().process_frame
 	_fail("GPU capture camera terrain did not converge: %s" % str(last_summary))
 	return false
+
+
+func _run_base_coverage_edit_probe() -> bool:
+	var terrain_world: Node = game_world.get_terrain_world() if game_world != null else null
+	if terrain_world == null:
+		_fail("base edit probe has no terrain world")
+		return false
+	var position := player.global_position + Vector3(0.0, -1.0, 7.0)
+	var batch = EditBatch.new()
+	if not batch.add_operation(_edit_operation(&"carve", position, 4.0, 1, 1.0)):
+		_fail("base edit probe could not construct operation")
+		return false
+	var submitted_usec := Time.get_ticks_usec()
+	var before_revision := int(terrain_world.call("get_backend_world_revision"))
+	if not bool(terrain_world.call("submit_edit_batch", batch, 7719)):
+		_fail("base edit probe submission failed: %s" %
+			str(terrain_world.call("get_last_error")))
+		return false
+	var observations: Array = []
+	for frame in range(45):
+		await get_tree().process_frame
+		if frame % 10 != 0 and frame != 44:
+			continue
+		var status := Dictionary(terrain_world.call("get_gpu_resident_render_status"))
+		var effect := Dictionary(status.get("effect_status", {}))
+		var metrics := Dictionary(terrain_world.call("get_runtime_metrics"))
+		var revision := int(terrain_world.call("get_backend_world_revision"))
+		var local_visual := _gpu_local_visual_coverage_summary(position)
+		var local_visual_states: Array = []
+		for value in terrain_world.call("get_debug_gpu_processing_states"):
+			var state := Dictionary(value)
+			var minimum: Vector3 = state.get("bounds_min", Vector3.INF)
+			var maximum: Vector3 = state.get("bounds_max", -Vector3.INF)
+			if minimum.x <= position.x and maximum.x >= position.x and \
+					minimum.y <= position.y and maximum.y >= position.y and \
+					minimum.z <= position.z and maximum.z >= position.z:
+				var identity := Dictionary(state.get("identity", {}))
+				local_visual_states.append({
+					"stage": str(state.get("stage", "")),
+					"lod": int(identity.get("lod", -1)),
+					"world_revision": int(identity.get("world_revision", -1)),
+				})
+				if local_visual_states.size() >= 8:
+					break
+		observations.append({
+			"frame": frame,
+			"elapsed_ms": roundi((Time.get_ticks_usec() - submitted_usec) / 1000.0),
+			"revision": revision,
+			"retained_roots": int(effect.get("base_coverage_retained_roots", -1)),
+			"cut_roots": int(effect.get("base_coverage_cut_roots", -1)),
+			"active_chunks": int(status.get("active_chunks", -1)),
+			"edit_replacements": int(metrics.get("edit_replacements", -1)),
+			"edit_deferred_visual": int(metrics.get(
+				"edit_deferred_inactive_visual_chunks", -1
+			)),
+			"local_visual_ok": bool(local_visual.get("ok", false)),
+			"local_visual_error": str(local_visual.get("error", "")),
+			"local_visual_states": local_visual_states,
+		})
+	print("WT_GPU_BASE_EDIT_PROBE ", JSON.stringify({
+		"before_revision": before_revision,
+		"after_revision": int(terrain_world.call("get_backend_world_revision")),
+		"edit_center": position,
+		"samples": observations,
+	}))
+	return true
 
 
 func _fail(message: String) -> void:

@@ -3,12 +3,33 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import pathlib
+import shutil
 import subprocess
 import time
 
 import psutil
+
+
+@contextmanager
+def temporary_debug_dll(project: pathlib.Path, candidate: pathlib.Path | None):
+    if candidate is None:
+        yield
+        return
+    target = project / "addons/world_transvoxel/bin/world_transvoxel.windows.template_debug.x86_64.dll"
+    backup = project / ".godot/world_transvoxel_captures/base_coverage_probe/pinned_debug_backup.dll"
+    if backup.exists():
+        shutil.copy2(backup, target)
+        backup.unlink()
+    shutil.copy2(target, backup)
+    try:
+        shutil.copy2(candidate, target)
+        yield
+    finally:
+        shutil.copy2(backup, target)
+        backup.unlink()
 
 
 def main() -> int:
@@ -17,6 +38,7 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=15.0)
     parser.add_argument("--memory-gib", type=float, default=3.0)
     parser.add_argument("--mode", default="ground")
+    parser.add_argument("--native-debug-dll", type=pathlib.Path)
     args = parser.parse_args()
     project = pathlib.Path(__file__).resolve().parents[1]
     out = project / ".godot" / "world_transvoxel_captures" / "base_coverage_probe"
@@ -36,7 +58,7 @@ def main() -> int:
     ]
     started = time.monotonic()
     peak_rss = 0
-    with log_path.open("wb") as log:
+    with temporary_debug_dll(project, args.native_debug_dll), log_path.open("wb") as log:
         process = subprocess.Popen(command, cwd=project, stdout=log, stderr=subprocess.STDOUT)
         measured = psutil.Process(process.pid)
         reason = "completed"
@@ -63,6 +85,7 @@ def main() -> int:
     lines = log_path.read_text(errors="replace").splitlines()
     markers = [line for line in lines if any(tag in line for tag in (
         "WT_BOOT_STAGE", "WT_GPU_INIT_STAGE", "WT_GPU_BASE_COVERAGE_READY",
+        "WT_GPU_BASE_EDIT_PROBE",
         "GPU base coverage", "ERROR", "SCRIPT ERROR",
     ))]
     result = {
