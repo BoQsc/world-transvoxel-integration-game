@@ -605,13 +605,27 @@ func _start_profile() -> void:
 			gpu_startup_root_trace_backend = trace_backend
 	if playtest_diagnostics != null:
 		playtest_diagnostics.call("attach_runtime", game_world, player)
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE first_physics_wait msec=%d" % Time.get_ticks_msec())
 	await get_tree().physics_frame
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE first_physics_ready msec=%d" % Time.get_ticks_msec())
 	if not await _stabilize_player_spawn():
 		return
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE spawn_stabilized msec=%d" % Time.get_ticks_msec())
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE presentation_begin msec=%d" % Time.get_ticks_msec())
 	_configure_presentation(settings)
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE presentation_ready msec=%d" % Time.get_ticks_msec())
 	await get_tree().process_frame
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE post_presentation_frame msec=%d" % Time.get_ticks_msec())
 	if material_applicator != null:
 		material_applicator.call("apply_materials_now")
+	if gpu_resident_render_candidate_requested and OS.get_cmdline_user_args().has("--gpu-stage-timing"):
+		print("WT_BOOT_STAGE materials_ready msec=%d" % Time.get_ticks_msec())
 	if not autonomous:
 		if not await _wait_for_human_startup_visual_ready():
 			return
@@ -901,13 +915,31 @@ func _wait_for_human_startup_visual_ready() -> bool:
 	var last_local_visual := {}
 	var last_local_collision := {}
 	for _frame in range(frame_limit):
+		var trace_wait_stage := gpu_resident_render_candidate_requested \
+			and OS.get_cmdline_user_args().has("--gpu-stage-timing") and _frame < 4
+		if trace_wait_stage:
+			print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=begin usec=%d" % [
+				_frame, Time.get_ticks_usec()
+			])
 		var summary: Dictionary = game_world.get_game_world_summary() if game_world != null else {}
+		if trace_wait_stage:
+			print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=summary_done usec=%d" % [
+				_frame, Time.get_ticks_usec()
+			])
 		last_summary = summary
 		if gpu_resident_render_candidate_requested and player != null:
 			var local_visual := _gpu_local_visual_coverage_summary(player.global_position)
+			if trace_wait_stage:
+				print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=visual_done usec=%d" % [
+					_frame, Time.get_ticks_usec()
+				])
 			var local_collision: Dictionary = game_world.call(
 				"get_player_collision_readiness_at", player.global_position
 			)
+			if trace_wait_stage:
+				print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=collision_done usec=%d" % [
+					_frame, Time.get_ticks_usec()
+				])
 			last_local_visual = local_visual
 			last_local_collision = local_collision
 			if bool(local_visual.get("ok", false)) and bool(local_collision.get("ready", false)):
@@ -918,8 +950,6 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				and OS.get_cmdline_user_args().has("--gpu-stage-timing") \
 				and (_frame < 5 or _frame % 15 == 0):
 			var terrain_world: Node = game_world.get_terrain_world()
-			var runtime_metrics: Dictionary = terrain_world.call("get_runtime_metrics") \
-				if terrain_world != null else {}
 			var controller: Node = terrain_world.get_node_or_null("WT_GpuResidentRender") \
 				if terrain_world != null else null
 			var local_chunk := Vector3i(
@@ -927,6 +957,10 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				floori(player.global_position.y / 16.0),
 				floori(player.global_position.z / 16.0)
 			)
+			if trace_wait_stage:
+				print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=diagnostic_begin usec=%d" % [
+					_frame, Time.get_ticks_usec()
+				])
 			print("WT_GPU_LOCAL_PROGRESS ", JSON.stringify({
 				"frame": _frame,
 				"local_visual": last_local_visual,
@@ -934,15 +968,15 @@ func _wait_for_human_startup_visual_ready() -> bool:
 					"inspect_chunk_activation", local_chunk, 0
 				)) if controller != null else {},
 				"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
-				"mesh_queue": int(runtime_metrics.get("mesh_worker_queued_jobs", 0)),
-				"mesh_active": int(runtime_metrics.get("mesh_worker_active_jobs", 0)),
-				"mesh_workers": int(runtime_metrics.get("mesh_worker_count", 0)),
-				"mesh_completions": int(runtime_metrics.get("mesh_worker_queued_completions", 0)),
 				"active_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
 				"root_trace": _gpu_startup_root_trace() \
 					if gpu_startup_root_trace_backend != null else {},
 			}))
+			if trace_wait_stage:
+				print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=diagnostic_done usec=%d" % [
+					_frame, Time.get_ticks_usec()
+				])
 		if gpu_resident_render_candidate_requested and _frame % 120 == 0:
 			var terrain_world: Node = game_world.get_terrain_world()
 			var resident := Dictionary(terrain_world.call(
@@ -1035,6 +1069,10 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"arena_active_slots": int(effect.get("arena_active_slot_count", 0)),
 				"arena_allocated_slots": int(effect.get("arena_allocated_slot_count", 0)),
 			}))
+		if trace_wait_stage:
+			print("WT_GPU_STARTUP_WAIT_STAGE frame=%d stage=await_frame usec=%d" % [
+				_frame, Time.get_ticks_usec()
+			])
 		await get_tree().process_frame
 	_fail("human-visible startup terrain did not reach strict ready state: summary=%s local_visual=%s local_collision=%s" % [
 		str(last_summary), str(last_local_visual), str(last_local_collision)
@@ -1271,6 +1309,8 @@ func _set_human_loading_visible(visible: bool) -> void:
 
 
 func _configure_presentation(_settings: Dictionary) -> void:
+	var stage_timing := gpu_resident_render_candidate_requested and \
+		OS.get_cmdline_user_args().has("--gpu-stage-timing")
 	material_applicator = MaterialApplicator.new()
 	material_applicator.name = "TerrainMaterialApplicator"
 	material_applicator.reference_scene_path = NodePath("../WtGameWorldTerrain")
@@ -1278,7 +1318,11 @@ func _configure_presentation(_settings: Dictionary) -> void:
 	if not autonomous:
 		_apply_human_material_mode_to_applicator()
 	game_world.add_child(material_applicator)
+	if stage_timing:
+		print("WT_BOOT_STAGE material_node_added msec=%d" % Time.get_ticks_msec())
 	material_applicator.call("apply_materials_now")
+	if stage_timing:
+		print("WT_BOOT_STAGE material_first_apply_done msec=%d" % Time.get_ticks_msec())
 
 
 func _create_player(start: Vector3) -> CharacterBody3D:

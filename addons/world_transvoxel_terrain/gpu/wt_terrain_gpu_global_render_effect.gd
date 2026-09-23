@@ -784,12 +784,12 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_drain_arena_readbacks_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("arena_readback", phase_start)
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE dispatch_begin callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])
 	_drain_pending_on_render_thread()
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE dispatch_end callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])
@@ -804,23 +804,23 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_drain_debug_geometry_requests_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("debug_geometry", phase_start)
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE lifecycle_begin callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])
 	_drain_lifecycle_commands_on_render_thread()
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE lifecycle_end callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("lifecycle", phase_start)
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE draw_begin callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])
 	_draw_entries_on_render_thread(render_data)
-	if _stage_timing_enabled and _render_callback_sequence <= 3:
+	if _stage_timing_enabled and _render_callback_sequence <= 12:
 		print("WT_GPU_CALLBACK_STAGE draw_end callback=%d usec=%d" % [
 			_render_callback_sequence, Time.get_ticks_usec()
 		])

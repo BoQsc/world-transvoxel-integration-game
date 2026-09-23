@@ -567,7 +567,7 @@ func _process(_delta: float) -> void:
 	if not _running or _backend_terrain == null or _effect == null:
 		return
 	_process_frame += 1
-	if _stage_timing_enabled and _process_frame <= 3:
+	if _stage_timing_enabled and _process_frame <= 12:
 		print("WT_GPU_PROCESS_STAGE begin frame=%d usec=%d" % [
 			_process_frame, Time.get_ticks_usec()
 		])
@@ -621,7 +621,7 @@ func _process(_delta: float) -> void:
 			and not bool(effect_status.get("initialized", false)) \
 			and not str(effect_status.get("last_error", "")).is_empty():
 		_fail_closed(str(effect_status.get("last_error", "GPU renderer failed")))
-	if _stage_timing_enabled and _process_frame <= 3:
+	if _stage_timing_enabled and _process_frame <= 12:
 		print("WT_GPU_PROCESS_STAGE end frame=%d usec=%d" % [
 			_process_frame, Time.get_ticks_usec()
 		])

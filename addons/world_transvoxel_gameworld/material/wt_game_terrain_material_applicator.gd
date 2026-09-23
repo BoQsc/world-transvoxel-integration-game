@@ -569,6 +569,39 @@ func _production_texture_resolution(profile: Dictionary) -> int:
 	return int(clamp(int(profile.get("standard_texture_resolution", DEFAULT_PRODUCTION_TEXTURE_RESOLUTION)), 16, 1024))
 
 func _production_texture_array(resolution: int, slot: StringName) -> Texture2DArray:
+	var images := _baked_production_images(resolution, slot)
+	if images.is_empty():
+		if resolution == DEFAULT_PRODUCTION_TEXTURE_RESOLUTION:
+			push_warning("baked terrain material layers unavailable for %s; generating at runtime" % slot)
+		images = production_images_for_bake(resolution, slot)
+	var texture_array := Texture2DArray.new()
+	var error := texture_array.create_from_images(images)
+	if error != OK:
+		push_error("failed to create production texture array: %s" % str(error))
+	return texture_array
+
+
+func _baked_production_images(resolution: int, slot: StringName) -> Array[Image]:
+	var images: Array[Image] = []
+	if resolution != DEFAULT_PRODUCTION_TEXTURE_RESOLUTION:
+		return images
+	for tile in range(8):
+		var path := "res://addons/world_transvoxel_gameworld/material/baked/terrain_%s_%d_%d.png" % [
+			slot, resolution, tile
+		]
+		if not FileAccess.file_exists(path):
+			return []
+		var image := Image.new()
+		if image.load_png_from_buffer(FileAccess.get_file_as_bytes(path)) != OK or \
+				image.get_width() != resolution or image.get_height() != resolution or \
+				image.get_format() != Image.FORMAT_RGBA8:
+			return []
+		image.generate_mipmaps(slot == &"normal")
+		images.append(image)
+	return images
+
+
+func production_images_for_bake(resolution: int, slot: StringName) -> Array[Image]:
 	const TILE_COUNT := 8
 	var base := [
 		Color(0.24, 0.25, 0.24, 1.0), # 1 deep stone
@@ -599,11 +632,7 @@ func _production_texture_array(resolution: int, slot: StringName) -> Texture2DAr
 					image.set_pixel(x, y, c)
 		image.generate_mipmaps(slot == &"normal")
 		images.append(image)
-	var texture_array := Texture2DArray.new()
-	var error := texture_array.create_from_images(images)
-	if error != OK:
-		push_error("failed to create production texture array: %s" % str(error))
-	return texture_array
+	return images
 
 func _authored_albedo_layers() -> Array:
 	var layers := []
