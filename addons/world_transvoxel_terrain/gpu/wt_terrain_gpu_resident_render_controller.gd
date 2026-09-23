@@ -67,6 +67,7 @@ const COLLISION_ACTIVATION_RETRY_BURST := 3
 const LIFECYCLE_HISTORY_CAPACITY := 4096
 const MATERIAL_SYNC_INTERVAL_FRAMES := 30
 const IDLE_RECONCILIATION_INTERVAL_FRAMES := 8
+const RECONCILIATION_IDENTITIES_PER_FRAME := 32
 const DORMANT_GROUP_CAPACITY := 64
 const DORMANT_APPLICATION_RETRY_FRAMES := 8
 
@@ -148,6 +149,7 @@ var _stage_timing_enabled := OS.get_cmdline_user_args().has("--gpu-stage-timing"
 var _stage_timing_usec: Dictionary = {}
 var _next_material_sync_frame := 0
 var _next_reconciliation_frame := 0
+var _reconciliation_scan_cursor := 0
 var _dormant_group_lru: Array[String] = []
 var _dormant_group_peak := 0
 var _dormant_group_insertions := 0
@@ -2883,17 +2885,32 @@ func _mark_replaced_active_groups_retiring(activated_group_keys: Array) -> void:
 func _reconcile_active_chunks() -> int:
 	var terrain_identities: Array = []
 	var group_by_identity: Dictionary = {}
+	var active_groups: Array = []
 	for group_key in _groups:
 		var group: Dictionary = _groups[group_key]
 		if not bool(group.get("active", false)):
 			continue
+		active_groups.append(group_key)
+	if active_groups.is_empty():
+		_reconciliation_scan_cursor = 0
+		return IDLE_RECONCILIATION_INTERVAL_FRAMES
+	_reconciliation_scan_cursor %= active_groups.size()
+	var inspection_count := mini(
+		active_groups.size(), RECONCILIATION_IDENTITIES_PER_FRAME
+	)
+	for offset in range(inspection_count):
+		var group_key = active_groups[
+			(_reconciliation_scan_cursor + offset) % active_groups.size()
+		]
+		var group: Dictionary = _groups[group_key]
 		var terrain_identity: Dictionary = Dictionary(
 			Dictionary(group.get("requests", {})).get("terrain", {})
 		).get("identity", {})
 		terrain_identities.append(terrain_identity)
 		group_by_identity[_group_key(terrain_identity)] = group_key
-	if terrain_identities.is_empty():
-		return IDLE_RECONCILIATION_INTERVAL_FRAMES
+	_reconciliation_scan_cursor = (
+		_reconciliation_scan_cursor + inspection_count
+	) % active_groups.size()
 	var reconciliation := Dictionary(_backend_terrain.call(
 		"reconcile_gpu_resident_render_chunks", terrain_identities
 	))
@@ -2933,8 +2950,10 @@ func _reconcile_active_chunks() -> int:
 		_groups[group_key] = group
 		retirement_confirmation_pending = true
 		_retirement_confirmation_deferrals += 1
-	_has_retirement_candidates = retirement_confirmation_pending
-	return 1 if retirement_confirmation_pending else IDLE_RECONCILIATION_INTERVAL_FRAMES
+	_has_retirement_candidates = _has_retirement_candidates or retirement_confirmation_pending
+	return 1 if retirement_confirmation_pending \
+			or active_groups.size() > inspection_count \
+			else IDLE_RECONCILIATION_INTERVAL_FRAMES
 
 
 func _clear_retirement_candidates() -> void:
