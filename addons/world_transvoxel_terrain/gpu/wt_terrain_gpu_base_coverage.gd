@@ -170,7 +170,7 @@ func reconcile(active_entries: Array) -> bool:
 		var root := Dictionary(root_value)
 		var key: Vector3i = root.get("key", Vector3i.ZERO)
 		var selected: Array[String] = []
-		if _cover(key.x, key.y, key.z, ROOT_LOD, leaves, selected):
+		if _cover(key.x, key.y, key.z, ROOT_LOD, leaves, selected, entry_by_token):
 			proposed[_root_key(key)] = selected
 	var changed := true
 	while changed:
@@ -240,25 +240,57 @@ static func _leaf_key(x: int, y: int, z: int, lod: int) -> String:
 
 func _cover(
 	x: int, y: int, z: int, lod: int,
-	leaves: Dictionary, selected: Array[String]
+	leaves: Dictionary, selected: Array[String], entries: Dictionary = {}
 ) -> bool:
 	var key := _leaf_key(x, y, z, lod)
+	# A complete finer cut wins over retained coarse coverage. The old parent
+	# remains selected until every child region has a validated replacement.
+	if lod > 0:
+		var children: Array[String] = []
+		var complete := true
+		for dx in range(2):
+			for dy in range(2):
+				for dz in range(2):
+					if not _cover(
+						x * 2 + dx, y * 2 + dy, z * 2 + dz,
+						lod - 1, leaves, children, entries
+					):
+						complete = false
+						break
+				if not complete:
+					break
+			if not complete:
+				break
+		if complete:
+			selected.append_array(children)
+			return true
 	if leaves.has(key):
-		selected.append(str(leaves[key]))
+		var token := str(leaves[key])
+		var entry := Dictionary(entries.get(token, {}))
+		var identity := Dictionary(entry.get("identity", {}))
+		var mask := int(entry.get(
+			"regular_visibility_mask", identity.get("regular_visibility_mask", 0xff)
+		))
+		if mask < 0 or mask > 0xff or (lod == 0 and mask != 0xff):
+			return false
+		var start := selected.size()
+		selected.append(token)
+		if mask == 0xff:
+			return true
+		for dx in range(2):
+			for dy in range(2):
+				for dz in range(2):
+					var brick := dx + 2 * dy + 4 * dz
+					if (mask & (1 << brick)) != 0:
+						continue
+					if not _cover(
+						x * 2 + dx, y * 2 + dy, z * 2 + dz,
+						lod - 1, leaves, selected, entries
+					):
+						selected.resize(start)
+						return false
 		return true
-	if lod == 0:
-		return false
-	var start := selected.size()
-	for dx in range(2):
-		for dy in range(2):
-			for dz in range(2):
-				if not _cover(
-					x * 2 + dx, y * 2 + dy, z * 2 + dz,
-					lod - 1, leaves, selected
-				):
-					selected.resize(start)
-					return false
-	return true
+	return false
 
 
 func _balanced_against_retained_base(

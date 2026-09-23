@@ -34,6 +34,39 @@ func _run() -> void:
 	if base._cover(0, -1, 0, 3, leaves, selected) or not selected.is_empty():
 		_fail("incomplete child set retired coarse coverage")
 		return
+	var complete_children := leaves.duplicate()
+	complete_children["1:-1:1:2"] = "1:-1:1"
+	complete_children["0:-1:0:3"] = "parent"
+	selected.clear()
+	if not base._cover(0, -1, 0, 3, complete_children, selected) \
+			or selected.has("parent") or selected.size() != 8:
+		_fail("complete fine cut did not replace its retained parent")
+		return
+	leaves["0:-1:0:3"] = "parent"
+	selected.clear()
+	if not base._cover(0, -1, 0, 3, leaves, selected) \
+			or selected != ["parent"]:
+		_fail("incomplete fine cut did not retain its complete parent")
+		return
+	var partial_leaves := {
+		"0:-1:0:3": "parent",
+		"0:-2:0:2": "child",
+	}
+	var partial_entries := {
+		"parent": {"regular_visibility_mask": 0xfe},
+		"child": {"regular_visibility_mask": 0xff},
+	}
+	selected.clear()
+	if not base._cover(0, -1, 0, 3, partial_leaves, selected, partial_entries) \
+			or selected != ["parent", "child"]:
+		_fail("masked parent did not select its required child")
+		return
+	partial_leaves.erase("0:-2:0:2")
+	selected.clear()
+	if base._cover(0, -1, 0, 3, partial_leaves, selected, partial_entries) \
+			or not selected.is_empty():
+		_fail("masked parent retired coverage without its required child")
+		return
 	base._root_inventory = {"0:-1:0": true, "1:-1:0": true}
 	var entries := {"edge": {"identity": {
 		"page_x": 1, "page_y": -1, "page_z": 0, "lod": 2,
