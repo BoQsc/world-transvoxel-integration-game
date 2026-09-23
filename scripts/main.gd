@@ -11695,6 +11695,8 @@ func _run_base_coverage_edit_probe() -> bool:
 			"retained_roots": int(effect.get("base_coverage_retained_roots", -1)),
 			"cut_roots": int(effect.get("base_coverage_cut_roots", -1)),
 			"active_chunks": int(status.get("active_chunks", -1)),
+			"active_lod_counts": Dictionary(effect.get("active_terrain_lod_counts", {})),
+			"selected_lod_counts": Dictionary(effect.get("selected_terrain_lod_counts", {})),
 			"edit_replacements": int(metrics.get("edit_replacements", -1)),
 			"edit_deferred_visual": int(metrics.get(
 				"edit_deferred_inactive_visual_chunks", -1
