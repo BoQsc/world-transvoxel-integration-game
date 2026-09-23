@@ -275,6 +275,18 @@ func is_running() -> bool:
 	return _running
 
 
+func configure_base_coverage(upload: Dictionary) -> bool:
+	if not _running or _effect == null:
+		_last_error = "GPU resident renderer is not running"
+		return false
+	if not _effect.configure_base_coverage(upload):
+		_last_error = str(_effect.get_status().get(
+			"last_error", "base coverage was rejected"
+		))
+		return false
+	return true
+
+
 func is_chunk_generation_active(position: Vector3i, lod: int, generation: int) -> bool:
 	if not _running or generation <= 0:
 		return false

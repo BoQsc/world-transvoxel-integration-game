@@ -23,7 +23,11 @@ GENERATED_RUNTIME_PATHS = (
     PurePosixPath("bin/world_transvoxel.windows.template_release.x86_64.dll"),
 )
 
-RUNTIME_PATHS = STATIC_RUNTIME_PATHS + GENERATED_RUNTIME_PATHS
+ATLAS_RUNTIME_PATHS = (
+    PurePosixPath("data/g23_base_lod3.wtba"),
+)
+
+RUNTIME_PATHS = STATIC_RUNTIME_PATHS + ATLAS_RUNTIME_PATHS + GENERATED_RUNTIME_PATHS
 NATIVE_SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp"}
 
 

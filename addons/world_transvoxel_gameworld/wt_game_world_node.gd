@@ -65,6 +65,7 @@ const InteractionCollisionDemand := preload("res://addons/world_transvoxel_gamew
 @export var runtime_gpu_meshing_publication_candidate_enabled: bool = false
 @export_range(1, 64, 1) var runtime_gpu_meshing_shadow_capacity: int = 3
 @export var runtime_gpu_resident_render_candidate_enabled: bool = false
+@export var gpu_base_coverage_atlas_path: String = ""
 @export_range(1, 16, 1) var runtime_gpu_resident_request_capacity: int = 16
 @export_range(1, 4096, 1) var runtime_gpu_resident_chunk_capacity: int = 64
 
@@ -217,6 +218,32 @@ func start_world() -> bool:
 			_terrain_world_error(),
 			startup_world_state_timeout_frames,
 		])
+	if not gpu_base_coverage_atlas_path.is_empty():
+		var base_terrain := get_terrain_world()
+		if base_terrain == null or not bool(base_terrain.call(
+				"prepare_gpu_base_coverage", gpu_base_coverage_atlas_path
+		)):
+			return _fail("GPU base coverage was rejected: %s" % (
+				str(base_terrain.call("get_last_error")) if base_terrain != null else
+				"terrain world unavailable"
+			))
+		var base_ready := false
+		for _base_wait_frame in range(120):
+			var base_status := Dictionary(base_terrain.call(
+				"get_gpu_resident_render_status"
+			))
+			var effect_status := Dictionary(base_status.get("effect_status", {}))
+			if bool(effect_status.get("base_coverage_ready", false)):
+				base_ready = true
+				break
+			if not str(effect_status.get("last_error", "")).is_empty():
+				return _fail("GPU base coverage upload failed: %s" %
+					str(effect_status.get("last_error")))
+			await get_tree().process_frame
+		if not base_ready:
+			return _fail("GPU base coverage did not become drawable")
+		print("WT_GPU_BASE_COVERAGE_READY")
+		await get_tree().process_frame
 	_startup_collision_bootstrap_active = runtime_gpu_resident_render_candidate_enabled
 	if _player != null and player_driven_viewer_enabled:
 		# Install player locality before any world-coverage viewer can enqueue a
@@ -477,6 +504,16 @@ func wait_for_minimum_resources(render_count: int, collision_count: int) -> bool
 			summary.merge(Dictionary(terrain_world.call("get_runtime_metrics")), true)
 			summary.merge(_gpu_resident_settle_summary(terrain_world), true)
 		_last_cold_idle_summary = summary
+		if not gpu_base_coverage_atlas_path.is_empty() and \
+				render_count == 0 and collision_count == 0:
+			var gpu_status := Dictionary(terrain_world.call(
+				"get_gpu_resident_render_status"
+			))
+			var effect_status := Dictionary(gpu_status.get("effect_status", {}))
+			if bool(summary.get("world_running", false)) and \
+					bool(effect_status.get("base_coverage_ready", false)):
+				await get_tree().process_frame
+				return true
 		var render_minimum_ready := int(summary.get(
 			"render_resources", -1
 		)) >= render_count

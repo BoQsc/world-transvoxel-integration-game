@@ -1,0 +1,83 @@
+"""Bounded visible GPU startup probe; terminates only the process it launches."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import subprocess
+import time
+
+import psutil
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--godot", type=pathlib.Path, required=True)
+    parser.add_argument("--seconds", type=float, default=15.0)
+    parser.add_argument("--memory-gib", type=float, default=3.0)
+    parser.add_argument("--mode", default="ground")
+    args = parser.parse_args()
+    project = pathlib.Path(__file__).resolve().parents[1]
+    out = project / ".godot" / "world_transvoxel_captures" / "base_coverage_probe"
+    out.mkdir(parents=True, exist_ok=True)
+    log_path = out / "godot.log"
+    capture_path = out / f"{args.mode}.png"
+    capture_path.unlink(missing_ok=True)
+    command = [
+        str(args.godot), "--path", str(project), "--",
+        "--p2-profile", "g23_four_biomes_lakes_mountains_roads_2k_256_on_demand",
+        "--human-material-mode", "production_texture_array",
+        "--human-windowed", "--gpu-resident-render-candidate",
+        "--human-visual-capture", str(capture_path),
+        "--human-visual-capture-mode", args.mode,
+        "--human-visual-capture-wait-frames", "1",
+        "--human-visual-capture-timeout-frames", "90",
+    ]
+    started = time.monotonic()
+    peak_rss = 0
+    with log_path.open("wb") as log:
+        process = subprocess.Popen(command, cwd=project, stdout=log, stderr=subprocess.STDOUT)
+        measured = psutil.Process(process.pid)
+        reason = "completed"
+        while process.poll() is None:
+            if time.monotonic() - started >= args.seconds:
+                reason = "time_limit"
+                break
+            try:
+                rss = measured.memory_info().rss
+            except psutil.NoSuchProcess:
+                break
+            peak_rss = max(peak_rss, rss)
+            if rss >= int(args.memory_gib * 1024**3):
+                reason = "memory_limit"
+                break
+            time.sleep(0.25)
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
+    lines = log_path.read_text(errors="replace").splitlines()
+    markers = [line for line in lines if any(tag in line for tag in (
+        "WT_BOOT_STAGE", "WT_GPU_INIT_STAGE", "WT_GPU_BASE_COVERAGE_READY",
+        "GPU base coverage", "ERROR", "SCRIPT ERROR",
+    ))]
+    result = {
+        "reason": reason,
+        "elapsed_s": round(time.monotonic() - started, 2),
+        "exit_code": process.returncode,
+        "peak_rss_mib": round(peak_rss / 1024**2),
+        "capture_exists": capture_path.is_file(),
+        "capture_path": str(capture_path),
+        "log_path": str(log_path),
+        "markers": markers[-40:],
+    }
+    print(json.dumps(result, indent=2))
+    return 0 if reason == "completed" and capture_path.is_file() else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -422,7 +422,7 @@ func _start_profile() -> void:
 		# Startup is released by the first bounded GPU cover. The strict local
 		# visual/collision gate below remains authoritative while global coarse
 		# coverage and finer LODs continue asynchronously.
-		settings["startup_minimum_render_resources"] = 1
+		settings["startup_minimum_render_resources"] = 0
 		if selected_profile == FOUR_BIOME_WORLD_PROFILE:
 			# The live player viewer begins at the same location as this profile's
 			# persistent viewer. Submitting both creates two full immutable plans
@@ -567,6 +567,10 @@ func _start_profile() -> void:
 		if gpu_resident_render_candidate_requested else 3
 	game_world.runtime_gpu_resident_render_candidate_enabled = \
 		gpu_resident_render_candidate_requested
+	if gpu_resident_render_candidate_requested and \
+			selected_profile == FOUR_BIOME_WORLD_PROFILE:
+		game_world.gpu_base_coverage_atlas_path = \
+			"res://addons/world_transvoxel/data/g23_base_lod3.wtba"
 	game_world.runtime_gpu_resident_request_capacity = int(settings.get(
 		"runtime_gpu_resident_request_capacity", 16
 	))
@@ -11402,7 +11406,7 @@ func _apply_capture_camera_mode() -> bool:
 			capture_target = Vector3(310, 42, 315)
 			player.global_position = capture_position
 			player.rotation = Vector3.ZERO
-		"topdown":
+		"topdown", "base_coverage_topdown":
 			capture_position = Vector3(1032.0, 420.0, 1032.0)
 			capture_target = Vector3(1032.0, 40.0, 1032.1)
 			player.global_position = capture_position
@@ -11572,7 +11576,8 @@ func _apply_capture_camera_mode() -> bool:
 	camera.fov = 75.0
 	camera.far = 5000.0
 	var up_vector := Vector3.UP
-	if human_visual_capture_mode == "topdown":
+	if human_visual_capture_mode == "topdown" or \
+			human_visual_capture_mode == "base_coverage_topdown":
 		up_vector = Vector3.FORWARD
 	camera.look_at_from_position(capture_position, capture_target, up_vector)
 	if human_visual_capture_mode == "pipeline_debug":
@@ -11590,6 +11595,18 @@ func _apply_capture_camera_mode() -> bool:
 
 func _wait_for_capture_camera_visual_ready() -> bool:
 	var minimum_frames := maxi(human_visual_capture_wait_frames, 0)
+	if human_visual_capture_mode == "base_coverage_topdown":
+		var base_terrain: Node = game_world.get_terrain_world() if game_world != null else null
+		var base_status := Dictionary(base_terrain.call(
+			"get_gpu_resident_render_status"
+		)) if base_terrain != null else {}
+		var effect_status := Dictionary(base_status.get("effect_status", {}))
+		if not bool(effect_status.get("base_coverage_ready", false)):
+			_fail("topdown base coverage was not drawable")
+			return false
+		for _frame in range(minimum_frames):
+			await get_tree().process_frame
+		return true
 	if not gpu_resident_render_candidate_requested:
 		for _frame in range(minimum_frames):
 			await get_tree().process_frame

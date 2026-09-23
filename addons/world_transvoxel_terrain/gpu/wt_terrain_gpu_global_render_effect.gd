@@ -8,6 +8,9 @@ const MeshingCandidate := preload(
 const ResidentArena := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_resident_arena.gd"
 )
+const BaseCoverage := preload(
+	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_base_coverage.gd"
+)
 const COMPUTE_SHADER_FILE := preload(
 	"res://addons/world_transvoxel_terrain/gpu/wt_terrain_gpu_meshing.glsl"
 )
@@ -54,6 +57,8 @@ const REQUIRED_IDENTITY_FIELDS := [
 var _rendering_device: RenderingDevice
 var _packer = MeshingCandidate.new()
 var _arena
+var _base_coverage
+var _pending_base_upload: Dictionary = {}
 var _mutex := Mutex.new()
 var _pending: Array[Dictionary] = []
 var _pending_interaction: Array[Dictionary] = []
@@ -133,6 +138,9 @@ var _status := {
 	"resource_architecture": "bounded_gpu_validated_exact_meshlet_residency",
 	"resident_buffer_count_per_entry": 1,
 	"arena_binding_buffer_count_per_page": 21,
+	"base_coverage_ready": false,
+	"base_coverage_retained_roots": 0,
+	"base_coverage_cut_roots": 0,
 	"arena_page_slot_capacity": 4,
 	"arena_page_count": 0,
 	"arena_allocated_slot_count": 0,
@@ -291,6 +299,20 @@ func _init() -> void:
 	access_resolved_depth = true
 	enabled = true
 	_rendering_device = RenderingServer.get_rendering_device()
+
+
+func configure_base_coverage(upload: Dictionary) -> bool:
+	if not bool(upload.get("ok", false)):
+		_record_rejection("native base coverage admission failed")
+		return false
+	_mutex.lock()
+	if _base_coverage != null or not _pending_base_upload.is_empty():
+		_status["last_error"] = "base coverage is already configured"
+		_mutex.unlock()
+		return false
+	_pending_base_upload = upload
+	_mutex.unlock()
+	return true
 
 
 func configure_production_terrain_material(config: Dictionary) -> bool:
@@ -778,6 +800,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 		phase_start = _record_stage_time("initialize", phase_start)
 	_apply_pending_production_material_on_render_thread()
 	_apply_pending_production_water_on_render_thread()
+	_apply_pending_base_coverage_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("materials", phase_start)
 	_drain_dispatch_completions_on_render_thread()
@@ -1052,6 +1075,26 @@ static func _shader_file_compile_error(
 	if shader_file == null:
 		return "GPU shader resource is unavailable"
 	return str(shader_file.get_spirv().get_stage_compile_error(stage)).strip_edges()
+
+
+func _apply_pending_base_coverage_on_render_thread() -> void:
+	_mutex.lock()
+	var upload := _pending_base_upload
+	_pending_base_upload = {}
+	_mutex.unlock()
+	if upload.is_empty():
+		return
+	var base = BaseCoverage.new()
+	if not base.initialize(_rendering_device, _vertex_format, upload):
+		_record_render_error("base coverage upload failed: %s" % base.get_error())
+		return
+	_base_coverage = base
+	_active_lod_inventory_dirty = true
+	_mutex.lock()
+	_status["base_coverage_ready"] = true
+	_status["base_coverage_retained_roots"] = base.get_retained_root_count()
+	_status["base_coverage_cut_roots"] = 0
+	_mutex.unlock()
 
 
 func _apply_pending_production_material_on_render_thread() -> void:
@@ -2223,6 +2266,30 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 	if not _active_lod_inventory_dirty:
 		return
 	_active_lod_inventory_dirty = false
+	var base_selected_tokens: Dictionary = {}
+	if _base_coverage != null and _base_coverage.is_ready():
+		var complete_active_entries: Array = []
+		for token_value in _entries.keys():
+			var token := str(token_value)
+			var candidate: Dictionary = _entries[token]
+			var candidate_identity := Dictionary(candidate.get("identity", {}))
+			var candidate_key := _identity_key(candidate_identity)
+			if int(_active_sequence_by_key.get(candidate_key, 0)) != int(
+				candidate.get("publication_sequence", 0)
+			):
+				continue
+			var item := candidate.duplicate()
+			item["token"] = token
+			complete_active_entries.append(item)
+		if not _base_coverage.reconcile(complete_active_entries):
+			_record_render_error(_base_coverage.get_error())
+		base_selected_tokens = _base_coverage.get_selected_tokens()
+		_mutex.lock()
+		_status["base_coverage_retained_roots"] = \
+			_base_coverage.get_retained_root_count()
+		_status["base_coverage_cut_roots"] = \
+			_base_coverage.get_cut_root_count()
+		_mutex.unlock()
 	var terrain_counts := {}
 	var water_counts := {}
 	var empty_count := 0
@@ -2256,7 +2323,11 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 			var counts := water_counts \
 				if str(identity.get("surface", "")) == "static_water" else terrain_counts
 			counts[lod] = int(counts.get(lod, 0)) + 1
-		if is_active and not bool(entry.get("empty", false)):
+		var selected_for_draw := is_active
+		if _base_coverage != null \
+				and str(identity.get("surface", "")) == "terrain":
+			selected_for_draw = selected_for_draw and base_selected_tokens.has(token)
+		if selected_for_draw and not bool(entry.get("empty", false)):
 			var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
 			var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
 			var center := (minimum + maximum) * 0.5
@@ -2401,7 +2472,7 @@ static func _debug_ray_aabb_distance(
 
 
 func _draw_entries_on_render_thread(render_data: RenderData) -> void:
-	if _entries.is_empty():
+	if _entries.is_empty() and (_base_coverage == null or not _base_coverage.is_ready()):
 		return
 	var scene_buffers := render_data.get_render_scene_buffers() as RenderSceneBuffersRD
 	var scene_data := render_data.get_render_scene_data()
@@ -2478,6 +2549,14 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 		var diagnostic_entries: Array[Dictionary] = []
 		var water_entries: Array[Dictionary] = []
 		var visibility_context := _visibility_context_for_view(scene_data, view)
+		if _base_coverage != null and _base_coverage.is_ready():
+			var base_entry: Dictionary = _base_coverage.get_draw_entry()
+			if _entry_visible_for_context(base_entry, visibility_context):
+				if production_ready:
+					production_entries.append(base_entry)
+				else:
+					diagnostic_entries.append(base_entry)
+				view_command_records += int(base_entry.get("indirect_draw_count", 0))
 		for bin_value in _draw_bins:
 			var bin: Dictionary = bin_value
 			var bin_entries: Array = bin.get("entries", [])
@@ -2524,9 +2603,10 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				draw_list, _activation_set_for(_production_raster_shader), 3
 			)
 			for entry in production_entries:
-				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
-					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
-				cached_push_uses += 1 if view_count == 1 else 0
+				var has_cached_push := view_count == 1 and entry.has("mono_push_bytes")
+				var push_bytes: PackedByteArray = entry["mono_push_bytes"] \
+					if has_cached_push else _entry_push_bytes(entry, view, view_count, size, false)
+				cached_push_uses += 1 if has_cached_push else 0
 				_draw_entry_on_render_thread(
 					draw_list,
 					entry,
@@ -2539,9 +2619,10 @@ func _draw_entries_on_render_thread(render_data: RenderData) -> void:
 				draw_list, _activation_set_for(_raster_shader), 3
 			)
 			for entry in diagnostic_entries:
-				var push_bytes: PackedByteArray = entry.get("mono_push_bytes", PackedByteArray()) \
-					if view_count == 1 else _entry_push_bytes(entry, view, view_count, size, false)
-				cached_push_uses += 1 if view_count == 1 else 0
+				var has_cached_push := view_count == 1 and entry.has("mono_push_bytes")
+				var push_bytes: PackedByteArray = entry["mono_push_bytes"] \
+					if has_cached_push else _entry_push_bytes(entry, view, view_count, size, false)
+				cached_push_uses += 1 if has_cached_push else 0
 				_draw_entry_on_render_thread(
 					draw_list,
 					entry,
@@ -2889,6 +2970,10 @@ func _framebuffer_for(color: RID, depth: RID) -> RID:
 
 
 func _close_on_render_thread() -> void:
+	if _base_coverage != null:
+		_base_coverage.close()
+		_base_coverage = null
+	_pending_base_upload.clear()
 	for entry in _entries.values():
 		_free_entry_on_render_thread(entry)
 	_entries.clear()

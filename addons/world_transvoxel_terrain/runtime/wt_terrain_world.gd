@@ -386,6 +386,27 @@ func get_gpu_resident_render_status() -> Dictionary:
 	return _gpu_resident_render_controller.get_status()
 
 
+func prepare_gpu_base_coverage(path: String) -> bool:
+	if _backend_terrain == null or _gpu_resident_render_controller == null \
+			or not _backend_terrain.has_method("_load_gpu_base_coverage_atlas"):
+		_last_error = "native GPU base atlas bridge is unavailable"
+		return false
+	var upload := Dictionary(_backend_terrain.call(
+		"_load_gpu_base_coverage_atlas", path
+	))
+	if not bool(upload.get("ok", false)):
+		_last_error = "GPU base atlas admission failed: %s" % str(
+			upload.get("error", "unknown")
+		)
+		return false
+	if not _gpu_resident_render_controller.configure_base_coverage(upload):
+		_last_error = str(_gpu_resident_render_controller.get_status().get(
+			"last_error", "GPU base atlas upload was rejected"
+		))
+		return false
+	return true
+
+
 func is_gpu_resident_render_chunk_active(
 	position: Vector3i, lod: int, generation: int
 ) -> bool:
