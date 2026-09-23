@@ -32,6 +32,11 @@ def main() -> int:
         action="store_true",
         help="Allow reviewed files larger than 25 MiB.",
     )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Stage only these reviewed paths; defaults to all nonignored changes.",
+    )
     args = parser.parse_args()
     root = pathlib.Path(
         git(pathlib.Path.cwd(), "rev-parse", "--show-toplevel", capture=True).strip()
@@ -39,7 +44,10 @@ def main() -> int:
     if git(root, "diff", "--cached", "--name-only", capture=True).strip():
         print("checkpoint refused: the index already contains staged changes", file=sys.stderr)
         return 2
-    git(root, "add", "-A")
+    if args.paths:
+        git(root, "add", "-A", "--", *args.paths)
+    else:
+        git(root, "add", "-A")
     staged = [
         pathlib.PurePosixPath(value).as_posix()
         for value in git(root, "diff", "--cached", "--name-only", capture=True).splitlines()

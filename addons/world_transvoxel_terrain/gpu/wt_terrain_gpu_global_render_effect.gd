@@ -142,6 +142,7 @@ var _status := {
 	"base_coverage_retained_roots": 0,
 	"base_coverage_cut_roots": 0,
 	"selected_terrain_lod_counts": {},
+	"selected_terrain_lod0_chunks": {},
 	"arena_page_slot_capacity": 4,
 	"arena_page_count": 0,
 	"arena_allocated_slot_count": 0,
@@ -2293,6 +2294,7 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 		_mutex.unlock()
 	var terrain_counts := {}
 	var selected_terrain_counts := {}
+	var selected_lod0_chunks := {}
 	var water_counts := {}
 	var empty_count := 0
 	var partial_count := 0
@@ -2334,6 +2336,13 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 			selected_terrain_counts[selected_lod] = int(
 				selected_terrain_counts.get(selected_lod, 0)
 			) + 1
+			if selected_lod == "0":
+				var chunk_key := "%d:%d:%d" % [
+					int(identity.get("page_x", 0)),
+					int(identity.get("page_y", 0)),
+					int(identity.get("page_z", 0)),
+				]
+				selected_lod0_chunks[chunk_key] = int(identity.get("world_revision", -1))
 		if selected_for_draw and not bool(entry.get("empty", false)):
 			var minimum: Vector3 = entry.get("bounds_min", Vector3.ZERO)
 			var maximum: Vector3 = entry.get("bounds_max", Vector3.ZERO)
@@ -2360,6 +2369,7 @@ func _sync_active_lod_inventory_on_render_thread() -> void:
 	_status["active_inventory_rebuilds"] = int(_status.get("active_inventory_rebuilds", 0)) + 1
 	_status["active_terrain_lod_counts"] = terrain_counts
 	_status["selected_terrain_lod_counts"] = selected_terrain_counts
+	_status["selected_terrain_lod0_chunks"] = selected_lod0_chunks
 	_status["active_static_water_lod_counts"] = water_counts
 	_status["active_empty_entry_count"] = empty_count
 	_status["active_partial_entry_count"] = partial_count

@@ -11663,14 +11663,25 @@ func _run_base_coverage_edit_probe() -> bool:
 			str(terrain_world.call("get_last_error")))
 		return false
 	var observations: Array = []
-	for frame in range(45):
+	var edited_chunk := Vector3i(
+		floori(position.x / 16.0),
+		floori(position.y / 16.0),
+		floori(position.z / 16.0)
+	)
+	var edited_chunk_key := "%d:%d:%d" % [
+		edited_chunk.x, edited_chunk.y, edited_chunk.z
+	]
+	for frame in range(12):
 		await get_tree().process_frame
-		if frame % 10 != 0 and frame != 44:
+		if frame > 2 and frame != 10 and frame != 11:
 			continue
 		var status := Dictionary(terrain_world.call("get_gpu_resident_render_status"))
 		var effect := Dictionary(status.get("effect_status", {}))
 		var metrics := Dictionary(terrain_world.call("get_runtime_metrics"))
 		var revision := int(terrain_world.call("get_backend_world_revision"))
+		var selected_lod0 := Dictionary(effect.get(
+			"selected_terrain_lod0_chunks", {}
+		))
 		var local_visual := _gpu_local_visual_coverage_summary(position)
 		var local_visual_states: Array = []
 		for value in terrain_world.call("get_debug_gpu_processing_states"):
@@ -11697,6 +11708,10 @@ func _run_base_coverage_edit_probe() -> bool:
 			"active_chunks": int(status.get("active_chunks", -1)),
 			"active_lod_counts": Dictionary(effect.get("active_terrain_lod_counts", {})),
 			"selected_lod_counts": Dictionary(effect.get("selected_terrain_lod_counts", {})),
+			"edited_lod0_chunk": edited_chunk_key,
+			"edited_lod0_draw_selected": selected_lod0.has(edited_chunk_key) and \
+				int(selected_lod0.get(edited_chunk_key, -1)) == revision,
+			"edited_lod0_draw_revision": int(selected_lod0.get(edited_chunk_key, -1)),
 			"edit_replacements": int(metrics.get("edit_replacements", -1)),
 			"edit_deferred_visual": int(metrics.get(
 				"edit_deferred_inactive_visual_chunks", -1

@@ -97,13 +97,22 @@ def main() -> int:
             active_lod0 = [sample for sample in samples if int(
                 sample.get("active_lod_counts", {}).get("0", 0)
             ) > 0]
-            selected_lod0 = [sample for sample in active_lod0 if int(
-                sample.get("selected_lod_counts", {}).get("0", 0)
-            ) > 0]
+            selected_lod0 = [sample for sample in samples if bool(
+                sample.get("edited_lod0_draw_selected", False)
+            )]
+            selected_within_two_frames = [sample for sample in selected_lod0 if int(
+                sample.get("frame", 999)
+            ) <= 2]
             draw_selection = {
-                "ok": bool(selected_lod0),
+                "ok": bool(selected_within_two_frames),
                 "active_lod0_samples": len(active_lod0),
                 "selected_lod0_samples": len(selected_lod0),
+                "first_selected_lod0_frame": (
+                    int(selected_lod0[0]["frame"]) if selected_lod0 else None
+                ),
+                "edited_lod0_chunk": (
+                    samples[-1].get("edited_lod0_chunk") if samples else None
+                ),
                 "last_active_lod_counts": samples[-1].get("active_lod_counts", {}) if samples else {},
                 "last_selected_lod_counts": samples[-1].get("selected_lod_counts", {}) if samples else {},
             }
