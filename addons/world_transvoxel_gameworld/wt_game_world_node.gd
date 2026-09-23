@@ -110,6 +110,7 @@ var _accepted_foreground_support_updates := 0
 var _accepted_foreground_focus_updates := 0
 var _coalesced_player_viewer_updates := 0
 var _last_player_viewer_stage_usec: Dictionary = {}
+var _startup_collision_bootstrap_active := false
 var _last_player_viewer_coalesce_reason := "none"
 var _last_error := ""
 var _last_edit_summary := {}
@@ -216,11 +217,19 @@ func start_world() -> bool:
 			_terrain_world_error(),
 			startup_world_state_timeout_frames,
 		])
-	if not _submit_initial_viewers():
-		return false
+	_startup_collision_bootstrap_active = runtime_gpu_resident_render_candidate_enabled
 	if _player != null and player_driven_viewer_enabled:
+		# Install player locality before any world-coverage viewer can enqueue a
+		# global plan. The runtime applies this lease to the first immutable desired
+		# set, so local cover enters its reserved lanes at admission rather than
+		# being repaired after a background flood already exists.
+		if player_foreground_priority_enabled and not \
+				_update_player_foreground_priority_leases(true):
+			return _fail("initial player foreground terrain lease was rejected: %s" % _terrain_world_error())
 		if not update_player_viewer(true):
 			return _fail("initial player terrain viewers were rejected: %s" % _terrain_world_error())
+	if not _submit_initial_viewers():
+		return false
 	if startup_requires_cold_idle:
 		if not await wait_for_cold_idle(_expected_resource_count, _expected_resource_count):
 			return _fail("terrain did not settle: %s" % str(_last_cold_idle_summary))
@@ -231,6 +240,12 @@ func start_world() -> bool:
 		):
 			return _fail("terrain did not reach startup minimum resources: %s" % str(_last_cold_idle_summary))
 	return true
+
+
+func finish_startup_collision_bootstrap() -> void:
+	_startup_collision_bootstrap_active = false
+	_last_collision_viewer_position = Vector3(INF, INF, INF)
+	_last_predictive_collision_viewer_position = Vector3(INF, INF, INF)
 
 
 func stop_world() -> bool:
@@ -282,10 +297,14 @@ func update_player_viewer(force: bool = false) -> bool:
 	# consumes one viewer event before a foreground edit, so collision-first order
 	# can commit an edit against collision-only demand before visual demand arrives.
 	_viewer_revision += 1
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE visual_begin usec=", Time.get_ticks_usec())
 	if not bool(_reference_scene.call(
 		"update_runtime_viewer", _player_viewer_id, _viewer_revision, position, _viewer_radius_chunks, _viewer_maximum_lod
 	)):
 		return _fail("player viewer update failed: %s" % _terrain_world_error())
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE visual_end usec=", Time.get_ticks_usec())
 	stage_usec["visual_submit"] = Time.get_ticks_usec() - stage_started_usec
 	stage_started_usec = Time.get_ticks_usec()
 	_last_player_viewer_position = position
@@ -297,24 +316,44 @@ func update_player_viewer(force: bool = false) -> bool:
 		"position": _vector3_summary(position),
 		"force": force,
 	})
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE collision_begin usec=", Time.get_ticks_usec())
 	if not _update_player_collision_invoker(position, force):
 		return false
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE collision_end usec=", Time.get_ticks_usec())
 	stage_usec["collision_submit"] = Time.get_ticks_usec() - stage_started_usec
 	stage_started_usec = Time.get_ticks_usec()
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE interaction_collision_begin usec=", Time.get_ticks_usec())
 	if not _update_player_interaction_collision_invoker(force):
 		return false
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE interaction_collision_end usec=", Time.get_ticks_usec())
 	stage_usec["interaction_collision_submit"] = Time.get_ticks_usec() - stage_started_usec
 	stage_started_usec = Time.get_ticks_usec()
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE predictive_visual_begin usec=", Time.get_ticks_usec())
 	if not _update_predictive_player_viewer(position, previous_position, force):
 		return false
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE predictive_visual_end usec=", Time.get_ticks_usec())
 	stage_usec["predictive_visual_submit"] = Time.get_ticks_usec() - stage_started_usec
 	stage_started_usec = Time.get_ticks_usec()
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE focus_visual_begin usec=", Time.get_ticks_usec())
 	if not _update_focus_player_viewer(force):
 		return false
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE focus_visual_end usec=", Time.get_ticks_usec())
 	stage_usec["focus_visual_submit"] = Time.get_ticks_usec() - stage_started_usec
 	stage_started_usec = Time.get_ticks_usec()
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE foreground_priority_begin usec=", Time.get_ticks_usec())
 	if not _update_player_foreground_priority_leases(force):
 		return false
+	if force:
+		print("WT_PLAYER_VIEWER_SUBMIT_STAGE foreground_priority_end usec=", Time.get_ticks_usec())
 	stage_usec["foreground_priority_submit"] = Time.get_ticks_usec() - stage_started_usec
 	_last_player_viewer_stage_usec = stage_usec
 	_begin_streaming_burst()
@@ -1387,6 +1426,8 @@ func _submit_initial_viewers() -> bool:
 	# persistent world-coverage viewers and must not be overwritten when the
 	# player moves.
 	var viewer_id := 2 if player_driven_viewer_enabled else 1
+	if _viewer_positions.is_empty():
+		return player_driven_viewer_enabled
 	for position in _viewer_positions:
 		if not bool(_reference_scene.call("update_runtime_viewer", viewer_id, viewer_id, position, _viewer_radius_chunks, _viewer_maximum_lod)):
 			return _fail("initial viewer update failed: %s" % _terrain_world_error())
@@ -1461,6 +1502,25 @@ func _update_player_collision_invoker(
 	force: bool
 ) -> bool:
 	if not player_collision_invoker_enabled:
+		return true
+	if _startup_collision_bootstrap_active:
+		var bootstrap_position := position + Vector3.DOWN * maxf(
+			16.0, player_collision_prediction_distance
+		)
+		var bootstrap_chunk := _collision_invoker_chunk(bootstrap_position)
+		if force or bootstrap_chunk != _collision_invoker_chunk(
+				_last_collision_viewer_position
+		):
+			if not _submit_collision_viewer(
+				_player_collision_viewer_id,
+				bootstrap_position,
+				&"collision_startup_floor",
+				force,
+				0
+			):
+				return false
+			_last_collision_viewer_position = bootstrap_position
+			_accepted_collision_viewer_updates += 1
 		return true
 	var predictive_position := position
 	var movement := Vector3.ZERO
@@ -1554,6 +1614,8 @@ func _submit_collision_viewer(
 
 
 func _update_player_interaction_collision_invoker(force: bool) -> bool:
+	if _startup_collision_bootstrap_active:
+		return _remove_interaction_collision_viewers(0)
 	if not player_interaction_collision_invoker_enabled or _player == null:
 		return _remove_interaction_collision_viewers(0)
 	var camera := _player.get_node_or_null("FirstPersonCamera") as Camera3D

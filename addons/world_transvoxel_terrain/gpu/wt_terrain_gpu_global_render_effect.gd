@@ -784,7 +784,15 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_drain_arena_readbacks_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("arena_readback", phase_start)
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE dispatch_begin callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	_drain_pending_on_render_thread()
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE dispatch_end callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("dispatch", phase_start)
 	_drain_one_compaction_on_render_thread()
@@ -796,10 +804,26 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	_drain_debug_geometry_requests_on_render_thread()
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("debug_geometry", phase_start)
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE lifecycle_begin callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	_drain_lifecycle_commands_on_render_thread()
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE lifecycle_end callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	if _stage_timing_enabled:
 		phase_start = _record_stage_time("lifecycle", phase_start)
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE draw_begin callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	_draw_entries_on_render_thread(render_data)
+	if _stage_timing_enabled and _render_callback_sequence <= 3:
+		print("WT_GPU_CALLBACK_STAGE draw_end callback=%d usec=%d" % [
+			_render_callback_sequence, Time.get_ticks_usec()
+		])
 	if _stage_timing_enabled:
 		_record_stage_time("draw", phase_start)
 		_mutex.lock()
@@ -815,6 +839,10 @@ func _record_stage_time(stage: String, start_us: int) -> int:
 	value["total"] = int(value["total"]) + elapsed
 	value["max"] = maxi(int(value["max"]), elapsed)
 	_stage_timing_usec[stage] = value
+	if elapsed >= 20000:
+		print("WT_GPU_CALLBACK_SLOW_STAGE callback=%d stage=%s usec=%d" % [
+			_render_callback_sequence, stage, elapsed
+		])
 	return now
 
 
@@ -830,6 +858,8 @@ func _ensure_shaders() -> bool:
 	if _initialization_attempted:
 		return false
 	_initialization_attempted = true
+	if _stage_timing_enabled:
+		print("WT_GPU_INIT_STAGE begin usec=%d" % Time.get_ticks_usec())
 	_mutex.lock()
 	_status["initialization_attempted"] = true
 	_mutex.unlock()
@@ -920,6 +950,8 @@ func _ensure_shaders() -> bool:
 	_compute_pipeline = _rendering_device.compute_pipeline_create(_compute_shader)
 	if not _compute_pipeline.is_valid():
 		return false
+	if _stage_timing_enabled:
+		print("WT_GPU_INIT_STAGE extraction_pipeline_ready usec=%d" % Time.get_ticks_usec())
 	_commit_shader = _rendering_device.shader_create_from_spirv(commit_file.get_spirv())
 	if not _commit_shader.is_valid():
 		return false
@@ -940,6 +972,8 @@ func _ensure_shaders() -> bool:
 	_compact_pipeline = _rendering_device.compute_pipeline_create(_compact_shader)
 	if not _compact_pipeline.is_valid():
 		return false
+	if _stage_timing_enabled:
+		print("WT_GPU_INIT_STAGE publication_pipelines_ready usec=%d" % Time.get_ticks_usec())
 	_raster_shader = _rendering_device.shader_create_from_spirv(
 		raster_file.get_spirv()
 	)
@@ -963,6 +997,8 @@ func _ensure_shaders() -> bool:
 	_scene_color_copy_pipeline = _rendering_device.compute_pipeline_create(
 		_scene_color_copy_shader
 	)
+	if _stage_timing_enabled:
+		print("WT_GPU_INIT_STAGE raster_pipelines_ready usec=%d" % Time.get_ticks_usec())
 	var scene_sampler_state := RDSamplerState.new()
 	scene_sampler_state.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
 	scene_sampler_state.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
@@ -1002,6 +1038,8 @@ func _ensure_shaders() -> bool:
 			_record_render_error(_arena.get_last_error())
 			_arena = null
 			return false
+	if _stage_timing_enabled:
+		print("WT_GPU_INIT_STAGE arena_ready usec=%d" % Time.get_ticks_usec())
 	_mutex.lock()
 	_status["initialized"] = _vertex_format >= 0
 	_mutex.unlock()

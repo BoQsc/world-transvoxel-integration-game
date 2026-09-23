@@ -58,6 +58,7 @@ const NATIVE_SUBMISSIONS_PER_FRAME := RENDER_SUBMISSION_CAPACITY / 2
 # one regional wait, so preparation must not rebuild its cohort for each member.
 const ACTIVATION_COHORT_RETRY_CAPACITY := 4
 const ACTIVATION_COHORT_RETRY_BUDGET_USEC := 750
+const GROUP_MAINTENANCE_INSPECTIONS_PER_FRAME := 8
 const ACTIVATION_WAIT_INTERACTION_PROBE_FRAMES := 1
 const ACTIVATION_WAIT_BACKGROUND_PROBE_FRAMES := 2
 const EFFECT_EVENT_CAPACITY_PER_FRAME := 32
@@ -138,6 +139,8 @@ var _effect_events_processed := 0
 var _effect_event_budget_stops := 0
 var _effect_event_max_processed_per_frame := 0
 var _process_frame := 0
+var _prepared_group_scan_cursor := 0
+var _incomplete_group_scan_cursor := 0
 var _production_material_signature := ""
 var _production_water_signature := ""
 var _production_texture_cache: Dictionary = {}
@@ -562,6 +565,10 @@ func _process(_delta: float) -> void:
 	if not _running or _backend_terrain == null or _effect == null:
 		return
 	_process_frame += 1
+	if _stage_timing_enabled and _process_frame <= 3:
+		print("WT_GPU_PROCESS_STAGE begin frame=%d usec=%d" % [
+			_process_frame, Time.get_ticks_usec()
+		])
 	var phase_start := Time.get_ticks_usec() if _stage_timing_enabled else 0
 	if _process_frame >= _next_material_sync_frame:
 		_sync_production_materials()
@@ -612,11 +619,20 @@ func _process(_delta: float) -> void:
 			and not bool(effect_status.get("initialized", false)) \
 			and not str(effect_status.get("last_error", "")).is_empty():
 		_fail_closed(str(effect_status.get("last_error", "GPU renderer failed")))
+	if _stage_timing_enabled and _process_frame <= 3:
+		print("WT_GPU_PROCESS_STAGE end frame=%d usec=%d" % [
+			_process_frame, Time.get_ticks_usec()
+		])
 
 
 func _record_stage_time(stage: String, start_us: int) -> int:
 	var now := Time.get_ticks_usec()
-	_accumulate_stage_time(stage, now - start_us)
+	var elapsed := now - start_us
+	_accumulate_stage_time(stage, elapsed)
+	if elapsed >= 20000:
+		print("WT_GPU_PROCESS_SLOW_STAGE frame=%d stage=%s usec=%d" % [
+			_process_frame, stage, elapsed
+		])
 	return now
 
 
@@ -903,8 +919,14 @@ static func _append_vec4(values: PackedFloat32Array, value: Vector4) -> void:
 func _submit_native_captures() -> void:
 	var submitted_this_frame := 0
 	var deferred_attempts_remaining := _deferred_interaction_requests.size()
+	# Before any coverage exists, feed one immutable surface at a time. Initial
+	# pipeline creation, arena allocation and field upload otherwise concentrate
+	# up to eight captures in the first render callback and can prevent physics
+	# from advancing for seconds. Normal bounded throughput resumes immediately
+	# after the first active chunk proves the render path is warm.
+	var submission_limit := 1 if _activated_chunks < 8 else 2
 	while _render_request_routes.size() < RENDER_SUBMISSION_CAPACITY \
-			and submitted_this_frame < NATIVE_SUBMISSIONS_PER_FRAME:
+			and submitted_this_frame < submission_limit:
 		var retry_deferred := deferred_attempts_remaining > 0
 		var request := _deferred_interaction_requests.pop_front() \
 				if retry_deferred else Dictionary(_backend_terrain.call(
@@ -925,6 +947,11 @@ func _submit_native_captures() -> void:
 			_reject_native_request(request, request_error)
 			continue
 		var identity: Dictionary = request.get("identity", {})
+		# A committed edit is already bounded by its immutable dirty cohort and has
+		# a two-frame publication contract. Let that lane fill the extraction queue;
+		# cold/background streaming remains capped so relocation cannot halt frames.
+		if bool(identity.get("incremental_edit", false)):
+			submission_limit = NATIVE_SUBMISSIONS_PER_FRAME
 		var interaction_request := bool(identity.get("incremental_edit", false)) \
 				or bool(identity.get("interaction_priority", false)) \
 				or bool(identity.get("local_publication_priority", false))
@@ -1644,17 +1671,40 @@ func _try_validate_group(group_key: String) -> void:
 
 
 func _pending_group_keys() -> Array:
-	var keys: Array = []
+	var interaction_keys: Array = []
+	var background_keys: Array = []
 	for key in _groups:
 		var group: Dictionary = _groups[key]
-		if not bool(group.get("active", false)) and not bool(group.get("retiring", false)):
-			keys.append(key)
-	return keys
+		if bool(group.get("active", false)) or bool(group.get("retiring", false)):
+			continue
+		var requests: Dictionary = group.get("requests", {})
+		var request: Dictionary = requests.get("terrain", {})
+		if request.is_empty() and not requests.is_empty():
+			request = Dictionary(requests.values()[0])
+		var identity: Dictionary = request.get("identity", {})
+		if bool(identity.get("incremental_edit", false)) \
+				or bool(identity.get("interaction_priority", false)) \
+				or bool(identity.get("local_publication_priority", false)):
+			interaction_keys.append(key)
+		else:
+			background_keys.append(key)
+	interaction_keys.append_array(background_keys)
+	return interaction_keys
 
 
 func _retry_prepared_groups(group_keys: Array = _pending_group_keys()) -> void:
+	if group_keys.is_empty():
+		_prepared_group_scan_cursor = 0
+		return
+	_prepared_group_scan_cursor %= group_keys.size()
 	var queued_cohort_retries := 0
-	for group_key_value in group_keys:
+	var inspection_count := mini(
+		group_keys.size(), GROUP_MAINTENANCE_INSPECTIONS_PER_FRAME
+	)
+	for offset in range(inspection_count):
+		var group_key_value = group_keys[
+			(_prepared_group_scan_cursor + offset) % group_keys.size()
+		]
 		var group_key := str(group_key_value)
 		if not _groups.has(group_key):
 			continue
@@ -1675,10 +1725,23 @@ func _retry_prepared_groups(group_keys: Array = _pending_group_keys()) -> void:
 			continue
 		_queue_activation_cohort_retry(group_key)
 		queued_cohort_retries += 1
+	_prepared_group_scan_cursor = (
+		_prepared_group_scan_cursor + inspection_count
+	) % group_keys.size()
 
 
 func _supersede_stale_incomplete_groups(group_keys: Array = _pending_group_keys()) -> void:
-	for group_key_value in group_keys:
+	if group_keys.is_empty():
+		_incomplete_group_scan_cursor = 0
+		return
+	_incomplete_group_scan_cursor %= group_keys.size()
+	var inspection_count := mini(
+		group_keys.size(), GROUP_MAINTENANCE_INSPECTIONS_PER_FRAME
+	)
+	for offset in range(inspection_count):
+		var group_key_value = group_keys[
+			(_incomplete_group_scan_cursor + offset) % group_keys.size()
+		]
 		var group_key := str(group_key_value)
 		if not _groups.has(group_key):
 			continue
@@ -1709,6 +1772,9 @@ func _supersede_stale_incomplete_groups(group_keys: Array = _pending_group_keys(
 		if readiness_status.begins_with("STALE"):
 			_stale_incomplete_groups_superseded += 1
 			_supersede_group(group_key)
+	_incomplete_group_scan_cursor = (
+		_incomplete_group_scan_cursor + inspection_count
+	) % group_keys.size()
 
 
 func _try_queue_activation_cohort(group_key: String) -> bool:

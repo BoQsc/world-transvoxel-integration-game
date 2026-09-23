@@ -166,6 +166,7 @@ var gpu_render_status_update_frame := 0
 
 
 func _ready() -> void:
+	print("WT_BOOT_STAGE ready_entered msec=%d" % Time.get_ticks_msec())
 	var args := Array(OS.get_cmdline_user_args())
 	gpu_meshing_shadow_requested = args.has("--gpu-meshing-shadow")
 	gpu_meshing_publication_candidate_requested = args.has(
@@ -409,6 +410,22 @@ func _start_profile() -> void:
 		# satisfy; player support is demanded and verified by the targeted body
 		# readiness check after spawn relocation.
 		settings["startup_minimum_collision_resources"] = 0
+		# Foreground collision and GPU publication have dedicated lanes. Raising the
+		# shared apply limits to 128 lets unrelated global completions monopolize a
+		# physics frame, which defeats those lanes and visibly freezes startup/editing.
+		settings["runtime_streaming_burst_render_apply_budget"] = 8
+		settings["runtime_streaming_burst_collision_apply_budget"] = 8
+		settings["runtime_edit_burst_render_apply_budget"] = 8
+		settings["runtime_edit_burst_collision_apply_budget"] = 8
+		# Startup is released by the first bounded GPU cover. The strict local
+		# visual/collision gate below remains authoritative while global coarse
+		# coverage and finer LODs continue asynchronously.
+		settings["startup_minimum_render_resources"] = 1
+		if selected_profile == FOUR_BIOME_WORLD_PROFILE:
+			# The live player viewer begins at the same location as this profile's
+			# persistent viewer. Submitting both creates two full immutable plans
+			# before the first drawable cover and supplies no additional coverage.
+			settings["viewers"] = []
 	playtest_profile_id = selected_profile
 	expected_resources = int(settings["expected_resources"])
 	expected_max_resources = int(settings["expected_max_resources"])
@@ -571,9 +588,11 @@ func _start_profile() -> void:
 		_terrain_profile(selected_profile)
 	)
 	game_world.attach_player(player, settings["start"])
+	print("WT_BOOT_STAGE terrain_start_begin msec=%d" % Time.get_ticks_msec())
 	if not await game_world.start_world():
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
+	print("WT_BOOT_STAGE terrain_start_ready msec=%d" % Time.get_ticks_msec())
 	if playtest_diagnostics != null:
 		playtest_diagnostics.call("attach_runtime", game_world, player)
 	await get_tree().physics_frame
@@ -4862,12 +4881,22 @@ func _stabilize_player_spawn() -> bool:
 	var frame_limit := 180
 	if game_world != null:
 		frame_limit = maxi(frame_limit, game_world.startup_world_state_timeout_frames)
-	for _frame in range(frame_limit):
+	for frame in range(frame_limit):
 		summary = _playable_spawn_summary()
 		if bool(summary.get("spawn_floor_hit", false)):
 			break
-		if game_world != null and game_world.has_method("update_player_viewer"):
-			game_world.call("update_player_viewer", true)
+		if frame % 30 == 0 and game_world != null:
+			var runtime_summary: Dictionary = game_world.get_game_world_summary()
+			print("WT_BOOT_COLLISION_PENDING %s" % JSON.stringify({
+				"frame": frame,
+				"spawn": summary,
+				"queued_jobs": int(runtime_summary.get("scheduler_queued_jobs", 0)),
+				"queued_collision": int(runtime_summary.get("queued_collision", 0)),
+				"collision_required_not_ready": int(runtime_summary.get(
+					"collision_required_not_ready_chunk_records", 0
+				)),
+				"active_records": int(runtime_summary.get("active_chunk_records", 0)),
+			}))
 		await get_tree().physics_frame
 	if not bool(summary.get("spawn_floor_hit", false)):
 		_fail("playable spawn has no collision floor below it before human enable after %d frames: %s" % [frame_limit, str(summary)])
@@ -4875,6 +4904,8 @@ func _stabilize_player_spawn() -> bool:
 	var floor_y := float(summary.get("collision_floor_y", player.global_position.y - 2.0))
 	player.global_position.y = floor_y + 2.0
 	player.velocity = Vector3.ZERO
+	if game_world != null and game_world.has_method("finish_startup_collision_bootstrap"):
+		game_world.call("finish_startup_collision_bootstrap")
 	if game_world != null and not bool(game_world.call("update_player_viewer", true)):
 		_fail("player viewer update failed after spawn relocation")
 		return false

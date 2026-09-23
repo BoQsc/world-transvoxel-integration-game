@@ -56,6 +56,12 @@ def main() -> int:
     parser.add_argument("--driver", choices=("vulkan", "d3d12"), default="vulkan")
     parser.add_argument("--wait-frames", type=int, default=600)
     parser.add_argument("--timeout-seconds", type=float, default=360.0)
+    parser.add_argument(
+        "--launch-grace-seconds",
+        type=float,
+        default=15.0,
+        help="Bound engine launch separately before the runtime gate begins.",
+    )
     parser.add_argument("--memory-limit-gib", type=float, default=6.0)
     parser.add_argument(
         "--fast-stage-gate",
@@ -83,9 +89,10 @@ def main() -> int:
         "--gpu-resident-render-candidate",
     ]
     if args.fast_stage_gate:
-        command.append("--tunnel-fast-stage-gate")
+        command.extend(("--tunnel-fast-stage-gate", "--gpu-stage-timing"))
     memory_limit = int(args.memory_limit_gib * 1024**3)
     started = time.monotonic()
+    runtime_started: float | None = None
     peak_rss = 0
     termination_reason = ""
     with log_path.open("w", encoding="utf-8") as log:
@@ -100,12 +107,23 @@ def main() -> int:
             rss = tree_rss_bytes(process.pid)
             peak_rss = max(peak_rss, rss)
             elapsed = time.monotonic() - started
+            if runtime_started is None and log_path.exists():
+                try:
+                    live_output = log_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    live_output = ""
+                if "WT_BOOT_STAGE terrain_start_ready" in live_output:
+                    runtime_started = time.monotonic()
             if rss >= memory_limit:
                 termination_reason = "memory_limit_exceeded"
                 terminate_tree(process)
                 break
-            if elapsed >= args.timeout_seconds:
-                termination_reason = "timeout"
+            if runtime_started is None and elapsed >= args.launch_grace_seconds:
+                termination_reason = "launch_timeout"
+                terminate_tree(process)
+                break
+            if runtime_started is not None and time.monotonic() - runtime_started >= args.timeout_seconds:
+                termination_reason = "runtime_timeout"
                 terminate_tree(process)
                 break
             time.sleep(0.25)
@@ -121,6 +139,9 @@ def main() -> int:
         "return_code": return_code,
         "termination_reason": termination_reason,
         "elapsed_seconds": time.monotonic() - started,
+        "runtime_elapsed_seconds": (
+            time.monotonic() - runtime_started if runtime_started is not None else None
+        ),
         "peak_process_tree_rss_bytes": peak_rss,
         "memory_limit_bytes": memory_limit,
         "log_path": str(log_path),
