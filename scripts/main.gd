@@ -904,6 +904,27 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				return true
 		if _is_lod_movement_visual_ready_summary(summary):
 			return true
+		if gpu_resident_render_candidate_requested and player != null \
+				and OS.get_cmdline_user_args().has("--gpu-stage-timing") \
+				and _frame % 15 == 0:
+			var terrain_world: Node = game_world.get_terrain_world()
+			var controller: Node = terrain_world.get_node_or_null("WT_GpuResidentRender") \
+				if terrain_world != null else null
+			var local_chunk := Vector3i(
+				floori(player.global_position.x / 16.0),
+				floori(player.global_position.y / 16.0),
+				floori(player.global_position.z / 16.0)
+			)
+			print("WT_GPU_LOCAL_PROGRESS ", JSON.stringify({
+				"frame": _frame,
+				"local_visual": last_local_visual,
+				"local_activation": Dictionary(controller.call(
+					"inspect_chunk_activation", local_chunk, 0
+				)) if controller != null else {},
+				"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+				"active_records": int(summary.get("active_chunk_records", 0)),
+				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
+			}))
 		if gpu_resident_render_candidate_requested and _frame % 120 == 0:
 			var terrain_world: Node = game_world.get_terrain_world()
 			var resident := Dictionary(terrain_world.call(
@@ -7568,8 +7589,12 @@ func _gpu_local_visual_coverage_summary(world_position: Vector3) -> Dictionary:
 		var sample := {
 			"lod": lod,
 			"chunk": chunk,
+			"present": bool(state.call("is_present")),
 			"generation": int(state.call("get_generation")),
+			"world_revision": int(state.call("get_world_revision")),
+			"visual_required": bool(state.call("is_visual_required")),
 			"render_generation": render_generation,
+			"staged_render_generation": int(state.call("get_staged_render_generation")),
 			"visual_ready": visual_ready,
 			"gpu_active": gpu_active,
 			"atomic_replacement_handoff": visual_ready and render_generation > 0 \
