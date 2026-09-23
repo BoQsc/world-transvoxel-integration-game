@@ -96,6 +96,8 @@ var runtime_baseline_edit_ready_wait_frames := 900
 var foreground_priority_focus_settle_frames := 0
 var cpu_causal_trace_output_path := ""
 var cpu_causal_trace: RefCounted
+var gpu_startup_root_trace_backend: Node
+var gpu_startup_root_trace_cursor := 0
 var terrain_waterfall_requested := false
 var terrain_waterfall_smoke := false
 var terrain_waterfall_autonomous_route := false
@@ -593,6 +595,14 @@ func _start_profile() -> void:
 		_fail("gameworld did not start: %s" % game_world.get_last_error())
 		return
 	print("WT_BOOT_STAGE terrain_start_ready msec=%d" % Time.get_ticks_msec())
+	if gpu_resident_render_candidate_requested and \
+			OS.get_cmdline_user_args().has("--gpu-local-root-trace") and \
+			cpu_causal_trace_output_path.is_empty():
+		var trace_terrain: Node = game_world.get_terrain_world()
+		var trace_backend: Node = trace_terrain.call("get_backend_terrain") \
+			if trace_terrain != null else null
+		if trace_backend != null and bool(trace_backend.call("begin_cpu_causal_trace")):
+			gpu_startup_root_trace_backend = trace_backend
 	if playtest_diagnostics != null:
 		playtest_diagnostics.call("attach_runtime", game_world, player)
 	await get_tree().physics_frame
@@ -906,7 +916,7 @@ func _wait_for_human_startup_visual_ready() -> bool:
 			return true
 		if gpu_resident_render_candidate_requested and player != null \
 				and OS.get_cmdline_user_args().has("--gpu-stage-timing") \
-				and _frame % 15 == 0:
+				and (_frame < 5 or _frame % 15 == 0):
 			var terrain_world: Node = game_world.get_terrain_world()
 			var controller: Node = terrain_world.get_node_or_null("WT_GpuResidentRender") \
 				if terrain_world != null else null
@@ -924,6 +934,8 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
 				"active_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
+				"root_trace": _gpu_startup_root_trace() \
+					if gpu_startup_root_trace_backend != null else {},
 			}))
 		if gpu_resident_render_candidate_requested and _frame % 120 == 0:
 			var terrain_world: Node = game_world.get_terrain_world()
@@ -7557,6 +7569,59 @@ func _gpu_local_lod0_publication_summary(
 		"current_edit_visible": current_edit_visible,
 		"collision_required": collision_required,
 		"collision_ready": collision_ready,
+	}
+
+
+func _gpu_startup_root_trace() -> Dictionary:
+	if gpu_startup_root_trace_backend == null or player == null:
+		return {}
+	var root := Vector3i(
+		floori(player.global_position.x / 128.0),
+		floori(player.global_position.y / 128.0),
+		floori(player.global_position.z / 128.0)
+	)
+	var matching := []
+	var scanned_events := 0
+	var next_sequence := gpu_startup_root_trace_cursor
+	var dropped_events := 0
+	for _page in range(4):
+		var snapshot := Dictionary(gpu_startup_root_trace_backend.call(
+			"get_cpu_causal_trace_events", gpu_startup_root_trace_cursor, 2048
+		))
+		var events := Array(snapshot.get("events", []))
+		next_sequence = int(snapshot.get("next_sequence", gpu_startup_root_trace_cursor))
+		dropped_events = int(snapshot.get("dropped_event_count", 0))
+		scanned_events += events.size()
+		for event_value in events:
+			var event := Dictionary(event_value)
+			gpu_startup_root_trace_cursor = maxi(
+				gpu_startup_root_trace_cursor, int(event.get("sequence", 0)) + 1
+			)
+			if not bool(event.get("has_chunk", false)) or \
+					int(event.get("chunk_lod", -1)) != 3 or \
+					int(event.get("chunk_x", 0)) != root.x or \
+					int(event.get("chunk_y", 0)) != root.y or \
+					int(event.get("chunk_z", 0)) != root.z:
+				continue
+			matching.append({
+				"sequence": int(event.get("sequence", 0)),
+				"kind": str(event.get("kind", "")),
+				"generation": int(event.get("generation", 0)),
+				"elapsed_ms": float(event.get("elapsed_ns", 0)) / 1000000.0,
+				"duration_ms": float(event.get("duration_ns", 0)) / 1000000.0,
+				"status": int(event.get("status", 0)),
+				"job_stage": str(event.get("job_stage", "")),
+				"jobs_ahead": int(event.get("jobs_ahead", -1)),
+			})
+		if events.is_empty() or gpu_startup_root_trace_cursor >= next_sequence:
+			break
+	return {
+		"root": root,
+		"events": matching.slice(maxi(0, matching.size() - 24)),
+		"dropped_events": dropped_events,
+		"scanned_events": scanned_events,
+		"next_sequence": next_sequence,
+		"cursor": gpu_startup_root_trace_cursor,
 	}
 
 

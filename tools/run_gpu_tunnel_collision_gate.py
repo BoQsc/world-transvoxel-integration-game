@@ -93,7 +93,10 @@ def main() -> int:
         "--gpu-resident-render-candidate",
     ]
     if args.fast_stage_gate:
-        command.extend(("--tunnel-fast-stage-gate", "--gpu-stage-timing"))
+        command.extend((
+            "--tunnel-fast-stage-gate", "--gpu-stage-timing",
+            "--gpu-local-root-trace",
+        ))
     memory_limit = int(args.memory_limit_gib * 1024**3)
     started = time.monotonic()
     runtime_started: float | None = None
