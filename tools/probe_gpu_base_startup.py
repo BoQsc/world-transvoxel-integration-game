@@ -88,6 +88,27 @@ def main() -> int:
         "WT_GPU_BASE_EDIT_PROBE",
         "GPU base coverage", "ERROR", "SCRIPT ERROR",
     ))]
+    draw_selection = None
+    if args.mode == "base_coverage_edit_probe":
+        probe_lines = [line for line in lines if line.startswith("WT_GPU_BASE_EDIT_PROBE ")]
+        if probe_lines:
+            probe = json.loads(probe_lines[-1].split(" ", 1)[1])
+            samples = probe.get("samples", [])
+            active_lod0 = [sample for sample in samples if int(
+                sample.get("active_lod_counts", {}).get("0", 0)
+            ) > 0]
+            selected_lod0 = [sample for sample in active_lod0 if int(
+                sample.get("selected_lod_counts", {}).get("0", 0)
+            ) > 0]
+            draw_selection = {
+                "ok": bool(selected_lod0),
+                "active_lod0_samples": len(active_lod0),
+                "selected_lod0_samples": len(selected_lod0),
+                "last_active_lod_counts": samples[-1].get("active_lod_counts", {}) if samples else {},
+                "last_selected_lod_counts": samples[-1].get("selected_lod_counts", {}) if samples else {},
+            }
+        else:
+            draw_selection = {"ok": False, "error": "edit probe marker missing"}
     result = {
         "reason": reason,
         "elapsed_s": round(time.monotonic() - started, 2),
@@ -98,8 +119,12 @@ def main() -> int:
         "log_path": str(log_path),
         "markers": markers[-40:],
     }
+    if draw_selection is not None:
+        result["draw_selection"] = draw_selection
     print(json.dumps(result, indent=2))
-    return 0 if reason == "completed" and capture_path.is_file() else 1
+    return 0 if reason == "completed" and capture_path.is_file() and (
+        draw_selection is None or draw_selection["ok"]
+    ) else 1
 
 
 if __name__ == "__main__":
