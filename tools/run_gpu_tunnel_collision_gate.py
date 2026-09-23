@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -99,9 +100,13 @@ def main() -> int:
     peak_rss = 0
     termination_reason = ""
     with log_path.open("w", encoding="utf-8") as log:
+        process_environment = os.environ.copy()
+        if args.fast_stage_gate:
+            process_environment["WT_VIEWER_ENQUEUE_TIMING"] = "1"
         process = subprocess.Popen(
             command,
             cwd=project,
+            env=process_environment,
             text=True,
             stdout=log,
             stderr=subprocess.STDOUT,
