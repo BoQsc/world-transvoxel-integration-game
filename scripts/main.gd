@@ -918,6 +918,8 @@ func _wait_for_human_startup_visual_ready() -> bool:
 				and OS.get_cmdline_user_args().has("--gpu-stage-timing") \
 				and (_frame < 5 or _frame % 15 == 0):
 			var terrain_world: Node = game_world.get_terrain_world()
+			var runtime_metrics: Dictionary = terrain_world.call("get_runtime_metrics") \
+				if terrain_world != null else {}
 			var controller: Node = terrain_world.get_node_or_null("WT_GpuResidentRender") \
 				if terrain_world != null else null
 			var local_chunk := Vector3i(
@@ -932,6 +934,10 @@ func _wait_for_human_startup_visual_ready() -> bool:
 					"inspect_chunk_activation", local_chunk, 0
 				)) if controller != null else {},
 				"queued_jobs": int(summary.get("scheduler_queued_jobs", 0)),
+				"mesh_queue": int(runtime_metrics.get("mesh_worker_queued_jobs", 0)),
+				"mesh_active": int(runtime_metrics.get("mesh_worker_active_jobs", 0)),
+				"mesh_workers": int(runtime_metrics.get("mesh_worker_count", 0)),
+				"mesh_completions": int(runtime_metrics.get("mesh_worker_queued_completions", 0)),
 				"active_records": int(summary.get("active_chunk_records", 0)),
 				"visual_ready_records": int(summary.get("visual_ready_chunk_records", 0)),
 				"root_trace": _gpu_startup_root_trace() \
